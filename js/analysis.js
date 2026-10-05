@@ -22,6 +22,15 @@ export const F = {
   headTilt: p => G.lineTilt(p[P.L_EAR], p[P.R_EAR]),
   trunkLateral(p) { return G.toVertical(G.mid(p[P.L_HIP], p[P.R_HIP]), G.mid(p[P.L_SHOULDER], p[P.R_SHOULDER])) * G.sideSign(p); },
   kneeFlexion(p, r) { return 180 - G.angleAt(p[r ? P.R_HIP : P.L_HIP], p[r ? P.R_KNEE : P.L_KNEE], p[r ? P.R_ANKLE : P.L_ANKLE]); },
+  /** Поворот кисти внутрь в стойке (вид спереди): большой палец уходит к середине тела относительно мизинца.
+   *  Ладони назад, «костяшки вперед» — признак внутренней ротации плеча и сутулых плеч (грудные, широчайшая). В долях длины кисти. */
+  handRot(p, r) {
+    const sh = p[r ? P.R_SHOULDER : P.L_SHOULDER], other = p[r ? P.L_SHOULDER : P.R_SHOULDER], wr = p[r ? P.R_WRIST : P.L_WRIST];
+    const th = p[r ? 22 : 21], pk = p[r ? 18 : 17], ix = p[r ? 20 : 19];
+    if (!th || !pk || !ix || [th, pk, ix, wr].some(l => (l.visibility ?? 1) < .5)) return NaN;
+    const len = Math.hypot(ix.x - wr.x, ix.y - wr.y); if (len < 1) return NaN;
+    return (th.x - pk.x) * Math.sign(other.x - sh.x || 1) / len;
+  },
   fppa(p, r) {
     const hip = p[r ? P.R_HIP : P.L_HIP], knee = p[r ? P.R_KNEE : P.L_KNEE], ank = p[r ? P.R_ANKLE : P.L_ANKLE], other = p[r ? P.L_HIP : P.R_HIP];
     const mag = 180 - G.angleAt(hip, knee, ank);
@@ -50,7 +59,7 @@ export function sideView(p) {
 export function smooth(fr) {
   if (fr.length < 5 || fr._s) return fr;
   const out = fr.map((f, i) => { const a = Math.max(0, i - 2), b = Math.min(fr.length - 1, i + 2), n = b - a + 1;
-    return { t: f.t, p: f.p.map((l, j) => { let x = 0, y = 0; for (let k = a; k <= b; k++) { x += fr[k].p[j].x; y += fr[k].p[j].y; } return { ...l, x: x / n, y: y / n }; }) }; });
+    return { t: f.t, w: f.w, p: f.p.map((l, j) => { let x = 0, y = 0; for (let k = a; k <= b; k++) { x += fr[k].p[j].x; y += fr[k].p[j].y; } return { ...l, x: x / n, y: y / n }; }) }; });
   out._s = true; return out;
 }
 const goodFrame = f => [P.L_HIP, P.R_HIP, P.L_KNEE, P.R_KNEE, P.L_ANKLE, P.R_ANKLE].every(i => (f.p[i].visibility ?? 1) > .55);
@@ -76,6 +85,34 @@ const LEGS = [P.L_HIP, P.R_HIP, P.L_KNEE, P.R_KNEE, P.L_ANKLE, P.R_ANKLE];
 const res = (f, reps, v) => ({ f, reps, visibility: v, quality: reps >= 2 && v >= .75 ? 'GOOD' : reps >= 1 ? 'DOUBTFUL' : 'RETAKE' });
 const ang = (a, c) => Math.atan2(c.x - a.x, a.y - c.y) * RAD;
 
+/**
+ * Руки вверх: насколько не хватает до полного сгибания плеча (180°), в градусах, отдельно для каждой руки.
+ * Спереди руки, ушедшие вперед, видны как укороченная вертикальная проекция: подъем кисти над плечом / длина руки = cos(недостачи).
+ * Если есть объемные точки MediaPipe, добавляем угол между корпусом и плечевой костью в 3D и усредняем.
+ * Берем кадры стоя с руками над головой и 75-й процентиль: лучшее, что человек стабильно показывает.
+ * MediaPipe занижает крайние углы сгибания плеча, поэтому порог правила взят с запасом.
+ */
+export function overheadReach(fr) {
+  if (fr.length < 10) return {};
+  const hy = fr.map(f => (f.p[P.L_HIP].y + f.p[P.R_HIP].y) / 2), base = [...hy].sort((a, b) => a - b)[Math.floor(hy.length * .1)];
+  const leg = median(fr.map(f => Math.hypot(f.p[P.L_HIP].x - f.p[P.L_ANKLE].x, f.p[P.L_HIP].y - f.p[P.L_ANKLE].y))) || 1;
+  const q75 = a => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length >= 4 ? v[Math.floor(v.length * .75)] : NaN; };
+  const out = {};
+  for (const r of [true, false]) {
+    const S = r ? P.R_SHOULDER : P.L_SHOULDER, E = r ? P.R_ELBOW : P.L_ELBOW, W = r ? P.R_WRIST : P.L_WRIST;
+    const arm = Math.max(...fr.map(f => Math.hypot(f.p[W].x - f.p[S].x, f.p[W].y - f.p[S].y)));
+    const top = fr.filter((f, i) => hy[i] - base < .05 * leg && f.p[W].y < f.p[P.NOSE].y && f.p[W].visibility > .5 && f.p[S].visibility > .5);
+    const r2 = q75(top.map(f => (f.p[S].y - f.p[W].y) / Math.max(1, arm)));
+    const d2 = Number.isFinite(r2) ? Math.acos(Math.max(-1, Math.min(1, r2))) * RAD : NaN;
+    const a3 = q75(top.filter(f => f.w).map(f => { const w = f.w, ms = { x: (w[11].x + w[12].x) / 2, y: (w[11].y + w[12].y) / 2, z: (w[11].z + w[12].z) / 2 }, mh = { x: (w[23].x + w[24].x) / 2, y: (w[23].y + w[24].y) / 2, z: (w[23].z + w[24].z) / 2 };
+      const t = [ms.x - mh.x, ms.y - mh.y, ms.z - mh.z], u = [w[E].x - w[S].x, w[E].y - w[S].y, w[E].z - w[S].z], n = Math.hypot(...t) * Math.hypot(...u);
+      return n ? Math.acos(Math.max(-1, Math.min(1, (t[0] * u[0] + t[1] * u[1] + t[2] * u[2]) / n))) * RAD : NaN; }));
+    const d3 = Number.isFinite(a3) ? Math.max(0, a3) : NaN; // угол между «вверх по корпусу» и плечом: 0° = рука ровно вверх
+    const v = [d2, d3].filter(Number.isFinite); if (v.length) out['oh_reach_' + (r ? 'r' : 'l')] = v.reduce((a, b) => a + b, 0) / v.length;
+  }
+  return out;
+}
+
 export const Movement = {
   front(fr) { fr = smooth(fr);
     const b = bottoms(fr), st = fr.slice(0, 6), f = {};
@@ -91,6 +128,7 @@ export const Movement = {
       f.ohs_shift = median(bf.map(x => shift(x.p))) - median(st.map(x => shift(x.p)));
       f.ohs_elbow_r = median(bf.map(x => elbow(x.p, true))); f.ohs_elbow_l = median(bf.map(x => elbow(x.p, false)));
     }
+    Object.assign(f, overheadReach(fr));
     return res(f, b.length, vis(fr, LEGS));
   },
   side(fr) { fr = smooth(fr);
@@ -106,6 +144,7 @@ export const Movement = {
       const lift = p => { const r = near(p), heel = p[r ? P.R_HEEL : P.L_HEEL], toe = p[r ? P.R_FOOT : P.L_FOOT]; return (toe.y - heel.y) / Math.max(1, Math.hypot(heel.x - toe.x, heel.y - toe.y)); };
       f.ohs_heel_lift = median(bf.map(x => lift(x.p))) - median(fr.slice(0, 6).map(x => lift(x.p)));
     }
+    Object.assign(f, overheadReach(fr));
     return res(f, b.length, vis(fr, [P.R_HIP, P.R_KNEE, P.R_ANKLE, P.R_SHOULDER]));
   },
   back(fr) { fr = smooth(fr);
@@ -164,9 +203,46 @@ Movement.calfRaise = (fr, right) => { fr = smooth(fr);
   return res({ ['calf_reps_' + k]: peaks.length, ['calf_h_' + k]: peaks.length ? median(peaks.map(i => sm[i])) : 0 }, peaks.length, vis(fr, [right ? P.R_ANKLE : P.L_ANKLE, right ? P.R_HEEL : P.L_HEEL]));
 };
 
+// ---------- снимки стойки: одинаково при съемке и при пересчете по сохраненной записи ----------
+const medF = a => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length ? v[v.length >> 1] : 0; };
+const medU = a => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length >= 5 ? v[v.length >> 1] : undefined; };
+export function standSnapshot(st) {
+  if (!st.length) return null;
+  return { shoulderTilt: medF(st.map(f => F.shoulderTilt(f.p))), pelvicTilt: medF(st.map(f => F.pelvicTilt(f.p))), headTilt: medF(st.map(f => F.headTilt(f.p))), trunkLateral: medF(st.map(f => F.trunkLateral(f.p))),
+    handRotL: medU(st.map(f => F.handRot(f.p, false))), handRotR: medU(st.map(f => F.handRot(f.p, true))) };
+}
+export function sideSnapshot(sf) {
+  if (!sf.length) return null; const sv = sf.map(f => sideView(f.p));
+  return { headForwardDeg: medF(sv.map(s => s.headForwardDeg)), hipShift: medF(sv.map(s => s.hipShift)), shoulderShift: medF(sv.map(s => s.shoulderShift)), kneeHyperDeg: medF(sv.map(s => s.kneeHyperDeg)) };
+}
+const maxFlex = fr => fr.reduce((m, f) => Math.max(m, F.kneeFlexion(f.p, true), F.kneeFlexion(f.p, false)), 0);
+/**
+ * Пересчет оценки по сохраненной записи скелета: новая методика применяется к старым тестам без повторной съемки.
+ * frames(key) возвращает кадры записи { t, p: [{ x, y, visibility }], w? } или пустой массив.
+ */
+export function recompute(t, frames) {
+  const out = { snapshot: t.snapshot, side: t.side, moves: { ...(t.moves || {}) } };
+  const st = frames('stand'); if (st.length) out.snapshot = standSnapshot(st);
+  const sd = frames('side_stand'); if (sd.length) out.side = sideSnapshot(sd);
+  const keep = (k, r) => { const old = out.moves[k]; if (old && old.alt) r.alt = old.alt; out.moves[k] = r; };
+  const fr = { ohs_front: frames('ohs_front'), ohs_side: frames('ohs_side'), ohs_back: frames('ohs_back'), sls_r: frames('sls_r'), sls_l: frames('sls_l'), t_hold: frames('t_hold'), bends: frames('bends'), calf_r: frames('calf_r'), calf_l: frames('calf_l') };
+  if (fr.ohs_front.length > 10) { const r = Movement.front(fr.ohs_front); r.f.max_knee_flex = maxFlex(fr.ohs_front); keep('ohs_front', r); }
+  if (fr.ohs_side.length > 10) keep('ohs_side', Movement.side(fr.ohs_side));
+  if (fr.ohs_back.length > 10) keep('ohs_back', Movement.back(fr.ohs_back));
+  if (fr.sls_r.length > 10) keep('sls_r', Movement.singleLeg(fr.sls_r, true));
+  if (fr.sls_l.length > 10) keep('sls_l', Movement.singleLeg(fr.sls_l, false));
+  if (fr.t_hold.length > 20) keep('t_hold', Movement.tHold(fr.t_hold));
+  if (fr.bends.length > 30) keep('side_bend', Movement.sideBend(fr.bends));
+  if (fr.calf_r.length > 20) keep('calf_r', Movement.calfRaise(fr.calf_r, true));
+  if (fr.calf_l.length > 20) keep('calf_l', Movement.calfRaise(fr.calf_l, false));
+  return out;
+}
+
 export function features(t) {
   const f = { const_r: 1, const_l: -1 };
-  const s = t.snapshot; if (s) { f.shoulder_tilt = s.shoulderTilt; f.pelvic_tilt = s.pelvicTilt; f.head_tilt = s.headTilt; f.trunk_lateral = s.trunkLateral; }
+  const s = t.snapshot; if (s) { f.shoulder_tilt = s.shoulderTilt; f.pelvic_tilt = s.pelvicTilt; f.head_tilt = s.headTilt; f.trunk_lateral = s.trunkLateral;
+    // кисти «костяшками вперед»: среднее двух рук (поворот у обеих рук обычно общий, от сутулых плеч)
+    const hr = [s.handRotL, s.handRotR].filter(Number.isFinite); if (hr.length) f.hand_rot = hr.reduce((a, b) => a + b, 0) / hr.length; }
   if (t.side) { f.head_forward = t.side.headForwardDeg; f.knee_hyper = t.side.kneeHyperDeg; f.shoulder_shift = t.side.shoulderShift; f.hip_shift = t.side.hipShift; }
   const g = n => (t.moves[n] && t.moves[n].quality !== 'RETAKE') ? t.moves[n].f : {};
   const of = g('ohs_front'), os = g('ohs_side'), ob = g('ohs_back'), sr = g('sls_r'), sl = g('sls_l');
@@ -181,13 +257,16 @@ export function features(t) {
   put('sq_depth', Number.isFinite(of.max_knee_flex) && of.max_knee_flex > 0 ? of.max_knee_flex : of.ohs_depth);
   if (t.moves && t.moves.ohs_front && t.moves.ohs_front.alt) f.sq_assisted = 1;
   put('ohs_elbow_r', of.ohs_elbow_r); put('ohs_elbow_l', of.ohs_elbow_l);
+  // руки вверх: недостача сгибания плеча, худшая рука и ее сторона (по виду спереди; если его нет — по виду сбоку)
+  const rr = Number.isFinite(of.oh_reach_r) ? of.oh_reach_r : os.oh_reach_r, rl = Number.isFinite(of.oh_reach_l) ? of.oh_reach_l : os.oh_reach_l;
+  if (Number.isFinite(rr) || Number.isFinite(rl)) { const a = Number.isFinite(rr) ? rr : -1, b = Number.isFinite(rl) ? rl : -1; f.oh_reach = Math.max(a, b); f.oh_reach_side = Math.abs(a - b) < 8 || a < 0 || b < 0 ? 0 : a > b ? 1 : -1; f.sym_reach = Number.isFinite(rr) && Number.isFinite(rl) ? [rl, rr] : undefined; if (!f.sym_reach) delete f.sym_reach; }
   for (const k of ['sls_valgus_r', 'sls_drop_r', 'sls_trunk_r']) put(k, k.includes('valgus') ? ok(sr[k]) : sr[k]);
   for (const k of ['sls_valgus_l', 'sls_drop_l', 'sls_trunk_l']) put(k, k.includes('valgus') ? ok(sl[k]) : sl[k]);
   const th = g('t_hold'), sb = g('side_bend'), cr = g('calf_r'), cl = g('calf_l');
   // дельтовидная: насколько рука опустилась к концу удержания; плюс = правая опустилась сильнее
   if (Number.isFinite(th.t_end_r)) { const dr = th.t_start_r - th.t_end_r, dl = th.t_start_l - th.t_end_l; put('asym_delt', (dr - dl) + (th.t_end_l - th.t_end_r) * .5); f.sym_delt = [th.t_end_l, th.t_end_r]; }
   // наклоны: меньше наклон вправо = зажат левый бок (квадратная поясницы, широчайшая слева); плюс = вправо наклон меньше
-  if (Number.isFinite(sb.bend_r)) { put('asym_bend', sb.bend_l - sb.bend_r); f.sym_bend = [sb.bend_l, sb.bend_r]; }
+  if (Number.isFinite(sb.bend_r)) { put('asym_bend', sb.bend_l - sb.bend_r); f.sym_bend = [sb.bend_l, sb.bend_r]; put('bend_sum', sb.bend_l + sb.bend_r); }
   // икры: меньше подъемов или ниже пятка; плюс = правая слабее
   if (Number.isFinite(cr.calf_reps_r) && Number.isFinite(cl.calf_reps_l)) { const sr2 = cr.calf_reps_r * (1 + cr.calf_h_r * 10), sl2 = cl.calf_reps_l * (1 + cl.calf_h_l * 10);
     put('asym_calf', (sl2 - sr2) / Math.max(1, Math.max(sl2, sr2)) * 100); f.sym_calf = [cl.calf_reps_l, cr.calf_reps_r]; }
@@ -229,10 +308,11 @@ export function findings(rules, f) {
 function strength(fd) { const r = fd.rule, v = Math.abs(fd.value);
   // для правил «меньше порога»: при положительном пороге (глубина 70°) сила = порог / значение, при отрицательном (-0,02) = |значение| / |порог|
   const ratio = r.absGreater != null ? v / r.absGreater : r.greater != null ? v / r.greater : r.less != null ? (r.less > 0 ? (v > 1e-6 ? r.less / v : 2) : (Math.abs(r.less) > 1e-9 ? v / Math.abs(r.less) : 2)) : 2;
-  return Math.max(.35, Math.min(1, .35 + .65 * (ratio - 1))); }
+  return Math.max(.45, Math.min(1, .45 + .55 * (ratio - 1))); }
 export function tones(fds, catalog, antagonists) {
   const pos = new Map(), neg = new Map(), src = new Map(), key = (id, s) => id + ':' + s;
-  for (const fd of fds) { const s = strength(fd) * (fd.rule.weak ? .6 : 1) * (fd.borderline ? .5 : 1);
+  // ослабление слабых и пограничных признаков было слишком сильным (×0,6 и ×0,5, вместе ×0,3): одиночный признак пропадал с карты
+  for (const fd of fds) { const s = strength(fd) * (fd.rule.weak ? .75 : 1) * (fd.borderline ? .7 : 1);
     for (const m of fd.muscles) for (const sd of (m.side === 'BOTH' ? ['LEFT', 'RIGHT'] : [m.side])) { const k = key(m.id, sd);
       // источник: какие независимые признаки (правила) указали на мышцу; пограничные в доказательства цепей не идут
       if (!fd.borderline) { if (!src.has(k)) src.set(k, new Set()); src.get(k).add(fd.rule.id + (fd.rule.feature || '')); }
@@ -262,7 +342,9 @@ export function chains(defs, tn, triggers) {
     const rules = new Set(); for (const m of evM) { const s = sideOf(m); for (const sd of (s === 'BOTH' ? ['LEFT', 'RIGHT'] : [s])) for (const r of (srcOf.get(m.id + ':' + sd) || [])) rules.add(r); }
     const trig = (c.triggers || []).filter(x => triggers.has(x) && x.startsWith('CHAIN_'));
     const n = rules.size + trig.length - contra;
-    if (rules.size < 2 || evM.length < Math.max(2, Math.ceil(c.members.length * .5)) || n < (c.minEvidence || 2)) continue; // цепь только если подтверждена хотя бы половина ее звеньев
+    // цепь, если ее подтверждают хотя бы два разных признака и треть звеньев. Раньше требовалась половина:
+    // в верхнем перекрестном синдроме (11 звеньев) это 6 мышц, и цепь с грудными почти никогда не находилась
+    if (rules.size < 2 || evM.length < Math.max(2, Math.ceil(c.members.length * .3)) || n < (c.minEvidence || 2)) continue;
     out.push({ chain: c, side, score: Math.max(0, Math.min(1, n / (c.members.length + 2))), evidence: ev, inferred: c.members.filter(m => !ev.includes(m.id) && Math.abs(tone(m)) <= .25).map(m => m.id) });
   }
   return out.sort((a, b) => b.score - a.score);

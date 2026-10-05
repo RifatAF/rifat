@@ -1,5 +1,5 @@
 // BodyPassport web: тот же поток, тексты и дизайн, что в Android-версии.
-import { P, F, G, Movement, sideView, levelled, analyze, fmt } from './analysis.js';
+import { P, F, G, Movement, sideView, levelled, analyze, fmt, standSnapshot, sideSnapshot } from './analysis.js';
 import { proHome, motionViewer, consumerPoses } from './pro.js';
 import { seal } from './core.js';
 import { ensureLogin, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, logout, deleteAccount, betaUsers, providers } from './auth.js';
@@ -45,7 +45,7 @@ export function verdict(top, findings) {
     // одна мышца с двух сторон: «с двух сторон» вместо двух строк
     const ids = [...new Set(items.map(s => s.id))], names = ids.map(id => { const sd = items.filter(s => s.id === id).map(s => s.side);
       return acc(lc(C.muscles[id].name)) + ' ' + (sd.length > 1 ? 'с двух сторон' : sideWord(sd[0])); });
-    return { k, verb, what: names.join(', '), why: f ? f.observed.replace(' (на границе нормы)', '') : '' }; }).filter(Boolean);
+    return { k, verb, what: names.join(', '), why: f ? f.observed.replace(' (на границе нормы)', '') : s0.byChain ? `Возможно, по цепи «${s0.byChain}»` : '' }; }).filter(Boolean);
 }
 export function verdictCard(top, findings, empty = 'Явных перекосов не видно') {
   const v = verdict(top, findings);
@@ -68,6 +68,9 @@ export function spots(a) {
     return { id: t.id, side: t.side, tone: t.derived ? t.tone * .7 : t.tone, k, back: m.view === 'back', derived: t.derived, ambiguous: t.ambiguous, byChain: t.byChain, x: t.side === 'LEFT' ? m.xLeft : 1 - m.xLeft, y: m.y, key: t.id + ':' + t.side };
   }).filter(Boolean);
 }
+/** Главные зоны: сначала измеренные, затем выведенные по подтвержденной цепи (с пометкой «возможно»).
+ *  Раньше выведенные по цепи в списки не попадали вовсе, и, например, грудные при сутулости не показывались. */
+export const topOf = all => all.filter(s => s.k !== 'OK' && (!s.derived || s.byChain)).sort((x, y) => (!!x.derived - !!y.derived) || Math.abs(y.tone) - Math.abs(x.tone));
 export const title = s => `${C.muscles[s.id].zone || C.muscles[s.id].name} ${sideWord(s.side)}: ${s.ambiguous ? 'признаки противоречат' : s.derived ? TONE[s.k][3].replace('похоже', 'возможно') : TONE[s.k][3]}`;
 export const tech = s => s.k === 'OK' ? C.muscles[s.id].name : `${TONE[s.k][4]} ${C.muscles[s.id].gen}`;
 const seen = (a, s) => [...new Set(a.findings.filter(f => f.muscles.some(m => m.id === s.id && (m.side === s.side || m.side === 'BOTH'))).map(f => f.observed))];
@@ -104,7 +107,7 @@ export function cleanResult(o) {
   const moves = {}; for (const [k, v] of Object.entries(o.moves && typeof o.moves === 'object' ? o.moves : {}).slice(0, 20)) {
     if (!/^[a-z_]{1,20}$/.test(k) || !v || typeof v !== 'object') continue;
     moves[k] = { f: numObj(v.f) || {}, reps: num(v.reps) || 0, quality: ['GOOD', 'DOUBTFUL', 'RETAKE'].includes(v.quality) ? v.quality : 'DOUBTFUL', ...(v.alt ? { alt: 'support' } : {}) }; }
-  return { date: num(o.date) || Date.now(), full: !!o.full, snapshot: numObj(o.snapshot, ['shoulderTilt', 'pelvicTilt', 'headTilt', 'trunkLateral']), side: numObj(o.side, ['headForwardDeg', 'hipShift', 'shoulderShift', 'kneeHyperDeg']), moves };
+  return { date: num(o.date) || Date.now(), full: !!o.full, snapshot: numObj(o.snapshot, ['shoulderTilt', 'pelvicTilt', 'headTilt', 'trunkLateral', 'handRotL', 'handRotR']), side: numObj(o.side, ['headForwardDeg', 'hipShift', 'shoulderShift', 'kneeHyperDeg']), moves };
 }
 async function resultLink() { return location.origin + location.pathname + '#r=' + await packResult(currentAnalysis().t); }
 
@@ -140,13 +143,16 @@ export const UNITS = {
   bends: [['Наклоны в стороны', 'Вправо и влево', 27]],
   calf: [['На носок правой ноги', '15 секунд', 27], ['На носок левой ноги', '15 секунд', 24]],
   side: [['Боком: стоять и 3 приседа', 'Правое плечо к камере', 49]],
+  // стойка боком без приседа: без нее не видно сутулость, вынос головы, таз вперед и переразгибание колен
+  profile: [['Боком: стой ровно', 'Правое плечо к камере', 20]],
   back: [['Спиной: 3 приседа', 'Спиной к камере', 38]],
 };
-export const ORDER = ['stand', 'ohs_front', 'sls', 'thold', 'bends', 'calf', 'side', 'back'];
-export const sortUnits = u => ORDER.filter(x => u.includes(x));
-const consumerProtocol = () => sortUnits(['stand', 'ohs_front', 'sls', ...(FULL ? ['side', 'back'] : []), ...(STRENGTH ? ['thold', 'bends', 'calf'] : [])]);
+export const ORDER = ['stand', 'ohs_front', 'sls', 'thold', 'bends', 'calf', 'profile', 'side', 'back'];
+// «боком» уже включает стойку боком: отдельная стойка не нужна
+export const sortUnits = u => ORDER.filter(x => u.includes(x) && !(x === 'profile' && u.includes('side')));
+const consumerProtocol = () => sortUnits(['stand', 'ohs_front', 'sls', FULL ? 'side' : 'profile', ...(FULL ? ['back'] : []), ...(STRENGTH ? ['thold', 'bends', 'calf'] : [])]);
 export const rowsOf = p => sortUnits(p).flatMap(u => UNITS[u]);
-const QUICK = rowsOf(['stand', 'ohs_front', 'sls']), FULLS = rowsOf(['stand', 'ohs_front', 'sls', 'side', 'back']), STR = rowsOf(['thold', 'bends', 'calf']);
+const QUICK = rowsOf(['stand', 'ohs_front', 'sls', 'profile']), FULLS = rowsOf(['stand', 'ohs_front', 'sls', 'side', 'back']), STR = rowsOf(['thold', 'bends', 'calf']);
 export const SETUP_SEC = 36;
 export const secs = l => l.reduce((x, s) => x + s[2], 0);
 export const mins = sec => (Math.ceil(sec / 30) / 2).toString().replace('.', ',');
@@ -159,7 +165,7 @@ export async function prep() {
   go(`<div class="scr fade"><div class="pad" style="padding-top:8px"><button class="round" id="back" style="background:transparent">‹</button></div>
    <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:16px">
     <div class="seg"><button id="m0" class="${FULL ? '' : 'on'}">Быстрый · ${mins(SETUP_SEC + secs(QUICK) + (STRENGTH ? secs(STR) : 0))} мин</button><button id="m1" class="${FULL ? 'on' : ''}">Точный · ${mins(SETUP_SEC + secs(FULLS) + (STRENGTH ? secs(STR) : 0))} мин</button></div>
-    <div><div class="caps" style="color:var(--coral)">Видеотест · около ${mins(SETUP_SEC + secs(steps))} мин · ${FULL ? 'с поворотами' : 'только лицом'}</div><h1 style="margin-top:8px">Поставь телефон и отойди на 2–4 метра</h1><p class="sub" style="margin-top:6px">В кадре должен быть весь рост, от макушки до стоп.</p></div>
+    <div><div class="caps" style="color:var(--coral)">Видеотест · около ${mins(SETUP_SEC + secs(steps))} мин · ${FULL ? 'с поворотами' : 'лицом и боком'}</div><h1 style="margin-top:8px">Поставь телефон и отойди на 2–4 метра</h1><p class="sub" style="margin-top:6px">В кадре должен быть весь рост, от макушки до стоп.</p></div>
     <div><b style="font-size:15px">Камера</b><div class="seg" style="margin-top:8px"><button id="c0" class="${cam.back ? '' : 'on'}">Фронтальная</button><button id="c1" class="${cam.back ? 'on' : ''}">Основная</button></div>
       <p class="sub" style="font-size:13px;margin-top:6px">${cam.back ? 'Точнее картинка. Экран не видно, ведет голос.' : 'Видишь себя на экране во время теста.'}</p></div>
     <label class="card row" style="padding:14px 16px"><input type="checkbox" id="strc" ${STRENGTH ? 'checked' : ''} style="width:22px;height:22px;accent-color:#1E2533"><div style="flex:1"><b style="font-size:15px">Сила и симметрия</b><div class="sub" style="font-size:13px">Сравнит левую и правую сторону: плечи, бока, икры, бедра. Добавляет ${mins(secs(STR))} мин</div></div></label>
@@ -236,7 +242,7 @@ const V = {
   sideMore: 'Ещё немного. Правым плечом ко мне', turnMore: 'Повернись полностью', finish: 'Тест закончен. Можно подойти к телефону',
   go: 'Поехали', n1: '1', n2: '2', n3: '3',
 };
-export const LIMIT_NAMES = { stand: 'Стойка', ohs_front: 'Присед', sls: 'На одной ноге', thold: 'Руки в стороны', bends: 'Наклоны', calf: 'На носок', side: 'Боком', back: 'Спиной' };
+export const LIMIT_NAMES = { profile: 'Стойка боком', stand: 'Стойка', ohs_front: 'Присед', sls: 'На одной ноге', thold: 'Руки в стороны', bends: 'Наклоны', calf: 'На носок', side: 'Боком', back: 'Спиной' };
 const CANT = {
   ohs_front: { q: 'Что мешает присесть?', side: false, opts: ['Боль в спине', 'Боль в колене', 'Боль в тазу или бедре', 'Не хватает сил', 'Теряю равновесие', 'Страшно'], lvl: ['Совсем не могу', 'Только с опорой', 'Немного, неглубоко'] },
   sls: { q: 'Что мешает стоять на одной ноге?', side: true, opts: ['Боль', 'Теряю равновесие', 'Не хватает сил'], lvl: ['Не могу постоять 10 секунд', 'Только с опорой', 'Могу, но не приседать'] },
@@ -245,6 +251,7 @@ const CANT = {
   calf: { q: 'Что мешает подниматься на носок?', side: true, opts: ['Боль в стопе или голени', 'Не хватает сил', 'Теряю равновесие'], lvl: ['Не могу ни разу', 'Могу 1–5 раз'] },
   side: { q: 'Что мешает?', side: false, opts: ['Боль', 'Не хватает места'], lvl: ['Пропустить этот шаг'] },
   back: { q: 'Что мешает?', side: false, opts: ['Боль', 'Не хватает места'], lvl: ['Пропустить этот шаг'] },
+  profile: { q: 'Что мешает?', side: false, opts: ['Боль', 'Кружится голова'], lvl: ['Пропустить этот шаг'] },
   stand: { q: 'Что мешает?', side: false, opts: ['Боль', 'Кружится голова'], lvl: ['Не могу стоять ровно'] },
 };
 // упаковка движения скелета: 33 точки × (x, y, видимость) в Int16, координаты в долях кадра ×10000
@@ -373,7 +380,7 @@ export async function runProtocol(protocol, opts = {}) {
   const runUnit = async u => {
     if (u === 'stand') { await face('front'); step(k, 'Стой ровно', 'Руки вдоль тела, смотри прямо'); await say(SAY.standIntro); await say(SAY.freeze);
       const st = await hold('stand', 5, 'Замри'); if (stop || skipped()) return;
-      snapshot = { shoulderTilt: med(st.map(f => F.shoulderTilt(f.p))), pelvicTilt: med(st.map(f => F.pelvicTilt(f.p))), headTilt: med(st.map(f => F.headTilt(f.p))), trunkLateral: med(st.map(f => F.trunkLateral(f.p))) };
+      snapshot = standSnapshot(st);
       const f = cam.frame; setup = { bodyFrac: med(st.map(x => bodyFrac(x.p))) / (f ? f.h : 1), roll: phone.roll, pitch: phone.pitch ?? null, back: cam.back, w: f && f.w, h: f && f.h }; await say(SAY.good); k++; }
     if (u === 'ohs_front') { await face('front'); step(k, 'Присед с руками вверх', 'Руки вверх, пятки на полу, 5 раз'); await say(SAY.ohsIntro); if (skipped()) return; await say(SAY.ohsGo);
       moves.ohs_front = await reps('ohs_front', fr => Movement.front(fr), .12, 5); if (skipped()) return; await say(SAY.stop); k++; }
@@ -399,10 +406,12 @@ export async function runProtocol(protocol, opts = {}) {
         const fr = await hold(key, 15, 'Вверх-вниз', (fr, left) => { if (left < 11 && left > 5 && fr.length > 60) { const hy = x => (x.p[P.L_HEEL].y + x.p[P.R_HEEL].y) / 2, rec = fr.slice(-90).map(hy); if (Math.max(...rec) - Math.min(...rec) < 8) hint(SAY.calfHigher, 6000); } });
         if (skipped()) return; moves[key] = fr.length > 20 ? Movement.calfRaise(fr, right) : { f: {}, reps: 0, quality: 'RETAKE' }; await say(SAY.footDown); k++; } }
     if (u === 'side') { await face('side'); step(k, 'Боком: стой ровно', 'Правое плечо к телефону'); await say(SAY.freeze);
-      const sf = await hold('side_stand', 5, 'Замри'); if (skipped()) return; const sv = sf.map(f => sideView(f.p));
-      side = { headForwardDeg: med(sv.map(s => s.headForwardDeg)), hipShift: med(sv.map(s => s.hipShift)), shoulderShift: med(sv.map(s => s.shoulderShift)), kneeHyperDeg: med(sv.map(s => s.kneeHyperDeg)) };
+      const sf = await hold('side_stand', 5, 'Замри'); if (skipped()) return; side = sideSnapshot(sf);
       step(k, 'Боком: присед', 'Руки вверх, 3 раза'); await say(SAY.armsOverhead); await say(SAY.squatGo);
       moves.ohs_side = await reps('ohs_side', fr => Movement.side(fr)); if (skipped()) return; await say(SAY.stop); k++; }
+    if (u === 'profile') { await face('side'); step(k, 'Боком: стой ровно', 'Руки вдоль тела, смотри прямо'); await say(SAY.freeze);
+      const sf = await hold('side_stand', 5, 'Замри'); if (stop || skipped()) return; side = sideSnapshot(sf);
+      await say(SAY.good); k++; }
     if (u === 'back') { await face('back'); step(k, 'Спиной: присед', 'Руки вверх, 3 раза'); await say(SAY.armsOverhead); if (skipped()) return; await say(SAY.squatGo);
       moves.ohs_back = await reps('ohs_back', fr => Movement.back(fr)); if (skipped()) return; await say(SAY.stop); k++; }
   };
@@ -420,7 +429,7 @@ export async function runProtocol(protocol, opts = {}) {
   }
   if (stop) return;
   step(null, 'Готово', 'Считаю результат'); bar(1, ''); cam.onFrame = null; await say(SAY.finish); stopCamera();
-  return { date: Date.now(), protocol: units, full: units.includes('side'), snapshot, side, moves, poses, quality, limits, setup };
+  return { date: Date.now(), protocol: units, full: units.includes('side') || units.includes('profile'), snapshot, side, moves, poses, quality, limits, setup };
 }
 
 async function runTest() {
@@ -520,7 +529,7 @@ async function analysisScreen() {
 let BACK = true, SEL = null, MODE3D = false;
 export function map() {
   const cur = currentAnalysis(); if (!cur) return onboarding();
-  const { t, a } = cur; const all = spots(a); const top = all.filter(s => s.k !== 'OK' && !s.derived).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
+  const { t, a } = cur; const all = spots(a); const top = topOf(all);
   if (SEL == null && top[0]) { SEL = top[0].key; BACK = top[0].back; }
   const sel = all.find(s => s.key === SEL);
   // считаем зоны, а не отдельные мышцы: одна зона на сторону, только по замеру
@@ -609,7 +618,7 @@ async function shareResult() {
 
 // картинка результата 1080×1600: заголовок, тепловая карта, главные зоны, левая и правая сторона
 async function resultImage() {
-  const { t, a } = currentAnalysis(); const all = spots(a); const top = all.filter(s => s.k !== 'OK' && !s.derived).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone)).slice(0, 5);
+  const { t, a } = currentAnalysis(); const all = spots(a); const top = topOf(all).slice(0, 5);
   const W = 1080, H = 2400, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const c = cv.getContext('2d');
   await document.fonts.ready;
   c.fillStyle = '#F4F0E8'; c.fillRect(0, 0, W, H);

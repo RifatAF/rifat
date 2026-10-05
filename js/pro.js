@@ -1,6 +1,6 @@
 // Кабинет специалиста: клиенты, оценки по протоколам, три слоя результата, резервная копия.
 // Все данные в IndexedDB на телефоне специалиста; на сервер ничего не уходит.
-import { analyze, fmt } from './analysis.js';
+import { analyze, fmt, recompute } from './analysis.js';
 import { meSync, logout, getMe } from './auth.js';
 import { gate, planLine, SPECIALTIES, TEMPLATE_ORDER, START_CLIENTS } from './plans.js';
 import { C, voice, cam, startMotion, initPose, drawHeat, RAMP_CSS, device, seal, body3D } from './core.js';
@@ -54,13 +54,13 @@ const meta = async k => (await get('meta', k))?.v; const setMeta = (k, v) => put
 
 // ---------- шаблоны протоколов ----------
 export const TEMPLATES = [
-  ['knee', 'Колено', ['stand', 'ohs_front', 'sls', 'calf', 'back']],
+  ['knee', 'Колено', ['stand', 'ohs_front', 'sls', 'calf', 'profile', 'back']],
   ['low_back', 'Поясница', ['stand', 'ohs_front', 'sls', 'bends', 'side']],
   ['neck', 'Шея и плечи', ['stand', 'thold', 'bends', 'side']],
   ['run', 'Бег', ['stand', 'ohs_front', 'sls', 'calf', 'side']],
   ['full', 'Полный', ['stand', 'ohs_front', 'sls', 'thold', 'bends', 'calf', 'side', 'back']],
   ['screen', 'Первичный скрининг', ['stand', 'ohs_front', 'sls', 'side']],
-  ['posture', 'Осанка до и после сеанса, 1 мин', ['stand', 'bends']],
+  ['posture', 'Осанка до и после сеанса, 1 мин', ['stand', 'bends', 'profile']],
 ];
 // шаблоны в порядке, удобном для специализации: первый открывается по умолчанию
 function orderTemplates(sp) { const o = TEMPLATE_ORDER[sp]; if (o) TEMPLATES.sort((a, b) => o.indexOf(a[0]) - o.indexOf(b[0])); }
@@ -99,7 +99,7 @@ async function specialtyScreen(after) {
     (after || proHome)(); });
 }
 const QNAMES = { stand: 'Стойка', ohs_front: 'Присед лицом', sls_r: 'Правая нога', sls_l: 'Левая нога', thold: 'Руки в стороны', t_hold: 'Руки в стороны', bends: 'Наклоны', calf_r: 'Носок, правая', calf_l: 'Носок, левая', side_stand: 'Стойка боком', ohs_side: 'Присед боком', ohs_back: 'Присед спиной' };
-const UNIT_NAMES = { stand: 'Стойка', ohs_front: 'Присед лицом', sls: 'На одной ноге', thold: 'Руки в стороны', bends: 'Наклоны', calf: 'На носок', side: 'Боком', back: 'Спиной' };
+const UNIT_NAMES = { profile: 'Стойка боком', stand: 'Стойка', ohs_front: 'Присед лицом', sls: 'На одной ноге', thold: 'Руки в стороны', bends: 'Наклоны', calf: 'На носок', side: 'Боком', back: 'Спиной' };
 const PAIN = [['neck', 'Шея'], ['shoulder', 'Плечо'], ['upper_back', 'Грудной отдел'], ['low_back', 'Поясница'], ['hip', 'Таз, бедро'], ['knee', 'Колено'], ['foot', 'Стопа']];
 let HYP3D = false; // специалист смотрит гипотезу в 3D: режим сохраняется при правках
 const STATES = [['OK', 'Норма', 0], ['HYPER', 'Перегрузка', .8], ['SHORT', 'Зажата', .7], ['WEAK', 'Слабость', -.8]];
@@ -263,7 +263,7 @@ function proSpots(a) {
 }
 export async function result(aid, view = 'measured') {
   const a = await get('assessments', aid); if (!a) return proHome(); const c = await get('clients', a.clientId);
-  const an = analyze(a, C); const sp = proSpots(a); const top = sp.filter(s => s.k !== 'OK' && (!s.derived || s.edited)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
+  const an = analyze(a, C); const sp = proSpots(a); const top = sp.filter(s => s.k !== 'OK' && (!s.derived || s.edited || s.byChain)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
   const q = Object.entries(a.quality || {}); const qa = q.length ? Math.round(q.reduce((x, [, v]) => x + v, 0) / q.length) : null;
   const facts = an.findings.slice(0, 3);
   const tab = (k, t) => `<button class="${view === k ? 'on' : ''}" data-v="${k}">${t}</button>`;
@@ -271,6 +271,7 @@ export async function result(aid, view = 'measured') {
   if (view === 'measured') body = `
     ${verdictCard(top, an.findings)}
     <button class="btn lime" id="mv" style="height:50px">▶ Запись движения</button>
+    ${a.demo || a.clientId === 'demo' ? '' : `<button class="btn ghost" id="rc" style="height:46px;background:#fff">${a.recalc ? 'Пересчитано по новой методике · вернуть исходный расчет' : 'Пересчитать по новой методике'}</button>`}
     ${a.expect ? `<div class="card" style="background:#fff;border:1.5px solid var(--line)"><div class="caps" style="color:var(--muted)">Ваше ожидание до теста</div><p style="font-size:15px;line-height:1.45;margin-top:6px">${esc(a.expect)}</p>
       <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">${[['yes', 'Совпало'], ['part', 'Частично'], ['no', 'Не совпало']].map(([k, n]) => `<button class="pill" data-em="${k}" style="font-size:12px;padding:6px 10px;border:1.5px solid ${a.expectMatch === k ? 'var(--navy)' : 'transparent'}">${n}</button>`).join('')}</div></div>` : ''}
     <div class="card"><div class="caps" style="color:var(--muted)">Главное по замеру</div>${facts.length ? facts.map(f => `<div style="margin-top:12px"><b style="font-size:16px">${f.observed}</b>${f.rule.weak ? '<div style="font-size:12px;color:var(--muted)">слабый признак</div>' : ''}</div>`).join('') : '<p class="sub" style="margin-top:8px">Существенных отклонений не найдено.</p>'}</div>
@@ -303,6 +304,7 @@ export async function result(aid, view = 'measured') {
     <div class="pad" style="display:flex;flex-direction:column;gap:10px;margin-top:12px">${body}</div>
     <div style="position:fixed;left:0;right:0;bottom:0;padding:12px 20px calc(env(safe-area-inset-bottom) + 20px);background:linear-gradient(transparent,var(--bg) 30%);max-width:480px;margin:0 auto"><div class="row" style="gap:8px"><button class="btn ghost" id="rep" style="flex:1;background:#fff">Отчет</button>${a.prevId ? '<button class="btn ghost" id="cmp" style="flex:1;background:#fff">Было → стало</button>' : ''}<button class="btn" id="fin" style="flex:1.3">${a.draft ? 'Сохранить' : 'Готово'}</button></div></div></div>`);
   document.querySelectorAll('[data-v]').forEach(b => b.onclick = async () => { await savePlan(a); result(aid, b.dataset.v); });
+  if ($('#rc')) $('#rc').onclick = async () => { $('#rc').textContent = 'Считаю…'; await recalc(a); const y = scrollY; await result(aid, view); scrollTo(0, y); };
   if ($('#mv')) $('#mv').onclick = async () => { const pp = await get('poses', aid); motionViewer(pp && pp.poses, a.setup, () => result(aid), `${c.name} · ${fmtDate(a.date)}`); };
   $('#back').onclick = async () => { await savePlan(a); clientCard(a.clientId); };
   $('#rep').onclick = async () => { await savePlan(a); a.draft = false; await put('assessments', a); report(aid); };
@@ -341,9 +343,17 @@ export async function result(aid, view = 'measured') {
     document.querySelectorAll('[data-add]').forEach(b => b.onclick = () => addIds(recs[+b.dataset.add].all));
     if ($('#addall')) $('#addall').onclick = () => addIds(recs.flatMap(r => r.all)); }
 }
+/** Пересчет по сохраненной записи скелета; исходный расчет хранится, чтобы можно было вернуться. Повторное нажатие возвращает исходный. */
+async function recalc(a) {
+  if (a.recalc && a.orig) { Object.assign(a, a.orig); delete a.orig; delete a.recalc; await put('assessments', a); return; }
+  const pp = await get('poses', a.id), poses = (pp && pp.poses) || {}; const W = (a.setup && a.setup.w) || 720, H = (a.setup && a.setup.h) || 1280;
+  const frames = k => { const pk = poses[k]; if (!pk || !pk.n) return []; const fr = unpack(pk, W, H).map(f => ({ t: f.t, p: f.p.map(l => ({ x: l.x, y: l.y, visibility: l.v })) }));
+    const w = unpackWorld(pk); if (w) fr.forEach((f, i) => { f.w = w[i]; }); return fr; };
+  const r = recompute(a, frames); a.orig = { snapshot: a.snapshot, side: a.side, moves: a.moves }; Object.assign(a, r); a.recalc = Date.now(); await put('assessments', a);
+}
 /** Рекомендации по конкретным мышцам: что отпустить, что включить, чем закрепить. Из правок специалиста и черновика. */
 function muscleRecs(a) {
-  const sp = proSpots(a).filter(s => s.k !== 'OK' && (!s.derived || s.edited)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone)).slice(0, 8);
+  const sp = proSpots(a).filter(s => s.k !== 'OK' && (!s.derived || s.edited || s.byChain)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone)).slice(0, 8);
   const sideW = s => s.side === 'RIGHT' ? 'справа' : 'слева', sk = s => s.side === 'RIGHT' ? 'right' : 'left';
   const ids = (l, s) => (l || []).map(x => x.replace('{s}', sk(s))).filter(x => C.exercises[x]);
   const exT = id => C.exercises[id].title.split(' (')[0];
@@ -442,7 +452,7 @@ function drawPair(cv, ghost, cur, k) {
 // пороги «существенного изменения»: меньше — это погрешность съемки (до собственной валидации — консервативные значения)
 const METRICS = [['sq_depth', 'Глубина приседа (сгибание колен)', '°', 8, true], ['valgus_max', 'Колено внутрь в приседе', '°', 5], ['sls_valgus_r', 'Колено внутрь, правая нога', '°', 5], ['sls_valgus_l', 'Колено внутрь, левая нога', '°', 5],
   ['sls_drop_r', 'Провал таза, на правой', '°', 2.5], ['sls_drop_l', 'Провал таза, на левой', '°', 2.5], ['sq_shift', 'Сдвиг таза в приседе', '', .12], ['sq_lean', 'Наклон корпуса в приседе', '°', 5],
-  ['sq_arms', 'Руки падают вперед', '°', 6], ['shoulder_tilt', 'Перекос плеч', '°', 2], ['pelvic_tilt', 'Перекос таза', '°', 2], ['head_forward', 'Голова вперед', '°', 4],
+  ['sq_arms', 'Руки падают вперед', '°', 6], ['oh_reach', 'Руки вверх: не хватает до вертикали', '°', 8], ['shoulder_shift', 'Плечи впереди таза (сбоку)', '', .02], ['knee_hyper', 'Переразгибание колен', '°', 3], ['shoulder_tilt', 'Перекос плеч', '°', 2], ['pelvic_tilt', 'Перекос таза', '°', 2], ['head_forward', 'Голова вперед', '°', 4],
   ['asym_delt', 'Разница рук в стороны', '°', 6], ['asym_bend', 'Разница наклонов', '°', 5], ['asym_calf', 'Разница икр', '%', 15], ['asym_quad', 'Разница глубины на одной ноге', '°', 8]];
 function deltas(pa, ca) {
   const f0 = analyze(pa, C).f, f1 = analyze(ca, C).f;
@@ -485,7 +495,7 @@ export async function compare(prevId, curId) {
 async function report(aid) {
   const a = await get('assessments', aid), c = await get('clients', a.clientId), prev = a.prevId ? await get('assessments', a.prevId) : null;
   const author = (await meta('profile')) || defaultAuthor();
-  const sp = proSpots(a), an = analyze(a, C), top = sp.filter(s => s.k !== 'OK' && (!s.derived || s.edited)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone)).slice(0, 5);
+  const sp = proSpots(a), an = analyze(a, C), top = sp.filter(s => s.k !== 'OK' && (!s.derived || s.edited || s.byChain)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone)).slice(0, 5);
   const W = 1080, cv = document.createElement('canvas'); cv.width = W; cv.height = 3000; const g = cv.getContext('2d'); await document.fonts.ready;
   g.fillStyle = '#F4F0E8'; g.fillRect(0, 0, W, 3000);
   g.fillStyle = '#E8765A'; g.font = '600 26px Onest, sans-serif'; g.fillText('ПАСПОРТ ДВИЖЕНИЯ', 64, 80);
