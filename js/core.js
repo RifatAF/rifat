@@ -14,7 +14,7 @@ export async function loadContent() {
 // ---------- голос: заранее записанный нейроголос, системный как запасной ----------
 let voiceIdx = {}, audio = null, unlocked = false;
 export const voice = {
-  async init() { voiceIdx = await fetch('voice/index.json?v=' + Date.now(), { cache: 'no-store' }).then(r => r.json()).catch(() => voiceIdx || {}); },
+  async init() { voiceIdx = await fetch('voice/index.json', { cache: 'no-store' }).then(r => r.json()).catch(() => voiceIdx || {}); },
   /** Проверка перед тестом: все фразы есть в списке записей; если нет — перечитать список. */
   async ensure(texts) { if (texts.some(t => !voiceIdx[t.trim()])) await this.init(); return texts.filter(t => !voiceIdx[t.trim()]); },
   unlock() { try { this._ac = this._ac || new (window.AudioContext || window.webkitAudioContext)(); this._ac.resume(); } catch (e) {} if (unlocked) return; unlocked = true; const a = new Audio(); a.muted = true; a.play().catch(() => {}); },
@@ -45,12 +45,13 @@ export const voice = {
       const f = voiceIdx[text.trim()]; if (audio) { audio.pause(); audio = null; }
       if (!f) { try { const u = new SpeechSynthesisUtterance(text); u.lang = 'ru-RU'; const vs = speechSynthesis.getVoices().filter(v => v.lang.startsWith('ru'));
           u.voice = vs.find(v => /dmitr|male|юр|макс/i.test(v.name)) || vs[0] || null; u.onend = () => setTimeout(fin, 150); speechSynthesis.speak(u); setTimeout(fin, est + 3000); } catch (e) { setTimeout(fin, est); } return; }
-      const a = new Audio('voice/' + f); audio = a; a.onended = () => setTimeout(fin, 150);
+      const a = new Audio('voice/' + f); audio = a; a.onended = () => setTimeout(fin, 150); let known = false;
       // запись не проигралась (сеть, формат) — читаем системным голосом, чтобы не было тишины
       const tts = () => { try { const u = new SpeechSynthesisUtterance(text); u.lang = 'ru-RU'; const vs = speechSynthesis.getVoices().filter(v => v.lang.startsWith('ru'));
         u.voice = vs.find(v => /dmitr|male|юр|макс/i.test(v.name)) || vs[0] || null; u.onend = () => setTimeout(fin, 150); speechSynthesis.speak(u); } catch (e) {} setTimeout(fin, est + 1500); };
-      a.onerror = tts; a.onloadedmetadata = () => { if (isFinite(a.duration)) setTimeout(fin, a.duration * 1000 + 600); };
-      setTimeout(fin, est + 2500); a.play().catch(tts); });
+      a.onerror = tts; a.onloadedmetadata = () => { if (isFinite(a.duration)) { known = true; setTimeout(fin, a.duration * 1000 + 600); } };
+      // запасной предел по оценке длины действует, только пока настоящая длина записи неизвестна: иначе длинная фраза обрывалась следующей
+      setTimeout(() => { if (!known) fin(); }, est + 2500); setTimeout(fin, 15000 + est); a.play().catch(tts); });
   },
   /** Звуковой сигнал: старт — один высокий, стоп — два коротких. Слышно, даже если человек стоит спиной. */
   beep(kind = 'start') { try { const ac = this._ac || (this._ac = new (window.AudioContext || window.webkitAudioContext)()); const t = ac.currentTime;
@@ -117,9 +118,10 @@ export async function startCamera(video) {
   cam.running = true; keepAwake(true); loop();
 }
 export function stopCamera() { keepAwake(false); cam.running = false; if (cam.stream) cam.stream.getTracks().forEach(t => t.stop()); cam.stream = null; }
-let lastTs = -1, fpsT = performance.now(), fpsN = 0;
-function loop() {
-  if (!cam.running) return;
+let lastTs = -1, fpsT = performance.now(), fpsN = 0, loopGen = 0;
+function loop(gen = ++loopGen) {
+  // после перезапуска камеры старый цикл завершается: два цикла вызывали бы детектор дважды на кадр
+  if (!cam.running || gen !== loopGen) return;
   const v = cam.video;
   if (landmarker && v.readyState >= 2) {
     const ts = performance.now(); if (ts - lastTs >= 30) { lastTs = ts;
@@ -131,7 +133,7 @@ function loop() {
       if (cam.onFrame) cam.onFrame(cam.frame);
     }
   }
-  requestAnimationFrame(loop);
+  requestAnimationFrame(() => loop(gen));
 }
 export function fullyVisible(p) { return p && [P.NOSE, P.L_ANKLE, P.R_ANKLE, P.L_SHOULDER, P.R_SHOULDER].every(i => p[i].visibility > .5); }
 
@@ -163,15 +165,18 @@ export function ramp(v) { const x = Math.max(-1, Math.min(1, v)); let i = RAMP.f
   return [mix(16), mix(8), mix(0)]; }
 export const RAMP_CSS = 'linear-gradient(90deg,' + RAMP.map(([v, c]) => '#' + c.toString(16).padStart(6, '0') + ' ' + ((v + 1) * 50) + '%').join(',') + ')';
 const VW = 360, OX = 80;
+// маска силуэта считается один раз: проверка 88 тысяч точек по контурам тормозила каждое касание карты
+let bodyMask = null;
+function mask() { if (bodyMask) return bodyMask; const parts = bodyParts(), tc = document.createElement('canvas').getContext('2d'); bodyMask = new Uint8Array(200 * 440);
+  for (let y = 0; y < 440; y++) for (let x = 0; x < 200; x++) if (parts.some(pp => tc.isPointInPath(pp, x, y))) bodyMask[y * 200 + x] = 1; return bodyMask; }
 export function drawHeat(cv, spots, back, selected, labels) {
   const mine = spots.filter(s => s.back === back);
   const k = 1, W = 200 * k, H = 440 * k;
   const off = document.createElement('canvas'); off.width = W; off.height = H; const o = off.getContext('2d');
-  const img = o.createImageData(W, H), parts = bodyParts();
-  const tc = document.createElement('canvas').getContext('2d');
+  const img = o.createImageData(W, H), parts = bodyParts(), inside = mask();
   const vals = new Float32Array(W * H).fill(NaN);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const ux = x / k, uy = y / k; if (!parts.some(pp => tc.isPointInPath(pp, ux, uy))) continue;
+    const ux = x / k, uy = y / k; if (!inside[y * W + x]) continue;
     let num = 0, den = .55;
     for (const s of mine) { const dx = ux - s.x * 200, dy = uy - s.y * 440, sg = 13 + 13 * Math.abs(s.tone); const g = Math.exp(-(dx * dx + dy * dy) / (2 * sg * sg)); num += g * s.tone; den += g; }
     vals[y * W + x] = num / den;
@@ -274,13 +279,14 @@ export async function body3D(container, spots, onPick) {
   renderer.domElement.addEventListener('pointerup', e => { if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 8) return; const r = renderer.domElement.getBoundingClientRect();
     ray.setFromCamera({ x: (e.clientX - r.left) / r.width * 2 - 1, y: -((e.clientY - r.top) / r.height) * 2 + 1 }, camera);
     const hit = ray.intersectObject(obj)[0]; if (!hit) return; const g = m.grp[hit.face.a]; if (g > 0 && g < 255) { const id = order[(g - 1) >> 1]; onPick && onPick(id + ':' + ((g - 1) % 2 ? 'RIGHT' : 'LEFT')); } });
-  let alive = true; (function anim() { if (!alive || !renderer.domElement.isConnected) return;
+  let alive = true; function anim() { if (!alive) return; if (!renderer.domElement.isConnected) { api.dispose(); return; }
     if (fly) { fly.k = Math.min(1, fly.k + .06); const e = 1 - (1 - fly.k) ** 3; ctl.target.lerpVectors(fly.from.t, fly.to.t, e); camera.position.lerpVectors(fly.from.p, fly.to.p, e); if (fly.k >= 1) fly = null; }
-    ctl.update(); renderer.render(scene, camera); requestAnimationFrame(anim); })();
+    ctl.update(); renderer.render(scene, camera); requestAnimationFrame(anim); }
   let isBack = false;
-  return { turn(back) { isBack = back; const d = camera.position.distanceTo(ctl.target); flyTo(ctl.target, d, back); },
+  const api = { turn(back) { isBack = back; const d = camera.position.distanceTo(ctl.target); flyTo(ctl.target, d, back); },
     focus(zone) { const [y, d] = ZONES[zone] || ZONES.all; flyTo(new THREE.Vector3(0, y, 0), d, isBack); },
-    dispose() { alive = false; ctl.dispose(); geo.dispose(); mat.dispose(); renderer.dispose(); try { renderer.forceContextLoss(); } catch (e) {} } };
+    dispose() { if (!alive) return; alive = false; ctl.dispose(); geo.dispose(); mat.dispose(); renderer.dispose(); try { renderer.forceContextLoss(); } catch (e) {} } };
+  anim(); return api;
 }
 
 

@@ -4,7 +4,7 @@ import { analyze, fmt } from './analysis.js';
 import { meSync, logout, getMe } from './auth.js';
 import { gate, planLine, SPECIALTIES, TEMPLATE_ORDER, START_CLIENTS } from './plans.js';
 import { C, voice, cam, startMotion, initPose, drawHeat, RAMP_CSS, device, seal, body3D } from './core.js';
-import { verdictCard, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, plan, ex, totalMin, workout, onboarding, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol } from './app.js';
+import { cleanResult, verdictCard, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, plan, ex, totalMin, workout, onboarding, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol } from './app.js';
 
 const $ = s => document.querySelector(s);
 // имя специалиста для отчетов по умолчанию: из аккаунта (в бете кабинетом пользуются разные специалисты)
@@ -98,7 +98,7 @@ async function specialtyScreen(after) {
     fetch('/api/auth?a=profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ specialty: sp }) }).catch(() => {});
     (after || proHome)(); });
 }
-const QNAMES = { stand: 'Стойка', ohs_front: 'Присед лицом', sls_r: 'Правая нога', sls_l: 'Левая нога', thold: 'Руки в стороны', calf_r: 'Носок, правая', calf_l: 'Носок, левая', side_stand: 'Стойка боком', ohs_side: 'Присед боком', ohs_back: 'Присед спиной' };
+const QNAMES = { stand: 'Стойка', ohs_front: 'Присед лицом', sls_r: 'Правая нога', sls_l: 'Левая нога', thold: 'Руки в стороны', t_hold: 'Руки в стороны', bends: 'Наклоны', calf_r: 'Носок, правая', calf_l: 'Носок, левая', side_stand: 'Стойка боком', ohs_side: 'Присед боком', ohs_back: 'Присед спиной' };
 const UNIT_NAMES = { stand: 'Стойка', ohs_front: 'Присед лицом', sls: 'На одной ноге', thold: 'Руки в стороны', bends: 'Наклоны', calf: 'На носок', side: 'Боком', back: 'Спиной' };
 const PAIN = [['neck', 'Шея'], ['shoulder', 'Плечо'], ['upper_back', 'Грудной отдел'], ['low_back', 'Поясница'], ['hip', 'Таз, бедро'], ['knee', 'Колено'], ['foot', 'Стопа']];
 let HYP3D = false; // специалист смотрит гипотезу в 3D: режим сохраняется при правках
@@ -123,7 +123,8 @@ export async function proHome(query = '', pulled = null) {
     $('#lgy').onclick = async () => { $('#lgy').textContent = 'Переношу…'; await claimLegacy(true); proHome(); };
     $('#lgn').onclick = async () => { await claimLegacy(false); proHome(); }; return; }
   const sp = await meta('specialty'); if (!sp) return specialtyScreen(); localStorage.setItem('bp_sp', sp); orderTemplates(sp); getMe();
-  if (pulled === null) pullResults().then(n => { if (n.length) proHome(query, n); });
+  // новые результаты пришли, пока специалист уже ушел в карточку: не выдергиваем его на главный экран
+  if (pulled === null) pullResults().then(n => { if (n.length && document.getElementById('join') && document.getElementById('menu')) proHome(query, n); });
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
   const [clients, asses] = await Promise.all([all('clients'), all('assessments')]);
   const last = id => asses.filter(a => a.clientId === id).sort((x, y) => y.date - x.date)[0];
@@ -228,7 +229,7 @@ function remind(c, date) {
 // ---------- новая оценка: протокол, боль, камера ----------
 async function newAssessment(clientId, retestOf) {
   const c = await get('clients', clientId); const prev = retestOf ? await get('assessments', retestOf) : null;
-  let tpl = prev ? TEMPLATES.find(t => t[0] === prev.template) || TEMPLATES[0] : TEMPLATES[0]; let units = prev ? prev.protocol : tpl[2]; const pain = {}; const pre = {}; let expect = '';
+  let tpl = prev ? TEMPLATES.find(t => t[0] === prev.template) || ['custom', prev.templateName || 'Свой', prev.protocol] : TEMPLATES[0]; let units = prev ? prev.protocol : tpl[2]; const pain = {}; const pre = {}; let expect = '';
   const draw = () => { const rows = rowsOf(units);
     go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" style="background:transparent">‹</button><b style="font-size:18px">${prev ? 'Повторный тест' : 'Новая оценка'}: ${esc(c.name)}</b></div>
      <div class="pad" style="display:flex;flex-direction:column;gap:16px;padding-bottom:20px">
@@ -273,9 +274,8 @@ export async function result(aid, view = 'measured') {
     ${a.expect ? `<div class="card" style="background:#fff;border:1.5px solid var(--line)"><div class="caps" style="color:var(--muted)">Ваше ожидание до теста</div><p style="font-size:15px;line-height:1.45;margin-top:6px">${esc(a.expect)}</p>
       <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">${[['yes', 'Совпало'], ['part', 'Частично'], ['no', 'Не совпало']].map(([k, n]) => `<button class="pill" data-em="${k}" style="font-size:12px;padding:6px 10px;border:1.5px solid ${a.expectMatch === k ? 'var(--navy)' : 'transparent'}">${n}</button>`).join('')}</div></div>` : ''}
     <div class="card"><div class="caps" style="color:var(--muted)">Главное по замеру</div>${facts.length ? facts.map(f => `<div style="margin-top:12px"><b style="font-size:16px">${f.observed}</b>${f.rule.weak ? '<div style="font-size:12px;color:var(--muted)">слабый признак</div>' : ''}</div>`).join('') : '<p class="sub" style="margin-top:8px">Существенных отклонений не найдено.</p>'}</div>
-    ${q.length ? '' : '<!--'}<div class="card"><div class="caps" style="color:var(--muted)">Качество съемки${qa != null ? ' · ' + qa + ' из 100' : ''}</div>${q.map(([k, v]) => `<div class="row" style="margin-top:8px;font-size:14px"><span style="flex:1">${QNAMES[k] || k}</span><b style="color:${v < 60 ? '#E5484D' : 'var(--text)'}">${v}${v < 60 ? ' · не для строгого сравнения' : ''}</b></div>`).join('')}</div>${q.length ? '' : '-->'}
-    ${a.limits && Object.keys(a.limits).length ? `<div class="card" style="background:var(--shortS)"><div class="caps" style="color:var(--coral)">Не смог выполнить</div>${Object.entries(a.limits).map(([u, l]) => `<div style="margin-top:8px;font-size:14px"><b>${UNIT_NAMES[u] || u}</b>: ${esc([l.level, ...(l.reasons || [])].filter(Boolean).join(', '))}${l.side && l.side !== 'BOTH' ? (l.side === 'LEFT' ? ', слева' : ', справа') : ''}</div>`).join('')}</div>` : ''}
-    ${a.limits && Object.keys(a.limits).length ? `<div class="card" style="background:var(--shortS)"><div class="caps" style="color:var(--muted)">Не смог выполнить</div>${Object.entries(a.limits).map(([u, l]) => `<div style="margin-top:8px;font-size:15px"><b>${LIMIT_NAMES[u] || u}</b>: ${[...(l.reasons || []), l.level, l.side && l.side !== 'BOTH' ? (l.side === 'LEFT' ? 'слева' : 'справа') : ''].filter(Boolean).join(', ').toLowerCase()}${l.alt ? ' · сделан вариант с опорой' : ''}</div>`).join('')}</div>` : ''}
+    ${q.length ? `<div class="card"><div class="caps" style="color:var(--muted)">Качество съемки${qa != null ? ' · ' + qa + ' из 100' : ''}</div>${q.map(([k, v]) => `<div class="row" style="margin-top:8px;font-size:14px"><span style="flex:1">${esc(QNAMES[k] || k)}</span><b style="color:${v < 60 ? '#E5484D' : 'var(--text)'}">${esc(v)}${v < 60 ? ' · не для строгого сравнения' : ''}</b></div>`).join('')}</div>` : ''}
+    ${a.limits && Object.keys(a.limits).length ? `<div class="card" style="background:var(--shortS)"><div class="caps" style="color:var(--coral)">Не смог выполнить</div>${Object.entries(a.limits).map(([u, l]) => `<div style="margin-top:8px;font-size:14px"><b>${esc(UNIT_NAMES[u] || u)}</b>: ${esc([...(l.reasons || []), l.level, l.side && l.side !== 'BOTH' ? (l.side === 'LEFT' ? 'слева' : 'справа') : ''].filter(Boolean).join(', ').toLowerCase())}${l.alt ? ' · сделан вариант с опорой' : ''}</div>`).join('')}</div>` : ''}
     ${Object.values(a.pain || {}).some(v => v > 0) ? `<div class="card"><div class="caps" style="color:var(--muted)">Боль до теста</div>${PAIN.filter(([k]) => a.pain[k] > 0).map(([k, n]) => `<div class="row" style="margin-top:6px"><span style="flex:1">${n}</span><b>${a.pain[k]} / 10</b></div>`).join('')}</div>` : ''}
     <details class="card"><summary style="font-weight:600">Все показатели</summary>${Object.entries(an.f).filter(([k, v]) => typeof v === 'number' && !k.startsWith('const')).map(([k, v]) => `<div class="row" style="font-size:13px;margin-top:4px"><span style="flex:1;color:var(--sub)">${k}</span><b style="font-variant-numeric:tabular-nums">${fmt(v)}</b></div>`).join('')}</details>`;
   if (view === 'hyp') body = `
@@ -297,7 +297,7 @@ export async function result(aid, view = 'measured') {
         ${r.out.map(([h, t]) => `<div style="font-size:14px;margin-top:6px;line-height:1.4"><b>${h}:</b> ${t}</div>`).join('')}</div>`).join('') : '<p class="sub" style="margin-top:8px">Значимых отклонений нет.</p>'}</div>
     <div class="card"><div class="caps" style="color:var(--muted)">Упражнения</div>${Object.values(C.exercises).filter(e => !e.id.endsWith('_right') || pl.ex.includes(e.id)).sort((x, y) => (pl.ex.includes(y.id) - pl.ex.includes(x.id)) || x.title.localeCompare(y.title)).slice(0, 40).map(e => `<label class="row" style="margin-top:8px;font-size:15px"><input type="checkbox" data-e="${e.id}" ${pl.ex.includes(e.id) ? 'checked' : ''} style="width:20px;height:20px;accent-color:#1E2533"><span style="flex:1">${e.title.split(' (')[0]}${e.id.endsWith('_right') ? ' (правая)' : e.id.endsWith('_left') && pl.ex.includes(e.id) ? ' (левая)' : ''}</span><span style="font-size:12px;color:var(--muted)">${e.dose || ''}</span></label>`).join('')}</div>
       <div class="card"><div class="caps" style="color:var(--muted)">Комментарий для клиента</div><textarea id="pt" rows="4" style="width:100%;margin-top:8px;border-radius:12px;border:1.5px solid var(--line);padding:10px;font:15px Onest">${esc(pl.text)}</textarea><button class="btn ghost" id="dict" style="height:40px;margin-top:8px">🎙 Надиктовать</button></div>
-      <div class="card row"><span style="flex:1">Повторный тест</span><input type="date" id="nd" value="${new Date(a.nextDate).toISOString().slice(0, 10)}" style="height:40px;border-radius:10px;border:1.5px solid var(--line);padding:0 8px;font:15px Onest"></div>`; }
+      <div class="card row"><span style="flex:1">Повторный тест</span><input type="date" id="nd" value="${Number.isFinite(+a.nextDate) && +a.nextDate > 0 ? new Date(+a.nextDate).toISOString().slice(0, 10) : ''}" style="height:40px;border-radius:10px;border:1.5px solid var(--line);padding:0 8px;font:15px Onest"></div>`; }
   go(`<div class="fade" style="padding-bottom:110px"><div class="pad row" style="padding-top:8px"><button class="round" id="back" style="background:transparent">‹</button><div style="flex:1"><b style="font-size:17px">${esc(c.name)}</b><div style="font-size:13px;color:var(--muted)">${fmtDate(a.date)} · ${esc(a.templateName)}</div></div></div>
     <div class="pad"><div class="seg">${tab('measured', 'Измерено')}${tab('hyp', 'Гипотеза')}${tab('plan', 'Назначение')}</div></div>
     <div class="pad" style="display:flex;flex-direction:column;gap:10px;margin-top:12px">${body}</div>
@@ -462,7 +462,7 @@ export async function compare(prevId, curId) {
   go(`<div class="fade" style="padding-bottom:40px"><div class="pad row" style="padding-top:8px"><button class="round" id="back" style="background:transparent">‹</button><div style="flex:1"><b style="font-size:17px">Было → стало</b><div style="font-size:13px;color:var(--muted)">${esc(c.name)} · ${fmtDate(pa.date)} → ${fmtDate(ca.date)}</div></div></div>
    <div class="pad"><div class="card" style="background:${better > worse ? 'var(--okS)' : '#fff'}"><b style="font-size:17px">${better ? `Лучше: ${better}` : 'Существенных улучшений нет'}${worse ? ` · хуже: ${worse}` : ''} · без изменений: ${ds.length - better - worse}</b>
      <div style="font-size:13px;color:var(--sub);margin-top:4px">Изменения меньше погрешности съемки показаны как «без изменений».${lowQ(pa.quality) || lowQ(ca.quality) ? ' Часть тестов снята с низким качеством: сравнение по ним менее надежно.' : ''}</div></div></div>
-   ${keys.length ? `<div class="pad" style="margin-top:12px"><div class="row" style="gap:6px;flex-wrap:wrap">${keys.map(x => `<button class="pill" data-k="${x}" style="border:1.5px solid ${x === key ? 'var(--navy)' : 'transparent'}">${QNAMES[x] || x}</button>`).join('')}</div>
+   ${keys.length ? `<div class="pad" style="margin-top:12px"><div class="row" style="gap:6px;flex-wrap:wrap">${keys.map(x => `<button class="pill" data-k="${esc(x)}" style="border:1.5px solid ${x === key ? 'var(--navy)' : 'transparent'}">${esc(QNAMES[x] || x)}</button>`).join('')}</div>
      <div class="card" style="margin-top:10px;padding:10px"><canvas id="cv" style="width:100%;height:340px;display:block"></canvas>
        <div class="row" style="margin-top:8px"><button class="round" id="pp" style="background:var(--lime)">❚❚</button><input type="range" id="ph" min="0" max="1000" value="0" style="flex:1;accent-color:#1E2533"></div>
        <div class="row" style="font-size:12px;color:var(--muted);margin-top:6px;gap:14px"><span><b style="color:#A9A091">━</b> было</span><span><b style="color:#1E2533">━</b> стало</span><span style="flex:1;text-align:right">выровнено по стопам и росту</span></div></div></div>` : '<p class="pad sub" style="margin-top:12px">В этих оценках нет общих тестов со скелетом.</p>'}
@@ -545,9 +545,21 @@ async function sendInvite(c) {
       if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url); alert('Ссылка скопирована'); } d.remove(); }; };
   draw(); document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
 }
+const str = (v, n) => typeof v === 'string' ? v.replace(/[\u0000-\u001f]/g, ' ').slice(0, n) : '';
+const KEY = /^[a-z_]{1,20}$/;
+/** Результат пришел с чужого телефона: пропускаем только ожидаемые поля и типы (иначе возможна вставка HTML в кабинет). */
+function cleanRemote(r) {
+  const base = cleanResult(r), pick = (o, f) => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).slice(0, 30).filter(([k]) => KEY.test(k)).map(([k, v]) => [k, f(v)]).filter(([, v]) => v !== undefined));
+  const n = v => typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+  const protocol = sortUnits(Array.isArray(r.protocol) ? r.protocol.filter(u => typeof u === 'string' && Object.prototype.hasOwnProperty.call(UNITS, u)) : []);
+  const limits = pick(r.limits, l => l && typeof l === 'object' ? { reasons: Array.isArray(l.reasons) ? l.reasons.slice(0, 8).map(x => str(x, 60)).filter(Boolean) : [], level: str(l.level, 80) || null, side: ['LEFT', 'RIGHT', 'BOTH'].includes(l.side) ? l.side : null, ...(l.alt ? { alt: 'support' } : {}) } : undefined);
+  const poses = pick(r.poses, p => p && typeof p === 'object' && Number.isInteger(p.n) && p.n > 0 && p.n < 20000 && typeof p.t === 'string' && typeof p.d === 'string' ? { n: p.n, t: p.t, d: p.d, w: typeof p.w === 'string' ? p.w : null } : undefined);
+  const setup = r.setup && typeof r.setup === 'object' ? { bodyFrac: n(r.setup.bodyFrac), w: n(r.setup.w), h: n(r.setup.h), back: !!r.setup.back } : {};
+  return { ...base, protocol, quality: pick(r.quality, v => n(v) !== undefined ? Math.max(0, Math.min(100, Math.round(v))) : undefined), limits, pain: pick(r.pain, v => n(v) !== undefined ? Math.max(0, Math.min(10, Math.round(v))) : undefined), poses, setup };
+}
 async function addResult(c, r) {
-  const prev = (await byClient(c.id)).at(-1); const tpl = TEMPLATES.find(t => t[2].join() === (r.protocol || []).join());
-  const a = { id: uid(), clientId: c.id, date: r.date || Date.now(), template: tpl ? tpl[0] : 'custom', templateName: 'Дома · ' + (tpl ? tpl[1] : 'свой протокол'), protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, limits: r.limits || {},
+  r = cleanRemote(r); const prev = (await byClient(c.id)).at(-1); const tpl = TEMPLATES.find(t => t[2].join() === (r.protocol || []).join());
+  const a = { id: uid(), clientId: c.id, date: r.date || Date.now(), template: tpl ? tpl[0] : 'custom', templateName: 'Дома · ' + (tpl ? tpl[1] : 'свой протокол'), protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup,
     limits: r.limits || {}, pain: r.pain || {}, hyp: {}, plan: null, note: '', nextDate: (r.date || Date.now()) + 30 * DAY, prevId: prev ? prev.id : null, draft: true, source: 'home' };
   await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses || {} });
 }
@@ -575,13 +587,17 @@ export async function pullResults() {
   let data; try { data = await (await fetch('/api/relay?ids=' + ids.join(','), { cache: 'no-store' })).json(); } catch (e) { return []; }
   const got = [], done = p => fetch('/api/relay?p=' + encodeURIComponent(p), { method: 'DELETE' }).catch(() => {});
   for (const c of clients) for (const item of (data[c.invite.id] || [])) {
-    try { await addResult(c, await seal.decrypt(c.invite.key, item.data)); got.push(c.name); done(item.p); } catch (e) { console.warn('relay item', e); } }
+    let r; try { r = await seal.decrypt(c.invite.key, item.data); } catch (e) { done(item.p); continue; } // не расшифровывается этим ключом: мусор, иначе он занимает лимит ссылки
+    try { await addResult(c, r); got.push(c.name); done(item.p); } catch (e) { console.warn('relay item', e); } }
   if (bx) for (const item of (data[bx.id] || [])) {
-    try { const m = await seal.decrypt(bx.key, item.data); const pr = m.profile || {};
+    let m; try { m = await seal.decrypt(bx.key, item.data); } catch (e) { done(item.p); continue; }
+    try { const p0 = m.profile && typeof m.profile === 'object' ? m.profile : {}, pr = { name: str(p0.name, 40), surname: str(p0.surname, 60), dob: /^\d{4}-\d{2}-\d{2}$/.test(p0.dob) ? p0.dob : '', sex: ['M', 'F'].includes(p0.sex) ? p0.sex : '', height: /^\d{2,3}$/.test(p0.height) ? p0.height : '', hand: ['R', 'L'].includes(p0.hand) ? p0.hand : '', activity: str(p0.activity, 120), complaints: str(p0.complaints, 1000) };
+      if (typeof m.token !== 'string' || !/^[A-Za-z0-9_-]{16,64}$/.test(m.token)) m.token = null;
       // тот же человек по общей ссылке повторно — в ту же карточку
-      let c = (await all('clients')).find(x => x.remoteToken && x.remoteToken === m.token);
+      let c = m.token && (await all('clients')).find(x => x.remoteToken && x.remoteToken === m.token);
       if (!c) c = { id: uid(), created: Date.now(), remoteToken: m.token, notes: '' };
       Object.assign(c, { name: [pr.name, pr.surname].filter(Boolean).join(' ') || 'Без имени', dob: pr.dob || c.dob || '', sex: pr.sex || c.sex || '', height: pr.height || c.height || '', hand: pr.hand || c.hand || 'R', leg: pr.hand || c.leg || 'R', activity: pr.activity || c.activity || '', complaints: pr.complaints || c.complaints || '' });
+      if (!m.result || typeof m.result !== 'object') throw new Error('no result');
       await put('clients', c); await addResult(c, m.result); got.push(c.name); done(item.p); } catch (e) { console.warn('inbox item', e); } }
   return got;
 }
@@ -602,7 +618,7 @@ export async function motionViewer(poses, setup, back, titleText) {
   const keys = Object.keys(poses || {}).filter(k => poses[k] && poses[k].n); if (!keys.length) { alert('В этой оценке нет записи движения'); return back(); }
   let key = keys.includes('ohs_front') ? 'ohs_front' : keys[0], mode = 'flat', amp = 1, speed = 1, k = 0, playing = true, raf = 0, v3 = null;
   go(`<div class="fade" style="padding-bottom:40px"><div class="pad row" style="padding-top:8px"><button class="round" id="back" style="background:transparent">‹</button><div style="flex:1"><b style="font-size:17px">Запись движения</b><div style="font-size:13px;color:var(--muted)">${esc(titleText || '')}</div></div></div>
-   <div class="pad"><div class="row" style="gap:6px;flex-wrap:wrap">${keys.map(x => `<button class="pill" data-k="${x}" style="border:1.5px solid ${x === key ? 'var(--navy)' : 'transparent'}">${QNAMES[x] || UNIT_NAMES[x] || x}</button>`).join('')}</div>
+   <div class="pad"><div class="row" style="gap:6px;flex-wrap:wrap">${keys.map(x => `<button class="pill" data-k="${esc(x)}" style="border:1.5px solid ${x === key ? 'var(--navy)' : 'transparent'}">${esc(QNAMES[x] || UNIT_NAMES[x] || x)}</button>`).join('')}</div>
     <div class="row" style="margin-top:10px;gap:8px"><div class="seg" style="flex:1"><button id="m2" class="on">Схема</button><button id="m3">3D-фигура</button></div></div>
     <div class="card" style="margin-top:10px;padding:10px"><div id="stage" style="width:100%;height:380px;position:relative"><canvas id="cv" style="width:100%;height:100%;display:block"></canvas></div>
      <div class="row" style="margin-top:8px"><button class="round" id="pp" style="background:var(--lime)">❚❚</button><input type="range" id="ph" min="0" max="1000" value="0" style="flex:1;accent-color:#1E2533"></div>
@@ -643,8 +659,10 @@ export async function motionViewer(poses, setup, back, titleText) {
     const set = i => { const g = pts(i);
       for (const L of limbs) { const a = g(L.i), b = g(L.j), d = b.clone().sub(a), len = d.length(); L.m.position.copy(a.clone().add(b).multiplyScalar(.5)); L.m.scale.set(1, Math.max(.001, len), 1); L.m.quaternion.setFromUnitVectors(up, d.normalize()); }
       for (const J of joints) J.m.position.copy(g(J.j)); const hp = g(0); head.position.copy(hp); };
-    ctl.target.set(0, -.1, 0); let alive = true; (function a() { if (!alive || !r.domElement.isConnected) return; ctl.update(); r.render(scene, camera); requestAnimationFrame(a); })();
-    return { set, dispose() { alive = false; r.dispose(); } }; };
+    let alive = true; const dispose = () => { if (!alive) return; alive = false; ctl.dispose(); scene.traverse(o => { if (o.geometry) o.geometry.dispose(); }); [matB, matL, matJ].forEach(x => x.dispose()); r.dispose(); try { r.forceContextLoss(); } catch (e) {} };
+    // ушли с экрана: освобождаем WebGL, иначе после нескольких просмотров браузер упирается в лимит контекстов
+    ctl.target.set(0, -.1, 0); (function a() { if (!alive) return; if (!r.domElement.isConnected) return dispose(); ctl.update(); r.render(scene, camera); requestAnimationFrame(a); })();
+    return { set, dispose }; };
   load();
   $('#back').onclick = () => { cancelAnimationFrame(raf); if (v3) v3.dispose(); back(); };
   $('#pp').onclick = () => { playing = !playing; $('#pp').textContent = playing ? '❚❚' : '▶'; };
@@ -656,7 +674,7 @@ export async function motionViewer(poses, setup, back, titleText) {
   document.querySelectorAll('[data-k]').forEach(b => b.onclick = async () => { key = b.dataset.k; k = 0; document.querySelectorAll('[data-k]').forEach(x => x.style.borderColor = x === b ? 'var(--navy)' : 'transparent'); load(); if (mode === '3d') { if (v3) v3.dispose(); v3 = await open3d(); } });
   loop();
 }
-export const consumerPoses = { save: p => put('poses', { assessmentId: 'consumer-last', poses: p }), get: async () => (await get('poses', 'consumer-last'))?.poses };
+export const consumerPoses = { save: p => put('poses', { assessmentId: 'consumer-last', poses: p }), get: async () => (await get('poses', 'consumer-last'))?.poses, clear: () => del('poses', 'consumer-last') };
 
 /** Повторяемость: показатели трех последних оценок, разброс сравнивается с погрешностью съемки. */
 async function repeatability(list, clientId) {

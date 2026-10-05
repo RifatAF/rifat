@@ -68,7 +68,7 @@ export function loginScreen(role, cont, opts = {}) {
    </div></div>`);
   if (opts.back) document.getElementById('lback').onclick = opts.back;
   const box = document.getElementById('lbtns'), err = document.getElementById('lerr'), cons = document.getElementById('cons');
-  const sync = () => { box.style.opacity = cons.checked ? '1' : '.4'; box.style.pointerEvents = cons.checked ? 'auto' : 'none'; if (cons.checked) { localStorage.setItem('bp_consent', String(Date.now())); err.textContent = ''; } };
+  const sync = () => { box.style.opacity = cons.checked ? '1' : '.4'; box.style.pointerEvents = cons.checked ? 'auto' : 'none'; if (cons.checked) { localStorage.setItem('bp_consent', String(Date.now())); err.textContent = ''; } else localStorage.removeItem('bp_consent'); };
   cons.onchange = sync; sync();
   const done = async (a, body) => {
     if (!consented()) { err.textContent = 'Отметь согласие выше'; return; }

@@ -96,6 +96,16 @@ async function unpackResult(code) {
   if (z === '1') bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
   return JSON.parse(new TextDecoder().decode(bytes));
 }
+// результат из ссылки чужой: оставляем только числа в ожидаемой структуре, иначе битая ссылка ломала карту
+const num = v => typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+const numObj = (o, keys) => { if (!o || typeof o !== 'object') return null; const r = {}; for (const k of keys || Object.keys(o).slice(0, 60)) if (/^[a-z_]{1,32}$/.test(k) && num(o[k]) !== undefined) r[k] = o[k]; return r; };
+export function cleanResult(o) {
+  if (!o || typeof o !== 'object') throw new Error('bad result');
+  const moves = {}; for (const [k, v] of Object.entries(o.moves && typeof o.moves === 'object' ? o.moves : {}).slice(0, 20)) {
+    if (!/^[a-z_]{1,20}$/.test(k) || !v || typeof v !== 'object') continue;
+    moves[k] = { f: numObj(v.f) || {}, reps: num(v.reps) || 0, quality: ['GOOD', 'DOUBTFUL', 'RETAKE'].includes(v.quality) ? v.quality : 'DOUBTFUL', ...(v.alt ? { alt: 'support' } : {}) }; }
+  return { date: num(o.date) || Date.now(), full: !!o.full, snapshot: numObj(o.snapshot, ['shoulderTilt', 'pelvicTilt', 'headTilt', 'trunkLateral']), side: numObj(o.side, ['headForwardDeg', 'hipShift', 'shoulderShift', 'kneeHyperDeg']), moves };
+}
 async function resultLink() { return location.origin + location.pathname + '#r=' + await packResult(currentAnalysis().t); }
 
 // ---------- 1. знакомство ----------
@@ -302,7 +312,7 @@ export async function runProtocol(protocol, opts = {}) {
     level = !phone.ok || Math.abs(phone.roll) <= 5;
     $('#fr').style.borderColor = ok && level ? 'var(--green)' : '#EE9B30';
     const chips = [ok ? '✓ Всё тело в кадре' : '! Не видно всё тело', level ? '' : `! Наклон телефона ${fmt(phone.roll)}°`, light < 45 ? '! Мало света' : ''];
-    if (opts.target && f.pose && ok) { const cur = bodyFrac(f.pose) / f.h, dv = (cur - opts.target.bodyFrac) / opts.target.bodyFrac; chips.push(Math.abs(dv) <= .1 ? '✓ Как в прошлый раз' : dv > 0 ? '↔ Отойди чуть дальше' : '↔ Подойди чуть ближе'); }
+    if (opts.target && opts.target.bodyFrac > 0 && f.pose && ok) { const cur = bodyFrac(f.pose) / f.h, dv = (cur - opts.target.bodyFrac) / opts.target.bodyFrac; chips.push(Math.abs(dv) <= .1 ? '✓ Как в прошлый раз' : dv > 0 ? '↔ Отойди чуть дальше' : '↔ Подойди чуть ближе'); }
     $('#chips').innerHTML = chips.filter(Boolean).map(c => `<div class="chip" style="background:${c[0] === '✓' ? 'rgba(46,158,106,.85)' : 'rgba(238,155,48,.85)'}">${c}</div>`).join('');
     if (f.pose) { const lv = levelled(f.pose, f.w, f.h, corr()); $('#met').textContent = `Плечи ${fmt(F.shoulderTilt(lv))}° · Таз ${fmt(F.pelvicTilt(lv))}°`; } };
   // ---- экран и голос ----
@@ -402,11 +412,11 @@ export async function runProtocol(protocol, opts = {}) {
     if (u === 'sls') { step(k, 'Правая нога с опорой', 'Держись за стену'); await say(SAY.slsRIntro); await say(SAY.slsRGo); const r = await reps('sls_r', fr => Movement.singleLeg(fr, true), .03); r.alt = 'support'; moves.sls_r = r; await say(SAY.footDown); k++;
       step(k, 'Левая нога с опорой', 'Держись за стену'); await say(SAY.slsLIntro); await say(SAY.slsLGo); const r2 = await reps('sls_l', fr => Movement.singleLeg(fr, false), .03); r2.alt = 'support'; moves.sls_l = r2; await say(SAY.footDown); k++; } };
   for (const u of units) {
-    if (stop) return; skip = false;
+    if (stop) return; skip = false; const k0 = k;
     if (pre[u]) { limits[u] = pre[u]; if (pre[u].alt) await runAlt(u); continue; }
     await runUnit(u);
     if (skip && !stop) { voice.beep('stop'); step(null, 'Не можешь — ничего страшного', 'Ответь на пару вопросов'); limits[u] = await cantSheet(u); skip = false;
-      if (/опор|неглуб/i.test(limits[u].level || '') && (u === 'ohs_front' || u === 'sls')) { limits[u].alt = 'support'; await runAlt(u); } else k += (UNITS[u] || []).length; }
+      if (/опор|неглуб/i.test(limits[u].level || '') && (u === 'ohs_front' || u === 'sls')) { limits[u].alt = 'support'; await runAlt(u); } else k = k0 + (UNITS[u] || []).length; }
   }
   if (stop) return;
   step(null, 'Готово', 'Считаю результат'); bar(1, ''); cam.onFrame = null; await say(SAY.finish); stopCamera();
@@ -458,9 +468,8 @@ async function inviteWelcome() {
   if (!safetyOk()) return safetyScreen(inviteWelcome, null, bot());
   voice.preload(Object.values(SAY));
   const inv = INV(); const rows = rowsOf(inv.p); const pain = PAINI;
-  const redraw = () => { const keep = { ...pain }; inviteWelcome(); };
   if (inv.join && !PROFILE()) return joinForm();
-  if (inv.join) inv.n = PROFILE().first;
+  if (inv.join) inv.n = PROFILE().name;
   go(`<div class="scr fade"><div class="pad" style="padding-top:20px"><div class="caps" style="color:var(--coral)">Тест от специалиста</div>
      <h1 style="margin-top:8px">${(inv.n || (PROFILE() || {}).name) ? esc(inv.n || PROFILE().name) + ', ' : ''}здравствуйте!</h1>${inv.join ? '<button class="pill" id="editpf" style="margin-top:8px">Изменить анкету</button>' : ''}<p class="sub" style="margin-top:8px">${esc(inv.s)} подготовил для вас тест движения. Результат сразу придет специалисту, а вы увидите свою карту тела.</p></div>
    <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:14px;margin-top:16px">
@@ -499,6 +508,7 @@ function sentBanner() { const inv = INV(); if (!inv) return ''; const st = local
 
 // ---------- 4. анализ ----------
 async function analysisScreen() {
+  SEL = null; MODE3D = false;
   const items = ['Углы плеч и таза', 'Колени в приседе', 'Таз на одной ноге', 'Цепи компенсации', 'Карта тонуса мышц'];
   go(`<div class="scr pad fade" style="align-items:center;padding-top:80px"><div style="width:220px;height:220px;border-radius:50%;overflow:hidden;border:6px solid var(--line)"><img src="img/img_onb_muscles.webp" style="width:100%;height:100%;object-fit:cover"></div>
    <h1 style="margin-top:40px">Собираем карту тела</h1><p class="sub" style="margin-top:8px">Считаем прямо на телефоне</p><div id="ck" style="width:100%;margin-top:30px;display:flex;flex-direction:column;gap:14px"></div></div>`);
@@ -517,13 +527,12 @@ export function map() {
   const zoneSet = k => new Set(top.filter(s => Math.abs(s.tone) > .4 && (k === 'over' ? s.tone > 0 : s.tone < 0)).map(s => (C.muscles[s.id].zone || s.id) + s.side));
   const over = zoneSet('over').size, weak = zoneSet('weak').size;
   const pl = plan(top), benefits = [...new Set(top.map(s => C.muscles[s.id].benefit).filter(Boolean))].slice(0, 3);
-  const all_t = tests(), first = all_t[0], days = Math.floor((Date.now() - t.date) / 864e5);
+  const all_t = SHARED ? [] : tests().filter(x => x.snapshot), first = all_t[0], days = Math.floor((Date.now() - t.date) / 864e5);
   go(`<div class="fade" style="padding-bottom:40px">
    ${!SHARED && INV() ? sentBanner() : ''}
-   ${t.limits && Object.keys(t.limits).length ? `<div class="pad" style="padding-top:12px"><div class="card" style="font-size:14px;line-height:1.45"><b>Что не получилось</b>${Object.entries(t.limits).map(([u, l]) => `<div style="margin-top:6px">${LIMIT_NAMES[u] || u}: ${[...(l.reasons || []), l.level].filter(Boolean).join(', ').toLowerCase()}${l.alt ? ' · сделан облегченный вариант' : ''}</div>`).join('')}</div></div>` : ''}
    ${SHARED ? '<div class="pad" style="padding-top:12px"><div class="card" style="background:var(--lime);padding:12px 16px;font-size:14px"><b>Это результат по ссылке.</b> Твои данные не меняются. Внизу можно пройти свой тест.</div></div>' : ''}
    <div class="pad row" style="padding-top:16px;align-items:flex-start"><div style="flex:1"><div class="sub" style="font-size:13px">Тест от ${new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })}</div><h1>${SHARED ? 'Карта тела' : 'Твоя карта тела'}</h1></div><button class="round" id="set">⚙︎</button></div>
-   ${days >= 7 ? `<div class="pad" style="margin-top:12px"><div class="card row" id="re" style="background:var(--lime)"><div style="flex:1"><b>Прошла неделя</b><div style="font-size:14px">Пройди быстрый тест и сравни карту</div></div>›</div></div>` : ''}
+   ${days >= 7 && !SHARED ? `<div class="pad" style="margin-top:12px"><div class="card row" id="re" style="background:var(--lime)"><div style="flex:1"><b>Прошла неделя</b><div style="font-size:14px">Пройди быстрый тест и сравни карту</div></div>›</div></div>` : ''}
    <div class="pad" style="margin-top:14px"><div style="border-radius:32px;background:radial-gradient(#FBF8F2,#EFE8DC);padding:14px 0 16px;position:relative">
      <div class="row" style="justify-content:center;gap:8px"><div class="seg" style="width:auto"><button id="vf" class="${!BACK ? 'on' : ''}">Спереди</button><button id="vb" class="${BACK ? 'on' : ''}">Сзади</button></div>${device.webgl2 ? `<span class="pill" id="v3">${MODE3D ? 'Схема' : '3D'}</span>` : ''}</div>
      <div id="vis" style="position:relative;margin:10px auto 0;width:min(100%,360px);${MODE3D ? 'height:400px' : ''}">${MODE3D ? '' : '<canvas id="heat" style="width:100%;display:block"></canvas>'}</div>
@@ -539,7 +548,7 @@ export function map() {
      <p class="sub" style="font-size:14px;margin-top:14px">Делай комплекс 2 недели и пройди тест снова. Сравнишь карты до и после.</p>
      ${pl.length ? `<button class="btn" id="plan" style="margin-top:14px"><span class="ic">▶</span> Комплекс на сегодня · ${totalMin(pl.map(ex))} мин</button>` : ''}
      <button class="btn ghost" id="cal" style="margin-top:10px">Напоминать каждый день в 20:00</button></div></div>` : ''}
-   ${t.limits && Object.keys(t.limits).length ? `<div class="pad" style="margin-top:14px"><div class="card"><div class="caps" style="color:var(--coral)">Не получилось выполнить</div>${Object.entries(t.limits).map(([u, l]) => `<div style="margin-top:8px;font-size:14px"><b>${(UNITS[u] || [[u]])[0][0]}</b>: ${[l.level, ...(l.reasons || [])].filter(Boolean).join(', ')}${l.side && l.side !== 'BOTH' ? (l.side === 'LEFT' ? ', слева' : ', справа') : ''}</div>`).join('')}<p style="font-size:12px;color:var(--muted);margin-top:8px">Это важно для специалиста: такие ограничения разбираются на консультации.</p></div></div>` : ''}
+   ${t.limits && Object.keys(t.limits).length ? `<div class="pad" style="margin-top:14px"><div class="card"><div class="caps" style="color:var(--coral)">Не получилось выполнить</div>${Object.entries(t.limits).map(([u, l]) => `<div style="margin-top:8px;font-size:14px"><b>${esc(LIMIT_NAMES[u] || u)}</b>: ${esc([l.level, ...(l.reasons || [])].filter(Boolean).join(', '))}${l.alt ? ' · сделан облегченный вариант' : ''}${l.side && l.side !== 'BOTH' ? (l.side === 'LEFT' ? ', слева' : ', справа') : ''}</div>`).join('')}<p style="font-size:12px;color:var(--muted);margin-top:8px">Это важно для специалиста: такие ограничения разбираются на консультации.</p></div></div>` : ''}
    ${(() => { const f = a.f, rows = [['Руки в стороны, угол в конце', f.sym_delt, '°', true], ['Наклон в сторону', f.sym_bend, '°', true], ['Подъемы на носок', f.sym_calf, '', true], ['Глубина приседа на одной ноге', f.sym_quad, '°', true]].filter(r => r[1]);
       if (!rows.length) return ''; return `<div class="pad" style="margin-top:14px"><div class="card"><div class="caps" style="color:var(--coral)">Левая и правая сторона</div>
       <div class="row" style="margin-top:10px;font-size:12px;color:var(--muted)"><span style="flex:1"></span><b style="width:64px;text-align:center">Левая</b><b style="width:64px;text-align:center">Правая</b></div>
@@ -547,7 +556,7 @@ export function map() {
         const cell = (x, i) => `<b style="width:64px;text-align:center;font-variant-numeric:tabular-nums;color:${weak === i ? '#E5484D' : 'var(--text)'}">${fmt(x)}${u}</b>`;
         return `<div class="row" style="margin-top:8px"><span style="flex:1;font-size:14px">${n}</span>${cell(l, 0)}${cell(r, 1)}</div>`; }).join('')}
       <p style="font-size:12px;color:var(--muted);margin-top:10px">Красным — сторона, где результат хуже больше чем на 12%.</p></div></div>`; })()}
-   ${all_t.length >= 2 ? `<div class="pad" style="margin-top:14px"><div class="card"><div class="caps" style="color:var(--coral)">Было → стало</div>
+   ${all_t.length >= 2 && t.snapshot && first !== t ? `<div class="pad" style="margin-top:14px"><div class="card"><div class="caps" style="color:var(--coral)">Было → стало</div>
      ${[['Наклон плеч', first.snapshot.shoulderTilt, t.snapshot.shoulderTilt], ['Наклон таза', first.snapshot.pelvicTilt, t.snapshot.pelvicTilt]].map(([n, x, y]) => `<div class="row" style="margin-top:10px"><span style="flex:1">${n}</span><b style="font-variant-numeric:tabular-nums;color:${Math.abs(y) < Math.abs(x) - .3 ? 'var(--green)' : 'var(--sub)'}">${fmt(x)}° → ${fmt(y)}°</b></div>`).join('')}</div></div>` : ''}
    <div class="pad" style="margin-top:24px"><div style="border-radius:28px;background:var(--navy) url(img/img_muscles_back.webp) right/cover;background-blend-mode:soft-light;padding:22px;color:#fff">
      <div class="caps" style="color:var(--lime)">Консультация</div><h2 style="font-size:21px;margin-top:8px;max-width:240px">Разберем карту вместе</h2>
@@ -585,7 +594,7 @@ async function shareResult() {
   const d = document.createElement('div'); d.className = 'sheet';
   d.innerHTML = `<div><h2 style="font-size:20px">Поделиться результатом</h2><p class="sub" style="font-size:14px;margin-top:6px">Другу, специалисту или себе на компьютер.</p>
     <button class="btn" id="sl" style="margin-top:16px">Ссылкой на карту</button>
-    <p style="font-size:12px;color:var(--muted);margin:6px 4px 0">Откроется та же карта с разбором. Данные зашифрованы в самой ссылке, на сервер ничего не уходит.</p>
+    <p style="font-size:12px;color:var(--muted);margin:6px 4px 0">Откроется та же карта с разбором. Результат упакован в саму ссылку и на сервер не уходит, но открыть карту сможет любой, у кого есть ссылка.</p>
     <button class="btn ghost" id="si" style="margin-top:14px">Картинкой</button>
     <p style="font-size:12px;color:var(--muted);margin:6px 4px 0">Карта тела, главные зоны и сравнение сторон одним изображением.</p>
     <button class="btn ghost" id="sc" style="margin-top:14px;border:0">Отмена</button></div>`;
@@ -724,7 +733,11 @@ export function settings() {
     <button class="btn ghost" id="wipe" style="margin-top:10px">Удалить мои результаты</button><button class="btn" id="cl" style="margin-top:10px">Готово</button></div>`;
   document.body.appendChild(d);
   d.querySelector('#vm').onclick = e => { voice.muted = !voice.muted; localStorage.setItem('bp_mute', voice.muted ? '1' : '0'); e.target.textContent = voice.muted ? 'Выкл' : 'Вкл'; };
-  d.querySelector('#wipe').onclick = () => { if (confirm('Удалить все результаты?')) { localStorage.removeItem(K('bp_tests')); localStorage.removeItem(K('bp_done')); d.remove(); onboarding(); } };
+  d.querySelector('#wipe').onclick = async () => { if (!confirm('Удалить все результаты?')) return;
+    for (const k of ['bp_tests', 'bp_done', 'bp_profile']) localStorage.removeItem(K(k)); localStorage.removeItem('bp_sent');
+    // записи движения тоже: последняя запись клиента, копия для специалиста и неотправленный результат
+    await consumerPoses.clear().catch(() => {}); await outbox.clear().catch(() => {}); try { indexedDB.deleteDatabase('bodypassport-client'); } catch (e) {}
+    SHARED = null; d.remove(); onboarding(); };
   d.querySelector('#topro').onclick = () => { d.remove(); openPro(); };
   d.querySelector('#cl').onclick = () => d.remove(); d.onclick = e => { if (e.target === d) d.remove(); };
   accountBlock(d.querySelector('#acc'), () => d.remove());
@@ -748,7 +761,8 @@ async function accountBlock(el, close) {
 
 // ---------- старт ----------
 (async () => {
-  await loadContent(); await voice.init();
+  try { await loadContent(); } catch (e) { app.innerHTML = '<div class="scr pad" style="justify-content:center;gap:16px"><h1>Не удалось загрузить данные</h1><p class="sub">Проверь интернет и обнови страницу.</p><button class="btn" id="rl">Обновить</button></div>'; $('#rl').onclick = () => location.reload(); return; }
+  await voice.init();
   await getMe(); claimLegacy();
   if ('serviceWorker' in navigator) {
     // когда выходит новая версия, страница один раз перезагружается сама
@@ -765,7 +779,7 @@ async function accountBlock(el, close) {
     history.replaceState(null, '', location.pathname); let role = 'client';
     try { role = await tgWebLogin(data); claimLegacy(); } catch (e) { alert('Не получилось войти через Telegram: ' + e.message); }
     return role === 'specialist' ? openPro() : INV() ? inviteWelcome() : prep(); }
-  if (location.hash.startsWith('#r=')) { try { SHARED = await unpackResult(location.hash.slice(3)); } catch (e) { SHARED = null; } }
+  if (location.hash.startsWith('#r=')) { try { SHARED = cleanResult(await unpackResult(location.hash.slice(3))); } catch (e) { SHARED = null; } }
   if (location.hash.startsWith('#join=')) { try { const inv = { ...cleanInv(seal.unpack(location.hash.slice(6))), join: true }; localStorage.setItem('bp_inv', JSON.stringify(inv)); localStorage.setItem('bp_mode', 'client'); history.replaceState(null, '', location.pathname); return inviteWelcome(); } catch (e) {} }
   if (location.hash.startsWith('#inv=')) { try { const inv = cleanInv(seal.unpack(location.hash.slice(5))); localStorage.setItem('bp_inv', JSON.stringify(inv)); localStorage.setItem('bp_mode', 'client'); history.replaceState(null, '', location.pathname); return inviteWelcome(); } catch (e) {} }
   if (!SHARED && localStorage.getItem('bp_mode') === 'pro') return openPro();

@@ -178,7 +178,6 @@ export function features(t) {
   if (Number.isFinite(of.ohs_foot_out_r) && Number.isFinite(of.ohs_foot_out_l)) { f.foot_out_max = Math.max(of.ohs_foot_out_r, of.ohs_foot_out_l); f.foot_out_side = of.ohs_foot_out_r >= of.ohs_foot_out_l ? 1 : -1; }
   const put = (k, v) => { if (Number.isFinite(v)) f[k] = v; };
   put('sq_lean', os.ohs_lean_excess); put('sq_arms', os.ohs_arms_fwd); put('sq_heel', os.ohs_heel_lift); put('sq_pelvis', ob.back_pelvis_tilt);
-  put('sq_depth', of.max_knee_flex);
   put('sq_depth', Number.isFinite(of.max_knee_flex) && of.max_knee_flex > 0 ? of.max_knee_flex : of.ohs_depth);
   if (t.moves && t.moves.ohs_front && t.moves.ohs_front.alt) f.sq_assisted = 1;
   put('ohs_elbow_r', of.ohs_elbow_r); put('ohs_elbow_l', of.ohs_elbow_l);
@@ -216,8 +215,9 @@ export function findings(rules, f) {
     const hit = (r.absGreater == null || Math.abs(v) > r.absGreater) && (r.greater == null || v > r.greater) && (r.less == null || v < r.less);
     if (!hit) continue;
     // разница с порогом меньше погрешности измерения — «на границе нормы»: слабее и с пометкой, чтобы повторные тесты не «прыгали»
-    const thr = r.absGreater != null ? r.absGreater : r.greater != null ? r.greater : null, unit = thr != null && thr < 1 ? .03 : thr != null && thr >= 12 ? 3 : 1.5;
-    const borderline = thr != null && Math.abs(Math.abs(v) - thr) < Math.max(unit, thr * .12);
+    const thr = r.absGreater != null ? r.absGreater : r.greater != null ? r.greater : r.less != null ? r.less : null, at = thr != null ? Math.abs(thr) : 0;
+    const unit = at < 1 ? .03 : at >= 12 ? 3 : 1.5, gap = r.absGreater != null ? Math.abs(v) - thr : r.greater != null ? v - thr : thr != null ? thr - v : 0;
+    const borderline = thr != null && gap < Math.max(unit, at * .12);
     let side = 'BOTH';
     if (r.sideFrom) { const sv = f[r.sideFrom]; if (sv === undefined) continue; const sg = Math.sign(sv) * (r.sideNegate ? -1 : 1); side = sg > 0 ? 'RIGHT' : sg < 0 ? 'LEFT' : 'BOTH'; }
     const muscles = r.muscles.map(m => ({ id: m.id, state: m.state, side: m.side === 'same' ? side : m.side === 'opposite' ? opp(side) : 'BOTH' }));
@@ -227,7 +227,8 @@ export function findings(rules, f) {
   return out.sort((a, b) => (b.rule.priority || 0) - (a.rule.priority || 0));
 }
 function strength(fd) { const r = fd.rule, v = Math.abs(fd.value);
-  const ratio = r.absGreater != null ? v / r.absGreater : r.greater != null ? v / r.greater : (r.less != null && v > 1e-6) ? r.less / v : 2;
+  // для правил «меньше порога»: при положительном пороге (глубина 70°) сила = порог / значение, при отрицательном (-0,02) = |значение| / |порог|
+  const ratio = r.absGreater != null ? v / r.absGreater : r.greater != null ? v / r.greater : r.less != null ? (r.less > 0 ? (v > 1e-6 ? r.less / v : 2) : (Math.abs(r.less) > 1e-9 ? v / Math.abs(r.less) : 2)) : 2;
   return Math.max(.35, Math.min(1, .35 + .65 * (ratio - 1))); }
 export function tones(fds, catalog, antagonists) {
   const pos = new Map(), neg = new Map(), src = new Map(), key = (id, s) => id + ':' + s;

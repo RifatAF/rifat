@@ -24,7 +24,8 @@ function verifyTgWidget(d) {
   const fields = Object.keys(d).filter(k => k !== 'hash' && d[k] != null && ['id', 'first_name', 'last_name', 'username', 'photo_url', 'auth_date'].includes(k)).sort();
   const dcs = fields.map(k => `${k}=${d[k]}`).join('\n');
   const h = crypto.createHmac('sha256', crypto.createHash('sha256').update(TG_TOKEN).digest()).update(dcs).digest('hex');
-  if (!hex(h, d.hash) || Date.now() / 1000 - +d.auth_date > 86400) return null;
+  // без auth_date разница давала NaN, и проверка срока пропускала данные
+  const age = Date.now() / 1000 - +d.auth_date; if (!hex(h, d.hash) || !Number.isFinite(age) || age > 86400) return null;
   return { id: 't_' + d.id, provider: 'telegram', name: clip([d.first_name, d.last_name].filter(Boolean).join(' ') || d.username, 80), username: clip(d.username, 40), photo: clip(d.photo_url, 300) };
 }
 
@@ -35,7 +36,7 @@ function verifyTgInitData(initData) {
   const dcs = [...p.entries()].map(([k, v]) => `${k}=${v}`).sort().join('\n');
   const secret = crypto.createHmac('sha256', 'WebAppData').update(TG_TOKEN).digest();
   const h = crypto.createHmac('sha256', secret).update(dcs).digest('hex');
-  if (!hex(h, hash) || Date.now() / 1000 - +p.get('auth_date') > 86400) return null;
+  const age = Date.now() / 1000 - +p.get('auth_date'); if (!hex(h, hash) || !(p.get('auth_date') > 0) || !Number.isFinite(age) || age > 86400) return null;
   let u; try { u = JSON.parse(p.get('user') || 'null'); } catch (e) { return null; } if (!u || !u.id) return null;
   return { id: 't_' + u.id, provider: 'telegram', name: clip([u.first_name, u.last_name].filter(Boolean).join(' ') || u.username, 80), username: clip(u.username, 40), photo: clip(u.photo_url, 300) };
 }
@@ -73,7 +74,8 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && a === 'me') { const uid = sessionUid(req); const u = uid && await loadUser(uid); if (!u) { if (uid) clearSession(res); return res.status(401).json({ user: null }); } return res.status(200).json({ user: publicUser(u) }); }
     if (req.method !== 'POST') return res.status(405).json({ error: 'method' });
     // защита от отправки формы с чужого сайта: запрос должен прийти с нашего адреса
-    const origin = req.headers.origin; if (origin && new URL(origin).host !== req.headers.host) return res.status(403).json({ error: 'origin' });
+    const origin = req.headers.origin; let oh = null; try { oh = origin ? new URL(origin).host : null; } catch (e) { oh = '?'; }
+    if (origin && oh !== req.headers.host) return res.status(403).json({ error: 'origin' });
     const b = req.body || {};
     if (a === 'google') return signIn(req, res, await verifyGoogle(b.credential));
     if (a === 'telegram') return signIn(req, res, b.initData ? verifyTgInitData(b.initData) : verifyTgWidget(b.data));
@@ -86,7 +88,7 @@ export default async function handler(req, res) {
     if (a === 'setplan') { if (!isAdmin(u)) return res.status(403).json({ error: 'forbidden' });
       if (!/^[gt]_[A-Za-z0-9_.-]{1,80}$/.test(b.id || '') || !['start', 'pro', 'studio'].includes(b.plan)) return res.status(400).json({ error: 'bad' });
       const t = await loadUser(b.id); if (!t) return res.status(404).json({ error: 'нет такого пользователя' });
-      const days = Math.max(0, Math.min(400, +b.days || 30)); t.plan = b.plan; t.planUntil = Math.max(Date.now(), t.planUntil || 0) + days * 864e5; if (b.plan === 'start') t.planUntil = 0;
+      const days = Number.isFinite(+b.days) && b.days !== '' && b.days != null ? Math.max(0, Math.min(400, +b.days)) : 30; t.plan = b.plan; t.planUntil = Math.max(Date.now(), t.planUntil || 0) + days * 864e5; if (b.plan === 'start') t.planUntil = 0;
       await saveUser(t); return res.status(200).json({ ok: true, plan: effectivePlan(t) }); }
     if (a === 'logout') { clearSession(res); return res.status(200).json({ ok: true }); }
     if (a === 'delete') { await deleteUser(u.id); clearSession(res); return res.status(200).json({ ok: true }); }
