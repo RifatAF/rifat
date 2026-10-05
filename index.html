@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BodyPassport — карта тела по камере телефона</title>
+<meta name="description" content="Тест осанки и движения по камере телефона за 2–5 минут. Подсказывает, какие мышцы, вероятно, перегружены или недорабатывают, и дает упражнения. Бета-версия. Это оценка, не диагноз.">
+<meta name="theme-color" content="#F4F0E8">
+<meta property="og:title" content="BodyPassport — карта тела по камере телефона">
+<meta property="og:description" content="Короткий видеотест по камере: какие мышцы, вероятно, перегружены, какие недорабатывают, и что с этим делать. Бета.">
+<meta property="og:image" content="img/img_muscles_back.webp">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/logo.svg">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>if (/tgWebApp/.test(location.hash + location.search) || sessionStorage.getItem('bp_tg')) { sessionStorage.setItem('bp_tg', '1'); document.write('<script src="https://telegram.org/js/telegram-web-app.js"><\/script>'); }</script>
+<style>
+:root{--bg:#F4F0E8;--navy:#1E2533;--lime:#C6E84B;--coral:#E8765A;--text:#1C1B19;--sub:#6E6A63;--muted:#8A847A;--faint:#A9A091;--line:#D8D0C2;--line2:#E0D8CA;--seg:#E6DED0;--peach:#FBE8DF;--green:#2E9E6A;
+--hyper:#E5484D;--hyperS:#FBE3E1;--short:#EE7B30;--shortS:#FCEAD9;--weak:#3B7BE8;--weakS:#E0E9FA;--ok:#2E9E6A;--okS:#DDF1E6}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:Onest,system-ui,sans-serif}
+body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+#app{max-width:480px;margin:0 auto;min-height:100%;position:relative}
+.scr{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
+.pad{padding:0 20px}
+h1{font-size:28px;font-weight:700;letter-spacing:-.03em;line-height:1.12}
+.sub{color:var(--sub);font-size:15px;line-height:1.45}
+.caps{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;height:58px;border:0;border-radius:20px;background:var(--navy);color:#fff;font:600 17px Onest;cursor:pointer}
+.btn .ic{color:var(--lime)}
+.btn.lime{background:var(--lime);color:var(--text)}
+.btn.ghost{background:transparent;border:1.5px solid var(--line);color:var(--text);height:52px;border-radius:16px;font-size:15px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:99px;background:#fff;font-size:13px;font-weight:500}
+.card{background:#fff;border-radius:24px;padding:18px}
+.seg{display:flex;background:var(--seg);border-radius:99px;padding:4px}
+.seg button{flex:1;border:0;background:transparent;border-radius:99px;padding:10px 14px;font:600 14px Onest;color:var(--text)}
+.seg button.on{background:#fff}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:99px;font-size:12px;font-weight:700}
+.badge i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.row{display:flex;align-items:center;gap:12px}
+.list-item{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.55);border-radius:18px;padding:14px;border:1.5px solid transparent;cursor:pointer}
+.list-item.on{background:#fff;border-color:var(--navy)}
+.bar{width:10px;height:36px;border-radius:5px}
+.round{width:44px;height:44px;border-radius:50%;background:#fff;border:0;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer}
+.chev{color:var(--faint);font-size:20px}
+/* камера */
+.cam{position:fixed;inset:0;background:#0E1013;z-index:5}
+.cam video,.cam canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.cam video{background:#0E1013}
+.cam canvas{background:transparent;pointer-events:none}
+.cam .frame{position:absolute;inset:14px;border:5px solid var(--green);border-radius:36px;transition:border-color .3s}
+.cam .top{position:absolute;left:24px;right:16px;top:calc(env(safe-area-inset-top) + 24px)}
+.segs{display:flex;gap:5px}.segs div{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.22);overflow:hidden}.segs div b{display:block;height:100%;background:var(--lime);width:0}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:99px;color:#fff;font-size:12px;font-weight:500;margin-top:6px}
+.glass{position:absolute;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom) + 28px);background:rgba(10,12,15,.72);backdrop-filter:blur(12px);border-radius:28px;padding:20px;display:flex;align-items:center;gap:14px;color:#fff}
+.metric{position:absolute;right:26px;top:50%;font:600 12px ui-monospace,monospace;color:var(--lime);background:rgba(198,232,75,.16);border:1px solid rgba(198,232,75,.4);border-radius:8px;padding:6px 10px}
+.count{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:140px;font-weight:800;color:#fff;pointer-events:none}
+/* тренировка */
+.dark{background:var(--navy);color:#fff}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:flex-end;z-index:20}
+.sheet>div{background:var(--bg);width:100%;max-width:480px;margin:0 auto;border-radius:32px 32px 0 0;padding:24px 20px calc(env(safe-area-inset-bottom) + 30px)}
+.spin{width:36px;height:36px;border:4px solid var(--line);border-top-color:var(--navy);border-radius:50%;animation:sp 1s linear infinite;margin:40vh auto}
+@keyframes sp{to{transform:rotate(360deg)}}
+.fade{animation:fd .35s ease}@keyframes fd{from{opacity:0;transform:translateY(6px)}to{opacity:1}}
+</style>
+</head>
+<body>
+<div id="app"><div class="spin"></div></div>
+<noscript><p style="padding:24px">Включи JavaScript или открой ссылку в Chrome или Safari.</p></noscript>
+<script>
+// старые Safari и Android: недостающие методы, чтобы код работал на всех телефонах
+if (!Array.prototype.at) Array.prototype.at = function (i) { i = Math.trunc(i) || 0; if (i < 0) i += this.length; return this[i]; };
+if (!Array.prototype.findLastIndex) Array.prototype.findLastIndex = function (f) { for (let i = this.length - 1; i >= 0; i--) if (f(this[i], i, this)) return i; return -1; };
+if (window.CanvasRenderingContext2D && !CanvasRenderingContext2D.prototype.roundRect) CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h) { this.rect(x, y, w, h); };
+</script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
