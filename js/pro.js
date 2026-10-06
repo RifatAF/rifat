@@ -4,7 +4,7 @@ import { analyze, fmt, recompute } from './analysis.js';
 import { meSync, logout, getMe } from './auth.js';
 import { gate, planLine, SPECIALTIES, TEMPLATE_ORDER, START_CLIENTS } from './plans.js';
 import { C, voice, cam, startMotion, initPose, drawHeat, RAMP_CSS, device, seal, body3D } from './core.js';
-import { cleanResult, verdictCard, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, plan, ex, totalMin, workout, onboarding, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol } from './app.js';
+import { cleanResult, verdict, verdictCard, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, plan, ex, totalMin, workout, onboarding, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol } from './app.js';
 
 const $ = s => document.querySelector(s);
 // имя специалиста для отчетов по умолчанию: из аккаунта (в бете кабинетом пользуются разные специалисты)
@@ -127,25 +127,35 @@ export async function proHome(query = '', pulled = null) {
   if (pulled === null) pullResults().then(n => { if (n.length && document.getElementById('join') && document.getElementById('menu')) proHome(query, n); });
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
   const [clients, asses] = await Promise.all([all('clients'), all('assessments')]);
+  const byId = Object.fromEntries(clients.map(c => [c.id, c]));
   const last = id => asses.filter(a => a.clientId === id).sort((x, y) => y.date - x.date)[0];
-  const soon = clients.map(c => ({ c, a: last(c.id) })).filter(x => x.a && x.a.nextDate && x.a.nextDate - Date.now() <= 3 * DAY).sort((x, y) => x.a.nextDate - y.a.nextDate);
-  const q = query.trim().toLowerCase(); const list = clients.filter(c => !q || c.name.toLowerCase().includes(q)).sort((x, y) => (last(y.id)?.date || y.created) - (last(x.id)?.date || x.created));
-  const lastBackup = await meta('lastBackup'); const needBackup = clients.length && (!lastBackup || Date.now() - lastBackup > 7 * DAY);
+  // главный экран «Сегодня»: что посмотреть, кому ретест, последние клиенты
+  const review = asses.filter(a => a.draft && byId[a.clientId] && !byId[a.clientId].demo).sort((x, y) => y.date - x.date).slice(0, 5);
+  const soon = clients.map(c => ({ c, a: last(c.id) })).filter(x => x.a && x.a.nextDate && x.a.nextDate - Date.now() <= 7 * DAY).sort((x, y) => x.a.nextDate - y.a.nextDate);
+  const q = query.trim().toLowerCase(); const sorted = clients.filter(c => !q || c.name.toLowerCase().includes(q)).sort((x, y) => (last(y.id)?.date || y.created) - (last(x.id)?.date || x.created));
+  const list = q ? sorted : sorted.slice(0, 6);
+  const lastBackup = await meta('lastBackup'); const needBackup = clients.filter(c => !c.demo).length && (!lastBackup || Date.now() - lastBackup > 14 * DAY);
+  const name = (await meta('profile')) || defaultAuthor();
+  const row = (c, sub, color) => `<div class="list-item" data-id="${c.id}" style="background:#fff">${color ? `<i class="bar" style="background:${color}"></i>` : `<div style="width:40px;height:40px;border-radius:50%;background:var(--seg);display:flex;align-items:center;justify-content:center;font-weight:700;flex:none">${esc(c.name.slice(0, 1).toUpperCase())}</div>`}<div style="flex:1;min-width:0"><b>${esc(c.name)}</b><div style="font-size:13px;color:var(--muted)">${sub}</div></div><span class="chev">›</span></div>`;
+  const h3 = (t, n) => `<h3 class="pad" style="margin:24px 0 8px;font-size:17px">${t}${n ? ` <span style="color:var(--muted);font-weight:500">${n}</span>` : ''}</h3>`;
+  const today = new Date().toLocaleDateString('ru', { weekday: 'long', day: 'numeric', month: 'long' });
   go(`<div class="fade" style="padding:16px 0 40px">
-    <div class="pad row"><div style="flex:1"><div class="caps" style="color:var(--coral)">Кабинет специалиста</div><h1>Клиенты</h1><div style="font-size:12px;color:var(--muted);margin-top:2px">${esc((await meta('profile')) || defaultAuthor())}</div></div><button class="round" id="menu">⚙︎</button></div>
-    ${pulled && pulled.length ? `<div class="pad" style="margin-top:12px"><div class="card" style="background:var(--okS)"><b>Новые результаты из дома:</b> ${pulled.map(esc).join(', ')}</div></div>` : ''}
-    <div class="pad" style="margin-top:14px;display:flex;flex-direction:column;gap:8px"><button class="btn" id="new"><span class="ic">+</span> Новая оценка</button><button class="btn ghost" id="join" style="background:#fff">Ссылка для нового клиента</button></div>
-    ${needBackup ? `<div class="pad" style="margin-top:12px"><div class="card row" style="background:var(--shortS)"><div style="flex:1;font-size:14px"><b>Сохрани резервную копию.</b> Данные клиентов хранятся только на этом телефоне.</div><button class="pill" id="bk">Сохранить</button></div></div>` : ''}
-    ${soon.length ? `<h3 class="pad" style="margin:22px 0 8px;font-size:17px">Повторный тест в ближайшие 3 дня</h3><div class="pad" style="display:flex;flex-direction:column;gap:8px">${soon.map(({ c, a }) => {
-      const d = Math.ceil((a.nextDate - Date.now()) / DAY); return `<div class="list-item" data-id="${c.id}" style="background:#fff"><i class="bar" style="background:${d < 0 ? '#E5484D' : '#EE7B30'}"></i><div style="flex:1"><b>${esc(c.name)}</b><div style="font-size:13px;color:var(--muted)">${d < 0 ? 'просрочен на ' + (-d) + ' дн.' : d === 0 ? 'сегодня' : 'через ' + d + ' дн.'}</div></div><span class="chev">›</span></div>`; }).join('')}</div>` : ''}
-    <div class="pad" style="margin-top:22px"><input id="q" value="${esc(query)}" placeholder="Поиск по имени" style="width:100%;height:48px;border-radius:14px;border:1.5px solid var(--line);padding:0 14px;font:16px Onest;background:#fff"></div>
-    <div class="pad" style="margin-top:10px;display:flex;flex-direction:column;gap:8px">${list.length ? list.map(c => { const a = last(c.id);
-      return `<div class="list-item" data-id="${c.id}" style="background:#fff"><div style="width:40px;height:40px;border-radius:50%;background:var(--seg);display:flex;align-items:center;justify-content:center;font-weight:700;flex:none">${esc(c.name.slice(0, 1).toUpperCase())}</div><div style="flex:1"><b>${esc(c.name)}</b><div style="font-size:13px;color:var(--muted)">${a ? 'Оценка ' + fmtDate(a.date) : 'Оценок пока нет'}</div></div><span class="chev">›</span></div>`; }).join('')
-      : `<div class="card" style="margin-top:6px;text-align:center;padding:22px 18px"><b style="font-size:17px">Посмотрите, что получите</b><p class="sub" style="font-size:14px;margin-top:6px">Готовая оценка клиента с болью в колене: замеры, гипотеза, назначение и отчет. Удалите, когда будет не нужна.</p><button class="btn lime" id="demo" style="margin-top:14px">Открыть пример</button></div>`}</div></div>`);
+    <div class="pad row"><div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--muted)">${esc(name)}</div><h1>Сегодня</h1><div style="font-size:14px;color:var(--sub);margin-top:2px">${today[0].toUpperCase() + today.slice(1)}</div></div><button class="pill" id="menu" style="border:1.5px solid var(--line)">Меню</button></div>
+    <div class="pad" style="margin-top:16px;display:flex;flex-direction:column;gap:8px"><button class="btn" id="new"><span class="ic">+</span> ${({ trainer: 'Скрининг клиента', manual: 'До сеанса', sport: 'Спортивный тест' })[sp] || 'Новая оценка'}</button><button class="btn ghost" id="join" style="background:#fff">Отправить тест клиенту</button></div>
+    ${pulled && pulled.length ? `<div class="pad" style="margin-top:12px"><div class="card" style="background:var(--okS);font-size:14px"><b>Пришли результаты из дома:</b> ${pulled.map(esc).join(', ')}</div></div>` : ''}
+    ${review.length ? h3('Нужно посмотреть', review.length) + `<div class="pad" style="display:flex;flex-direction:column;gap:8px">${review.map(a => `<div class="list-item" data-a="${a.id}" style="background:#fff"><i class="bar" style="background:var(--lime)"></i><div style="flex:1;min-width:0"><b>${esc(byId[a.clientId].name)}</b><div style="font-size:13px;color:var(--muted)">${a.source === 'home' ? 'из дома' : 'не завершена'} · ${fmtDate(a.date)}</div></div><span class="chev">›</span></div>`).join('')}</div>` : ''}
+    ${soon.length ? h3('Ретесты на неделе', soon.length) + `<div class="pad" style="display:flex;flex-direction:column;gap:8px">${soon.map(({ c, a }) => { const d = Math.ceil((a.nextDate - Date.now()) / DAY); return row(c, d < 0 ? 'просрочен на ' + (-d) + ' дн.' : d === 0 ? 'сегодня' : 'через ' + d + ' дн.', d <= 0 ? '#E5484D' : '#EE7B30'); }).join('')}</div>` : ''}
+    ${h3(q ? 'Поиск' : 'Последние клиенты', clients.length > list.length && !q ? 'из ' + clients.length : '')}
+    ${clients.length > 6 || q ? `<div class="pad" style="margin-bottom:8px"><input id="q" value="${esc(query)}" placeholder="Найти клиента" style="width:100%;height:46px;border-radius:14px;border:1.5px solid var(--line);padding:0 14px;font:16px Onest;background:#fff"></div>` : ''}
+    <div class="pad" style="display:flex;flex-direction:column;gap:8px">${list.length ? list.map(c => { const a = last(c.id); return row(c, a ? fmtDate(a.date) + ' · ' + esc(a.templateName || 'оценка') : 'оценок пока нет'); }).join('')
+      : q ? '<p class="sub">Никого не нашлось.</p>' : `<div class="card" style="text-align:center;padding:22px 18px"><b style="font-size:17px">Посмотрите, что получите</b><p class="sub" style="font-size:14px;margin-top:6px">Готовая оценка клиента с болью в колене: замер, гипотеза, решение и отчет.</p><button class="btn lime" id="demo" style="margin-top:14px">Открыть пример</button></div>`}</div>
+    ${needBackup ? `<div class="pad" style="margin-top:20px"><button class="row" id="bk" style="width:100%;background:none;border:0;font:inherit;color:var(--muted);font-size:13px;justify-content:center;gap:6px">Клиенты хранятся только на этом телефоне · <u>сохранить копию</u></button></div>` : ''}
+  </div>`);
   if ($('#demo')) $('#demo').onclick = openDemo;
-  $('#new').onclick = () => clientForm(null, true); $('#join').onclick = sendJoin; $('#menu').onclick = proMenu; if ($('#bk')) $('#bk').onclick = backup;
-  $('#q').oninput = e => { clearTimeout(window._qt); window._qt = setTimeout(() => proHome(e.target.value).then(() => { const i = $('#q'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }), 250); };
-  document.querySelectorAll('.list-item').forEach(el => el.onclick = () => clientCard(el.dataset.id));
+  $('#new').onclick = () => quickStart(); $('#join').onclick = sendJoin; $('#menu').onclick = proMenu; if ($('#bk')) $('#bk').onclick = backup;
+  if ($('#q')) $('#q').oninput = e => { clearTimeout(window._qt); window._qt = setTimeout(() => proHome(e.target.value).then(() => { const i = $('#q'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }), 250); };
+  document.querySelectorAll('[data-id]').forEach(el => el.onclick = () => clientCard(el.dataset.id));
+  document.querySelectorAll('.list-item[data-a]').forEach(el => el.onclick = () => result(el.dataset.a));
 }
 
 function proMenu() {
@@ -227,21 +237,47 @@ function remind(c, date) {
 }
 
 // ---------- новая оценка: протокол, боль, камера ----------
+
+// ---------- быстрый старт оценки: только имя, остальное потом ----------
+async function quickStart() {
+  const clients = (await all('clients')).filter(c => !c.demo), asses = await all('assessments');
+  const last = id => Math.max(0, ...asses.filter(a => a.clientId === id).map(a => a.date));
+  const recent = clients.sort((x, y) => (last(y.id) || y.created) - (last(x.id) || x.created)).slice(0, 5);
+  go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" style="background:transparent">‹</button><b style="font-size:18px">Новая оценка</b></div>
+   <div class="pad" style="display:flex;flex-direction:column;gap:12px;margin-top:8px">
+    <b>Кто клиент?</b>
+    <input id="nm" placeholder="Имя нового клиента" autocomplete="off" style="width:100%;height:52px;border-radius:14px;border:1.5px solid var(--line);padding:0 14px;font:17px Onest;background:#fff">
+    <button class="btn" id="go" disabled style="opacity:.4">Дальше</button>
+    ${recent.length ? `<div class="sub" style="font-size:13px;margin-top:10px">или выберите</div>${recent.map(c => `<div class="list-item" data-c="${c.id}" style="background:#fff"><b style="flex:1">${esc(c.name)}</b><span class="chev">›</span></div>`).join('')}` : ''}
+   </div></div>`);
+  $('#back').onclick = () => proHome();
+  const nm = $('#nm'), go2 = $('#go'); nm.focus();
+  nm.oninput = () => { const ok = nm.value.trim().length > 0; go2.disabled = !ok; go2.style.opacity = ok ? 1 : .4; };
+  nm.onkeydown = e => { if (e.key === 'Enter' && !go2.disabled) go2.click(); };
+  go2.onclick = async () => { if (clients.length >= START_CLIENTS && !gate('clients')) return; const n = nm.value.trim().slice(0, 80);
+    const c = { id: uid(), created: Date.now(), name: n, first: n.split(' ')[0], last: n.split(' ').slice(1).join(' '), dob: '', sex: '', height: '', leg: 'R', hand: 'R', activity: '', complaints: '', notes: '' };
+    await put('clients', c); newAssessment(c.id); };
+  document.querySelectorAll('[data-c]').forEach(el => el.onclick = async () => { const as = await byClient(el.dataset.c); newAssessment(el.dataset.c, as.length ? as.at(-1).id : null); });
+}
+
 async function newAssessment(clientId, retestOf) {
   const c = await get('clients', clientId); const prev = retestOf ? await get('assessments', retestOf) : null;
   let tpl = prev ? TEMPLATES.find(t => t[0] === prev.template) || ['custom', prev.templateName || 'Свой', prev.protocol] : TEMPLATES[0]; let units = prev ? prev.protocol : tpl[2]; const pain = {}; const pre = {}; let expect = '';
   const draw = () => { const rows = rowsOf(units);
-    go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" style="background:transparent">‹</button><b style="font-size:18px">${prev ? 'Повторный тест' : 'Новая оценка'}: ${esc(c.name)}</b></div>
-     <div class="pad" style="display:flex;flex-direction:column;gap:16px;padding-bottom:20px">
-      ${prev ? `<div class="card" style="background:var(--okS);font-size:14px;line-height:1.4">Тот же протокол, что ${fmtDate(prev.date)}. Поставь телефон так же: подсказка в кадре покажет, ближе или дальше.</div>` : ''}
-      <div><b>Протокол</b><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px">${TEMPLATES.map(t => `<button class="pill" data-t="${t[0]}" style="border:1.5px solid ${tpl[0] === t[0] ? 'var(--navy)' : 'transparent'}">${t[1]}</button>`).join('')}</div>
-        <div class="row" style="flex-wrap:wrap;gap:6px;margin-top:10px">${Object.keys(UNITS).map(u => `<label style="display:flex;align-items:center;gap:6px;font-size:14px;background:#fff;border-radius:99px;padding:6px 12px"><input type="checkbox" data-u="${u}" ${units.includes(u) ? 'checked' : ''} ${u === 'stand' ? 'disabled' : ''}>${UNIT_NAMES[u]}</label>`).join('')}</div>
-        <p class="sub" style="font-size:13px;margin-top:8px">${rows.length} шагов · около ${mins(SETUP_SEC + secs(rows))} мин</p><div style="margin-top:10px">${stepList(units, pre)}</div></div>
-      <div><b>Боль сейчас, 0–10</b><div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">${PAIN.map(([k, n]) => `<div class="row" style="background:#fff;border-radius:14px;padding:8px 14px"><span style="width:110px;font-size:14px">${n}</span><input type="range" min="0" max="10" value="${pain[k] || 0}" data-p="${k}" style="flex:1;accent-color:#1E2533"><b style="width:24px;text-align:right" id="pv_${k}">${pain[k] || 0}</b></div>`).join('')}</div></div>
-      <div><b>Что ожидаете увидеть</b> <span class="sub" style="font-size:13px">необязательно</span><textarea id="expect" rows="2" placeholder="Например: справа слабая средняя ягодичная, колено уходит внутрь" style="margin-top:8px;width:100%;border-radius:14px;border:1.5px solid var(--line);padding:12px;font:15px Onest;background:#fff">${esc(expect)}</textarea>
-        <p class="sub" style="font-size:12px;margin-top:4px">Запишите свой вывод по осмотру руками: после теста увидите, совпало ли.</p></div>
-      <div><b>Камера</b><div class="seg" style="margin-top:8px"><button id="c0" class="${cam.back ? '' : 'on'}">Фронтальная</button><button id="c1" class="${cam.back ? 'on' : ''}">Основная</button></div></div>
-     </div><div class="pad" style="padding-bottom:24px"><button class="btn" id="go"><span class="ic">●</span> Начать съемку</button></div></div>`);
+    const session = prev && prev.template === 'posture' && Date.now() - prev.date < 12 * 3600e3; // массаж: «после сеанса» в тот же день
+    const goalBtn = t => { const r = rowsOf(t[2]); return `<button class="list-item" data-t="${t[0]}" style="background:#fff;text-align:left;font:inherit;color:inherit;border:1.5px solid ${tpl[0] === t[0] ? 'var(--navy)' : 'transparent'}"><div style="flex:1"><b style="font-size:16px">${t[1]}</b><div style="font-size:13px;color:var(--muted)">${r.length} ${r.length === 1 ? 'шаг' : r.length < 5 ? 'шага' : 'шагов'} · ${mins(SETUP_SEC + secs(r))} мин</div></div>${tpl[0] === t[0] ? '<b style="color:var(--navy)">✓</b>' : ''}</button>`; };
+    go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" style="background:transparent">‹</button><div style="flex:1;min-width:0"><b style="font-size:18px">${session ? 'После сеанса' : prev ? 'Повторный тест' : 'Новая оценка'}</b><div style="font-size:13px;color:var(--muted)">${esc(c.name)}</div></div></div>
+     <div class="pad" style="display:flex;flex-direction:column;gap:14px;padding-bottom:20px">
+      ${prev ? `<div class="card" style="background:var(--okS);font-size:14px;line-height:1.4">${session ? 'Тот же ракурс, что до сеанса.' : 'Тот же протокол, что ' + fmtDate(prev.date) + '.'} Поставьте телефон так же: подсказка в кадре покажет, ближе или дальше.</div>` : ''}
+      ${prev ? '' : `<div><b>Цель</b><div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">${TEMPLATES.map(goalBtn).join('')}</div></div>`}
+      <div><b>Моя гипотеза</b> <span class="sub" style="font-size:13px">необязательно</span><textarea id="expect" rows="2" placeholder="Что вы ожидаете увидеть по осмотру руками" style="margin-top:8px;width:100%;border-radius:14px;border:1.5px solid var(--line);padding:12px;font:15px Onest;background:#fff">${esc(expect)}</textarea></div>
+      <details class="card"><summary style="font-weight:600">Шаги, боль, камера</summary>
+        <div style="margin-top:10px">${stepList(units, pre)}</div>
+        <div class="row" style="flex-wrap:wrap;gap:6px;margin-top:10px">${Object.keys(UNITS).map(u => `<label style="display:flex;align-items:center;gap:6px;font-size:14px;background:var(--bg);border-radius:99px;padding:6px 12px"><input type="checkbox" data-u="${u}" ${units.includes(u) ? 'checked' : ''} ${u === 'stand' ? 'disabled' : ''}>${UNIT_NAMES[u]}</label>`).join('')}</div>
+        <div style="margin-top:14px"><b style="font-size:14px">Боль сейчас, 0–10</b><div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">${PAIN.map(([k, n]) => `<div class="row" style="background:var(--bg);border-radius:12px;padding:6px 12px"><span style="width:110px;font-size:14px">${n}</span><input type="range" min="0" max="10" value="${pain[k] || 0}" data-p="${k}" style="flex:1;accent-color:#1E2533"><b style="width:24px;text-align:right" id="pv_${k}">${pain[k] || 0}</b></div>`).join('')}</div></div>
+        <div style="margin-top:14px"><b style="font-size:14px">Камера</b><div class="seg" style="margin-top:6px"><button id="c0" class="${cam.back ? '' : 'on'}">Фронтальная</button><button id="c1" class="${cam.back ? 'on' : ''}">Основная</button></div></div>
+      </details>
+     </div><div class="pad" style="padding-bottom:24px"><button class="btn" id="go"><span class="ic">●</span> Начать · ${rows.length} ${rows.length === 1 ? 'шаг' : rows.length < 5 ? 'шага' : 'шагов'}, ${mins(SETUP_SEC + secs(rows))} мин</button></div></div>`);
     $('#back').onclick = () => clientCard(clientId); bindStepList(pre, draw);
     document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tpl = TEMPLATES.find(t => t[0] === b.dataset.t); units = tpl[2]; draw(); });
     document.querySelectorAll('[data-u]').forEach(b => b.onchange = () => { units = sortUnits(b.checked ? [...units, b.dataset.u] : units.filter(x => x !== b.dataset.u)); tpl = ['custom', 'Свой', units]; draw(); });
@@ -251,7 +287,7 @@ async function newAssessment(clientId, retestOf) {
     $('#go').onclick = async () => { voice.unlock(); startMotion(); $('#go').textContent = 'Загружаю модель…';
       try { await initPose(); } catch (e) { alert('Не удалось загрузить модель: ' + e.message); return draw(); }
       const r = await runProtocol(units, { target: prev && prev.setup, onCancel: () => clientCard(clientId), pre }); if (!r) return;
-      const a = { id: uid(), clientId, date: r.date, template: tpl[0], templateName: tpl[1], protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, limits: r.limits || {}, pain, hyp: {}, plan: null, note: '', expect: expect.trim().slice(0, 500), nextDate: r.date + 30 * DAY, prevId: prev ? prev.id : null, draft: true };
+      const a = { id: uid(), clientId, date: r.date, template: tpl[0], templateName: session ? 'После сеанса' : tpl[0] === 'posture' && !prev ? 'До сеанса' : tpl[1], protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, limits: r.limits || {}, pain, hyp: {}, plan: null, note: '', expect: expect.trim().slice(0, 500), nextDate: r.date + 30 * DAY, prevId: prev ? prev.id : null, draft: true };
       await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); result(a.id); }; };
   draw();
 }
@@ -268,17 +304,29 @@ export async function result(aid, view = 'measured') {
   const facts = an.findings.slice(0, 3);
   const tab = (k, t) => `<button class="${view === k ? 'on' : ''}" data-v="${k}">${t}</button>`;
   let body = '';
-  if (view === 'measured') body = `
-    ${verdictCard(top, an.findings)}
-    <button class="btn lime" id="mv" style="height:50px">▶ Запись движения</button>
+  if (view === 'measured') { const conf = a.check || {};
+    const hypTop = top.filter(s => !s.edited || s.k !== 'OK').slice(0, 3);
+    const decided = sp.filter(s => s.k !== 'OK' && (conf[s.key] === 'yes' || s.edited)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
+    const isBefore = a.template === 'posture' && !a.prevId;
+    const cap = (t, col) => `<div class="caps" style="color:${col || 'var(--muted)'}">${t}</div>`;
+    body = `
+    <div class="card">${cap('Измерено')}${facts.length ? facts.map(f => `<div class="row" style="align-items:flex-start;gap:10px;margin-top:10px"><span style="width:8px;height:8px;border-radius:4px;background:#A9A091;margin-top:7px;flex:none"></span><b style="font-size:15px;font-weight:600;line-height:1.35">${f.observed}</b></div>`).join('') : '<p class="sub" style="margin-top:8px">Существенных отклонений нет</p>'}</div>
+    <div class="card" style="padding:12px 0"><div class="row" style="justify-content:center"><div class="seg" style="width:auto"><button id="mf" class="on">Спереди</button><button id="mb2">Сзади</button></div></div><div style="width:100%;max-width:320px;margin:8px auto 0"><canvas id="heat" style="width:100%;display:block"></canvas></div></div>
+    ${hypTop.length ? `<div class="card">${cap('Гипотеза · вероятный вклад', 'var(--weak)')}${hypTop.map(s => `<div style="margin-top:12px"><div style="font-size:15px;line-height:1.35"><span style="color:var(--muted)">Вероятно:</span> <b>${C.muscles[s.id].name} ${s.side === 'RIGHT' ? 'справа' : 'слева'}</b> · ${TONE[s.k][0].toLowerCase()}</div>
+      <div class="row" style="gap:6px;margin-top:6px">${[['yes', 'Подтверждаю'], ['no', 'Убрать']].map(([v, n]) => `<button class="pill" data-chk="${s.key}" data-v="${v}" style="font-size:12px;padding:6px 12px;border:1.5px solid ${conf[s.key] === v ? 'var(--navy)' : 'var(--line)'};${conf[s.key] === v ? 'background:var(--navy);color:#fff' : ''}">${n}</button>`).join('')}</div></div>`).join('')}
+      <button id="tohyp" style="margin-top:12px;background:none;border:0;padding:0;font:600 13px Onest;color:var(--navy)">Проверка руками и все мышцы ›</button></div>` : ''}
+    <div>${cap(decided.length ? 'Решение специалиста' : 'Решение · черновик, подтвердите гипотезы', 'var(--coral)')}<div style="margin-top:8px">${verdictCard(decided.length ? decided : top, an.findings)}</div>${(a.plan && a.plan.ex && a.plan.ex.length) ? `<button id="toplan" style="margin-top:10px;background:none;border:0;padding:0;font:600 13px Onest;color:var(--navy)">Назначение: ${a.plan.ex.length} упр. ›</button>` : '<button id="mkplan" style="margin-top:10px;background:none;border:0;padding:0;font:600 13px Onest;color:var(--navy)">Собрать упражнения по решению ›</button>'}</div>
+    ${isBefore ? '<button class="btn lime" id="after"><span class="ic">●</span> После сеанса: снять снова</button>' : ''}
+    <div class="row" style="gap:8px"><button class="btn" id="send" style="flex:1">Отправить клиенту</button><button class="btn ghost" id="rt" style="flex:1;background:#fff">${a.nextDate && a.retestSet ? 'Ретест ' + fmtDate(a.nextDate) + ' ✓' : 'Ретест через 4 нед.'}</button></div>
+    <details class="card"><summary style="font-weight:600">Подробнее: запись, качество, все показатели</summary><div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+    <button class="btn lime" id="mv" style="height:46px">▶ Запись движения</button>
     ${a.demo || a.clientId === 'demo' ? '' : `<button class="btn ghost" id="rc" style="height:46px;background:#fff">${a.recalc ? 'Пересчитано по новой методике · вернуть исходный расчет' : 'Пересчитать по новой методике'}</button>`}
     ${a.expect ? `<div class="card" style="background:#fff;border:1.5px solid var(--line)"><div class="caps" style="color:var(--muted)">Ваше ожидание до теста</div><p style="font-size:15px;line-height:1.45;margin-top:6px">${esc(a.expect)}</p>
       <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">${[['yes', 'Совпало'], ['part', 'Частично'], ['no', 'Не совпало']].map(([k, n]) => `<button class="pill" data-em="${k}" style="font-size:12px;padding:6px 10px;border:1.5px solid ${a.expectMatch === k ? 'var(--navy)' : 'transparent'}">${n}</button>`).join('')}</div></div>` : ''}
-    <div class="card"><div class="caps" style="color:var(--muted)">Главное по замеру</div>${facts.length ? facts.map(f => `<div style="margin-top:12px"><b style="font-size:16px">${f.observed}</b>${f.rule.weak ? '<div style="font-size:12px;color:var(--muted)">слабый признак</div>' : ''}</div>`).join('') : '<p class="sub" style="margin-top:8px">Существенных отклонений не найдено.</p>'}</div>
     ${q.length ? `<div class="card"><div class="caps" style="color:var(--muted)">Качество съемки${qa != null ? ' · ' + qa + ' из 100' : ''}</div>${q.map(([k, v]) => `<div class="row" style="margin-top:8px;font-size:14px"><span style="flex:1">${esc(QNAMES[k] || k)}</span><b style="color:${v < 60 ? '#E5484D' : 'var(--text)'}">${esc(v)}${v < 60 ? ' · не для строгого сравнения' : ''}</b></div>`).join('')}</div>` : ''}
     ${a.limits && Object.keys(a.limits).length ? `<div class="card" style="background:var(--shortS)"><div class="caps" style="color:var(--coral)">Не смог выполнить</div>${Object.entries(a.limits).map(([u, l]) => `<div style="margin-top:8px;font-size:14px"><b>${esc(UNIT_NAMES[u] || u)}</b>: ${esc([...(l.reasons || []), l.level, l.side && l.side !== 'BOTH' ? (l.side === 'LEFT' ? 'слева' : 'справа') : ''].filter(Boolean).join(', ').toLowerCase())}${l.alt ? ' · сделан вариант с опорой' : ''}</div>`).join('')}</div>` : ''}
     ${Object.values(a.pain || {}).some(v => v > 0) ? `<div class="card"><div class="caps" style="color:var(--muted)">Боль до теста</div>${PAIN.filter(([k]) => a.pain[k] > 0).map(([k, n]) => `<div class="row" style="margin-top:6px"><span style="flex:1">${n}</span><b>${a.pain[k]} / 10</b></div>`).join('')}</div>` : ''}
-    <details class="card"><summary style="font-weight:600">Все показатели</summary>${Object.entries(an.f).filter(([k, v]) => typeof v === 'number' && !k.startsWith('const')).map(([k, v]) => `<div class="row" style="font-size:13px;margin-top:4px"><span style="flex:1;color:var(--sub)">${k}</span><b style="font-variant-numeric:tabular-nums">${fmt(v)}</b></div>`).join('')}</details>`;
+    <details class="card"><summary style="font-weight:600">Все показатели</summary>${Object.entries(an.f).filter(([k, v]) => typeof v === 'number' && !k.startsWith('const')).map(([k, v]) => `<div class="row" style="font-size:13px;margin-top:4px"><span style="flex:1;color:var(--sub)">${k}</span><b style="font-variant-numeric:tabular-nums">${fmt(v)}</b></div>`).join('')}</details></div></details>`; }
   if (view === 'hyp') body = `
     <div class="card" style="padding:12px 0"><div class="row" style="justify-content:center"><div class="seg" style="width:auto"><button id="hf" class="on">Спереди</button><button id="hb">Сзади</button></div>${device.webgl2 ? '<span class="pill" id="h3" style="margin-left:8px;border:1.5px solid var(--line)">3D</span>' : ''}</div>
       <div id="hvis" style="width:100%;max-width:360px;margin:8px auto 0"><canvas id="heat" style="width:100%;display:block"></canvas></div>
@@ -299,22 +347,32 @@ export async function result(aid, view = 'measured') {
     <div class="card"><div class="caps" style="color:var(--muted)">Упражнения</div>${Object.values(C.exercises).filter(e => !e.id.endsWith('_right') || pl.ex.includes(e.id)).sort((x, y) => (pl.ex.includes(y.id) - pl.ex.includes(x.id)) || x.title.localeCompare(y.title)).slice(0, 40).map(e => `<label class="row" style="margin-top:8px;font-size:15px"><input type="checkbox" data-e="${e.id}" ${pl.ex.includes(e.id) ? 'checked' : ''} style="width:20px;height:20px;accent-color:#1E2533"><span style="flex:1">${e.title.split(' (')[0]}${e.id.endsWith('_right') ? ' (правая)' : e.id.endsWith('_left') && pl.ex.includes(e.id) ? ' (левая)' : ''}</span><span style="font-size:12px;color:var(--muted)">${e.dose || ''}</span></label>`).join('')}</div>
       <div class="card"><div class="caps" style="color:var(--muted)">Комментарий для клиента</div><textarea id="pt" rows="4" style="width:100%;margin-top:8px;border-radius:12px;border:1.5px solid var(--line);padding:10px;font:15px Onest">${esc(pl.text)}</textarea><button class="btn ghost" id="dict" style="height:40px;margin-top:8px">🎙 Надиктовать</button></div>
       <div class="card row"><span style="flex:1">Повторный тест</span><input type="date" id="nd" value="${Number.isFinite(+a.nextDate) && +a.nextDate > 0 ? new Date(+a.nextDate).toISOString().slice(0, 10) : ''}" style="height:40px;border-radius:10px;border:1.5px solid var(--line);padding:0 8px;font:15px Onest"></div>`; }
-  go(`<div class="fade" style="padding-bottom:110px"><div class="pad row" style="padding-top:8px"><button class="round" id="back" style="background:transparent">‹</button><div style="flex:1"><b style="font-size:17px">${esc(c.name)}</b><div style="font-size:13px;color:var(--muted)">${fmtDate(a.date)} · ${esc(a.templateName)}</div></div></div>
-    <div class="pad"><div class="seg">${tab('measured', 'Измерено')}${tab('hyp', 'Гипотеза')}${tab('plan', 'Назначение')}</div></div>
+  go(`<div class="fade" style="padding-bottom:110px"><div class="pad row" style="padding-top:8px"><button class="round" id="back" style="background:transparent">‹</button><div style="flex:1"><b style="font-size:17px">${esc(c.name)}</b><div style="font-size:13px;color:var(--muted)">${esc(a.templateName)} · ${fmtDate(a.date)}${qa != null ? ' · качество ' + qa : ''}</div></div></div>
+    <div class="pad"><div class="seg">${tab('measured', 'Итог')}${tab('hyp', 'Гипотеза')}${tab('plan', 'Назначение')}</div></div>
     <div class="pad" style="display:flex;flex-direction:column;gap:10px;margin-top:12px">${body}</div>
     <div style="position:fixed;left:0;right:0;bottom:0;padding:12px 20px calc(env(safe-area-inset-bottom) + 20px);background:linear-gradient(transparent,var(--bg) 30%);max-width:480px;margin:0 auto"><div class="row" style="gap:8px"><button class="btn ghost" id="rep" style="flex:1;background:#fff">Отчет</button>${a.prevId ? '<button class="btn ghost" id="cmp" style="flex:1;background:#fff">Было → стало</button>' : ''}<button class="btn" id="fin" style="flex:1.3">${a.draft ? 'Сохранить' : 'Готово'}</button></div></div></div>`);
   document.querySelectorAll('[data-v]').forEach(b => b.onclick = async () => { await savePlan(a); result(aid, b.dataset.v); });
   if ($('#rc')) $('#rc').onclick = async () => { $('#rc').textContent = 'Считаю…'; await recalc(a); const y = scrollY; await result(aid, view); scrollTo(0, y); };
+  if (view === 'measured') { let bk = false; const lab = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 3)).map(s => ({ key: s.key, title: C.muscles[s.id].zone, sub: TONE[s.k][0].toLowerCase(), color: TONE_HEX[s.k] }));
+    const dh = () => drawHeat($('#heat'), sp, bk, null, lab); dh();
+    $('#mf').onclick = () => { bk = false; $('#mf').classList.add('on'); $('#mb2').classList.remove('on'); dh(); }; $('#mb2').onclick = () => { bk = true; $('#mb2').classList.add('on'); $('#mf').classList.remove('on'); dh(); };
+    if ($('#tohyp')) $('#tohyp').onclick = () => result(aid, 'hyp');
+    if ($('#toplan')) $('#toplan').onclick = () => result(aid, 'plan');
+    if ($('#mkplan')) $('#mkplan').onclick = async () => { await savePlan(a); a.plan = a.plan || { ex: [], text: '' }; a.plan.ex = [...new Set([...a.plan.ex, ...muscleRecs(a).flatMap(r => r.all)])].slice(0, 8); await put('assessments', a); result(aid, 'plan'); };
+    if ($('#after')) $('#after').onclick = async () => { a.draft = false; await put('assessments', a); newAssessment(a.clientId, a.id); };
+    $('#send').onclick = async () => { await savePlan(a); a.draft = false; await put('assessments', a); report(aid); };
+    $('#rt').onclick = async () => { a.nextDate = Date.now() + 28 * DAY; a.retestSet = true; a.draft = false; await put('assessments', a); $('#rt').textContent = 'Ретест ' + fmtDate(a.nextDate) + ' ✓'; }; }
   if ($('#mv')) $('#mv').onclick = async () => { const pp = await get('poses', aid); motionViewer(pp && pp.poses, a.setup, () => result(aid), `${c.name} · ${fmtDate(a.date)}`); };
   $('#back').onclick = async () => { await savePlan(a); clientCard(a.clientId); };
   $('#rep').onclick = async () => { await savePlan(a); a.draft = false; await put('assessments', a); report(aid); };
   if ($('#cmp')) $('#cmp').onclick = async () => { await savePlan(a); a.draft = false; await put('assessments', a); compare(a.prevId, aid); };
   $('#fin').onclick = async () => { await savePlan(a); a.draft = false; await put('assessments', a); clientCard(a.clientId); };
   document.querySelectorAll('[data-em]').forEach(btn => btn.onclick = async () => { a.expectMatch = a.expectMatch === btn.dataset.em ? null : btn.dataset.em; await put('assessments', a); const y = scrollY; await result(aid, view); scrollTo(0, y); });
-  if (view === 'hyp') document.querySelectorAll('[data-chk]').forEach(btn => btn.onclick = async () => { a.check = a.check || {}; const k = btn.dataset.chk;
+  if (view !== 'plan') document.querySelectorAll('[data-chk]').forEach(btn => btn.onclick = async () => { a.check = a.check || {}; const k = btn.dataset.chk;
     a.check[k] = a.check[k] === btn.dataset.v ? undefined : btn.dataset.v; if (!a.check[k]) delete a.check[k];
     if (btn.dataset.v === 'no' && a.check[k]) { a.hyp = a.hyp || {}; a.hyp[k] = 'OK'; } // не подтвердилось руками: в отчет как норма
-    await put('assessments', a); const y = scrollY; await result(aid, 'hyp'); scrollTo(0, y); });
+    if (btn.dataset.v === 'yes' && a.hyp && a.hyp[k] === 'OK') delete a.hyp[k];
+    await put('assessments', a); const y = scrollY; await result(aid, view); scrollTo(0, y); });
   if (view === 'hyp') { let back = false; const lab = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 4)).map(s => ({ key: s.key, title: C.muscles[s.id].zone, sub: TONE[s.k][0].toLowerCase(), color: TONE_HEX[s.k] }));
     let v3 = null, mode3 = false;
     const draw2 = () => { if (mode3) { if (v3) v3.turn(back); return; } drawHeat($('#heat'), sp, back, null, lab); }; draw2();
@@ -461,7 +519,7 @@ function deltas(pa, ca) {
 }
 
 export async function compare(prevId, curId) {
-  if (!gate('compare')) return;
+  { const pa = await get('assessments', prevId), ca = await get('assessments', curId); const same = pa && ca && Math.abs(ca.date - pa.date) < 12 * 3600e3; if (!same && !gate('compare')) return; } // до/после одного сеанса доступно всем
   const [pa, ca, pp, cp] = await Promise.all([get('assessments', prevId), get('assessments', curId), get('poses', prevId), get('poses', curId)]);
   const c = await get('clients', ca.clientId);
   const keys = Object.keys((cp && cp.poses) || {}).filter(k => pp && pp.poses && pp.poses[k]);
@@ -475,7 +533,7 @@ export async function compare(prevId, curId) {
    ${keys.length ? `<div class="pad" style="margin-top:12px"><div class="row" style="gap:6px;flex-wrap:wrap">${keys.map(x => `<button class="pill" data-k="${esc(x)}" style="border:1.5px solid ${x === key ? 'var(--navy)' : 'transparent'}">${esc(QNAMES[x] || x)}</button>`).join('')}</div>
      <div class="card" style="margin-top:10px;padding:10px"><canvas id="cv" style="width:100%;height:340px;display:block"></canvas>
        <div class="row" style="margin-top:8px"><button class="round" id="pp" style="background:var(--lime)">❚❚</button><input type="range" id="ph" min="0" max="1000" value="0" style="flex:1;accent-color:#1E2533"></div>
-       <div class="row" style="font-size:12px;color:var(--muted);margin-top:6px;gap:14px"><span><b style="color:#A9A091">━</b> было</span><span><b style="color:#1E2533">━</b> стало</span><span style="flex:1;text-align:right">выровнено по стопам и росту</span></div></div></div>` : '<p class="pad sub" style="margin-top:12px">В этих оценках нет общих тестов со скелетом.</p>'}
+       <div class="row" style="font-size:12px;color:var(--muted);margin-top:6px;gap:14px"><span><b style="color:#A9A091">━</b> было</span><span><b style="color:#1E2533">━</b> стало</span><span style="flex:1;text-align:right">выровнено по стопам и росту</span></div></div></div>` : ''}
    <div class="pad" style="margin-top:12px"><div class="card"><div class="caps" style="color:var(--muted)">Показатели</div>
      ${ds.map(x => `<div class="row" style="margin-top:10px;font-size:14px"><span style="flex:1">${x.n}</span><span style="font-variant-numeric:tabular-nums">${fmt(x.was)}${x.u} → <b>${fmt(x.now)}${x.u}</b></span><span class="badge" style="margin-left:8px;background:${x.state === 'better' ? 'var(--okS)' : x.state === 'worse' ? 'var(--hyperS)' : 'var(--seg)'};color:${x.state === 'better' ? 'var(--green)' : x.state === 'worse' ? '#E5484D' : 'var(--sub)'}">${x.state === 'better' ? 'лучше' : x.state === 'worse' ? 'хуже' : 'без изм.'}</span></div>`).join('') || '<p class="sub">Нет общих показателей.</p>'}</div></div>
    ${painRows.length ? `<div class="pad" style="margin-top:12px"><div class="card"><div class="caps" style="color:var(--muted)">Боль 0–10</div>${painRows.map(([z, n]) => `<div class="row" style="margin-top:8px"><span style="flex:1">${n}</span><b>${(pa.pain || {})[z] || 0} → ${(ca.pain || {})[z] || 0}</b></div>`).join('')}</div></div>` : ''}
@@ -505,18 +563,23 @@ async function report(aid) {
   for (const [i, back] of [[0, false], [1, true]]) { const hc = document.createElement('canvas'); hc.style.width = '470px'; holder.appendChild(hc); drawHeat(hc, sp, back, null, []); g.drawImage(hc, 64 + i * 486, 240, 470, 470 * hc.height / hc.width); }
   holder.remove(); let y = 860;
   const h2 = t => { y += 70; g.fillStyle = '#1C1B19'; g.font = '700 36px Onest, sans-serif'; g.fillText(t, 64, y); y += 10; };
-  const line = (t, col = '#3E3A34', size = 28) => { y += size + 16; g.fillStyle = col; g.font = `400 ${size}px Onest, sans-serif`; g.fillText(t.slice(0, 62), 64, y); };
-  h2('Главное по замеру'); an.findings.slice(0, 3).forEach(f => line('• ' + f.observed));
-  if (a.limits && Object.keys(a.limits).length) { h2('Не получилось'); Object.entries(a.limits).forEach(([u, l]) => line(`• ${LIMIT_NAMES[u] || u}: ${[...(l.reasons || []), l.level].filter(Boolean).join(', ').toLowerCase()}`)); }
-  if (top.length) { h2('Мышцы'); top.forEach(s => { y += 50; g.fillStyle = TONE_HEX[s.k]; g.fillRect(64, y - 30, 10, 38); g.fillStyle = '#1C1B19'; g.font = '600 28px Onest, sans-serif'; g.fillText(title(s).slice(0, 56), 90, y); }); }
-  if (prev) { const ds = deltas(prev, a).filter(x => x.state !== 'same'); h2(`Было → стало (с ${fmtDate(prev.date)})`);
+  // отчет клиенту отвечает на три вопроса: что увидели, что делаем, когда проверим. Без технических показателей
+  const line = (t, col = '#3E3A34', size = 28, x0 = 64) => { g.font = `400 ${size}px Onest, sans-serif`; const words = String(t).split(' '); let cur = '';
+    const flush = () => { y += size + 14; g.fillStyle = col; g.fillText(cur, x0, y); cur = ''; };
+    for (const w of words) { const tt = cur ? cur + ' ' + w : w; if (g.measureText(tt).width > W - x0 - 64 && cur) { flush(); cur = w; } else cur = tt; } if (cur) flush(); };
+  const plain = t => t.replace(/ \(на границе нормы\)/, '').replace(/\s*на\s*[\d,.]+\s*°.*$/, '').replace(/:\s*$/, '');
+  const same = prev && Math.abs(a.date - prev.date) < 12 * 3600e3;
+  if (an.findings.length) { h2('Что увидели'); an.findings.slice(0, 3).forEach(f => line('• ' + plain(f.observed))); }
+  const conf = a.check || {}, decided = sp.filter(s => s.k !== 'OK' && (conf[s.key] === 'yes' || s.edited)).sort((x, y2) => Math.abs(y2.tone) - Math.abs(x.tone));
+  const v = verdict(decided.length ? decided : top, an.findings), pl = a.plan || { ex: [], text: '' };
+  if (v.length || pl.ex.length || pl.text) { h2('Что делаем');
+    v.forEach(x => { const y0 = y; line(x.verb + ' ' + x.what, '#1C1B19', 30, 92); g.fillStyle = TONE_HEX[x.k]; g.beginPath(); g.arc(72, y0 + 34, 8, 0, 7); g.fill(); y += 6; });
+    pl.ex.slice(0, 4).forEach(id => { const e = C.exercises[id]; if (e) line(`• ${e.title}${e.dose ? ', ' + e.dose : ''}`, '#3E3A34', 26); }); if (pl.text) line(pl.text, '#3E3A34', 26); }
+  if (prev) { const ds = deltas(prev, a).filter(x => x.state !== 'same'); h2(same ? 'До и после сеанса' : `Было → стало, с ${fmtDate(prev.date)}`);
     if (!ds.length) line('Существенных изменений пока нет');
-    ds.slice(0, 5).forEach(x => line(`${x.state === 'better' ? '✓' : '!'} ${x.n}: ${fmt(x.was)}${x.u} → ${fmt(x.now)}${x.u}`, x.state === 'better' ? '#2E9E6A' : '#E5484D'));
+    ds.slice(0, 4).forEach(x => line(`${x.state === 'better' ? '✓' : '!'} ${x.n}: ${fmt(x.was)}${x.u} → ${fmt(x.now)}${x.u}`, x.state === 'better' ? '#2E9E6A' : '#E5484D'));
     PAIN.filter(([z]) => (prev.pain || {})[z] > 0 || (a.pain || {})[z] > 0).forEach(([z, n]) => line(`Боль, ${n.toLowerCase()}: ${(prev.pain || {})[z] || 0} → ${(a.pain || {})[z] || 0}`)); }
-  const recs = muscleRecs(a).slice(0, 5); if (recs.length) { h2('По мышцам'); recs.forEach(r => { line('• ' + r.head, '#1C1B19'); r.out.slice(0, 2).forEach(([hh, t]) => line('   ' + hh + ': ' + t.slice(0, 50), '#6E6A63', 24)); }); }
-  const pl = a.plan || { ex: [], text: '' };
-  if (pl.ex.length || pl.text) { h2('Что делать'); pl.ex.forEach(id => { const e = C.exercises[id]; if (e) line(`• ${e.title}${e.dose ? ' — ' + e.dose : ''}`); }); if (pl.text) line(pl.text); }
-  h2(`Следующий тест: ${fmtDate(a.nextDate)}`);
+  if (!same) { h2('Проверим снова'); line(fmtDate(a.nextDate) + ': тот же тест, сравним с сегодняшним'); }
   const H2 = y + 170, out = document.createElement('canvas'); out.width = W; out.height = H2; const o = out.getContext('2d'); o.drawImage(cv, 0, 0);
   o.fillStyle = '#1E2533'; o.fillRect(0, H2 - 120, W, 120); o.fillStyle = '#C6E84B'; o.font = '700 30px Onest, sans-serif'; o.fillText(author.slice(0, 52), 64, H2 - 66);
   const contact = await meta('contact');
