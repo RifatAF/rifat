@@ -52,11 +52,12 @@ export function verdict(top, findings) {
       return acc(lc(C.muscles[id].name)) + ' ' + (sd.length > 1 ? 'с двух сторон' : sideWord(sd[0])); });
     return { k, verb, what: names.join(', '), why: f ? f.observed.replace(' (на границе нормы)', '') : s0.byChain ? `Возможно, по цепи «${s0.byChain}»` : '' }; }).filter(Boolean);
 }
-export function verdictCard(top, findings, empty = 'Явных перекосов не видно') {
+// skip: причины, которые уже показаны выше на экране (блок «Измерено»), под решениями не повторяем
+export function verdictCard(top, findings, empty = 'Явных перекосов не видно', skip = []) {
   const v = verdict(top, findings);
   return `<div class="card verdict" style="padding:6px 18px">${v.length ? v.map((x, i) => `<div class="row" style="align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid #F0EBE2">
     <span style="width:10px;height:10px;border-radius:5px;margin-top:7px;flex:none;background:${TONE_HEX[x.k]}"></span>
-    <div style="flex:1;min-width:0"><div style="font-size:17px;line-height:1.3"><b>${x.verb}</b> ${esc(x.what)}</div>${x.why && !(i && v[i - 1].why === x.why) ? `<div style="font-size:13px;color:var(--muted);margin-top:3px">${esc(x.why)}</div>` : ''}</div></div>`).join('').replace(/border-bottom:1px solid #F0EBE2">(?![\s\S]*border-bottom)/, '">') : `<p style="padding:12px 0;font-size:16px"><b>${empty}</b></p>`}</div>`;
+    <div style="flex:1;min-width:0"><div style="font-size:17px;line-height:1.3"><b>${x.verb}</b> ${esc(x.what)}</div>${x.why && !skip.includes(x.why) && !(i && v[i - 1].why === x.why) ? `<div style="font-size:13px;color:var(--muted);margin-top:3px">${esc(x.why)}</div>` : ''}</div></div>`).join('').replace(/border-bottom:1px solid #F0EBE2">(?![\s\S]*border-bottom)/, '">') : `<p style="padding:12px 0;font-size:16px"><b>${empty}</b></p>`}</div>`;
 }
 export const ex = id => C.exercises[id];
 const exSec = e => Math.max(10, e.durationSec) + 20;
