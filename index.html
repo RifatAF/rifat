@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>BodyPassport — карта тела по камере телефона</title>
 <meta name="description" content="Тест осанки и движения по камере телефона за 2–5 минут. Подсказывает, какие мышцы, вероятно, перегружены или недорабатывают, и дает упражнения. Бета-версия. Это оценка, не диагноз.">
-<meta name="theme-color" content="#F4F0E8">
+<meta name="theme-color" content="#F3F2EE">
 <meta property="og:title" content="BodyPassport — карта тела по камере телефона">
 <meta property="og:description" content="Короткий видеотест по камере: какие мышцы, вероятно, перегружены, какие недорабатывают, и что с этим делать. Бета.">
 <meta property="og:image" content="https://bodypassport.vercel.app/img/og.jpg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
@@ -19,55 +19,80 @@
 <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script>if (/tgWebApp/.test(location.hash + location.search) || sessionStorage.getItem('bp_tg')) { sessionStorage.setItem('bp_tg', '1'); document.write('<script src="https://telegram.org/js/telegram-web-app.js"><\/script>'); }</script>
 <style>
-:root{--bg:#F4F0E8;--navy:#1E2533;--lime:#C6E84B;--coral:#E8765A;--text:#1C1B19;--sub:#6E6A63;--muted:#6E6A63;--faint:#8A847A;--line:#D8D0C2;--line2:#E0D8CA;--seg:#E6DED0;--peach:#FBE8DF;--green:#2E9E6A;
+/* Дизайн-система BodyPassport v2. Сетка 8pt (шаги 4/8/12/16/20/24/32), радиусы 12/16/22/28, две тени, единая шкала шрифтов.
+   Цвета текста дают контраст от 4,5:1 на фоне и на светлой подложке своего состояния (WCAG AA). */
+:root{--bg:#F3F2EE;--surface:#FFFFFF;--navy:#121826;--ink2:#1E2533;--lime:#C6E84B;--coral:#E8765A;--text:#14161A;--sub:#5D6168;--muted:#5D6168;--faint:#7D828A;
+--line:#E3E1DB;--line2:#ECEAE5;--seg:#E7E5DF;--peach:#FBE8DF;--green:#2E9E6A;
 --hyper:#E5484D;--hyperS:#FBE3E1;--short:#EE7B30;--shortS:#FCEAD9;--weak:#3B7BE8;--weakS:#E0E9FA;--ok:#2E9E6A;--okS:#DDF1E6;
-/* цвета для текста: контраст от 4,5:1 на фоне и на светлой подложке своего состояния (WCAG AA) */
---coralT:#A84A2A;--hyperT:#B8323A;--shortT:#A85010;--weakT:#2C63C4;--okT:#1F7550}
+--coralT:#A84A2A;--hyperT:#B8323A;--shortT:#A85010;--weakT:#2C63C4;--okT:#1F7550;
+--r1:12px;--r2:16px;--r3:22px;--r4:28px;
+--sh1:0 1px 2px rgba(18,24,38,.04),0 2px 8px rgba(18,24,38,.05);--sh2:0 12px 32px rgba(18,24,38,.12),0 2px 6px rgba(18,24,38,.06);
+--ease:cubic-bezier(.2,.8,.2,1);--t1:.18s;--t2:.32s}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:Onest,system-ui,sans-serif}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:Onest,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
 #app{max-width:480px;margin:0 auto;min-height:100%;position:relative}
 .scr{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
 .pad{padding:0 20px}
-h1{font-size:28px;font-weight:700;letter-spacing:-.03em;line-height:1.12}
-.sub{color:var(--sub);font-size:15px;line-height:1.45}
-.caps{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
-.btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;height:58px;border:0;border-radius:20px;background:var(--navy);color:#fff;font:600 17px Onest;cursor:pointer}
+h1{font-size:30px;font-weight:700;letter-spacing:-.035em;line-height:1.1}
+h2{letter-spacing:-.025em;line-height:1.2}
+.sub{color:var(--sub);font-size:15px;line-height:1.5}
+.caps{font-size:12px;font-weight:650;letter-spacing:.08em;text-transform:uppercase}
+.num,.kpi b,.metric{font-variant-numeric:tabular-nums}
+/* кнопки: нажатие ощущается, фокус виден с клавиатуры */
+button,a,.list-item,[data-k],[data-id]{transition:transform var(--t1) var(--ease),background-color var(--t1),border-color var(--t1),box-shadow var(--t1),opacity var(--t1)}
+.btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;height:56px;border:0;border-radius:var(--r2);background:var(--navy);color:#fff;font:600 17px Onest;letter-spacing:-.01em;cursor:pointer;box-shadow:0 1px 2px rgba(18,24,38,.2),inset 0 1px 0 rgba(255,255,255,.06)}
+.btn:active,.pill:active,.list-item:active,.round:active,.tile:active{transform:scale(.97)}
 .btn .ic{color:var(--lime)}
-.btn.lime{background:var(--lime);color:var(--text)}
-.btn.ghost{background:transparent;border:1.5px solid var(--line);color:var(--text);height:52px;border-radius:16px;font-size:15px}
-.pill{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:99px;background:#fff;font-size:13px;font-weight:500}
-.card{background:#fff;border-radius:24px;padding:18px}
-.seg{display:flex;background:var(--seg);border-radius:99px;padding:4px}
-.seg button{flex:1;border:0;background:transparent;border-radius:99px;padding:10px 14px;font:600 14px Onest;color:var(--text)}
-.seg button.on{background:#fff}
+.btn.lime{background:var(--lime);color:var(--text);box-shadow:0 1px 2px rgba(18,24,38,.12)}
+.btn.ghost{background:var(--surface);border:1px solid var(--line);color:var(--text);height:52px;border-radius:var(--r2);font-size:15px;box-shadow:none}
+:focus-visible{outline:3px solid #8FB52A;outline-offset:2px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:8px 13px;border-radius:99px;background:var(--surface);font-size:13px;font-weight:500;border:1px solid var(--line2);color:var(--text)}
+.card{background:var(--surface);border-radius:var(--r3);padding:18px;box-shadow:var(--sh1)}
+.seg{display:flex;background:var(--seg);border-radius:99px;padding:3px}
+.seg button{flex:1;border:0;background:transparent;border-radius:99px;padding:10px 14px;font:600 14px Onest;color:var(--sub)}
+.seg button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(18,24,38,.12)}
 .badge{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:99px;font-size:12px;font-weight:700}
 .badge i{width:8px;height:8px;border-radius:50%;display:inline-block}
 .row{display:flex;align-items:center;gap:12px}
-.list-item{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.55);border-radius:18px;padding:14px;border:1.5px solid transparent;cursor:pointer}
-.list-item.on{background:#fff;border-color:var(--navy)}
-.bar{width:10px;height:36px;border-radius:5px}
-.round{width:44px;height:44px;border-radius:50%;background:#fff;border:0;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer}
+.list-item{display:flex;align-items:center;gap:12px;background:var(--surface);border-radius:var(--r2);padding:14px;border:1px solid transparent;cursor:pointer;box-shadow:var(--sh1)}
+.list-item.on{border-color:var(--navy);box-shadow:0 0 0 1px var(--navy),var(--sh1)}
+.bar{width:6px;height:36px;border-radius:3px;flex:none}
+.round{width:44px;height:44px;border-radius:50%;background:var(--surface);border:0;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;color:var(--text)}
 .chev{color:var(--faint);font-size:20px}
+/* плитки инструментов и цифры */
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:88px;padding:14px;border:0;border-radius:var(--r2);background:var(--surface);box-shadow:var(--sh1);font:600 15px Onest;color:var(--text);text-align:left;cursor:pointer}
+.tile small{font-weight:400;font-size:12px;color:var(--sub);line-height:1.35}
+.tile .ti{width:30px;height:30px;border-radius:10px;background:var(--seg);display:flex;align-items:center;justify-content:center;font-size:15px}
+.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.kpi div{background:var(--surface);border-radius:var(--r2);padding:12px;box-shadow:var(--sh1)}
+.kpi b{display:block;font-size:24px;letter-spacing:-.03em;line-height:1.1}
+.kpi span{font-size:12px;color:var(--sub)}
+.trust{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:99px;background:rgba(46,158,106,.1);color:var(--okT);font-size:12.5px;font-weight:600}
+details>summary{cursor:pointer;list-style:none}details>summary::-webkit-details-marker{display:none}
 /* камера */
-.cam{position:fixed;inset:0;background:#0E1013;z-index:5}
+.cam{position:fixed;inset:0;background:#0B0D10;z-index:5;color:#fff}
 .cam video,.cam canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
-.cam video{background:#0E1013}
+.cam video{background:#0B0D10}
 .cam canvas{background:transparent;pointer-events:none}
-.cam .frame{position:absolute;inset:14px;border:5px solid var(--green);border-radius:36px;transition:border-color .3s}
-.cam .top{position:absolute;left:24px;right:16px;top:calc(env(safe-area-inset-top) + 24px)}
-.segs{display:flex;gap:5px}.segs div{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.22);overflow:hidden}.segs div b{display:block;height:100%;background:var(--lime);width:0}
-.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:99px;color:#fff;font-size:12px;font-weight:500;margin-top:6px}
-.glass{position:absolute;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom) + 28px);background:rgba(10,12,15,.72);backdrop-filter:blur(12px);border-radius:28px;padding:20px;display:flex;align-items:center;gap:14px;color:#fff}
-.metric{position:absolute;right:26px;top:50%;font:600 12px ui-monospace,monospace;color:var(--lime);background:rgba(198,232,75,.16);border:1px solid rgba(198,232,75,.4);border-radius:8px;padding:6px 10px}
-.count{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:140px;font-weight:800;color:#fff;pointer-events:none}
+.cam .frame{position:absolute;inset:12px;border:4px solid var(--green);border-radius:36px;transition:border-color .3s;box-shadow:inset 0 0 40px rgba(0,0,0,.25)}
+.cam .top{position:absolute;left:20px;right:16px;top:calc(env(safe-area-inset-top) + 20px)}
+.segs{display:flex;gap:4px}.segs div{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.2);overflow:hidden}.segs div b{display:block;height:100%;background:var(--lime);width:0;transition:width .3s linear}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:99px;color:#fff;font-size:12.5px;font-weight:600;margin-top:6px;background:rgba(0,0,0,.45);backdrop-filter:blur(8px)}
+.glass{position:absolute;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 20px);background:rgba(11,13,16,.7);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);border:1px solid rgba(255,255,255,.08);border-radius:var(--r4);padding:20px;display:flex;align-items:center;gap:14px;color:#fff;font-size:17px;line-height:1.35}
+.metric{position:absolute;right:24px;top:50%;font:600 13px ui-monospace,SFMono-Regular,monospace;color:var(--lime);background:rgba(198,232,75,.14);border:1px solid rgba(198,232,75,.35);border-radius:10px;padding:6px 10px}
+.count{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:150px;font-weight:800;letter-spacing:-.05em;color:#fff;pointer-events:none;text-shadow:0 8px 40px rgba(0,0,0,.4)}
 /* тренировка */
 .dark{background:var(--navy);color:#fff}
-.sheet{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:flex-end;z-index:20}
-.sheet>div{background:var(--bg);width:100%;max-width:480px;margin:0 auto;border-radius:32px 32px 0 0;padding:24px 20px calc(env(safe-area-inset-bottom) + 30px)}
-.spin{width:36px;height:36px;border:4px solid var(--line);border-top-color:var(--navy);border-radius:50%;animation:sp 1s linear infinite;margin:40vh auto}
+.sheet{position:fixed;inset:0;background:rgba(10,12,16,.4);backdrop-filter:blur(2px);display:flex;align-items:flex-end;z-index:20;animation:fdin var(--t2) var(--ease)}
+.sheet>div{background:var(--bg);width:100%;max-width:480px;max-height:92dvh;overflow:auto;margin:0 auto;border-radius:var(--r4) var(--r4) 0 0;padding:28px 20px calc(env(safe-area-inset-bottom) + 28px);position:relative;animation:up var(--t2) var(--ease);box-shadow:var(--sh2)}
+.sheet>div::before{content:'';position:absolute;top:8px;left:50%;width:36px;height:5px;margin-left:-18px;border-radius:3px;background:var(--line)}
+@keyframes up{from{transform:translateY(40px);opacity:.4}}@keyframes fdin{from{opacity:0}}
+.spin{width:28px;height:28px;border:3px solid var(--line);border-top-color:var(--navy);border-radius:50%;animation:sp .8s linear infinite;margin:40vh auto}
 @keyframes sp{to{transform:rotate(360deg)}}
-.fade{animation:fd .35s ease}@keyframes fd{from{opacity:0;transform:translateY(6px)}to{opacity:1}}
+.fade{animation:fd var(--t2) var(--ease)}@keyframes fd{from{opacity:0;transform:translateY(8px)}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style>
 </head>
 <body>
