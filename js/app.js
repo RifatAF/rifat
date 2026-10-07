@@ -64,7 +64,27 @@ const exSec = e => Math.max(10, e.durationSec) + 20;
 export const minutes = e => Math.max(1, Math.ceil(exSec(e) / 60));
 export const totalMin = list => Math.max(1, Math.round(list.reduce((x, e) => x + exSec(e), 0) / 60));
 let view3d = null;
-export function go(html) { if (view3d) { view3d.dispose(); view3d = null; } app.innerHTML = html; window.scrollTo(0, 0); }
+export function go(html) { if (view3d) { view3d.dispose(); view3d = null; } backFn = null; app.innerHTML = html; window.scrollTo(0, 0); }
+
+// ---------- «назад»: жест и системная кнопка ведут на шаг назад в приложении, а не закрывают его ----------
+// В истории браузера держим одну запись-ловушку. Жест «назад» снимает ее, мы делаем шаг назад внутри
+// приложения и ставим ловушку снова. На главном экране (нет кнопки «‹») жест закрывает приложение как обычно.
+let backFn = null;
+export const setBack = fn => { backFn = fn; };
+const BACK_SEL = ['#x', '#back', '#lback', '#sback', '#sre'];
+const armBack = () => { if (!(history.state && history.state.bpTrap)) history.pushState({ bpTrap: 1 }, ''); };
+function stepBack() {
+  const sheet = [...document.querySelectorAll('.sheet')].pop();
+  if (sheet) { sheet.remove(); return true; }
+  if (backFn) { const f = backFn; backFn = null; f(); return true; }
+  const b = BACK_SEL.map(s => app.querySelector(s)).find(x => x && x.offsetParent !== null);
+  if (b) { b.click(); return true; }
+  return false;
+}
+addEventListener('popstate', () => { if (stepBack()) armBack(); else history.back(); });
+armBack();
+// Telegram Mini App: своя кнопка «Назад» в шапке Telegram
+try { const tg = window.Telegram && window.Telegram.WebApp; if (tg && tg.BackButton && tg.initData) { tg.BackButton.show(); tg.BackButton.onClick(() => { stepBack(); }); } } catch (e) {}
 
 // ---------- данные карты ----------
 export function spots(a) {
@@ -126,13 +146,13 @@ export function onboarding() {
   const draw = () => { const [t, s, img] = slides[i]; go(`<div class="scr fade">
     <div style="position:relative;flex:1;min-height:52vh;overflow:hidden"><img src="img/${img}.webp" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 30%">
       <div style="position:absolute;inset:0;background:linear-gradient(var(--bg) 0%,transparent 18%,transparent 70%,var(--bg) 100%)"></div>
-      <div class="row pad" style="position:absolute;top:16px;left:0;right:0"><img src="icons/logo.svg" width="26"><div style="flex:1;line-height:1.1"><b>BodyPassport</b> <span style="background:var(--lime);border-radius:99px;padding:2px 7px;font-size:12px;font-weight:700;vertical-align:2px">БЕТА</span><div style="font-size:12px;color:var(--sub)">Рифат Аюпов · биомеханик, кинезиотерапевт</div></div><span class="pill" id="skip">Пропустить</span></div>
+      <div class="row pad" style="position:absolute;top:16px;left:0;right:0">${i ? '<button class="round" id="back" aria-label="Назад" style="box-shadow:var(--sh1)">‹</button>' : '<img src="icons/logo.svg" width="26">'}<div style="flex:1;line-height:1.1"><b>BodyPassport</b> <span style="background:var(--lime);border-radius:99px;padding:2px 7px;font-size:12px;font-weight:700;vertical-align:2px">БЕТА</span><div style="font-size:12px;color:var(--sub)">Рифат Аюпов · биомеханик, кинезиотерапевт</div></div><span class="pill" id="skip">Пропустить</span></div>
       <div class="row" style="position:absolute;bottom:8px;left:24px;gap:6px">${slides.map((_, k) => `<i style="height:6px;width:${k === i ? 28 : 6}px;border-radius:3px;background:${k === i ? 'var(--navy)' : 'var(--line)'};transition:.4s"></i>`).join('')}</div></div>
     <div class="pad" style="padding-bottom:24px"><h1 style="min-height:64px">${t}</h1><p class="sub" style="margin:10px 0 14px;min-height:44px">${s}</p>
       <div class="row" style="gap:8px;margin-bottom:16px;flex-wrap:wrap"><span class="pill">2–5 минут</span><span class="pill">Вход в один тап</span><span class="pill">Бесплатно</span></div>
       <button class="btn" id="next">${i < 2 ? 'Дальше' : 'Пройти тестирование'} <span class="ic">›</span></button>
       <button class="btn ghost" id="pro" style="margin-top:6px;border:0;height:44px;font-size:14px;color:var(--sub)">Я специалист: кабинет для клиентов ›</button></div></div>`);
-    $('#next').onclick = () => i < 2 ? (i++, draw()) : (track('onb_done'), prep()); $('#skip').onclick = () => { track('onb_done'); prep(); }; $('#pro').onclick = () => openPro(); };
+    $('#next').onclick = () => i < 2 ? (i++, draw()) : (track('onb_done'), prep()); $('#skip').onclick = () => { track('onb_done'); prep(); }; $('#pro').onclick = () => openPro(); if ($('#back')) $('#back').onclick = () => { i--; draw(); }; };
   draw();
 }
 
@@ -448,13 +468,13 @@ async function runTest() {
 function cameraHelp() {
   stopCamera();
   const url = location.origin + location.pathname + '?ref=' + encodeURIComponent(REF);
-  go(`<div class="scr pad fade" style="justify-content:center;gap:16px"><h1>Камера не запустилась</h1>
+  go(`<div class="scr pad fade" style="justify-content:center;gap:16px"><div style="position:absolute;top:12px;left:20px"><button class="round" id="back" aria-label="Назад" style="box-shadow:var(--sh1)">‹</button></div><h1>Камера не запустилась</h1>
     <p class="sub">${device.inApp || device.tg ? 'Встроенный браузер этого приложения не дает доступ к камере. Открой тест в Chrome или Safari.' : 'Разреши доступ к камере: значок замка или «Аа» в адресной строке → Камера → Разрешить. Потом нажми «Попробовать снова».'}</p>
     ${device.tg ? '<button class="btn" id="ob">Открыть в браузере</button>' : `<button class="btn" id="cp">Скопировать ссылку</button>`}
     <button class="btn ghost" id="rt">Попробовать снова</button></div>`);
   if ($('#ob')) $('#ob').onclick = () => window.Telegram.WebApp.openLink(url, { try_instant_view: false });
   if ($('#cp')) $('#cp').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(url); $('#cp').textContent = 'Ссылка скопирована, вставь в Chrome или Safari'; };
-  $('#rt').onclick = prep;
+  $('#rt').onclick = prep; $('#back').onclick = prep;
 }
 
 // ---------- приглашение от специалиста: тест дома, результат уходит ему зашифрованным ----------
