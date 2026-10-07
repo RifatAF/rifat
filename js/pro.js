@@ -1,10 +1,11 @@
 // Кабинет специалиста: клиенты, оценки по протоколам, три слоя результата, резервная копия.
 // Все данные в IndexedDB на телефоне специалиста; на сервер ничего не уходит.
 import { analyze, fmt, recompute } from './analysis.js';
+import { track } from './track.js';
 import { meSync, logout, getMe } from './auth.js';
 import { gate, planLine, SPECIALTIES, TEMPLATE_ORDER, START_CLIENTS } from './plans.js';
 import { C, voice, cam, startMotion, initPose, drawHeat, RAMP_CSS, device, seal, body3D } from './core.js';
-import { cleanResult, verdict, verdictCard, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, plan, ex, totalMin, workout, onboarding, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol } from './app.js';
+import { cleanResult, verdict, verdictCard, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, ex, totalMin, workout, onboarding, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol } from './app.js';
 
 const $ = s => document.querySelector(s);
 // имя специалиста для отчетов по умолчанию: из аккаунта (в бете кабинетом пользуются разные специалисты)
@@ -82,8 +83,8 @@ async function openDemo() {
   const base = { protocol: ['stand', 'ohs_front', 'sls', 'side'], full: true, quality: {}, limits: {}, setup: {}, template: 'knee', templateName: 'Колено', pain: { knee: 4 }, plan: null, note: '', draft: false };
   const m0 = { snapshot: { shoulderTilt: 5.2, pelvicTilt: -4.6, headTilt: 1, trunkLateral: 1.5 }, side: { headForwardDeg: 21, kneeHyperDeg: 2, shoulderShift: .01, hipShift: 0 },
     moves: { ohs_front: { quality: 'GOOD', f: { ohs_valgus_r: 14, ohs_valgus_l: 5 } }, sls_r: { quality: 'GOOD', f: { sls_drop_r: 6, sls_valgus_r: 13, sls_trunk_r: 3 } }, sls_l: { quality: 'GOOD', f: { sls_drop_l: 1, sls_valgus_l: 4, sls_trunk_l: 1 } } } };
-  const m1 = { snapshot: { shoulderTilt: 3.1, pelvicTilt: -2.2, headTilt: .8, trunkLateral: 1 }, side: { headForwardDeg: 18, kneeHyperDeg: 2, shoulderShift: .01, hipShift: 0 },
-    moves: { ohs_front: { quality: 'GOOD', f: { ohs_valgus_r: 7, ohs_valgus_l: 5 } }, sls_r: { quality: 'GOOD', f: { sls_drop_r: 3, sls_valgus_r: 8, sls_trunk_r: 2 } }, sls_l: { quality: 'GOOD', f: { sls_drop_l: 1, sls_valgus_l: 4, sls_trunk_l: 1 } } } };
+  const m1 = { snapshot: { shoulderTilt: 3.1, pelvicTilt: -2.2, headTilt: .8, trunkLateral: 1 }, side: { headForwardDeg: 11, kneeHyperDeg: 2, shoulderShift: .01, hipShift: 0 },
+    moves: { ohs_front: { quality: 'GOOD', f: { ohs_valgus_r: 11, ohs_valgus_l: 5 } }, sls_r: { quality: 'GOOD', f: { sls_drop_r: 3, sls_valgus_r: 4, sls_trunk_r: 2 } }, sls_l: { quality: 'GOOD', f: { sls_drop_l: 1, sls_valgus_l: 4, sls_trunk_l: 1 } } } };
   await put('clients', { id: 'demo', demo: true, created: d0, name: 'Пример: Олег, боль в колене', first: 'Олег', last: '', dob: '1985-03-12', sex: 'M', height: '180', leg: 'R', hand: 'R', activity: 'офис, бег 2 раза в неделю', complaints: 'Ноет правое колено после бега', notes: 'Демо-клиент: удалите, когда будет не нужен' });
   await put('assessments', { id: 'demo-1', clientId: 'demo', date: d0, ...base, ...m0, hyp: {}, check: {}, expect: 'Справа слабая средняя ягодичная, колено уходит внутрь', expectMatch: 'yes', nextDate: d0 + 30 * DAY, prevId: null });
   await put('assessments', { id: 'demo-2', clientId: 'demo', date: d1, ...base, ...m1, pain: { knee: 1 }, hyp: {}, check: {}, nextDate: d1 + 30 * DAY, prevId: 'demo-1' });
@@ -91,7 +92,7 @@ async function openDemo() {
   clientCard('demo');
 }
 async function specialtyScreen(after) {
-  go(`<div class="scr fade"><div class="pad" style="padding-top:20px"><div class="caps" style="color:var(--coral)">Кабинет специалиста</div><h1 style="margin-top:8px">Кто вы?</h1>
+  go(`<div class="scr fade"><div class="pad" style="padding-top:20px"><div class="caps" style="color:var(--coralT)">Кабинет специалиста</div><h1 style="margin-top:8px">Кто вы?</h1>
     <p class="sub" style="margin-top:6px">Под специализацию подстроим протоколы теста. Поменять можно в меню кабинета.</p></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:10px;margin-top:16px;padding-bottom:30px">${SPECIALTIES.map(([k, t, d]) => `<button class="list-item" data-sp="${k}" style="background:#fff;text-align:left;font:inherit;color:inherit"><div style="flex:1"><b style="font-size:15px">${t}</b><div class="sub" style="font-size:13px;margin-top:2px">${d}</div></div><span class="chev">›</span></button>`).join('')}</div></div>`);
   document.querySelectorAll('[data-sp]').forEach(b => b.onclick = async () => { const sp = b.dataset.sp; await setMeta('specialty', sp); localStorage.setItem('bp_sp', sp); orderTemplates(sp);
@@ -115,9 +116,10 @@ function dictate(textarea, btn) {
 
 // ---------- рабочий стол ----------
 export async function proHome(query = '', pulled = null) {
+  track('pro_open');
   localStorage.setItem('bp_mode', 'pro');
   const lc = await legacyCount().catch(() => 0);
-  if (lc) { go(`<div class="scr pad fade" style="justify-content:center;gap:14px"><div class="caps" style="color:var(--coral)">Кабинет ${esc(meSync().name)}</div>
+  if (lc) { go(`<div class="scr pad fade" style="justify-content:center;gap:14px"><div class="caps" style="color:var(--coralT)">Кабинет ${esc(meSync().name)}</div>
       <h1>На этом телефоне есть база без аккаунта</h1><p class="sub">${lc} ${lc % 10 === 1 && lc % 100 !== 11 ? 'клиент' : [2, 3, 4].includes(lc % 10) && ![12, 13, 14].includes(lc % 100) ? 'клиента' : 'клиентов'}, созданных до входа. Перенести их в ваш кабинет? Другие аккаунты их больше не увидят.</p>
       <button class="btn" id="lgy">Перенести ко мне</button><button class="btn ghost" id="lgn">Это не мои, начать с чистого</button></div>`);
     $('#lgy').onclick = async () => { $('#lgy').textContent = 'Переношу…'; await claimLegacy(true); proHome(); };
@@ -286,9 +288,10 @@ async function newAssessment(clientId, retestOf) {
     $('#c0').onclick = () => { cam.back = false; localStorage.setItem('bp_back', '0'); draw(); }; $('#c1').onclick = () => { cam.back = true; localStorage.setItem('bp_back', '1'); draw(); };
     $('#go').onclick = async () => { voice.unlock(); startMotion(); $('#go').textContent = 'Загружаю модель…';
       try { await initPose(); } catch (e) { alert('Не удалось загрузить модель: ' + e.message); return draw(); }
+      track('assess_start', { n: units.length }, false);
       const r = await runProtocol(units, { target: prev && prev.setup, onCancel: () => clientCard(clientId), pre }); if (!r) return;
       const a = { id: uid(), clientId, date: r.date, template: tpl[0], templateName: session ? 'После сеанса' : tpl[0] === 'posture' && !prev ? 'До сеанса' : tpl[1], protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, limits: r.limits || {}, pain, hyp: {}, plan: null, note: '', expect: expect.trim().slice(0, 500), nextDate: r.date + 30 * DAY, prevId: prev ? prev.id : null, draft: true };
-      await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); result(a.id); }; };
+      await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); track('assess_done', { n: units.length }, false); result(a.id); }; };
   draw();
 }
 
@@ -312,10 +315,10 @@ export async function result(aid, view = 'measured') {
     body = `
     <div class="card">${cap('Измерено')}${facts.length ? facts.map(f => `<div class="row" style="align-items:flex-start;gap:10px;margin-top:10px"><span style="width:8px;height:8px;border-radius:4px;background:#A9A091;margin-top:7px;flex:none"></span><b style="font-size:15px;font-weight:600;line-height:1.35">${f.observed}</b></div>`).join('') : '<p class="sub" style="margin-top:8px">Существенных отклонений нет</p>'}</div>
     <div class="card" style="padding:12px 0"><div class="row" style="justify-content:center"><div class="seg" style="width:auto"><button id="mf" class="on">Спереди</button><button id="mb2">Сзади</button></div></div><div style="width:100%;max-width:320px;margin:8px auto 0"><canvas id="heat" style="width:100%;display:block"></canvas></div></div>
-    ${hypTop.length ? `<div class="card">${cap('Гипотеза · вероятный вклад', 'var(--weak)')}${hypTop.map(s => `<div style="margin-top:12px"><div style="font-size:15px;line-height:1.35"><span style="color:var(--muted)">Вероятно:</span> <b>${C.muscles[s.id].name} ${s.side === 'RIGHT' ? 'справа' : 'слева'}</b> · ${TONE[s.k][0].toLowerCase()}</div>
+    ${hypTop.length ? `<div class="card">${cap('Гипотеза · вероятный вклад', 'var(--weakT)')}${hypTop.map(s => `<div style="margin-top:12px"><div style="font-size:15px;line-height:1.35"><span style="color:var(--muted)">Вероятно:</span> <b>${C.muscles[s.id].name} ${s.side === 'RIGHT' ? 'справа' : 'слева'}</b> · ${TONE[s.k][0].toLowerCase()}</div>
       <div class="row" style="gap:6px;margin-top:6px">${[['yes', 'Подтверждаю'], ['no', 'Убрать']].map(([v, n]) => `<button class="pill" data-chk="${s.key}" data-v="${v}" style="font-size:12px;padding:6px 12px;border:1.5px solid ${conf[s.key] === v ? 'var(--navy)' : 'var(--line)'};${conf[s.key] === v ? 'background:var(--navy);color:#fff' : ''}">${n}</button>`).join('')}</div></div>`).join('')}
       <button id="tohyp" style="margin-top:12px;background:none;border:0;padding:0;font:600 13px Onest;color:var(--navy)">Проверка руками и все мышцы ›</button></div>` : ''}
-    <div>${cap(decided.length ? 'Решение специалиста' : 'Решение · черновик, подтвердите гипотезы', 'var(--coral)')}<div style="margin-top:8px">${verdictCard(decided.length ? decided : top, an.findings)}</div>${(a.plan && a.plan.ex && a.plan.ex.length) ? `<button id="toplan" style="margin-top:10px;background:none;border:0;padding:0;font:600 13px Onest;color:var(--navy)">Назначение: ${a.plan.ex.length} упр. ›</button>` : '<button id="mkplan" style="margin-top:10px;background:none;border:0;padding:0;font:600 13px Onest;color:var(--navy)">Собрать упражнения по решению ›</button>'}</div>
+    <div>${cap(decided.length ? 'Решение специалиста' : 'Решение · черновик, подтвердите гипотезы', 'var(--coralT)')}<div style="margin-top:8px">${verdictCard(decided.length ? decided : top, an.findings)}</div>${(a.plan && a.plan.ex && a.plan.ex.length) ? `<button id="toplan" style="margin-top:10px;background:none;border:0;padding:0;font:600 13px Onest;color:var(--navy)">Назначение: ${a.plan.ex.length} упр. ›</button>` : '<button id="mkplan" style="margin-top:10px;background:none;border:0;padding:0;font:600 13px Onest;color:var(--navy)">Собрать упражнения по решению ›</button>'}</div>
     ${isBefore ? '<button class="btn lime" id="after"><span class="ic">●</span> После сеанса: снять снова</button>' : ''}
     <div class="row" style="gap:8px"><button class="btn" id="send" style="flex:1">Отправить клиенту</button><button class="btn ghost" id="rt" style="flex:1;background:#fff">${a.nextDate && a.retestSet ? 'Ретест ' + fmtDate(a.nextDate) + ' ✓' : 'Ретест через 4 нед.'}</button></div>
     <details class="card"><summary style="font-weight:600">Подробнее: запись, качество, все показатели</summary><div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
@@ -324,7 +327,7 @@ export async function result(aid, view = 'measured') {
     ${a.expect ? `<div class="card" style="background:#fff;border:1.5px solid var(--line)"><div class="caps" style="color:var(--muted)">Ваше ожидание до теста</div><p style="font-size:15px;line-height:1.45;margin-top:6px">${esc(a.expect)}</p>
       <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">${[['yes', 'Совпало'], ['part', 'Частично'], ['no', 'Не совпало']].map(([k, n]) => `<button class="pill" data-em="${k}" style="font-size:12px;padding:6px 10px;border:1.5px solid ${a.expectMatch === k ? 'var(--navy)' : 'transparent'}">${n}</button>`).join('')}</div></div>` : ''}
     ${q.length ? `<div class="card"><div class="caps" style="color:var(--muted)">Качество съемки${qa != null ? ' · ' + qa + ' из 100' : ''}</div>${q.map(([k, v]) => `<div class="row" style="margin-top:8px;font-size:14px"><span style="flex:1">${esc(QNAMES[k] || k)}</span><b style="color:${v < 60 ? '#E5484D' : 'var(--text)'}">${esc(v)}${v < 60 ? ' · не для строгого сравнения' : ''}</b></div>`).join('')}</div>` : ''}
-    ${a.limits && Object.keys(a.limits).length ? `<div class="card" style="background:var(--shortS)"><div class="caps" style="color:var(--coral)">Не смог выполнить</div>${Object.entries(a.limits).map(([u, l]) => `<div style="margin-top:8px;font-size:14px"><b>${esc(UNIT_NAMES[u] || u)}</b>: ${esc([...(l.reasons || []), l.level, l.side && l.side !== 'BOTH' ? (l.side === 'LEFT' ? 'слева' : 'справа') : ''].filter(Boolean).join(', ').toLowerCase())}${l.alt ? ' · сделан вариант с опорой' : ''}</div>`).join('')}</div>` : ''}
+    ${a.limits && Object.keys(a.limits).length ? `<div class="card" style="background:var(--shortS)"><div class="caps" style="color:var(--coralT)">Не смог выполнить</div>${Object.entries(a.limits).map(([u, l]) => `<div style="margin-top:8px;font-size:14px"><b>${esc(UNIT_NAMES[u] || u)}</b>: ${esc([...(l.reasons || []), l.level, l.side && l.side !== 'BOTH' ? (l.side === 'LEFT' ? 'слева' : 'справа') : ''].filter(Boolean).join(', ').toLowerCase())}${l.alt ? ' · сделан вариант с опорой' : ''}</div>`).join('')}</div>` : ''}
     ${Object.values(a.pain || {}).some(v => v > 0) ? `<div class="card"><div class="caps" style="color:var(--muted)">Боль до теста</div>${PAIN.filter(([k]) => a.pain[k] > 0).map(([k, n]) => `<div class="row" style="margin-top:6px"><span style="flex:1">${n}</span><b>${a.pain[k]} / 10</b></div>`).join('')}</div>` : ''}
     <details class="card"><summary style="font-weight:600">Все показатели</summary>${Object.entries(an.f).filter(([k, v]) => typeof v === 'number' && !k.startsWith('const')).map(([k, v]) => `<div class="row" style="font-size:13px;margin-top:4px"><span style="flex:1;color:var(--sub)">${k}</span><b style="font-variant-numeric:tabular-nums">${fmt(v)}</b></div>`).join('')}</details></div></details>`; }
   if (view === 'hyp') body = `
@@ -353,15 +356,15 @@ export async function result(aid, view = 'measured') {
     <div style="position:fixed;left:0;right:0;bottom:0;padding:12px 20px calc(env(safe-area-inset-bottom) + 20px);background:linear-gradient(transparent,var(--bg) 30%);max-width:480px;margin:0 auto"><div class="row" style="gap:8px"><button class="btn ghost" id="rep" style="flex:1;background:#fff">Отчет</button>${a.prevId ? '<button class="btn ghost" id="cmp" style="flex:1;background:#fff">Было → стало</button>' : ''}<button class="btn" id="fin" style="flex:1.3">${a.draft ? 'Сохранить' : 'Готово'}</button></div></div></div>`);
   document.querySelectorAll('[data-v]').forEach(b => b.onclick = async () => { await savePlan(a); result(aid, b.dataset.v); });
   if ($('#rc')) $('#rc').onclick = async () => { $('#rc').textContent = 'Считаю…'; await recalc(a); const y = scrollY; await result(aid, view); scrollTo(0, y); };
-  if (view === 'measured') { let bk = false; const lab = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 3)).map(s => ({ key: s.key, title: C.muscles[s.id].zone, sub: TONE[s.k][0].toLowerCase(), color: TONE_HEX[s.k] }));
+  if (view === 'measured') { let bk = false; const lab = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 3)).map(s => ({ key: s.key, title: C.muscles[s.id].zone + (s.side === 'RIGHT' ? ' справа' : s.side === 'LEFT' ? ' слева' : ''), sub: toneText(s, 0).toLowerCase(), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
     const dh = () => drawHeat($('#heat'), sp, bk, null, lab); dh();
     $('#mf').onclick = () => { bk = false; $('#mf').classList.add('on'); $('#mb2').classList.remove('on'); dh(); }; $('#mb2').onclick = () => { bk = true; $('#mb2').classList.add('on'); $('#mf').classList.remove('on'); dh(); };
     if ($('#tohyp')) $('#tohyp').onclick = () => result(aid, 'hyp');
     if ($('#toplan')) $('#toplan').onclick = () => result(aid, 'plan');
     if ($('#mkplan')) $('#mkplan').onclick = async () => { await savePlan(a); a.plan = a.plan || { ex: [], text: '' }; a.plan.ex = [...new Set([...a.plan.ex, ...muscleRecs(a).flatMap(r => r.all)])].slice(0, 8); await put('assessments', a); result(aid, 'plan'); };
     if ($('#after')) $('#after').onclick = async () => { a.draft = false; await put('assessments', a); newAssessment(a.clientId, a.id); };
-    $('#send').onclick = async () => { await savePlan(a); a.draft = false; await put('assessments', a); report(aid); };
-    $('#rt').onclick = async () => { a.nextDate = Date.now() + 28 * DAY; a.retestSet = true; a.draft = false; await put('assessments', a); $('#rt').textContent = 'Ретест ' + fmtDate(a.nextDate) + ' ✓'; }; }
+    $('#send').onclick = async () => { track('report_sent'); await savePlan(a); a.draft = false; await put('assessments', a); report(aid); };
+    $('#rt').onclick = async () => { track('retest_set'); a.nextDate = Date.now() + 28 * DAY; a.retestSet = true; a.draft = false; await put('assessments', a); $('#rt').textContent = 'Ретест ' + fmtDate(a.nextDate) + ' ✓'; }; }
   if ($('#mv')) $('#mv').onclick = async () => { const pp = await get('poses', aid); motionViewer(pp && pp.poses, a.setup, () => result(aid), `${c.name} · ${fmtDate(a.date)}`); };
   $('#back').onclick = async () => { await savePlan(a); clientCard(a.clientId); };
   $('#rep').onclick = async () => { await savePlan(a); a.draft = false; await put('assessments', a); report(aid); };
@@ -373,7 +376,7 @@ export async function result(aid, view = 'measured') {
     if (btn.dataset.v === 'no' && a.check[k]) { a.hyp = a.hyp || {}; a.hyp[k] = 'OK'; } // не подтвердилось руками: в отчет как норма
     if (btn.dataset.v === 'yes' && a.hyp && a.hyp[k] === 'OK') delete a.hyp[k];
     await put('assessments', a); const y = scrollY; await result(aid, view); scrollTo(0, y); });
-  if (view === 'hyp') { let back = false; const lab = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 4)).map(s => ({ key: s.key, title: C.muscles[s.id].zone, sub: TONE[s.k][0].toLowerCase(), color: TONE_HEX[s.k] }));
+  if (view === 'hyp') { let back = false; const lab = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 4)).map(s => ({ key: s.key, title: C.muscles[s.id].zone + (s.side === 'RIGHT' ? ' справа' : s.side === 'LEFT' ? ' слева' : ''), sub: toneText(s, 0).toLowerCase(), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
     let v3 = null, mode3 = false;
     const draw2 = () => { if (mode3) { if (v3) v3.turn(back); return; } drawHeat($('#heat'), sp, back, null, lab); }; draw2();
     $('#hf').onclick = () => { back = false; $('#hf').classList.add('on'); $('#hb').classList.remove('on'); draw2(); }; $('#hb').onclick = () => { back = true; $('#hb').classList.add('on'); $('#hf').classList.remove('on'); draw2(); };
@@ -507,8 +510,9 @@ function drawPair(cv, ghost, cur, k) {
   sk(ghost, '#A9A091', 6 * devicePixelRatio, .55); sk(cur, '#1E2533', 4 * devicePixelRatio, 1);
 }
 
-// пороги «существенного изменения»: меньше — это погрешность съемки (до собственной валидации — консервативные значения)
-const METRICS = [['sq_depth', 'Глубина приседа (сгибание колен)', '°', 8, true], ['valgus_max', 'Колено внутрь в приседе', '°', 5], ['sls_valgus_r', 'Колено внутрь, правая нога', '°', 5], ['sls_valgus_l', 'Колено внутрь, левая нога', '°', 5],
+// пороги «существенного изменения»: меньше — это погрешность съемки (до собственной валидации — консервативные значения).
+// Колено внутрь: минимальное обнаружимое изменение 2D-угла 7,5–8,9° (Munro 2011, doi:10.1123/jsr.21.1.7), берем 8°
+const METRICS = [['sq_depth', 'Глубина приседа (сгибание колен)', '°', 8, true], ['valgus_max', 'Колено внутрь в приседе', '°', 8], ['sls_valgus_r', 'Колено внутрь, правая нога', '°', 8], ['sls_valgus_l', 'Колено внутрь, левая нога', '°', 8],
   ['sls_drop_r', 'Провал таза, на правой', '°', 2.5], ['sls_drop_l', 'Провал таза, на левой', '°', 2.5], ['sq_shift', 'Сдвиг таза в приседе', '', .12], ['sq_lean', 'Наклон корпуса в приседе', '°', 5],
   ['sq_arms', 'Руки падают вперед', '°', 6], ['oh_reach', 'Руки вверх: не хватает до вертикали', '°', 8], ['shoulder_shift', 'Плечи впереди таза (сбоку)', '', .02], ['knee_hyper', 'Переразгибание колен', '°', 3], ['shoulder_tilt', 'Перекос плеч', '°', 2], ['pelvic_tilt', 'Перекос таза', '°', 2], ['head_forward', 'Голова вперед', '°', 4],
   ['asym_delt', 'Разница рук в стороны', '°', 6], ['asym_bend', 'Разница наклонов', '°', 5], ['asym_calf', 'Разница икр', '%', 15], ['asym_quad', 'Разница глубины на одной ноге', '°', 8]];
@@ -598,8 +602,25 @@ function messageClient(c, date) {
 
 
 // =================== Ссылка клиенту: тест дома → результат сразу у специалиста ===================
+// ящик для результатов выдает и подписывает сервер. Старые ящики (id из браузера) сервер принимает до LEGACY_UNTIL:
+// при новой ссылке такой ящик заменяется подписанным, а старый еще читается, чтобы дошли результаты по уже отправленным ссылкам
+const LEGACY_UNTIL = Date.parse('2026-11-30T23:59:59Z');
+const signedBox = id => typeof id === 'string' && id.length === 46;
+async function newBoxId() {
+  let r; try { r = await fetch('/api/relay?a=new', { method: 'POST' }); } catch (e) { r = null; }
+  if (r && r.ok) { const j = await r.json().catch(() => ({})); if (j.id) return j.id; }
+  if (r && r.status === 429) throw new Error('на сегодня создано слишком много ссылок, попробуйте завтра');
+  // вход на этом адресе не настроен: до конца переходного периода работает ящик старого формата
+  if (Date.now() < LEGACY_UNTIL) return seal.rid();
+  throw new Error('войдите в кабинет и попробуйте снова');
+}
+async function freshBox(b) {
+  if (b && signedBox(b.id)) return b;
+  const id = await newBoxId(); if (!b) return { id, key: await seal.key() };
+  return signedBox(id) ? { id, key: b.key, old: b.id } : b;
+}
 async function inviteLink(c, units) {
-  if (!c.invite) { c.invite = { id: seal.rid(), key: await seal.key() }; await put('clients', c); }
+  const fresh = await freshBox(c.invite); if (fresh !== c.invite) { c.invite = fresh; await put('clients', c); }
   const author = (await meta('profile')) || defaultAuthor();
   return location.origin + '/#inv=' + seal.pack({ i: c.invite.id, k: c.invite.key, n: c.name.split(' ')[0], s: author, p: units });
 }
@@ -614,7 +635,7 @@ async function sendInvite(c) {
     <button class="btn ghost" id="cx" style="margin-top:8px;border:0">Отмена</button></div>`;
     d.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tpl = TEMPLATES.find(t => t[0] === b.dataset.t); draw(); });
     d.querySelector('#cx').onclick = () => d.remove();
-    d.querySelector('#snd').onclick = async () => { const url = await inviteLink(c, tpl[2]); const text = `${c.name.split(' ')[0]}, здравствуйте! Пройдите, пожалуйста, тест движения по ссылке, это 2–4 минуты. Результат сразу придет мне.`;
+    d.querySelector('#snd').onclick = async () => { let url; try { url = await inviteLink(c, tpl[2]); } catch (e) { alert('Не удалось создать ссылку: ' + e.message); return; } track('invite_sent'); const text = `${c.name.split(' ')[0]}, здравствуйте! Пройдите, пожалуйста, тест движения по ссылке, это 2–4 минуты. Результат сразу придет мне.`;
       if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url); alert('Ссылка скопирована'); } d.remove(); }; };
   draw(); document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
 }
@@ -637,7 +658,7 @@ async function addResult(c, r) {
   await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses || {} });
 }
 /** Личный «почтовый ящик» специалиста для ссылки новому клиенту. */
-async function inbox() { let b = await meta('inbox'); if (!b) { b = { id: seal.rid(), key: await seal.key() }; await setMeta('inbox', b); } return b; }
+async function inbox() { const b = await meta('inbox'), f = await freshBox(b); if (f !== b) await setMeta('inbox', f); return f; }
 async function sendJoin() {
   if (!gate('invite')) return;
   let tpl = TEMPLATES[0]; const d = document.createElement('div'); d.className = 'sheet';
@@ -647,7 +668,7 @@ async function sendJoin() {
     <button class="btn" id="snd" style="margin-top:14px">Отправить ссылку</button><button class="btn ghost" id="cx" style="margin-top:8px;border:0">Отмена</button></div>`;
     d.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tpl = TEMPLATES.find(t => t[0] === b.dataset.t); draw(); });
     d.querySelector('#cx').onclick = () => d.remove();
-    d.querySelector('#snd').onclick = async () => { const bx = await inbox(), author = (await meta('profile')) || defaultAuthor();
+    d.querySelector('#snd').onclick = async () => { let bx; try { bx = await inbox(); } catch (e) { alert('Не удалось создать ссылку: ' + e.message); return; } track('join_sent'); const author = (await meta('profile')) || defaultAuthor();
       const url = location.origin + '/#join=' + seal.pack({ i: bx.id, k: bx.key, s: author, p: tpl[2] });
       const text = 'Здравствуйте! Пройдите, пожалуйста, тест движения по ссылке: короткая анкета и 2–4 минуты перед камерой. Результат сразу придет мне.';
       if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url); alert('Ссылка скопирована'); } d.remove(); }; };
@@ -656,13 +677,14 @@ async function sendJoin() {
 /** Забирает новые результаты с сервера (по ссылкам клиентам и по общей ссылке), расшифровывает и кладет в карточки. */
 export async function pullResults() {
   const clients = (await all('clients')).filter(c => c.invite); const bx = await meta('inbox');
-  const ids = clients.map(c => c.invite.id).concat(bx ? [bx.id] : []); if (!ids.length) return [];
+  const boxes = b => [b.id].concat(b.old && Date.now() < LEGACY_UNTIL ? [b.old] : []);
+  const ids = clients.flatMap(c => boxes(c.invite)).concat(bx ? boxes(bx) : []); if (!ids.length) return [];
   let data; try { data = await (await fetch('/api/relay?ids=' + ids.join(','), { cache: 'no-store' })).json(); } catch (e) { return []; }
   const got = [], done = p => fetch('/api/relay?p=' + encodeURIComponent(p), { method: 'DELETE' }).catch(() => {});
-  for (const c of clients) for (const item of (data[c.invite.id] || [])) {
+  for (const c of clients) for (const item of boxes(c.invite).flatMap(id => data[id] || [])) {
     let r; try { r = await seal.decrypt(c.invite.key, item.data); } catch (e) { done(item.p); continue; } // не расшифровывается этим ключом: мусор, иначе он занимает лимит ссылки
     try { await addResult(c, r); got.push(c.name); done(item.p); } catch (e) { console.warn('relay item', e); } }
-  if (bx) for (const item of (data[bx.id] || [])) {
+  if (bx) for (const item of boxes(bx).flatMap(id => data[id] || [])) {
     let m; try { m = await seal.decrypt(bx.key, item.data); } catch (e) { done(item.p); continue; }
     try { const p0 = m.profile && typeof m.profile === 'object' ? m.profile : {}, pr = { name: str(p0.name, 40), surname: str(p0.surname, 60), dob: /^\d{4}-\d{2}-\d{2}$/.test(p0.dob) ? p0.dob : '', sex: ['M', 'F'].includes(p0.sex) ? p0.sex : '', height: /^\d{2,3}$/.test(p0.height) ? p0.height : '', hand: ['R', 'L'].includes(p0.hand) ? p0.hand : '', activity: str(p0.activity, 120), complaints: str(p0.complaints, 1000) };
       if (typeof m.token !== 'string' || !/^[A-Za-z0-9_-]{16,64}$/.test(m.token)) m.token = null;
@@ -672,6 +694,7 @@ export async function pullResults() {
       Object.assign(c, { name: [pr.name, pr.surname].filter(Boolean).join(' ') || 'Без имени', dob: pr.dob || c.dob || '', sex: pr.sex || c.sex || '', height: pr.height || c.height || '', hand: pr.hand || c.hand || 'R', leg: pr.hand || c.leg || 'R', activity: pr.activity || c.activity || '', complaints: pr.complaints || c.complaints || '' });
       if (!m.result || typeof m.result !== 'object') throw new Error('no result');
       await put('clients', c); await addResult(c, m.result); got.push(c.name); done(item.p); } catch (e) { console.warn('inbox item', e); } }
+  if (got.length) track('result_pulled', { n: got.length }, false);
   return got;
 }
 
@@ -695,7 +718,7 @@ export async function motionViewer(poses, setup, back, titleText) {
     <div class="row" style="margin-top:10px;gap:8px"><div class="seg" style="flex:1"><button id="m2" class="on">Схема</button><button id="m3">3D-фигура</button></div></div>
     <div class="card" style="margin-top:10px;padding:10px"><div id="stage" style="width:100%;height:380px;position:relative"><canvas id="cv" style="width:100%;height:100%;display:block"></canvas></div>
      <div class="row" style="margin-top:8px"><button class="round" id="pp" style="background:var(--lime)">❚❚</button><input type="range" id="ph" min="0" max="1000" value="0" style="flex:1;accent-color:#1E2533"></div>
-     <div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap"><button class="pill" id="sp" style="font-size:12px">Скорость 1×</button><button class="pill" id="am" style="font-size:12px">Подчеркнуть отклонения</button><span id="amn" style="font-size:12px;color:var(--coral)"></span></div>
+     <div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap"><button class="pill" id="sp" style="font-size:12px">Скорость 1×</button><button class="pill" id="am" style="font-size:12px">Подчеркнуть отклонения</button><span id="amn" style="font-size:12px;color:var(--coralT)"></span></div>
      <p style="font-size:12px;color:var(--muted);margin-top:8px" id="note"></p></div></div></div>`);
   let fr2 = [], fr3 = null, dur = 1;
   const load = () => { const pk = poses[key]; fr2 = normalize(unpack(pk, setup && setup.w, setup && setup.h)); fr3 = unpackWorld(pk); dur = Math.max(1, fr2.length ? fr2.at(-1).t : 1);

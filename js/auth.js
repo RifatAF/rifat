@@ -1,9 +1,12 @@
 // Быстрый вход (Google, Telegram), согласие на обработку данных и проверка противопоказаний перед тестом.
 import { device } from './core.js';
+import { track } from './track.js';
 
 const app = () => document.querySelector('#app');
 const show = html => { app().innerHTML = html; window.scrollTo(0, 0); };
 const esc = v => String(v ?? '').replace(/[&<>"'`]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' })[c]);
+// ключ меняется вместе с версией политики: при новой версии согласие спрашивается заново
+const CONSENT_KEY = 'bp_consent_2026-10-b2';
 const TG = () => (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) ? window.Telegram.WebApp : null;
 
 let cfg = null, me;
@@ -30,10 +33,11 @@ async function post(a, body) {
   const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'ошибка ' + r.status); return j;
 }
 export const meSync = () => me || null;
+export const configSync = () => cfg || {};
 /** Возврат с виджета Telegram: данные пришли в адресе страницы, подпись проверяет сервер. */
 export async function tgWebLogin(data) {
   const role = localStorage.getItem('bp_login_role') || 'client';
-  me = (await post('telegram', { data, role, consent: !!localStorage.getItem('bp_consent'), ref: localStorage.getItem('bp_ref') })).user;
+  me = (await post('telegram', { data, role, consent: !!localStorage.getItem(CONSENT_KEY), health: !!localStorage.getItem(CONSENT_KEY), ref: localStorage.getItem('bp_ref') })).user;
   if (role === 'specialist' && me.role !== 'specialist') me = await setRole('specialist');
   return role;
 }
@@ -46,35 +50,39 @@ export async function betaUsers() { return (await post('users')).users; }
 export async function ensureLogin(role, cont, opts = {}) {
   if (!(await providers()).length) return true;
   let u = await getMe();
+  // политика сменилась: вход заново с новым согласием (один тап)
+  if (u && u.consentOk === false) { loginScreen(role, cont, opts); return false; }
   if (u) { if (role === 'specialist' && u.role !== 'specialist') u = await setRole('specialist').catch(() => u); else if (!u.role) u = await setRole(role).catch(() => u); return true; }
   // внутри Telegram Mini App вход без экрана: данные пользователя уже подписаны Telegram
-  if (TG() && localStorage.getItem('bp_consent')) { try { me = (await post('telegram', { initData: TG().initData, role, consent: true, ref: localStorage.getItem('bp_ref') })).user; window.dispatchEvent(new Event('bp-login')); return true; } catch (e) {} }
+  if (TG() && localStorage.getItem(CONSENT_KEY)) { try { me = (await post('telegram', { initData: TG().initData, role, consent: true, health: true, ref: localStorage.getItem('bp_ref') })).user; window.dispatchEvent(new Event('bp-login')); return true; } catch (e) {} }
   loginScreen(role, cont, opts); return false;
 }
 
 export function loginScreen(role, cont, opts = {}) {
   const pro = role === 'specialist';
-  const consented = () => document.getElementById('cons') && document.getElementById('cons').checked;
+  const consented = () => ['cons', 'consh'].every(id => document.getElementById(id) && document.getElementById(id).checked);
   show(`<div class="scr fade"><div class="pad" style="padding-top:8px">${opts.back ? '<button class="round" id="lback" style="background:transparent">‹</button>' : '<div style="height:44px"></div>'}</div>
    <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:14px">
-    <div class="row" style="gap:8px"><span class="caps" style="color:var(--coral)">${pro ? 'Кабинет специалиста' : 'Быстрый вход'}</span><span class="pill" style="background:var(--lime);font-size:11px;padding:4px 9px">Бета</span></div>
+    <div class="row" style="gap:8px"><span class="caps" style="color:var(--coralT)">${pro ? 'Кабинет специалиста' : 'Быстрый вход'}</span><span class="pill" style="background:var(--lime);font-size:11px;padding:4px 9px">Бета</span></div>
     <h1>${pro ? 'Войдите, чтобы вести клиентов' : 'Войди в один тап'}</h1>
     <p class="sub">${pro ? 'Вход привязывает кабинет к вам: результаты клиентов из дома может забрать только вошедший специалист.' : 'Без паролей. Нужно, чтобы участники беты могли вернуться к своим результатам и получить ответ от специалиста.'}</p>
-    <label class="card row" style="padding:14px 16px;align-items:flex-start"><input type="checkbox" id="cons" ${localStorage.getItem('bp_consent') ? 'checked' : ''} style="width:22px;height:22px;flex:none;margin-top:2px;accent-color:#1E2533">
-     <span style="font-size:14px;line-height:1.45">Мне есть 18 лет. Я согласен на обработку данных о движении и самочувствии по <a href="/privacy" target="_blank" style="color:var(--navy);font-weight:600">политике конфиденциальности</a>. Понимаю, что это оценка, а не диагноз.</span></label>
+    <label class="card row" style="padding:14px 16px;align-items:flex-start"><input type="checkbox" id="cons" ${localStorage.getItem(CONSENT_KEY) ? 'checked' : ''} style="width:22px;height:22px;flex:none;margin-top:2px;accent-color:#1E2533">
+     <span style="font-size:14px;line-height:1.45">Мне есть 18 лет. Принимаю <a href="/terms" target="_blank" style="color:var(--navy);font-weight:600">соглашение</a> и <a href="/privacy" target="_blank" style="color:var(--navy);font-weight:600">политику конфиденциальности</a>. Понимаю, что это оценка движения, а не диагноз.</span></label>
+    <label class="card row" style="padding:14px 16px;align-items:flex-start"><input type="checkbox" id="consh" ${localStorage.getItem(CONSENT_KEY) ? 'checked' : ''} style="width:22px;height:22px;flex:none;margin-top:2px;accent-color:#1E2533">
+     <span style="font-size:14px;line-height:1.45">Отдельно соглашаюсь на обработку данных о здоровье: жалобы, боль, результаты теста${pro ? ' моих клиентов в моем кабинете' : ''}. Отозвать согласие: удалить аккаунт в настройках.</span></label>
     <div id="lbtns" style="display:flex;flex-direction:column;gap:12px;align-items:center;transition:opacity .2s"></div>
     ${pro ? '<a href="/pricing" target="_blank" class="sub" style="font-size:14px;text-align:center;color:var(--navy);font-weight:600">Тарифы и возможности ›</a>' : ''}
     <p id="lerr" class="sub" style="font-size:13px;color:#C0392B;min-height:18px;text-align:center"></p>
    </div></div>`);
   if (opts.back) document.getElementById('lback').onclick = opts.back;
-  const box = document.getElementById('lbtns'), err = document.getElementById('lerr'), cons = document.getElementById('cons');
-  const sync = () => { box.style.opacity = cons.checked ? '1' : '.4'; box.style.pointerEvents = cons.checked ? 'auto' : 'none'; if (cons.checked) { localStorage.setItem('bp_consent', String(Date.now())); err.textContent = ''; } else localStorage.removeItem('bp_consent'); };
-  cons.onchange = sync; sync();
+  const box = document.getElementById('lbtns'), err = document.getElementById('lerr'), cons = document.getElementById('cons'), consh = document.getElementById('consh');
+  const sync = () => { const ok = consented(); box.style.opacity = ok ? '1' : '.4'; box.style.pointerEvents = ok ? 'auto' : 'none'; if (ok) { localStorage.setItem(CONSENT_KEY, String(Date.now())); err.textContent = ''; } else localStorage.removeItem(CONSENT_KEY); };
+  cons.onchange = sync; consh.onchange = sync; sync();
   const done = async (a, body) => {
-    if (!consented()) { err.textContent = 'Отметь согласие выше'; return; }
+    if (!consented()) { err.textContent = 'Отметь оба согласия выше'; return; }
     err.textContent = 'Вхожу…';
-    try { const r = await post(a, { ...body, role, consent: true, ref: localStorage.getItem('bp_ref') }); me = r.user;
-      if (pro && me.role !== 'specialist') me = await setRole('specialist'); err.textContent = ''; window.dispatchEvent(new Event('bp-login')); cont(); }
+    try { const r = await post(a, { ...body, role, consent: true, health: true, ref: localStorage.getItem('bp_ref') }); me = r.user;
+      if (pro && me.role !== 'specialist') me = await setRole('specialist'); track('login_ok'); err.textContent = ''; window.dispatchEvent(new Event('bp-login')); cont(); }
     catch (e) { err.textContent = 'Не получилось войти: ' + e.message; }
   };
   providers().then(list => {
@@ -112,7 +120,7 @@ export function safetyScreen(cont, back, booking) {
   const sel = new Set();
   show(`<div class="scr fade"><div class="pad" style="padding-top:8px">${back ? '<button class="round" id="sback" style="background:transparent">‹</button>' : '<div style="height:44px"></div>'}</div>
    <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:12px">
-    <div class="caps" style="color:var(--coral)">Перед тестом</div><h1>Есть ли у тебя сейчас что-то из этого?</h1>
+    <div class="caps" style="color:var(--coralT)">Перед тестом</div><h1>Есть ли у тебя сейчас что-то из этого?</h1>
     <p class="sub" style="font-size:14px">В тесте приседания и стойка на одной ноге. Если что-то из списка есть, сначала нужен врач.</p>
     ${FLAGS.map(([k, t]) => `<label class="list-item" data-k="${k}" style="background:#fff"><input type="checkbox" style="width:22px;height:22px;flex:none;accent-color:#1E2533"><span style="font-size:15px;line-height:1.35">${t}</span></label>`).join('')}
    </div><div class="pad" style="padding:14px 20px 24px"><button class="btn" id="sok">Ничего из этого нет</button></div></div>`);
@@ -120,7 +128,8 @@ export function safetyScreen(cont, back, booking) {
   app().querySelectorAll('[data-k]').forEach(l => l.querySelector('input').onchange = e => { e.target.checked ? sel.add(l.dataset.k) : sel.delete(l.dataset.k); l.classList.toggle('on', e.target.checked);
     document.getElementById('sok').textContent = sel.size ? 'Дальше' : 'Ничего из этого нет'; });
   document.getElementById('sok').onclick = () => {
-    if (!sel.size) { localStorage.setItem('bp_rf', String(Date.now())); return cont(); }
+    if (!sel.size) { track('safety_ok'); localStorage.setItem('bp_rf', String(Date.now())); return cont(); }
+    track('safety_stop');
     const urgent = sel.has('urgent');
     show(`<div class="scr pad fade" style="justify-content:center;gap:16px">
       <h1>${urgent ? 'Нужен врач сегодня' : 'Сначала к врачу'}</h1>

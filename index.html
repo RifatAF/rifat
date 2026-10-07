@@ -8,7 +8,9 @@
 <meta name="theme-color" content="#F4F0E8">
 <meta property="og:title" content="BodyPassport — карта тела по камере телефона">
 <meta property="og:description" content="Короткий видеотест по камере: какие мышцы, вероятно, перегружены, какие недорабатывают, и что с этим делать. Бета.">
-<meta property="og:image" content="img/img_muscles_back.webp">
+<meta property="og:image" content="https://bodypassport.vercel.app/img/og.jpg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta property="og:url" content="https://bodypassport.vercel.app/"><meta property="og:type" content="website"><meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://bodypassport.vercel.app/">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/logo.svg">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -17,8 +19,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script>if (/tgWebApp/.test(location.hash + location.search) || sessionStorage.getItem('bp_tg')) { sessionStorage.setItem('bp_tg', '1'); document.write('<script src="https://telegram.org/js/telegram-web-app.js"><\/script>'); }</script>
 <style>
-:root{--bg:#F4F0E8;--navy:#1E2533;--lime:#C6E84B;--coral:#E8765A;--text:#1C1B19;--sub:#6E6A63;--muted:#8A847A;--faint:#A9A091;--line:#D8D0C2;--line2:#E0D8CA;--seg:#E6DED0;--peach:#FBE8DF;--green:#2E9E6A;
---hyper:#E5484D;--hyperS:#FBE3E1;--short:#EE7B30;--shortS:#FCEAD9;--weak:#3B7BE8;--weakS:#E0E9FA;--ok:#2E9E6A;--okS:#DDF1E6}
+:root{--bg:#F4F0E8;--navy:#1E2533;--lime:#C6E84B;--coral:#E8765A;--text:#1C1B19;--sub:#6E6A63;--muted:#6E6A63;--faint:#8A847A;--line:#D8D0C2;--line2:#E0D8CA;--seg:#E6DED0;--peach:#FBE8DF;--green:#2E9E6A;
+--hyper:#E5484D;--hyperS:#FBE3E1;--short:#EE7B30;--shortS:#FCEAD9;--weak:#3B7BE8;--weakS:#E0E9FA;--ok:#2E9E6A;--okS:#DDF1E6;
+/* цвета для текста: контраст от 4,5:1 на фоне и на светлой подложке своего состояния (WCAG AA) */
+--coralT:#A84A2A;--hyperT:#B8323A;--shortT:#A85010;--weakT:#2C63C4;--okT:#1F7550}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:Onest,system-ui,sans-serif}
 body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}

@@ -48,14 +48,16 @@ export function isAdmin(u) {
   return !!u && (list.includes(String(u.id).toLowerCase()) || (!!u.email && list.includes(String(u.email).toLowerCase())));
 }
 // тариф: оплаченный, пока не истек; в бете все специалисты получают Про бесплатно до BETA_PRO_UNTIL
-const BETA_UNTIL = Date.parse(process.env.BETA_PRO_UNTIL || '2026-12-31T23:59:59Z');
+export const BETA_UNTIL = Date.parse(process.env.BETA_PRO_UNTIL || '2026-12-31T23:59:59Z');
 export function effectivePlan(u) {
   if (!u) return { plan: 'start', until: null, beta: false };
   if (['pro', 'studio'].includes(u.plan) && (u.planUntil || 0) > Date.now()) return { plan: u.plan, until: u.planUntil, beta: false };
   if (u.role === 'specialist' && Date.now() < BETA_UNTIL) return { plan: 'pro', until: BETA_UNTIL, beta: true };
   return { plan: 'start', until: null, beta: false };
 }
+// версия политики и согласий: при смене версии вошедших просим согласиться заново
+export const CONSENT_VERSION = '2026-10-beta2';
 export const publicUser = u => { if (!u) return u; const p = effectivePlan(u);
-  return { id: u.id, provider: u.provider, name: u.name, email: u.email || null, photo: u.photo || null, role: u.role || null, specialty: u.specialty || null, admin: isAdmin(u), plan: p.plan, planUntil: p.until, planBeta: p.beta }; };
+  return { id: u.id, provider: u.provider, name: u.name, email: u.email || null, photo: u.photo || null, role: u.role || null, specialty: u.specialty || null, admin: isAdmin(u), plan: p.plan, planUntil: p.until, planBeta: p.beta, consentOk: u.consentVersion === CONSENT_VERSION }; };
 
 export async function currentUser(req) { const uid = sessionUid(req); return uid ? loadUser(uid) : null; }

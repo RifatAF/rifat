@@ -1,7 +1,9 @@
 // Тарифы и специализации. Один источник правды для кабинета и страницы /pricing.
-import { meSync } from './auth.js';
+import { meSync, configSync } from './auth.js';
 
-export const BETA_UNTIL = Date.parse('2026-12-31T23:59:59Z');
+// дата конца беты одна, на сервере (BETA_PRO_UNTIL): приходит в /api/auth?a=config; здесь только запасное значение без сети
+const BETA_FALLBACK = Date.parse('2026-12-31T23:59:59Z');
+export const betaUntil = () => +configSync().betaUntil || BETA_FALLBACK;
 export const START_CLIENTS = 5;
 
 export const PLANS = {
@@ -36,7 +38,8 @@ export const TEMPLATE_ORDER = {
 export function plan() {
   const u = meSync();
   // без входа (вход еще не настроен на этом адресе) в бете открыт Про
-  if (!u) return { plan: Date.now() < BETA_UNTIL ? 'pro' : 'start', beta: Date.now() < BETA_UNTIL, until: BETA_UNTIL };
+  const bu = betaUntil();
+  if (!u) return { plan: Date.now() < bu ? 'pro' : 'start', beta: Date.now() < bu, until: bu };
   return { plan: u.plan || 'start', beta: !!u.planBeta, until: u.planUntil };
 }
 export const can = f => !PRO[f] || plan().plan !== 'start';
@@ -45,7 +48,7 @@ export const can = f => !PRO[f] || plan().plan !== 'start';
 export function gate(f) {
   if (can(f)) return true;
   const d = document.createElement('div'); d.className = 'sheet';
-  d.innerHTML = `<div><div class="caps" style="color:var(--coral)">Тариф Про</div><h2 style="font-size:22px;margin-top:6px">${PRO[f]}</h2>
+  d.innerHTML = `<div><div class="caps" style="color:var(--coralT)">Тариф Про</div><h2 style="font-size:22px;margin-top:6px">${PRO[f]}</h2>
     <p class="sub" style="margin-top:8px;font-size:15px">Доступно в тарифе Про: ${PLANS.pro.price}. Без лимита клиентов, тест из дома по ссылке, было → стало, повторяемость.</p>
     <a class="btn lime" href="/pricing" target="_blank" style="margin-top:16px;text-decoration:none">Тарифы</a>
     <a class="btn ghost" href="https://t.me/BodyPassport_bot?start=pro" target="_blank" style="margin-top:10px;text-decoration:none">Подключить Про</a>

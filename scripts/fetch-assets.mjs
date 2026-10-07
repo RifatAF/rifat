@@ -1,12 +1,13 @@
 // Тяжелые файлы (модель позы, озвучка, 3D-модель) не хранятся в Git.
-// При сборке на Vercel скрипт копирует их с рабочего сайта; модели при необходимости берет у Google (MediaPipe).
+// При сборке на Vercel скрипт копирует их с рабочего сайта; модели при необходимости берет у Google (MediaPipe, версия 1 закреплена:
+// пороги правил подобраны под конкретную модель, «latest» мог бы молча ее подменить).
 // Если чего-то не хватает, сборка падает: неполная версия не попадет на сайт.
 import { mkdir, writeFile, access, cp, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 const ORIGINS = (process.env.ASSETS_ORIGIN || 'https://bodypassport.vercel.app,https://test.rifataiupov.com').split(',');
-const MP = { 'models/pose_landmarker_full.task': 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task',
-  'models/pose_landmarker_lite.task': 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task' };
+const MP = { 'models/pose_landmarker_full.task': 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task',
+  'models/pose_landmarker_lite.task': 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task' };
 const MIN = { 'models/pose_landmarker_full.task': 1e6, 'models/pose_landmarker_lite.task': 1e6, 'data/body3d.bin': 1e6 };
 
 const exists = p => access(p).then(() => true, () => false);
@@ -22,7 +23,7 @@ async function save(path, buf) { await mkdir(dirname(path), { recursive: true })
 
 // сайт собирается в public/: Vercel публикует ее целиком, вместе со скачанными файлами
 const OUT = 'public';
-const SKIP = new Set(['api', 'scripts', 'node_modules', 'public', '.git', '.vercel', 'package.json', 'package-lock.json', 'AUDIT.md', '.gitignore', '.vercelignore', 'vercel.json', '_headers']);
+const SKIP = new Set(['api', 'scripts', 'node_modules', 'public', '.git', '.vercel', 'package.json', 'package-lock.json', 'AUDIT.md', '.gitignore', '.vercelignore', 'vercel.json', '_headers', 'tests']);
 await rm(OUT, { recursive: true, force: true }); await mkdir(OUT, { recursive: true });
 const { readdir } = await import('node:fs/promises');
 for (const e of await readdir('.')) if (!SKIP.has(e)) await cp(e, OUT + '/' + e, { recursive: true });

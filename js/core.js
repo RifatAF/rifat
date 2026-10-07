@@ -205,14 +205,14 @@ export function drawHeat(cv, spots, back, selected, labels) {
     ctx.font = '700 11px Onest, sans-serif'; const maxW = Math.max(60, OX + 22), words = l.title.split(' '), lines = [''];
     for (const w of words) { const t = lines[lines.length - 1] ? lines[lines.length - 1] + ' ' + w : w; if (ctx.measureText(t).width <= maxW || !lines[lines.length - 1]) lines[lines.length - 1] = t; else lines.push(w); }
     if (lines.length > 2) { lines.length = 2; while (ctx.measureText(lines[1] + '…').width > maxW && lines[1].length > 1) lines[1] = lines[1].slice(0, -1); lines[1] += '…'; }
-    const tw = Math.max(...lines.map(t => ctx.measureText(t).width), (ctx.font = '500 10px Onest, sans-serif', ctx.measureText(l.sub).width));
+    const tw = Math.max(...lines.map(t => ctx.measureText(t).width), (ctx.font = '500 11px Onest, sans-serif', ctx.measureText(l.sub).width));
     const bw = Math.ceil(tw) + 14, bh = 14 + lines.length * 12;
     while (placed.some(p => Math.abs(p - py) < bh + 4)) py += 8; placed.push(py);
     const bx = left ? 2 : VW - bw - 2, top = py - bh / 2;
     ctx.strokeStyle = l.color; ctx.globalAlpha = .7; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(px, h.y * 440); ctx.lineTo(left ? bx + bw : bx, py); ctx.stroke(); ctx.globalAlpha = 1;
     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(bx, top, bw, bh, 9); ctx.fill(); ctx.fillStyle = l.color; ctx.fillRect(bx, top, 4, bh);
     ctx.fillStyle = '#1C1B19'; ctx.font = '700 11px Onest, sans-serif'; lines.forEach((t, i) => ctx.fillText(t, bx + 9, top + 13 + i * 12));
-    ctx.fillStyle = l.color; ctx.font = '500 10px Onest, sans-serif'; ctx.fillText(l.sub, bx + 9, top + 13 + lines.length * 12);
+    ctx.fillStyle = l.text || l.color; ctx.font = '500 11px Onest, sans-serif'; ctx.fillText(l.sub, bx + 9, top + 13 + lines.length * 12);
   }
   return { hit(clientX, clientY) { const r = cv.getBoundingClientRect(); const ux = (clientX - r.left) / r.width * VW - OX, uy = (clientY - r.top) / r.height * 440;
     let best = null, bd = 34; for (const s of mine) { const d = Math.hypot(s.x * 200 - ux, s.y * 440 - uy); if (d < bd) { bd = d; best = s; } } return best; } };
@@ -260,7 +260,8 @@ export async function body3D(container, spots, onPick) {
   scene.add(new THREE.HemisphereLight(0xffffff, 0x8a7f70, 1.1)); const dl = new THREE.DirectionalLight(0xffffff, 2.2); dl.position.set(1, 2, 3); scene.add(dl); const bl = new THREE.DirectionalLight(0xffffff, 1.2); bl.position.set(-1, 1, -3); scene.add(bl);
   const W = container.clientWidth, H = container.clientHeight;
   const camera = new THREE.PerspectiveCamera(30, W / H, .1, 50); camera.position.set(0, 0, 4.2);
-  const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.setSize(W, H); container.innerHTML = ''; container.appendChild(renderer.domElement);
+  const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.setSize(W, H); container.innerHTML = ''; container.appendChild(renderer.domElement); if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
+  container.insertAdjacentHTML('beforeend', '<a href="/licenses" target="_blank" style="position:absolute;right:8px;bottom:6px;font-size:11px;color:#6E6A63;text-decoration:none">3D: Z-Anatomy, CC BY-SA 4.0</a>');
   // масштаб к точке под пальцами, сдвиг двумя пальцами: можно рассмотреть шею или стопу, а не только центр
   const ctl = new OrbitControls(camera, renderer.domElement); ctl.enablePan = true; ctl.screenSpacePanning = true; ctl.zoomToCursor = true;
   ctl.minDistance = .35; ctl.maxDistance = 6; ctl.enableDamping = true; ctl.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
