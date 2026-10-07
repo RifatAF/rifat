@@ -49,15 +49,43 @@ export function isAdmin(u) {
 }
 // тариф: оплаченный, пока не истек; в бете все специалисты получают Про бесплатно до BETA_PRO_UNTIL
 export const BETA_UNTIL = Date.parse(process.env.BETA_PRO_UNTIL || '2026-12-31T23:59:59Z');
+// реферальная программа: за каждого приглашенного коллегу-специалиста +1 месяц Про после беты, до 12 месяцев
+export const REF_MAX = 12;
+export const refBonusDays = u => Math.min(REF_MAX, (u && u.invitedPro) || 0) * 30;
 export function effectivePlan(u) {
   if (!u) return { plan: 'start', until: null, beta: false };
   if (['pro', 'studio'].includes(u.plan) && (u.planUntil || 0) > Date.now()) return { plan: u.plan, until: u.planUntil, beta: false };
-  if (u.role === 'specialist' && Date.now() < BETA_UNTIL) return { plan: 'pro', until: BETA_UNTIL, beta: true };
+  const until = BETA_UNTIL + refBonusDays(u) * 864e5;
+  if (u.role === 'specialist' && Date.now() < until) return { plan: 'pro', until, beta: Date.now() < BETA_UNTIL };
   return { plan: 'start', until: null, beta: false };
+}
+
+// код приглашения: короткий, из подписи id; обратный индекс refs/<код>.json → id владельца
+export const refCode = uid => 'r' + crypto.createHmac('sha256', SECRET).update('ref:' + uid).digest('hex').slice(0, 8);
+export const REF_RE = /^r[0-9a-f]{8}$/;
+export async function ensureRefIndex(u) {
+  if (!SECRET || u.refCode) return;
+  u.refCode = refCode(u.id);
+  await put(`refs/${u.refCode}.json`, JSON.stringify({ uid: u.id }), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true });
+}
+async function refOwner(code) {
+  if (!REF_RE.test(code || '')) return null;
+  try { const r = await get(`refs/${code}.json`, { access: 'private', useCache: false }); const j = r && r.stream ? JSON.parse(await readStream(r.stream)) : null; return j && j.uid ? loadUser(j.uid) : null; } catch (e) { return null; }
+}
+// засчитать приглашение: новый пользователь (invited) и новый специалист (invitedPro, дает бонус). Один раз на человека.
+export async function creditReferral(u, isNew) {
+  if (!u.ref || !REF_RE.test(u.ref) || u.ref === u.refCode) return;
+  const needPro = u.role === 'specialist' && !u.refCreditedPro;
+  if (!isNew && !needPro) return;
+  const owner = await refOwner(u.ref); if (!owner || owner.id === u.id) return;
+  if (isNew) owner.invited = (owner.invited || 0) + 1;
+  if (needPro) { owner.invitedPro = (owner.invitedPro || 0) + 1; u.refCreditedPro = true; }
+  u.referredBy = owner.id; await saveUser(owner);
 }
 // версия политики и согласий: при смене версии вошедших просим согласиться заново
 export const CONSENT_VERSION = '2026-10-beta2';
 export const publicUser = u => { if (!u) return u; const p = effectivePlan(u);
-  return { id: u.id, provider: u.provider, name: u.name, email: u.email || null, photo: u.photo || null, role: u.role || null, specialty: u.specialty || null, admin: isAdmin(u), plan: p.plan, planUntil: p.until, planBeta: p.beta, consentOk: u.consentVersion === CONSENT_VERSION }; };
+  return { id: u.id, provider: u.provider, name: u.name, email: u.email || null, photo: u.photo || null, role: u.role || null, specialty: u.specialty || null, admin: isAdmin(u), plan: p.plan, planUntil: p.until, planBeta: p.beta, consentOk: u.consentVersion === CONSENT_VERSION,
+    refCode: u.refCode || null, invited: u.invited || 0, invitedPro: u.invitedPro || 0, refBonusDays: refBonusDays(u) }; };
 
 export async function currentUser(req) { const uid = sessionUid(req); return uid ? loadUser(uid) : null; }

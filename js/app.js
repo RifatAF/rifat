@@ -1,6 +1,7 @@
 // BodyPassport web: тот же поток, тексты и дизайн, что в Android-версии.
 import { P, F, G, Movement, sideView, levelled, analyze, fmt, standSnapshot, sideSnapshot } from './analysis.js';
 import { track } from './track.js';
+import { rateCard, bindRate, installCard, bindInstall, feedbackSheet, shareApp, appLink } from './grow.js';
 import { proHome, motionViewer, consumerPoses } from './pro.js';
 import { seal } from './core.js';
 import { ensureLogin, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, logout, deleteAccount, betaUsers, providers, config } from './auth.js';
@@ -19,7 +20,9 @@ const app = $('#app');
 const TG = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData ? window.Telegram.WebApp : null;
 if (TG) { TG.ready(); TG.expand(); }
 const q = new URLSearchParams(location.search);
-if (q.get('ref')) localStorage.setItem('bp_ref', q.get('ref'));
+// источник перехода: первое касание (кто первым привел человека, тому и засчитывается приглашение)
+const inRef = (q.get('ref') || q.get('utm_source') || '').replace(/[^\w.-]/g, '').slice(0, 40);
+if (inRef && !localStorage.getItem('bp_ref')) localStorage.setItem('bp_ref', inRef);
 const REF = localStorage.getItem('bp_ref') || 'direct';
 // данные клиента разделены по аккаунтам: у каждого входа свои результаты на этом устройстве
 const K = k => { const u = meSync(); return u && u.id ? k + ':' + u.id : k; };
@@ -333,7 +336,7 @@ export async function runProtocol(protocol, opts = {}) {
     <div class="row" style="margin-top:8px"><span id="pbt" style="flex:1;font-size:13px;opacity:.75"></span>
      <button type="button" class="pill" id="skipb" style="background:rgba(255,255,255,.18);color:#fff;white-space:nowrap;border:1.5px solid rgba(255,255,255,.35);padding:10px 14px;font-size:14px;cursor:pointer">Не могу</button></div></div></div>`);
   let stop = false, skip = false; const cancel = () => { track('test_cancel'); (opts.onCancel || prep)(); }; const limits = {};
-  track('test_start', { n: units.length }, false);
+  track('test_start', { n: units.length }, false); const tStart = Date.now();
   $('#x').onclick = () => { stop = true; stopCamera(); cancel(); }; $('#skipb').onclick = () => { skip = true; };
   const video = app.querySelector('video'); const sk = $('#sk');
   try { if (!device.camera) throw new Error('no camera api'); await startCamera(video); } catch (e) { stop = true; return cameraHelp(); }
@@ -456,7 +459,7 @@ export async function runProtocol(protocol, opts = {}) {
   }
   if (stop) return;
   step(null, 'Готово', 'Считаю результат'); bar(1, ''); cam.onFrame = null; await say(SAY.finish); stopCamera();
-  track('test_done', { n: units.length }, false);
+  track('test_done', { n: units.length, d: Math.round((Date.now() - tStart) / 1000) }, false);
   return { date: Date.now(), protocol: units, full: units.includes('side') || units.includes('profile'), snapshot, side, moves, poses, quality, limits, setup };
 }
 
@@ -583,6 +586,7 @@ export function map() {
    </div><p style="font-size:12px;color:var(--muted);margin:6px 4px 0">Оценка по позе и движению. Это не диагноз.${MODE3D ? ' 3D: Z-Anatomy, BodyParts3D (CC BY-SA).' : ''}</p></div>
 
    <div class="pad" style="margin-top:16px">${verdictCard(top, a.findings, 'Сильных перекосов не видно')}</div>
+   ${SHARED ? '' : `<div class="pad" style="margin-top:12px">${rateCard(String(t.date))}</div>`}
    ${top.length ? `<details class="pad" style="margin-top:16px"><summary class="row" style="font-size:15px;font-weight:600;color:var(--sub);padding:8px 0">Все зоны · ${Math.min(5, top.length)}<span style="flex:1"></span><span class="chev" style="font-size:16px">⌄</span></summary><div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">${top.slice(0, 5).map(s => `<div class="list-item ${s.key === SEL ? 'on' : ''}" data-k="${s.key}"><i class="bar" style="background:${TONE_HEX[s.k]}"></i><div style="flex:1"><b style="font-size:15px">${title(s)}</b><div style="font-size:12px;color:var(--muted)">${tech(s)}</div></div><span class="chev">›</span></div>`).join('')}</div></details>` : ''}
    ${top.length ? `<div class="pad" style="margin-top:16px"><div class="card"><div class="caps" style="color:var(--coralT)">К чему стремимся</div>${benefits.map(b => `<div class="row" style="margin-top:10px;align-items:flex-start"><b style="width:18px;height:18px;border-radius:50%;background:var(--lime);font-size:11px;display:flex;align-items:center;justify-content:center;flex:none;margin-top:2px">✓</b><span style="font-size:15px;line-height:1.4">${b}</span></div>`).join('')}
      <p class="sub" style="font-size:14px;margin-top:14px">Делай комплекс 2 недели и пройди тест снова. Сравнишь карты до и после.</p>
@@ -599,6 +603,7 @@ export function map() {
    ${all_t.length >= 2 && t.snapshot && first !== t ? `<div class="pad" style="margin-top:14px"><div class="card"><div class="caps" style="color:var(--coralT)">Было → стало</div>
      ${[['Наклон плеч', first.snapshot.shoulderTilt, t.snapshot.shoulderTilt], ['Наклон таза', first.snapshot.pelvicTilt, t.snapshot.pelvicTilt]].map(([n, x, y]) => `<div class="row" style="margin-top:10px"><span style="flex:1">${n}</span><b style="font-variant-numeric:tabular-nums;color:${Math.abs(y) < Math.abs(x) - .3 ? 'var(--green)' : 'var(--sub)'}">${fmt(x)}° → ${fmt(y)}°</b></div>`).join('')}</div></div>` : ''}
    <div class="pad tiles" style="margin-top:16px">${SHARED ? '' : '<button class="tile" id="myrec"><span class="ti">▶</span>Моя запись<small>Скелет и 3D-фигура</small></button>'}<button class="tile" id="shareRes"><span class="ti">↗</span>Поделиться<small>Ссылка или картинка</small></button><button class="btn ghost" id="again" style="grid-column:1/-1">↻ ${SHARED ? 'Пройти свой тест' : 'Пройти тест заново'}</button></div>
+   ${SHARED ? '' : installCard()}
    <div class="pad" style="margin-top:16px"><a class="card row" href="${bot()}" target="_blank" style="text-decoration:none;color:inherit"><img src="img/img_neck.webp" alt="" style="width:52px;height:52px;border-radius:14px;object-fit:cover;flex:none"><div style="flex:1;min-width:0"><b style="font-size:15px">Разобрать карту с автором методики</b><div style="font-size:13px;color:var(--sub);margin-top:2px">Рифат Аюпов, кинезиотерапевт, 12 лет практики · онлайн</div></div><span class="chev">›</span></a></div></div>`);
   if (device.webgl2 && !device.weak) preload3D();
   // выбор зоны обновляет только подпись под моделью и метку, страница не перерисовывается
@@ -624,6 +629,7 @@ export function map() {
   if ($('#cal')) $('#cal').onclick = calendar;
   if ($('#re')) $('#re').onclick = () => { FULL = false; prep(); };
   if ($('#resend')) $('#resend').onclick = async () => { const p = await outbox.get().catch(() => null); if (p) sendResult(p); };
+  bindRate('map'); bindInstall();
   $('#again').onclick = () => { if (!SHARED && INV()) return INV().join ? joinForm() : inviteWelcome(); if (SHARED) { SHARED = null; history.replaceState(null, '', location.pathname); } FULL = false; tests().length || SHARED ? prep() : onboarding(); }; $('#set').onclick = settings;
   $('#shareRes').onclick = shareResult; if ($('#myrec')) $('#myrec').onclick = async () => { const p = await consumerPoses.get(); motionViewer(p, t.setup, map, 'Тест ' + new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })); };
 }
@@ -672,7 +678,7 @@ async function resultImage() {
   return new Promise(r => out.toBlob(r, 'image/png'));
 }
 
-function share() { const url = location.origin + location.pathname + '?ref=' + encodeURIComponent(REF);
+function share() { const url = appLink();
   const text = 'Тест осанки и движения по камере телефона, 2–5 минут. Показывает перегруженные и слабые мышцы. Бесплатно:';
   if (navigator.share) navigator.share({ title: 'BodyPassport', text, url }).catch(() => {}); else { navigator.clipboard.writeText(text + ' ' + url); alert('Ссылка скопирована'); } }
 function calendar() { // напоминание без сервера: событие в календаре телефона, каждый день в 20:00
@@ -766,11 +772,15 @@ export function settings() {
     <div class="card" style="margin-top:10px;font-size:14px;line-height:1.45">Видео не сохраняется и никуда не отправляется. Результаты хранятся только в этом браузере.</div>
     <div class="card" style="margin-top:10px;font-size:12px;color:var(--muted);line-height:1.45">Автор: Рифат Аюпов, биомеханик, кинезиотерапевт, rifataiupov.com. Распознавание позы: MediaPipe (Google, Apache 2.0). 3D-модель: Z-Anatomy на основе BodyParts3D (DBCLS), CC BY-SA. Методика: кинезиотерапевт Рифат Аюпов, rifataiupov.com.</div>
     <div id="acc"></div>
+    <button class="btn ghost" id="fbk" style="margin-top:10px">Отзыв или идея</button>
+    <button class="btn ghost" id="shapp" style="margin-top:10px">Поделиться приложением</button>
     <a class="btn ghost" href="/privacy" target="_blank" style="margin-top:10px;text-decoration:none">Конфиденциальность</a>
     <div class="row" style="justify-content:center;gap:16px;margin-top:10px;font-size:13px"><a href="/terms" target="_blank" style="color:var(--sub)">Соглашение</a><a href="/licenses" target="_blank" style="color:var(--sub)">Лицензии</a></div>
     <button class="btn ghost" id="topro" style="margin-top:10px">Кабинет специалиста</button>
     <button class="btn ghost" id="wipe" style="margin-top:10px">Удалить мои результаты</button><button class="btn" id="cl" style="margin-top:10px">Готово</button></div>`;
   document.body.appendChild(d);
+  d.querySelector('#fbk').onclick = () => { d.remove(); feedbackSheet('settings'); };
+  d.querySelector('#shapp').onclick = () => shareApp();
   d.querySelector('#vm').onclick = e => { voice.muted = !voice.muted; localStorage.setItem('bp_mute', voice.muted ? '1' : '0'); e.target.textContent = voice.muted ? 'Выкл' : 'Вкл'; };
   d.querySelector('#wipe').onclick = async () => { if (!confirm('Удалить все результаты?')) return;
     for (const k of ['bp_tests', 'bp_done', 'bp_profile']) localStorage.removeItem(K(k)); localStorage.removeItem('bp_sent');
@@ -785,7 +795,7 @@ async function accountBlock(el, close) {
   const u = await getMe(true); if (!el.isConnected) return;
   if (!u) { if ((await providers()).length) { el.innerHTML = '<button class="btn ghost" id="login" style="margin-top:10px">Войти</button>'; el.querySelector('#login').onclick = () => { close(); const home = () => (tests().length ? map() : onboarding()); ensureLogin('client', home).then(ok => ok && home()); }; } return; }
   el.innerHTML = `<div class="card row" style="margin-top:10px"><div style="flex:1;font-size:14px;line-height:1.35"><b>${esc(u.name)}</b><div style="color:var(--muted);font-size:12px">${u.provider === 'google' ? 'Google' : 'Telegram'}${u.role === 'specialist' ? ' · специалист' : ''}</div></div><button class="pill" id="lo">Выйти</button></div>
-    ${u.admin ? '<button class="btn ghost" id="beta" style="margin-top:10px">Участники беты</button><button class="btn ghost" id="funnel" style="margin-top:10px">Воронка и ошибки</button>' : ''}
+    ${u.admin ? '<button class="btn ghost" id="beta" style="margin-top:10px">Участники беты</button><button class="btn ghost" id="funnel" style="margin-top:10px">Статистика и отзывы</button>' : ''}
     <button class="btn ghost" id="delacc" style="margin-top:10px;color:#E5484D;border-color:#F3C9C9">Удалить аккаунт</button>`;
   el.querySelector('#lo').onclick = async () => { await logout(); localStorage.removeItem('bp_mode'); close(); onboarding(); };
   el.querySelector('#delacc').onclick = async () => { if (!confirm('Удалить аккаунт? Результаты на этом телефоне останутся, их можно удалить отдельно.')) return; try { await deleteAccount(); localStorage.removeItem('bp_mode'); close(); onboarding(); } catch (e) { alert('Не получилось: ' + e.message); } };
@@ -801,8 +811,8 @@ async function accountBlock(el, close) {
 
 // ---------- воронка беты (только администратор): обезличенные шаги из js/track.js ----------
 const FUNNEL = [['client', 'Клиент', [['app_open', 'Открыли приложение'], ['onb_done', 'Прошли знакомство'], ['login_ok', 'Вошли'], ['safety_ok', 'Скрининг: можно'], ['safety_stop', 'Скрининг: к врачу'],
-  ['test_start', 'Начали тест'], ['test_done', 'Закончили тест'], ['test_cancel', 'Прервали тест'], ['map_view', 'Открыли карту'], ['share_result', 'Поделились'], ['inv_open', 'Открыли ссылку специалиста'], ['result_sent', 'Отправили результат'], ['result_fail', 'Не смогли отправить']]],
-  ['pro', 'Специалист', [['pro_open', 'Открыли кабинет'], ['assess_start', 'Начали оценку'], ['assess_done', 'Закончили оценку'], ['report_sent', 'Отчет клиенту'], ['retest_set', 'Назначили ретест'], ['invite_sent', 'Ссылка клиенту'], ['join_sent', 'Общая ссылка'], ['result_pulled', 'Получили результат из дома']]]];
+  ['test_start', 'Начали тест'], ['test_done', 'Закончили тест'], ['test_cancel', 'Прервали тест'], ['map_view', 'Открыли карту'], ['share_result', 'Поделились'], ['inv_open', 'Открыли ссылку специалиста'], ['result_sent', 'Отправили результат'], ['result_fail', 'Не смогли отправить'], ['fb_sent', 'Оставили оценку или отзыв'], ['ref_share', 'Поделились приложением'], ['install_shown', 'Видели «Установить»'], ['install_ok', 'Установили на экран']]],
+  ['pro', 'Специалист', [['pro_open', 'Открыли кабинет'], ['assess_start', 'Начали оценку'], ['assess_done', 'Закончили оценку'], ['report_sent', 'Отчет клиенту'], ['retest_set', 'Назначили ретест'], ['invite_sent', 'Ссылка клиенту'], ['join_sent', 'Общая ссылка'], ['result_pulled', 'Получили результат из дома'], ['fb_sent', 'Оценка или отзыв'], ['ref_share', 'Пригласили коллегу']]]];
 export async function funnelScreen(days = 14) {
   go('<div class="spin"></div>');
   let d; try { const r = await fetch('/api/ev?a=stats&days=' + days, { cache: 'no-store' }); if (!r.ok) throw new Error(r.status); d = await r.json(); } catch (e) { alert('Не удалось загрузить: ' + e.message); return map(); }
@@ -811,20 +821,28 @@ export async function funnelScreen(days = 14) {
     return `<div class="card" style="padding:14px 16px"><b>${name}</b>${steps.map(([k, t]) => { const n = sum(role + ':' + k);
       return `<div class="row" style="font-size:14px;margin-top:8px"><span style="flex:1">${t}</span><b>${n}</b><span style="width:52px;text-align:right;color:var(--sub)">${Math.round(n / base * 100)}%</span></div>`; }).join('')}</div>`; };
   const errs = Object.entries(d.errors || {}).sort((a, b) => b[1] - a[1]).slice(0, 15);
-  go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" style="background:transparent">‹</button><b style="font-size:17px">Воронка · ${days} дней</b></div>
+  const src = Object.entries(d.sources || {}).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const [fb, users] = await Promise.all([fetch('/api/feedback?days=' + Math.max(days, 30), { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null), betaUsers().catch(() => [])]);
+  const refs = users.filter(u => u.invited).sort((a, b) => b.invitedPro - a.invitedPro || b.invited - a.invited).slice(0, 10);
+  const kind = { result: 'оценка теста', nps: 'порекомендует', free: 'отзыв' };
+  go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" style="background:transparent">‹</button><b style="font-size:17px">Статистика · ${days} дней</b></div>
     <div class="pad" style="display:flex;flex-direction:column;gap:10px;padding-bottom:30px">
      <p class="sub" style="font-size:13px">Число вкладок, где шаг был хотя бы раз, сумма по дням. Процент от первого шага.</p>
      <div class="seg">${[7, 14, 30].map(n => `<button data-d="${n}" class="${n === days ? 'on' : ''}">${n} дней</button>`).join('')}</div>
      ${FUNNEL.map(block).join('')}
+     <div class="kpi"><div><b>${d.testMedianSec ? Math.round(d.testMedianSec / 60 * 10) / 10 : '—'}</b><span>мин на тест, медиана (${d.testN || 0})</span></div><div><b>${fb && fb.resultAvg != null ? fb.resultAvg : '—'}</b><span>польза теста из 5 (${fb ? fb.resultN : 0})</span></div><div><b>${fb && fb.nps != null ? fb.nps : '—'}</b><span>NPS специалистов (${fb ? fb.npsN : 0})</span></div></div>
+     <div class="card" style="padding:14px 16px"><b>Откуда приходят</b>${src.length ? src.map(([k, n]) => `<div class="row" style="font-size:14px;margin-top:8px"><span style="flex:1;word-break:break-all">${esc(k)}</span><b>${n}</b></div>`).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Пока нет данных</div>'}<p class="sub" style="font-size:12px;margin-top:8px">Метка из ссылки ?ref= или ?utm_source=. Коды r… это приглашения пользователей.</p></div>
+     <div class="card" style="padding:14px 16px"><b>Приглашения</b>${refs.length ? refs.map(u => `<div class="row" style="font-size:14px;margin-top:8px"><span style="flex:1">${esc(u.name)}</span><span style="color:var(--sub)">${u.invited} пришли · </span><b>${u.invitedPro} спец.</b></div>`).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Пока никто не пригласил</div>'}</div>
+     <div class="card" style="padding:14px 16px"><b>Отзывы</b>${fb && fb.items.length ? fb.items.slice(0, 40).map(x => `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line2);font-size:14px;line-height:1.45"><div class="row" style="gap:8px;font-size:12px;color:var(--sub)"><span>${new Date(x.at).toLocaleDateString('ru', { day: 'numeric', month: 'short' })}</span><span>${x.r === 'pro' ? 'специалист' : 'клиент'}</span><span>${kind[x.k] || ''}${x.s != null ? ': <b style="color:var(--text)">' + x.s + '</b>' : ''}</span></div>${x.t ? `<div style="margin-top:4px">${esc(x.t)}</div>` : ''}${x.contact ? `<div style="margin-top:4px;font-size:13px;color:var(--weakT)">Можно связаться: ${esc(x.contact.name)} ${esc(x.contact.handle)}</div>` : ''}</div>`).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Отзывов пока нет</div>'}</div>
      <div class="card" style="padding:14px 16px"><b>Ошибки в браузере</b>${errs.length ? errs.map(([m, n]) => `<div style="font-size:13px;margin-top:8px;word-break:break-word"><b>${n}×</b> ${esc(m)}</div>`).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Ошибок нет</div>'}</div>
     </div></div>`);
-  $('#back').onclick = () => map();
+  $('#back').onclick = () => localStorage.getItem('bp_mode') === 'pro' ? openPro() : map();
   app.querySelectorAll('[data-d]').forEach(b => b.onclick = () => funnelScreen(+b.dataset.d));
 }
 
 // ---------- старт ----------
 (async () => {
-  track('app_open');
+  track('app_open', { r: REF });
   try { await loadContent(); } catch (e) { app.innerHTML = '<div class="scr pad" style="justify-content:center;gap:16px"><h1>Не удалось загрузить данные</h1><p class="sub">Проверь интернет и обнови страницу.</p><button class="btn" id="rl">Обновить</button></div>'; $('#rl').onclick = () => location.reload(); return; }
   await voice.init();
   await Promise.all([getMe(), config()]); claimLegacy();

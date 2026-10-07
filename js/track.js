@@ -1,7 +1,8 @@
 // Обезличенная аналитика воронки и ошибки из браузера. Без имен, почты, id аккаунта и данных теста:
 // только название шага, роль (клиент / специалист) и случайный номер вкладки, который живет до ее закрытия.
 const EVENTS = new Set(['app_open', 'onb_done', 'login_ok', 'safety_ok', 'safety_stop', 'test_start', 'test_done', 'test_cancel', 'map_view', 'share_result',
-  'inv_open', 'result_sent', 'result_fail', 'pro_open', 'assess_start', 'assess_done', 'invite_sent', 'join_sent', 'result_pulled', 'report_sent', 'retest_set', 'err']);
+  'inv_open', 'result_sent', 'result_fail', 'pro_open', 'assess_start', 'assess_done', 'invite_sent', 'join_sent', 'result_pulled', 'report_sent', 'retest_set', 'err',
+  'fb_sent', 'ref_share', 'install_shown', 'install_ok']);
 let sid; try { sid = sessionStorage.getItem('bp_sid'); if (!sid) { sid = Math.random().toString(36).slice(2, 12); sessionStorage.setItem('bp_sid', sid); } } catch (e) { sid = Math.random().toString(36).slice(2, 12); }
 const t0 = Date.now(), q = [], seen = new Set(); let errs = 0;
 const role = () => { try { return localStorage.getItem('bp_mode') === 'pro' ? 'pro' : 'client'; } catch (e) { return 'client'; } };
@@ -23,7 +24,7 @@ export function track(e, p, once = true) {
   q.push(ev); if (q.length >= 15) flush();
 }
 
-addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
 addEventListener('pagehide', flush);
 setInterval(flush, 30000);
 

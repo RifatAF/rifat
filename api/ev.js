@@ -4,8 +4,9 @@ import { put, list, get } from '@vercel/blob';
 import { currentUser, isAdmin } from './_session.js';
 
 const NAMES = new Set(['app_open', 'onb_done', 'login_ok', 'safety_ok', 'safety_stop', 'test_start', 'test_done', 'test_cancel', 'map_view', 'share_result',
-  'inv_open', 'result_sent', 'result_fail', 'pro_open', 'assess_start', 'assess_done', 'invite_sent', 'join_sent', 'result_pulled', 'report_sent', 'retest_set', 'err']);
-const KEYS = new Set(['m', 'f', 'l', 'n', 'c']); // текст ошибки, файл, строка, число шагов, причина
+  'inv_open', 'result_sent', 'result_fail', 'pro_open', 'assess_start', 'assess_done', 'invite_sent', 'join_sent', 'result_pulled', 'report_sent', 'retest_set', 'err',
+  'fb_sent', 'ref_share', 'install_shown', 'install_ok']);
+const KEYS = new Set(['m', 'f', 'l', 'n', 'c', 'r', 'd', 's']); // ошибка, файл, строка, число шагов, причина, источник, секунды, оценка
 const MAX = 8 * 1024;
 const day = t => new Date(t).toISOString().slice(0, 10);
 
@@ -21,7 +22,7 @@ function clean(b) {
 async function readAll(stream) { const ch = []; for await (const c of stream) ch.push(Buffer.from(c)); return Buffer.concat(ch).toString('utf8'); }
 
 async function stats(days) {
-  const out = { days: [], events: {}, errors: {} };
+  const out = { days: [], events: {}, errors: {}, sources: {}, testSec: [] };
   for (let i = days - 1; i >= 0; i--) {
     const d = day(Date.now() - i * 864e5); out.days.push(d); let cursor; const names = [];
     do { const r = await list({ prefix: `ev/${d}/`, limit: 1000, cursor }); cursor = r.hasMore ? r.cursor : undefined; names.push(...r.blobs.map(b => b.pathname)); } while (cursor);
@@ -29,9 +30,12 @@ async function stats(days) {
     for (let j = 0; j < names.length; j += 10) await Promise.all(names.slice(j, j + 10).map(async n => {
       try { const r = await get(n, { access: 'private', useCache: false }); const b = JSON.parse(await readAll(r.stream));
         for (const x of b.ev) { const k = b.r + ':' + x.e; (sess[k] ||= new Set()).add(b.s);
-          if (x.e === 'err' && x.p) { const m = `${x.p.m || ''} @ ${x.p.f || ''}:${x.p.l || 0}`; out.errors[m] = (out.errors[m] || 0) + 1; } } } catch (e) {} }));
+          if (x.e === 'err' && x.p) { const m = `${x.p.m || ''} @ ${x.p.f || ''}:${x.p.l || 0}`; out.errors[m] = (out.errors[m] || 0) + 1; }
+          if (x.e === 'app_open' && x.p && x.p.r) { const k = String(x.p.r).slice(0, 40); out.sources[k] = (out.sources[k] || 0) + 1; }
+          if (x.e === 'test_done' && x.p && x.p.d > 0 && out.testSec.length < 2000) out.testSec.push(x.p.d); } } catch (e) {} }));
     for (const [k, s] of Object.entries(sess)) ((out.events[k] ||= {})[d] = s.size);
   }
+  const t = out.testSec.sort((a, b) => a - b); out.testMedianSec = t.length ? t[Math.floor(t.length / 2)] : null; out.testN = t.length; delete out.testSec;
   return out;
 }
 
