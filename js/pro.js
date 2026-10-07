@@ -92,12 +92,14 @@ async function openDemo() {
   clientCard('demo');
 }
 async function specialtyScreen(after) {
-  go(`<div class="scr fade"><div class="pad" style="padding-top:20px"><div class="caps" style="color:var(--coralT)">Кабинет специалиста</div><h1 style="margin-top:8px">Кто вы?</h1>
+  go(`<div class="scr fade"><div class="pad" style="padding-top:8px"><button class="round" id="back" aria-label="Назад" style="box-shadow:var(--sh1)">‹</button></div><div class="pad" style="padding-top:8px"><div class="caps" style="color:var(--coralT)">Кабинет специалиста</div><h1 style="margin-top:8px">Кто вы?</h1>
     <p class="sub" style="margin-top:6px">Под специализацию подстроим протоколы теста. Поменять можно в меню кабинета.</p></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:10px;margin-top:16px;padding-bottom:30px">${SPECIALTIES.map(([k, t, d]) => `<button class="list-item" data-sp="${k}" style="background:#fff;text-align:left;font:inherit;color:inherit"><div style="flex:1"><b style="font-size:15px">${t}</b><div class="sub" style="font-size:13px;margin-top:2px">${d}</div></div><span class="chev">›</span></button>`).join('')}</div></div>`);
   document.querySelectorAll('[data-sp]').forEach(b => b.onclick = async () => { const sp = b.dataset.sp; await setMeta('specialty', sp); localStorage.setItem('bp_sp', sp); orderTemplates(sp);
     fetch('/api/auth?a=profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ specialty: sp }) }).catch(() => {});
     (after || proHome)(); });
+  // назад: из меню кабинета возвращаемся в кабинет, при первом входе на знакомство
+  $('#back').onclick = () => { if (after) return after(); localStorage.removeItem('bp_mode'); onboarding(); };
 }
 const QNAMES = { stand: 'Стойка', ohs_front: 'Присед лицом', sls_r: 'Правая нога', sls_l: 'Левая нога', thold: 'Руки в стороны', t_hold: 'Руки в стороны', bends: 'Наклоны', calf_r: 'Носок, правая', calf_l: 'Носок, левая', side_stand: 'Стойка боком', ohs_side: 'Присед боком', ohs_back: 'Присед спиной' };
 const UNIT_NAMES = { profile: 'Стойка боком', stand: 'Стойка', ohs_front: 'Присед лицом', sls: 'На одной ноге', thold: 'Руки в стороны', bends: 'Наклоны', calf: 'На носок', side: 'Боком', back: 'Спиной' };
@@ -176,7 +178,7 @@ function proMenu() {
     <button class="btn" id="mx" style="margin-top:10px">Закрыть</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
   d.querySelector('#mb').onclick = () => { d.remove(); backup(); };
-  d.querySelector('#msp').onclick = () => { d.remove(); specialtyScreen(); };
+  d.querySelector('#msp').onclick = () => { d.remove(); specialtyScreen(proHome); };
   d.querySelector('#mr').onchange = e => { const f = e.target.files[0]; d.remove(); if (f) restore(f); };
   d.querySelector('#mp').onclick = async () => { d.remove(); profileForm(); };
   d.querySelector('#mc').onclick = () => { localStorage.setItem('bp_mode', 'client'); d.remove(); onboarding(); };

@@ -1,5 +1,5 @@
 // Код и тексты всегда свежие (сначала сеть), тяжелые файлы из кэша (модель, голос, картинки, 3D).
-const V = 'bp-v43';
+const V = 'bp-v44';
 const HEAVY = /\/(models|voice|img)\/|body3d\.bin|cdn\.jsdelivr\.net|fonts\.(gstatic|googleapis)\.com/;
 self.addEventListener('install', e => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x !== V).map(x => caches.delete(x)))).then(() => self.clients.claim())));
