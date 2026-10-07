@@ -1,6 +1,6 @@
 // Быстрый вход: Google (Google Identity Services) и Telegram (виджет на сайте или Mini App внутри Telegram).
 import crypto from 'node:crypto';
-import { setSession, clearSession, sessionUid, loadUser, saveUser, deleteUser, allUsers, publicUser, isAdmin, effectivePlan, CONSENT_VERSION, BETA_UNTIL } from './_session.js';
+import { setSession, clearSession, sessionUid, loadUser, saveUser, deleteUser, allUsers, publicUser, isAdmin, effectivePlan, CONSENT_VERSION, BETA_UNTIL, ensureRefIndex, creditReferral } from './_session.js';
 
 const GOOGLE_ID = process.env.GOOGLE_CLIENT_ID || '';
 const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
@@ -62,6 +62,7 @@ async function signIn(req, res, ident) {
   const u = { ...(old || { created: now, consentAt: now, consentVersion: CONSENT_VERSION }), ...ident, lastLogin: now,
     role: (old && old.role) || (ROLES.includes(b.role) ? b.role : null), ref: (old && old.ref) || clip(b.ref, 40) || null };
   if (fresh && (!old || old.consentVersion !== CONSENT_VERSION)) { u.consentAt = now; u.consentVersion = CONSENT_VERSION; u.healthConsentAt = now; }
+  await ensureRefIndex(u); await creditReferral(u, !old).catch(e => console.error('ref', e));
   await saveUser(u); setSession(res, u.id);
   return res.status(200).json({ user: publicUser(u), created: !old });
 }
@@ -72,7 +73,9 @@ export default async function handler(req, res) {
   try {
     if (!process.env.SESSION_SECRET) return res.status(503).json({ error: 'вход не настроен' });
     if (req.method === 'GET' && a === 'config') return res.status(200).json({ betaUntil: BETA_UNTIL, google: GOOGLE_ID || null, telegram: TG_TOKEN && TG_NAME ? TG_NAME : null, telegramWeb: await widgetReady(String(req.headers.host || '').split(':')[0]), telegramId: TG_TOKEN ? TG_TOKEN.split(':')[0] : null });
-    if (req.method === 'GET' && a === 'me') { const uid = sessionUid(req); const u = uid && await loadUser(uid); if (!u) { if (uid) clearSession(res); return res.status(401).json({ user: null }); } return res.status(200).json({ user: publicUser(u) }); }
+    if (req.method === 'GET' && a === 'me') { const uid = sessionUid(req); const u = uid && await loadUser(uid); if (!u) { if (uid) clearSession(res); return res.status(401).json({ user: null }); }
+      if (!u.refCode && process.env.SESSION_SECRET) { await ensureRefIndex(u); await saveUser(u); } // код приглашения для тех, кто вошел до реферальной программы
+      return res.status(200).json({ user: publicUser(u) }); }
     if (req.method !== 'POST') return res.status(405).json({ error: 'method' });
     // защита от отправки формы с чужого сайта: запрос должен прийти с нашего адреса
     const origin = req.headers.origin; let oh = null; try { oh = origin ? new URL(origin).host : null; } catch (e) { oh = '?'; }
@@ -82,7 +85,7 @@ export default async function handler(req, res) {
     if (a === 'telegram') return signIn(req, res, b.initData ? verifyTgInitData(b.initData) : verifyTgWidget(b.data));
     const uid = sessionUid(req); const u = uid && await loadUser(uid);
     if (!u) return res.status(401).json({ error: 'войдите заново' });
-    if (a === 'role') { if (!ROLES.includes(b.role)) return res.status(400).json({ error: 'role' }); u.role = b.role; await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
+    if (a === 'role') { if (!ROLES.includes(b.role)) return res.status(400).json({ error: 'role' }); u.role = b.role; await ensureRefIndex(u); await creditReferral(u, false).catch(e => console.error('ref', e)); await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
     if (a === 'profile') { const sp = ['kinesio', 'trainer', 'manual', 'sport', 'studio']; if (!sp.includes(b.specialty)) return res.status(400).json({ error: 'specialty' });
       u.specialty = b.specialty; await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
     // оплата в бете вручную: администратор продлевает тариф после оплаты через бота
@@ -95,7 +98,7 @@ export default async function handler(req, res) {
     if (a === 'delete') { await deleteUser(u.id); clearSession(res); return res.status(200).json({ ok: true }); }
     if (a === 'users') { if (!isAdmin(u)) return res.status(403).json({ error: 'forbidden' });
       const all = (await allUsers()).sort((x, y) => (y.created || 0) - (x.created || 0));
-      return res.status(200).json({ users: all.map(x => ({ id: x.id, plan: effectivePlan(x).plan, paidUntil: x.planUntil || 0, name: x.name, provider: x.provider, email: x.email || null, username: x.username || null, role: x.role, specialty: x.specialty || null, created: x.created, lastLogin: x.lastLogin, ref: x.ref })) }); }
+      return res.status(200).json({ users: all.map(x => ({ id: x.id, plan: effectivePlan(x).plan, paidUntil: x.planUntil || 0, name: x.name, provider: x.provider, email: x.email || null, username: x.username || null, role: x.role, specialty: x.specialty || null, created: x.created, lastLogin: x.lastLogin, ref: x.ref, invited: x.invited || 0, invitedPro: x.invitedPro || 0 })) }); }
     return res.status(404).json({ error: 'action' });
   } catch (e) { console.error('auth', e); return res.status(500).json({ error: 'ошибка сервера' }); }
 }

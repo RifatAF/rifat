@@ -64,3 +64,34 @@ test('auth: без второго согласия новый вход запр�
   store.set('users/t_9.json', { body: JSON.stringify({ id: 't_9', role: 'client', consentVersion: '2026-10-beta' }), uploadedAt: '' });
   const me9 = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_9') } }); assert.equal(me9.j.user.consentOk, false, 'старая версия согласия');
 });
+
+const fb = (await import(R + 'feedback.js')).default;
+test('feedback: проверка оценки, контакт только по согласию, список только админу', async () => {
+  assert.equal((await call(fb, { method: 'POST', body: JSON.stringify({ k: 'result', s: 9 }) })).code, 400, 'оценка вне 1–5');
+  assert.equal((await call(fb, { method: 'POST', body: JSON.stringify({ k: 'free' }) })).code, 400, 'пустой');
+  assert.equal((await call(fb, { method: 'POST', body: JSON.stringify({ k: 'nps', s: 10, t: 'Супер <b>' }) })).code, 200);
+  assert.equal((await call(fb, { method: 'POST', body: JSON.stringify({ k: 'result', s: 4, contact: true }), headers: { cookie: cookie('t_2') } })).code, 200);
+  assert.equal((await call(fb, { method: 'POST', body: JSON.stringify({ k: 'nps', s: 3 }) })).code, 200);
+  assert.equal((await call(fb, { headers: { cookie: cookie('t_2') } })).code, 403);
+  const l = await call(fb, { headers: { cookie: cookie('t_1') } });
+  assert.equal(l.j.items.length, 3); assert.equal(l.j.nps, 0, '1 промоутер и 1 критик'); assert.equal(l.j.resultAvg, 4);
+  assert.ok(!l.j.items.find(x => x.k === 'nps' && x.s === 10).contact, 'без согласия контакта нет');
+  assert.equal(l.j.items.find(x => x.k === 'nps' && x.s === 10).t, 'Супер b', 'угловые скобки вырезаны');
+  assert.ok(l.j.items.find(x => x.k === 'result').contact.name, 'с согласием контакт есть');
+});
+test('рефералы: код, засчет нового специалиста один раз, бонус +30 дней, не за себя', async () => {
+  const s = await import(R + '_session.js');
+  const owner = { id: 't_100', role: 'specialist', name: 'A', consentVersion: '2026-10-beta2' }; await s.ensureRefIndex(owner); await s.saveUser(owner);
+  assert.match(owner.refCode, /^r[0-9a-f]{8}$/);
+  const newbie = { id: 't_101', role: 'specialist', ref: owner.refCode };
+  await s.creditReferral(newbie, true); await s.creditReferral(newbie, false);
+  let o = await s.loadUser('t_100'); assert.equal(o.invited, 1); assert.equal(o.invitedPro, 1, 'засчитан один раз');
+  const client = { id: 't_102', role: 'client', ref: owner.refCode }; await s.creditReferral(client, true);
+  o = await s.loadUser('t_100'); assert.equal(o.invited, 2); assert.equal(o.invitedPro, 1, 'клиент не дает бонуса');
+  client.role = 'specialist'; await s.creditReferral(client, false);
+  o = await s.loadUser('t_100'); assert.equal(o.invitedPro, 2, 'стал специалистом позже');
+  const self = { id: 't_100', role: 'specialist', ref: owner.refCode, refCode: owner.refCode }; await s.creditReferral(self, true);
+  o = await s.loadUser('t_100'); assert.equal(o.invited, 2, 'не за себя');
+  assert.equal(s.refBonusDays(o), 60); assert.equal(s.refBonusDays({ invitedPro: 40 }), 360, 'не больше 12 месяцев');
+  const p = s.effectivePlan(o); assert.equal(p.until, s.BETA_UNTIL + 60 * 864e5);
+});

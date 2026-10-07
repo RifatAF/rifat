@@ -2,10 +2,11 @@
 // Все данные в IndexedDB на телефоне специалиста; на сервер ничего не уходит.
 import { analyze, fmt, recompute } from './analysis.js';
 import { track } from './track.js';
+import { npsCard, bindNps, installCard, bindInstall, feedbackSheet, referralSheet, myRef } from './grow.js';
 import { meSync, logout, getMe } from './auth.js';
 import { gate, planLine, SPECIALTIES, TEMPLATE_ORDER, START_CLIENTS } from './plans.js';
 import { C, voice, cam, startMotion, initPose, drawHeat, RAMP_CSS, device, seal, body3D } from './core.js';
-import { cleanResult, verdict, verdictCard, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, ex, totalMin, workout, onboarding, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol } from './app.js';
+import { cleanResult, verdict, verdictCard, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, ex, totalMin, workout, onboarding, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen } from './app.js';
 
 const $ = s => document.querySelector(s);
 // имя специалиста для отчетов по умолчанию: из аккаунта (в бете кабинетом пользуются разные специалисты)
@@ -147,7 +148,8 @@ export async function proHome(query = '', pulled = null) {
     <div class="pad row"><div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--muted)">${esc(name)}</div><h1>Сегодня</h1><div style="font-size:14px;color:var(--sub);margin-top:2px">${today[0].toUpperCase() + today.slice(1)}</div></div><button class="pill" id="menu">Меню</button></div>
     ${clients.some(c => !c.demo) ? `<div class="pad kpi" style="margin-top:16px"><div><b>${clients.filter(c => !c.demo).length}</b><span>клиентов</span></div><div><b style="color:${soon.length ? 'var(--shortT)' : 'inherit'}">${soon.length}</b><span>ретестов на неделе</span></div><div><b style="color:${review.length ? 'var(--weakT)' : 'inherit'}">${review.length}</b><span>посмотреть</span></div></div>` : ''}
     <div class="pad" style="margin-top:12px"><button class="btn" id="new" style="height:60px"><span class="ic">+</span> ${({ trainer: 'Скрининг клиента', manual: 'До сеанса', sport: 'Спортивный тест' })[sp] || 'Новая оценка'}</button></div>
-    <div class="pad tiles" style="margin-top:8px"><button class="tile" id="join"><span class="ti">✉</span>Тест из дома<small>Ссылка клиенту, результат придет вам</small></button>${clients.length ? '<button class="tile" id="demo2"><span class="ti">◎</span>Пример оценки<small>Колено: замер, гипотеза, отчет</small></button>' : ''}${clients.length ? `<button class="tile" id="bk2"><span class="ti">⤓</span>Резервная копия<small>${lastBackup ? 'Последняя ' + fmtDate(lastBackup) : 'Еще не делали'}</small></button>` : ''}<button class="tile" id="menu2"><span class="ti">⚙</span>Протоколы<small>Шаблоны, профиль, тариф</small></button></div>
+    <div class="pad tiles" style="margin-top:8px"><button class="tile" id="join"><span class="ti">✉</span>Тест из дома<small>Ссылка клиенту, результат придет вам</small></button>${clients.length ? '<button class="tile" id="demo2"><span class="ti">◎</span>Пример оценки<small>Колено: замер, гипотеза, отчет</small></button>' : ''}${clients.length ? `<button class="tile" id="bk2"><span class="ti">⤓</span>Резервная копия<small>${lastBackup ? 'Последняя ' + fmtDate(lastBackup) : 'Еще не делали'}</small></button>` : ''}<button class="tile" id="refer"><span class="ti">★</span>Пригласить коллегу<small>+1 месяц Про за каждого</small></button></div>
+    ${npsCard(asses.filter(a => byId[a.clientId] && !byId[a.clientId].demo).length)}${installCard()}
     ${pulled && pulled.length ? `<div class="pad" style="margin-top:12px"><div class="card" style="background:var(--okS);font-size:14px"><b>Пришли результаты из дома:</b> ${pulled.map(esc).join(', ')}</div></div>` : ''}
     ${review.length ? h3('Нужно посмотреть', review.length) + `<div class="pad" style="display:flex;flex-direction:column;gap:8px">${review.map(a => `<div class="list-item" data-a="${a.id}" style="background:#fff"><i class="bar" style="background:var(--lime)"></i><div style="flex:1;min-width:0"><b>${esc(byId[a.clientId].name)}</b><div style="font-size:13px;color:var(--muted)">${a.source === 'home' ? 'из дома' : 'не завершена'} · ${fmtDate(a.date)}</div></div><span class="chev">›</span></div>`).join('')}</div>` : ''}
     ${soon.length ? h3('Ретесты на неделе', soon.length) + `<div class="pad" style="display:flex;flex-direction:column;gap:8px">${soon.map(({ c, a }) => { const d = Math.ceil((a.nextDate - Date.now()) / DAY); return row(c, d < 0 ? 'просрочен на ' + (-d) + ' дн.' : d === 0 ? 'сегодня' : 'через ' + d + ' дн.', d <= 0 ? '#E5484D' : '#EE7B30'); }).join('')}</div>` : ''}
@@ -158,7 +160,8 @@ export async function proHome(query = '', pulled = null) {
     ${needBackup ? `<div class="pad" style="margin-top:20px"><button class="row" id="bk" style="width:100%;background:none;border:0;font:inherit;color:var(--muted);font-size:13px;justify-content:center;gap:6px">Клиенты хранятся только на этом телефоне · <u>сохранить копию</u></button></div>` : ''}
   </div>`);
   if ($('#demo')) $('#demo').onclick = openDemo;
-  $('#new').onclick = () => quickStart(); $('#join').onclick = sendJoin; $('#menu').onclick = proMenu; $('#menu2').onclick = proMenu; if ($('#demo2')) $('#demo2').onclick = openDemo; if ($('#bk2')) $('#bk2').onclick = backup; if ($('#bk')) $('#bk').onclick = backup;
+  bindNps(); bindInstall();
+  $('#new').onclick = () => quickStart(); $('#join').onclick = sendJoin; $('#menu').onclick = proMenu; $('#refer').onclick = referralSheet; if ($('#demo2')) $('#demo2').onclick = openDemo; if ($('#bk2')) $('#bk2').onclick = backup; if ($('#bk')) $('#bk').onclick = backup;
   if ($('#q')) $('#q').oninput = e => { clearTimeout(window._qt); window._qt = setTimeout(() => proHome(e.target.value).then(() => { const i = $('#q'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }), 250); };
   document.querySelectorAll('[data-id]').forEach(el => el.onclick = () => clientCard(el.dataset.id));
   document.querySelectorAll('.list-item[data-a]').forEach(el => el.onclick = () => result(el.dataset.a));
@@ -169,6 +172,8 @@ function proMenu() {
   d.innerHTML = `<div><h2 style="font-size:20px">Кабинет</h2>
     <a class="card row" href="/pricing" target="_blank" style="margin-top:12px;text-decoration:none;color:inherit;font-size:14px"><span style="flex:1">${planLine()}</span><span class="chev">›</span></a>
     <button class="btn ghost" id="msp" style="margin-top:10px">Специализация: ${(SPECIALTIES.find(x => x[0] === localStorage.getItem('bp_sp')) || ['', 'не выбрана'])[1]}</button>
+    <div class="tiles" style="margin-top:12px"><button class="tile" id="mref" style="min-height:76px"><span class="ti">★</span>Пригласить коллегу</button><button class="tile" id="mfb" style="min-height:76px"><span class="ti">✎</span>Отзыв или идея</button></div>
+    ${meSync() && meSync().admin ? '<button class="btn ghost" id="mst" style="margin-top:10px">Статистика и отзывы (админ)</button>' : ''}
     <button class="btn ghost" id="mb" style="margin-top:14px">Сохранить резервную копию</button>
     <label class="btn ghost" style="margin-top:10px">Восстановить из копии<input type="file" id="mr" accept=".json,.bpbackup,application/json" style="display:none"></label>
     <button class="btn ghost" id="mp" style="margin-top:10px">Мой профиль: имя и контакт</button>
@@ -178,6 +183,9 @@ function proMenu() {
     <button class="btn" id="mx" style="margin-top:10px">Закрыть</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
   d.querySelector('#mb').onclick = () => { d.remove(); backup(); };
+  if (d.querySelector('#mst')) d.querySelector('#mst').onclick = () => { d.remove(); funnelScreen(); };
+  d.querySelector('#mref').onclick = () => { d.remove(); referralSheet(); };
+  d.querySelector('#mfb').onclick = () => { d.remove(); feedbackSheet('menu'); };
   d.querySelector('#msp').onclick = () => { d.remove(); specialtyScreen(proHome); };
   d.querySelector('#mr').onchange = e => { const f = e.target.files[0]; d.remove(); if (f) restore(f); };
   d.querySelector('#mp').onclick = async () => { d.remove(); profileForm(); };
@@ -592,8 +600,8 @@ async function report(aid) {
   const H2 = y + 170, out = document.createElement('canvas'); out.width = W; out.height = H2; const o = out.getContext('2d'); o.drawImage(cv, 0, 0);
   o.fillStyle = '#1E2533'; o.fillRect(0, H2 - 120, W, 120); o.fillStyle = '#C6E84B'; o.font = '700 30px Onest, sans-serif'; o.fillText(author.slice(0, 52), 64, H2 - 66);
   const contact = await meta('contact');
-  if (contact) { o.fillStyle = '#fff'; o.font = '500 24px Onest, sans-serif'; o.fillText('Запись: ' + contact.slice(0, 48), 64, H2 - 28); o.textAlign = 'right'; o.fillStyle = 'rgba(255,255,255,.5)'; o.font = '400 18px Onest, sans-serif'; o.fillText('BodyPassport · не диагноз', W - 64, H2 - 28); o.textAlign = 'left'; }
-  else { o.fillStyle = 'rgba(255,255,255,.6)'; o.font = '400 22px Onest, sans-serif'; o.fillText('BodyPassport · оценка по позе и движению, не диагноз', 64, H2 - 28); }
+  if (contact) { o.fillStyle = '#fff'; o.font = '500 24px Onest, sans-serif'; o.fillText('Запись: ' + contact.slice(0, 48), 64, H2 - 28); o.textAlign = 'right'; o.fillStyle = 'rgba(255,255,255,.5)'; o.font = '400 18px Onest, sans-serif'; o.fillText(location.host + ' · не диагноз', W - 64, H2 - 28); o.textAlign = 'left'; }
+  else { o.fillStyle = 'rgba(255,255,255,.6)'; o.font = '400 22px Onest, sans-serif'; o.fillText('BodyPassport · ' + location.host + ' · оценка движения, не диагноз', 64, H2 - 28); }
   const blob = await new Promise(r => out.toBlob(r, 'image/png')); const file = new File([blob], `bodypassport-${c.name}.png`, { type: 'image/png' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: 'Паспорт движения' }).catch(() => {});
   else { const l = document.createElement('a'); l.href = URL.createObjectURL(blob); l.download = file.name; l.click(); }
@@ -627,7 +635,7 @@ async function freshBox(b) {
 async function inviteLink(c, units) {
   const fresh = await freshBox(c.invite); if (fresh !== c.invite) { c.invite = fresh; await put('clients', c); }
   const author = (await meta('profile')) || defaultAuthor();
-  return location.origin + '/#inv=' + seal.pack({ i: c.invite.id, k: c.invite.key, n: c.name.split(' ')[0], s: author, p: units });
+  return location.origin + '/' + (myRef() ? '?ref=' + myRef() : '') + '#inv=' + seal.pack({ i: c.invite.id, k: c.invite.key, n: c.name.split(' ')[0], s: author, p: units });
 }
 async function sendInvite(c) {
   if (!gate('invite')) return;
@@ -674,7 +682,7 @@ async function sendJoin() {
     d.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tpl = TEMPLATES.find(t => t[0] === b.dataset.t); draw(); });
     d.querySelector('#cx').onclick = () => d.remove();
     d.querySelector('#snd').onclick = async () => { let bx; try { bx = await inbox(); } catch (e) { alert('Не удалось создать ссылку: ' + e.message); return; } track('join_sent'); const author = (await meta('profile')) || defaultAuthor();
-      const url = location.origin + '/#join=' + seal.pack({ i: bx.id, k: bx.key, s: author, p: tpl[2] });
+      const url = location.origin + '/' + (myRef() ? '?ref=' + myRef() : '') + '#join=' + seal.pack({ i: bx.id, k: bx.key, s: author, p: tpl[2] });
       const text = 'Здравствуйте! Пройдите, пожалуйста, тест движения по ссылке: короткая анкета и 2–4 минуты перед камерой. Результат сразу придет мне.';
       if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url); alert('Ссылка скопирована'); } d.remove(); }; };
   draw(); document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
