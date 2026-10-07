@@ -1,1 +1,1 @@
-{"name": "bodypassport", "private": true, "type": "module", "dependencies": {"@vercel/blob": "^2.0.0"}}
+{"name": "bodypassport", "private": true, "type": "module", "dependencies": {"@vercel/blob": "^2.0.0"}, "scripts": {"test": "node --experimental-test-module-mocks --test tests/api.test.mjs"}}

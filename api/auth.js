@@ -1,11 +1,10 @@
 // Быстрый вход: Google (Google Identity Services) и Telegram (виджет на сайте или Mini App внутри Telegram).
 import crypto from 'node:crypto';
-import { setSession, clearSession, sessionUid, loadUser, saveUser, deleteUser, allUsers, publicUser, isAdmin, effectivePlan } from './_session.js';
+import { setSession, clearSession, sessionUid, loadUser, saveUser, deleteUser, allUsers, publicUser, isAdmin, effectivePlan, CONSENT_VERSION, BETA_UNTIL } from './_session.js';
 
 const GOOGLE_ID = process.env.GOOGLE_CLIENT_ID || '';
 const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TG_NAME = process.env.TELEGRAM_BOT_USERNAME || '';
-const CONSENT_VERSION = '2026-10-beta';
 const ROLES = ['client', 'specialist'];
 const clip = (v, n) => typeof v === 'string' ? v.replace(/[\u0000-\u001f<>]/g, '').slice(0, n) : '';
 const hex = (a, b) => { const x = Buffer.from(String(a), 'hex'), y = Buffer.from(String(b), 'hex'); return x.length === 32 && x.length === y.length && crypto.timingSafeEqual(x, y); };
@@ -56,11 +55,13 @@ async function widgetReady(host) {
 async function signIn(req, res, ident) {
   if (!ident) return res.status(401).json({ error: 'не удалось подтвердить вход' });
   const b = req.body || {}; const old = await loadUser(ident.id);
-  if (!old && b.consent !== true) return res.status(400).json({ error: 'нужно согласие на обработку данных' });
+  // согласие на политику и отдельное согласие на данные о здоровье (152-ФЗ, ст. 10): у новых и при новой версии политики
+  const fresh = b.consent === true && b.health === true;
+  if ((!old || old.consentVersion !== CONSENT_VERSION) && !fresh) return res.status(400).json({ error: 'нужно согласие на обработку данных', consent: CONSENT_VERSION });
   const now = Date.now();
   const u = { ...(old || { created: now, consentAt: now, consentVersion: CONSENT_VERSION }), ...ident, lastLogin: now,
     role: (old && old.role) || (ROLES.includes(b.role) ? b.role : null), ref: (old && old.ref) || clip(b.ref, 40) || null };
-  if (b.consent === true && (!old || old.consentVersion !== CONSENT_VERSION)) { u.consentAt = now; u.consentVersion = CONSENT_VERSION; }
+  if (fresh && (!old || old.consentVersion !== CONSENT_VERSION)) { u.consentAt = now; u.consentVersion = CONSENT_VERSION; u.healthConsentAt = now; }
   await saveUser(u); setSession(res, u.id);
   return res.status(200).json({ user: publicUser(u), created: !old });
 }
@@ -70,7 +71,7 @@ export default async function handler(req, res) {
   const a = String(req.query.a || '');
   try {
     if (!process.env.SESSION_SECRET) return res.status(503).json({ error: 'вход не настроен' });
-    if (req.method === 'GET' && a === 'config') return res.status(200).json({ google: GOOGLE_ID || null, telegram: TG_TOKEN && TG_NAME ? TG_NAME : null, telegramWeb: await widgetReady(String(req.headers.host || '').split(':')[0]), telegramId: TG_TOKEN ? TG_TOKEN.split(':')[0] : null });
+    if (req.method === 'GET' && a === 'config') return res.status(200).json({ betaUntil: BETA_UNTIL, google: GOOGLE_ID || null, telegram: TG_TOKEN && TG_NAME ? TG_NAME : null, telegramWeb: await widgetReady(String(req.headers.host || '').split(':')[0]), telegramId: TG_TOKEN ? TG_TOKEN.split(':')[0] : null });
     if (req.method === 'GET' && a === 'me') { const uid = sessionUid(req); const u = uid && await loadUser(uid); if (!u) { if (uid) clearSession(res); return res.status(401).json({ user: null }); } return res.status(200).json({ user: publicUser(u) }); }
     if (req.method !== 'POST') return res.status(405).json({ error: 'method' });
     // защита от отправки формы с чужого сайта: запрос должен прийти с нашего адреса
