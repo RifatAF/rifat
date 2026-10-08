@@ -47,12 +47,14 @@ export const can = f => !PRO[f] || plan().plan !== 'start';
 /** Пускает к функции или показывает, какой тариф нужен. */
 export function gate(f) {
   if (can(f)) return true;
+  // единственное место, где упоминается Про: шторка при упоре в лимит, один раз за сессию
+  let seen = false; try { seen = sessionStorage.getItem('bp_gate_seen') === '1'; sessionStorage.setItem('bp_gate_seen', '1'); } catch (e) {}
+  if (seen) { const t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = f === 'clients' ? `Лимит Старт: ${START_CLIENTS} клиентов` : PRO[f] + ': тариф Про'; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); return false; }
   const d = document.createElement('div'); d.className = 'sheet';
-  d.innerHTML = `<div><div class="caps" style="color:var(--coralT)">Тариф Про</div><h2 style="font-size:22px;margin-top:6px">${PRO[f]}</h2>
-    <p class="sub" style="margin-top:8px;font-size:15px">Доступно в тарифе Про: ${PLANS.pro.price}. Без лимита клиентов, тест из дома по ссылке, было → стало, повторяемость.</p>
-    <a class="btn lime" href="/pricing" target="_blank" style="margin-top:16px;text-decoration:none">Тарифы</a>
-    <a class="btn ghost" href="https://t.me/BodyPassport_bot?start=pro" target="_blank" style="margin-top:10px;text-decoration:none">Подключить Про</a>
-    <button class="btn" id="pwx" style="margin-top:10px">Закрыть</button></div>`;
+  d.innerHTML = `<div><h2>${f === 'clients' ? `На тарифе Старт до ${START_CLIENTS} клиентов` : PRO[f] + ': в тарифе Про'}</h2>
+    <p class="sub" style="margin-top:8px">В бете Про бесплатен до ${new Date(betaUntil()).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>
+    <a class="btn" href="/pricing" target="_blank" style="margin-top:var(--s5);text-decoration:none">Подключить Про</a>
+    <button class="btn ghost" id="pwx" style="margin-top:var(--s2)">Не сейчас</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'pwx') d.remove(); };
   return false;
 }

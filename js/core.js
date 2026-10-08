@@ -137,21 +137,52 @@ function loop(gen = ++loopGen) {
 }
 export function fullyVisible(p) { return p && [P.NOSE, P.L_ANKLE, P.R_ANKLE, P.L_SHOULDER, P.R_SHOULDER].every(i => p[i].visibility > .5); }
 
-// ---------- скелет поверх видео (лайм, как в Android) ----------
+// ---------- иконки (спрайт Lucide, icons/ui.svg) ----------
+export const ic = (n, cls = '') => '<svg class="ic ' + cls + '" aria-hidden="true"><use href="icons/ui.svg#i-' + n + '"/></svg>';
+/** Короткое сообщение внизу экрана вместо alert(). */
+export function toast(t) { const d = document.createElement('div'); d.className = 'toast'; d.setAttribute('role', 'status'); d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); }
+export const reduceMotion = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+// ---------- скелет поверх видео ----------
 const BONES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28]];
-const sm = {};
-export function drawSkeleton(cv, frame) {
-  const ctx = cv.getContext('2d'); const W = cv.width = cv.clientWidth * devicePixelRatio, H = cv.height = cv.clientHeight * devicePixelRatio;
-  ctx.clearRect(0, 0, W, H); if (!frame || !frame.pose) return;
+const sm = {}; const trail = [];
+/** opts.focus: суставы текущего шага (кольцо и ореол кости); opts.trail: шлейф из 6 прошлых кадров; opts.warn: человек вне контура.
+ *  Возвращает экранные координаты первого сустава из focus (CSS-пиксели), чтобы поставить рядом метку с углом. */
+export function drawSkeleton(cv, frame, opts = {}) {
+  const ctx = cv.getContext('2d'), dpr = devicePixelRatio; const W = cv.width = cv.clientWidth * dpr, H = cv.height = cv.clientHeight * dpr;
+  ctx.clearRect(0, 0, W, H); if (!frame || !frame.pose) { trail.length = 0; return {}; }
   const s = Math.min(W / frame.w, H / frame.h), ox = (W - frame.w * s) / 2, oy = (H - frame.h * s) / 2, mir = !cam.back;
   const a = .35; const p = frame.pose.map((l, i) => { const o = sm[i] || l; const n = { x: o.x + (l.x - o.x) * a, y: o.y + (l.y - o.y) * a, visibility: l.visibility }; sm[i] = n; return n; });
   const m = l => [ox + (mir ? frame.w - l.x : l.x) * s, oy + l.y * s];
-  ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(198,232,75,.95)'; ctx.lineWidth = 8 * devicePixelRatio / 2;
-  for (const [i, j] of BONES) if (p[i].visibility > .4 && p[j].visibility > .4) { ctx.beginPath(); ctx.moveTo(...m(p[i])); ctx.lineTo(...m(p[j])); ctx.stroke(); }
-  ctx.fillStyle = '#fff'; for (const i of [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]) if (p[i].visibility > .4) { ctx.beginPath(); ctx.arc(...m(p[i]), 5 * devicePixelRatio, 0, 7); ctx.fill(); }
+  const warn = opts.warn || !fullyVisible(frame.pose), bone = warn ? '#FFB547' : '#D4F25A';
+  const bones = (q, w) => { for (const [i, j] of BONES) if (q[i].visibility > .4 && q[j].visibility > .4) { ctx.beginPath(); ctx.moveTo(...m(q[i])); ctx.lineTo(...m(q[j])); ctx.stroke(); } };
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const useTrail = opts.trail && !device.weak && !reduceMotion();
+  if (useTrail) { ctx.strokeStyle = bone; ctx.lineWidth = 3.5 * dpr; trail.forEach((q, k) => { ctx.globalAlpha = .08 + k * .044; bones(q); }); ctx.globalAlpha = 1;
+    trail.push(p.map(l => ({ ...l }))); if (trail.length > 6) trail.shift(); } else trail.length = 0;
+  const focus = (opts.focus || []).filter(i => p[i] && p[i].visibility > .4);
+  // ореол костей у измеряемого сустава
+  if (focus.length && !warn) { ctx.strokeStyle = bone; ctx.globalAlpha = .25; ctx.lineWidth = 10 * dpr;
+    for (const [i, j] of BONES) if ((focus.includes(i) || focus.includes(j)) && p[i].visibility > .4 && p[j].visibility > .4) { ctx.beginPath(); ctx.moveTo(...m(p[i])); ctx.lineTo(...m(p[j])); ctx.stroke(); }
+    ctx.globalAlpha = 1; }
+  ctx.strokeStyle = bone; ctx.lineWidth = 3.5 * dpr; bones(p);
+  ctx.fillStyle = '#fff'; for (const i of [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]) if (p[i].visibility > .4) { ctx.beginPath(); ctx.arc(...m(p[i]), 4.5 * dpr, 0, 7); ctx.fill(); }
+  for (const i of focus) { ctx.beginPath(); ctx.arc(...m(p[i]), 7 * dpr, 0, 7); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 3 * dpr; ctx.strokeStyle = bone; ctx.stroke(); }
+  if (!focus.length) return {};
+  const [fx, fy] = m(p[focus[0]]); return { focusXY: [fx / dpr, fy / dpr] };
 }
 
-// ---------- 2D тепловая карта (метеостиль), силуэт 200×440 из прототипа ----------
+// ---------- контур «куда встать» (пунктир по центру кадра) ----------
+const SIL = 'M78 72 L122 72 Q140 74 144 92 L156 176 Q158 186 150 188 Q144 188 142 180 L132 112 L128 190 L130 268 L128 352 Q128 362 118 362 Q110 362 110 352 L104 210 L96 210 L90 352 Q90 362 82 362 Q72 362 72 352 L70 268 L72 190 L68 112 L58 180 Q56 188 50 188 Q42 186 44 176 L56 92 Q60 74 78 72 Z';
+export function drawSilhouette(cv, target = {}) {
+  const ctx = cv.getContext('2d'), dpr = devicePixelRatio, W = cv.width = cv.clientWidth * dpr, H = cv.height = cv.clientHeight * dpr;
+  ctx.clearRect(0, 0, W, H); const k = H * (target.bodyFrac || .72) / 340; // 340: от макушки (y≈20) до стоп (y≈362) в координатах контура
+  ctx.save(); ctx.translate(W / 2 - 100 * k, (H - 380 * k) / 2); ctx.scale(k, k);
+  ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2.5 * dpr / k; ctx.setLineDash([6 * dpr / k, 6 * dpr / k]);
+  ctx.beginPath(); ctx.arc(100, 44, 24, 0, Math.PI * 2); ctx.stroke(); ctx.stroke(new Path2D(SIL)); ctx.restore();
+}
+
+// ---------- 2D тепловая карта, силуэт 200×440 из прототипа ----------
 const BODY = ['M60 82 Q100 70 140 82 Q157 88 155 110 L147 196 Q144 226 151 252 L49 252 Q56 226 53 196 L45 110 Q43 88 60 82Z',
   'M50 85 C33 88 28 100 29 116 L25 200 C22 240 22 270 25 292 C28 302 38 302 39 292 C40 268 42 238 45 204 L53 124 Z',
   'M150 85 C167 88 172 100 171 116 L175 200 C178 240 178 270 175 292 C172 302 162 302 161 292 C160 268 158 238 155 204 L147 124 Z',
@@ -159,63 +190,97 @@ const BODY = ['M60 82 Q100 70 140 82 Q157 88 155 110 L147 196 Q144 226 151 252 L
 function bodyParts() { const e = (x, y, rx, ry) => { const p = new Path2D(); p.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); return p; };
   const neck = new Path2D(); neck.rect(90, 50, 20, 36);
   return [...BODY.map(d => new Path2D(d)), e(100, 34, 20, 24), neck, e(72, 428, 14, 6), e(128, 428, 14, 6)]; }
-const RAMP = [[-1, 0x1E3A8A], [-.7, 0x2F6FDF], [-.45, 0x4FA9EA], [-.22, 0x6FD0C4], [0, 0x5DBE7C], [.2, 0xB9D65A], [.4, 0xF3D04A], [.62, 0xF29A38], [.82, 0xE8573A], [1, 0xC21F3A]];
+// пять опорных точек: норма нейтральная (цвет фигуры), карта показывает только отклонения
+const RAMP = [[-1, 0x2A5CB8], [-.45, 0x7FA6EE], [0, 0xE9E7E1], [.45, 0xF0A36A], [1, 0xD9484F]];
 export function ramp(v) { const x = Math.max(-1, Math.min(1, v)); let i = RAMP.findLastIndex(r => r[0] <= x); i = Math.max(0, Math.min(RAMP.length - 2, i));
   const [a, ca] = RAMP[i], [b, cb] = RAMP[i + 1], t = Math.max(0, Math.min(1, (x - a) / (b - a))); const ch = (c, s) => (c >> s) & 255; const mix = s => Math.round(ch(ca, s) + (ch(cb, s) - ch(ca, s)) * t);
   return [mix(16), mix(8), mix(0)]; }
 export const RAMP_CSS = 'linear-gradient(90deg,' + RAMP.map(([v, c]) => '#' + c.toString(16).padStart(6, '0') + ' ' + ((v + 1) * 50) + '%').join(',') + ')';
+export const MARK_HEX = { HYPER: '#D9484F', SHORT: '#E07A2E', WEAK: '#3A72D8' };
+/** Маркер состояния формой: перегрузка — круг, укорочение — ромб, слабость — кольцо. derived: пунктир без ореола. */
+export function drawMark(ctx, x, y, k, o = {}) {
+  const c = MARK_HEX[k]; if (!c) return; const sc = o.scale ?? 1; ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
+  if (!o.derived) { ctx.globalAlpha = (k === 'WEAK' ? .14 : .18) * (o.alpha ?? 1); ctx.fillStyle = c; ctx.beginPath(); ctx.arc(0, 0, 16, 0, 7); ctx.fill(); }
+  ctx.globalAlpha = o.alpha ?? 1; ctx.setLineDash(o.derived ? [3, 3] : []);
+  if (k === 'HYPER') { ctx.beginPath(); ctx.arc(0, 0, 7, 0, 7); if (o.derived) { ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.stroke(); } else { ctx.fillStyle = c; ctx.fill(); } }
+  if (k === 'SHORT') { ctx.rotate(Math.PI / 4); if (o.derived) { ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.strokeRect(-6, -6, 12, 12); } else { ctx.fillStyle = c; ctx.fillRect(-6, -6, 12, 12); } }
+  if (k === 'WEAK') { ctx.beginPath(); ctx.arc(0, 0, 7, 0, 7); ctx.strokeStyle = c; ctx.lineWidth = 3.5; ctx.stroke(); }
+  ctx.restore();
+}
 const VW = 360, OX = 80;
 // маска силуэта считается один раз: проверка 88 тысяч точек по контурам тормозила каждое касание карты
 let bodyMask = null;
 function mask() { if (bodyMask) return bodyMask; const parts = bodyParts(), tc = document.createElement('canvas').getContext('2d'); bodyMask = new Uint8Array(200 * 440);
   for (let y = 0; y < 440; y++) for (let x = 0; x < 200; x++) if (parts.some(pp => tc.isPointInPath(pp, x, y))) bodyMask[y * 200 + x] = 1; return bodyMask; }
-export function drawHeat(cv, spots, back, selected, labels) {
+const easeOut = t => 1 - (1 - t) ** 3;
+/**
+ * labels: [{ key, title, sub, color, text, value?, n? }]. value — короткий замер (mono, цвет состояния), n — номер точки вместо маркера.
+ * opts.reveal — анимация появления (первый показ результата). Если у всех подписей есть n, поля под выноски не нужны: фигура во всю ширину.
+ */
+export function drawHeat(cv, spots, back, selected, labels = [], opts = {}) {
   const mine = spots.filter(s => s.back === back);
-  const k = 1, W = 200 * k, H = 440 * k;
-  const off = document.createElement('canvas'); off.width = W; off.height = H; const o = off.getContext('2d');
-  const img = o.createImageData(W, H), parts = bodyParts(), inside = mask();
+  const W = 200, H = 440, inside = mask(), parts = bodyParts();
   const vals = new Float32Array(W * H).fill(NaN);
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const ux = x / k, uy = y / k; if (!inside[y * W + x]) continue;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (!inside[y * W + x]) continue;
     let num = 0, den = .55;
-    for (const s of mine) { const dx = ux - s.x * 200, dy = uy - s.y * 440, sg = 13 + 13 * Math.abs(s.tone); const g = Math.exp(-(dx * dx + dy * dy) / (2 * sg * sg)); num += g * s.tone; den += g; }
-    vals[y * W + x] = num / den;
-  }
+    for (const s of mine) { const dx = x - s.x * 200, dy = y - s.y * 440, sg = 13 + 13 * Math.abs(s.tone); const g = Math.exp(-(dx * dx + dy * dy) / (2 * sg * sg)); num += g * s.tone; den += g; }
+    vals[y * W + x] = num / den; }
+  const off = document.createElement('canvas'); off.width = W; off.height = H; const o = off.getContext('2d');
+  const numbered = labels.length && labels.every(l => l.n), vw = numbered ? 200 : VW, ox = numbered ? 0 : OX;
+  const ctx = cv.getContext('2d'); const sc = cv.clientWidth * devicePixelRatio / vw; cv.width = vw * sc; cv.height = 440 * sc;
+  const shown = labels.filter(l => mine.some(s => s.key === l.key));
+  const marks = mine.filter(s => s.k !== 'OK' && (!s.derived || s.byChain || s.edited) && !shown.some(l => l.key === s.key && l.n)).sort((a, b) => Math.abs(b.tone) - Math.abs(a.tone)).slice(0, 8);
   const lvl = f => f < -.6 ? 0 : f < -.3 ? 1 : f < .3 ? 2 : f < .6 ? 3 : 4;
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = y * W + x, f = vals[i]; if (Number.isNaN(f)) continue;
-    let [r, g, b] = ramp(f); const rr = vals[i + 1], dd = vals[i + W];
-    if ((x + 1 < W && !Number.isNaN(rr) && lvl(rr) !== lvl(f)) || (y + 1 < H && !Number.isNaN(dd) && lvl(dd) !== lvl(f))) { r *= .82; g *= .82; b *= .82; }
-    img.data.set([r, g, b, 230], i * 4); }
-  o.putImageData(img, 0, 0);
-  const ctx = cv.getContext('2d'); const sc = cv.clientWidth * devicePixelRatio / VW; cv.width = VW * sc; cv.height = 440 * sc;
-  ctx.scale(sc, sc); ctx.save(); ctx.translate(OX, 0);
-  const grd = ctx.createLinearGradient(0, 0, 0, 440); grd.addColorStop(0, '#F7F1E7'); grd.addColorStop(1, '#E8DDCC'); ctx.fillStyle = grd; parts.forEach(pp => ctx.fill(pp));
-  const sh = ctx.createLinearGradient(0, 0, 0, 440); sh.addColorStop(0, 'rgba(255,255,255,.22)'); sh.addColorStop(.5, 'rgba(255,255,255,0)'); sh.addColorStop(1, 'rgba(0,0,0,.06)');
-  ctx.imageSmoothingQuality = 'high';
-  for (const pp of parts) { ctx.save(); ctx.clip(pp); ctx.drawImage(off, 0, 0, 200, 440); ctx.fillStyle = sh; ctx.fillRect(0, 0, 200, 440); ctx.restore(); }
-  ctx.strokeStyle = '#CDBFA9'; ctx.lineWidth = 1.2; parts.forEach(pp => ctx.stroke(pp));
-  for (const s of mine.filter(s => s.k !== 'OK')) { ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.beginPath(); ctx.arc(s.x * 200, s.y * 440, 3.2, 0, 7); ctx.fill(); }
-  const sel = mine.find(s => s.key === selected); if (sel) { ctx.fillStyle = '#fff'; ctx.strokeStyle = '#1E2533'; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.arc(sel.x * 200, sel.y * 440, 6, 0, 7); ctx.fill(); ctx.stroke(); }
-  ctx.restore();
-  // выноски
-  const placed = []; ctx.font = '600 11.5px Onest, sans-serif';
-  for (const l of labels.filter(l => mine.some(s => s.key === l.key)).sort((a, b) => mine.find(s => s.key === a.key).y - mine.find(s => s.key === b.key).y)) {
-    const h = mine.find(s => s.key === l.key); const px = h.x * 200 + OX; let py = h.y * 440; const left = h.x < .5;
-    // подпись целиком: перенос на вторую строку вместо обрезки, ширина по тексту
-    ctx.font = '700 11px Onest, sans-serif'; const maxW = Math.max(60, OX + 22), words = l.title.split(' '), lines = [''];
-    for (const w of words) { const t = lines[lines.length - 1] ? lines[lines.length - 1] + ' ' + w : w; if (ctx.measureText(t).width <= maxW || !lines[lines.length - 1]) lines[lines.length - 1] = t; else lines.push(w); }
-    if (lines.length > 2) { lines.length = 2; while (ctx.measureText(lines[1] + '…').width > maxW && lines[1].length > 1) lines[1] = lines[1].slice(0, -1); lines[1] += '…'; }
-    const tw = Math.max(...lines.map(t => ctx.measureText(t).width), (ctx.font = '500 11px Onest, sans-serif', ctx.measureText(l.sub).width));
-    const bw = Math.ceil(tw) + 14, bh = 14 + lines.length * 12;
-    while (placed.some(p => Math.abs(p - py) < bh + 4)) py += 8; placed.push(py);
-    const bx = left ? 2 : VW - bw - 2, top = py - bh / 2;
-    ctx.strokeStyle = l.color; ctx.globalAlpha = .7; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(px, h.y * 440); ctx.lineTo(left ? bx + bw : bx, py); ctx.stroke(); ctx.globalAlpha = 1;
-    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(bx, top, bw, bh, 9); ctx.fill(); ctx.fillStyle = l.color; ctx.fillRect(bx, top, 4, bh);
-    ctx.fillStyle = '#1C1B19'; ctx.font = '700 11px Onest, sans-serif'; lines.forEach((t, i) => ctx.fillText(t, bx + 9, top + 13 + i * 12));
-    ctx.fillStyle = l.text || l.color; ctx.font = '500 11px Onest, sans-serif'; ctx.fillText(l.sub, bx + 9, top + 13 + lines.length * 12);
-  }
-  return { hit(clientX, clientY) { const r = cv.getBoundingClientRect(); const ux = (clientX - r.left) / r.width * VW - OX, uy = (clientY - r.top) / r.height * 440;
+  const fill = k => { const img = o.createImageData(W, H);
+    for (let i = 0; i < W * H; i++) { const f0 = vals[i]; if (Number.isNaN(f0)) continue; const f = f0 * k; let [r, g, b] = ramp(f);
+      const rr = vals[i + 1], dd = vals[i + W]; if (k > .99 && ((i % W + 1 < W && !Number.isNaN(rr) && lvl(rr) !== lvl(f)) || (i + W < W * H && !Number.isNaN(dd) && lvl(dd) !== lvl(f)))) { r *= .9; g *= .9; b *= .9; }
+      img.data.set([r, g, b, 235], i * 4); }
+    o.putImageData(img, 0, 0); };
+  const render = (figA, toneK, markT, labA) => {
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); ctx.scale(sc, sc); ctx.save(); ctx.translate(ox, 0); ctx.globalAlpha = figA;
+    ctx.fillStyle = '#E9E7E1'; parts.forEach(pp => ctx.fill(pp));
+    if (toneK > 0) { fill(toneK); ctx.imageSmoothingQuality = 'high'; for (const pp of parts) { ctx.save(); ctx.clip(pp); ctx.drawImage(off, 0, 0, 200, 440); ctx.restore(); } }
+    ctx.strokeStyle = '#D5D2CA'; ctx.lineWidth = 1.2; parts.forEach(pp => ctx.stroke(pp)); ctx.globalAlpha = 1;
+    marks.forEach((s, i) => { const t = markT(i); if (t <= 0) return; const sc2 = t < .7 ? .4 + (1.15 - .4) * (t / .7) : 1.15 - .15 * ((t - .7) / .3);
+      drawMark(ctx, s.x * 200, s.y * 440, s.k, { derived: s.derived && !s.edited, scale: t >= 1 ? 1 : sc2, alpha: Math.min(1, t * 2) }); });
+    for (const l of shown.filter(l => l.n)) { const s = mine.find(q => q.key === l.key); ctx.globalAlpha = Math.min(1, labA * 2 + (markT(0) > 0 ? 1 : 0));
+      ctx.fillStyle = '#111418'; ctx.beginPath(); ctx.arc(s.x * 200, s.y * 440, 12, 0, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '700 14px Onest, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(l.n), s.x * 200, s.y * 440 + 1); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1; }
+    const sel = mine.find(s => s.key === selected); if (sel) { ctx.strokeStyle = '#111418'; ctx.lineWidth = 2; ctx.setLineDash([]); ctx.beginPath(); ctx.arc(sel.x * 200, sel.y * 440, 12, 0, 7); ctx.stroke(); }
+    ctx.restore();
+    if (labA > 0 && !numbered) callouts(ctx, shown.filter(l => !l.n), mine, labA);
+  };
+  const markDelay = i => 320 + i * 60;
+  if (opts.reveal && !reduceMotion()) {
+    const t0 = performance.now(), end = 880 + marks.length * 60 + 320 + 200;
+    const step = now => { if (!cv.isConnected) return; const t = now - t0;
+      render(Math.min(1, t / 320), t < 320 ? 0 : easeOut(Math.min(1, (t - 320) / 560)), i => Math.max(0, Math.min(1, (t - markDelay(i)) / 320)), Math.max(0, Math.min(1, (t - (end - 200)) / 200)));
+      if (t < end) requestAnimationFrame(step); };
+    requestAnimationFrame(step); render(0, 0, () => 0, 0);
+  } else if (opts.reveal) { // меньше движения: один короткий fade
+    const t0 = performance.now(); const step = now => { if (!cv.isConnected) return; const k = Math.min(1, (now - t0) / 160); render(k, 1, () => 1, k); if (k < 1) requestAnimationFrame(step); }; requestAnimationFrame(step); render(0, 1, () => 1, 0);
+  } else render(1, 1, () => 1, 1);
+  return { hit(clientX, clientY) { const r = cv.getBoundingClientRect(); const ux = (clientX - r.left) / r.width * vw - ox, uy = (clientY - r.top) / r.height * 440;
     let best = null, bd = 34; for (const s of mine) { const d = Math.hypot(s.x * 200 - ux, s.y * 440 - uy); if (d < bd) { bd = d; best = s; } } return best; } };
+}
+// выноски: подпись прижата к ближайшему краю, шаг по высоте не меньше 36
+function callouts(ctx, labels, mine, alpha) {
+  const pos = l => mine.find(s => s.key === l.key); const placed = { L: [], R: [] };
+  ctx.globalAlpha = alpha;
+  for (const l of labels.sort((a, b) => pos(a).y - pos(b).y)) {
+    const h = pos(l), left = h.x < .5, side = left ? 'L' : 'R', px = h.x * 200 + OX, zy = h.y * 440; let py = zy;
+    for (const q of placed[side]) if (Math.abs(q - py) < 36) py = q + 36; placed[side].push(py);
+    const maxW = OX + 18; ctx.font = '400 12px Onest, sans-serif';
+    let title = l.title; while (ctx.measureText(title).width > maxW && title.length > 4) title = title.slice(0, -2) + '…';
+    const val = l.value || l.sub || ''; ctx.font = l.value ? '500 13px "JetBrains Mono", monospace' : '600 12px Onest, sans-serif';
+    let v = val; while (ctx.measureText(v).width > maxW && v.length > 4) v = v.slice(0, -2) + '…';
+    const tw = Math.max(ctx.measureText(v).width, (ctx.font = '400 12px Onest, sans-serif', ctx.measureText(title).width));
+    const bx = left ? 4 : VW - 4 - tw, ex = left ? bx + tw + 4 : bx - 4;
+    ctx.strokeStyle = l.color; ctx.globalAlpha = alpha * .6; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px, zy); ctx.lineTo(ex, py); ctx.stroke(); ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#5B6068'; ctx.font = '400 12px Onest, sans-serif'; ctx.fillText(title, bx, py - 3);
+    ctx.fillStyle = l.text || l.color; ctx.font = l.value ? '500 13px "JetBrains Mono", monospace' : '600 12px Onest, sans-serif'; ctx.fillText(v, bx, py + 12);
+  }
+  ctx.globalAlpha = 1;
 }
 
 // ---------- 3D-модель мышц (Z-Anatomy на основе BodyParts3D, CC BY-SA) ----------
@@ -231,16 +296,17 @@ async function loadMesh() {
 /** Фоновая подгрузка 3D, пока человек смотрит карту: кнопка 3D потом открывается сразу. */
 export function preload3D() { const go = () => { import('three'); import('three/addons/controls/OrbitControls.js'); loadMesh(); };
   if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 3000 }); else setTimeout(go, 1500); }
-export async function body3D(container, spots, onPick) {
-  container.innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:#8A847A;font-size:14px">Загружаю 3D-модель…</div>';
+export async function body3D(container, spots, onPick, opts = {}) {
+  container.style.borderRadius = '32px'; container.style.overflow = 'hidden'; container.style.background = '#fff';
+  container.innerHTML = '<div class="skel" style="height:100%"></div>';
   const THREE = await import('three');
   const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
   const m = await loadMesh(); const order = m.meta.order;
   const tone = new Map(); for (const s of spots) { const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0); if (order.indexOf(s.id) >= 0) tone.set(g, s.tone); }
   const blobs = Object.entries(m.meta.blobs).map(([g, c]) => [+g, c]).filter(([g]) => Math.abs(tone.get(g) || 0) > .02);
-  const col = new Float32Array(m.nv * 3);
+  const col = new Float32Array(m.nv * 3), lin = c => (c / 255) ** 2.2, BASE3 = ramp(0).map(lin);
   for (let i = 0; i < m.nv; i++) { const g = m.grp[i];
-    if (g === 255) { col.set([.80, .74, .63], i * 3); continue; }
+    if (g === 255) { col.set(BASE3, i * 3); continue; }
     const x = m.pos[i * 3], y = m.pos[i * 3 + 1], z = m.pos[i * 3 + 2]; let num = 0, den = .9;
     for (const [bg, c] of blobs) { const t = tone.get(bg), sg = 75 * (.8 + .6 * Math.abs(t)); const d2 = (x - c[0]) ** 2 + (y - c[1]) ** 2 + (z - c[2]) ** 2; const w = Math.exp(-d2 / (2 * sg * sg)); num += w * t; den += w; }
     if (tone.has(g)) { num += 2.5 * tone.get(g); den += 2.5; }
@@ -254,14 +320,15 @@ export async function body3D(container, spots, onPick) {
     n2[i * 3] = m.nrm[i * 3] / 127; n2[i * 3 + 1] = m.nrm[i * 3 + 2] / 127; n2[i * 3 + 2] = -m.nrm[i * 3 + 1] / 127; }
   geo.setAttribute('position', new THREE.BufferAttribute(p2, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(n2, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.setIndex(new THREE.BufferAttribute(m.idx, 1));
-  const scene = new THREE.Scene(); scene.background = new THREE.Color(0xF3EEE6);
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .5, metalness: 0, side: THREE.DoubleSide });
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0xFFFFFF);
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .85, metalness: 0, side: THREE.DoubleSide });
   const obj = new THREE.Mesh(geo, mat); const cz = (m.meta.zmin + m.meta.zmax) / 2; obj.position.y = -cz; const root = new THREE.Group(); root.add(obj); root.scale.setScalar(2 / (m.meta.zmax - m.meta.zmin)); scene.add(root);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x8a7f70, 1.1)); const dl = new THREE.DirectionalLight(0xffffff, 2.2); dl.position.set(1, 2, 3); scene.add(dl); const bl = new THREE.DirectionalLight(0xffffff, 1.2); bl.position.set(-1, 1, -3); scene.add(bl);
   const W = container.clientWidth, H = container.clientHeight;
   const camera = new THREE.PerspectiveCamera(30, W / H, .1, 50); camera.position.set(0, 0, 4.2);
   const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.setSize(W, H); container.innerHTML = ''; container.appendChild(renderer.domElement); if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
-  container.insertAdjacentHTML('beforeend', '<a href="/licenses" target="_blank" style="position:absolute;right:8px;bottom:6px;font-size:11px;color:#6E6A63;text-decoration:none">3D: Z-Anatomy, CC BY-SA 4.0</a>');
+  container.insertAdjacentHTML('beforeend', '<a href="/licenses" target="_blank" style="position:absolute;right:12px;bottom:6px;font-size:12px;color:#5B6068;text-decoration:none">3D: Z-Anatomy, CC BY-SA 4.0</a><div class="hint3d">Двумя пальцами: приблизить и повернуть</div>');
+  setTimeout(() => { const h = container.querySelector('.hint3d'); if (h) h.style.opacity = 0; }, 3000);
   // масштаб к точке под пальцами, сдвиг двумя пальцами: можно рассмотреть шею или стопу, а не только центр
   const ctl = new OrbitControls(camera, renderer.domElement); ctl.enablePan = true; ctl.screenSpacePanning = true; ctl.zoomToCursor = true;
   ctl.minDistance = .35; ctl.maxDistance = 6; ctl.enableDamping = true; ctl.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
@@ -280,9 +347,27 @@ export async function body3D(container, spots, onPick) {
   renderer.domElement.addEventListener('pointerup', e => { if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 8) return; const r = renderer.domElement.getBoundingClientRect();
     ray.setFromCamera({ x: (e.clientX - r.left) / r.width * 2 - 1, y: -((e.clientY - r.top) / r.height) * 2 + 1 }, camera);
     const hit = ray.intersectObject(obj)[0]; if (!hit) return; const g = m.grp[hit.face.a]; if (g > 0 && g < 255) { const id = order[(g - 1) >> 1]; onPick && onPick(id + ':' + ((g - 1) % 2 ? 'RIGHT' : 'LEFT')); } });
-  let alive = true; function anim() { if (!alive) return; if (!renderer.domElement.isConnected) { api.dispose(); return; }
+  // маркеры состояния поверх модели: точка зоны проецируется на экран каждый кадр, за телом прячется
+  const marks = spots.filter(s => s.k !== 'OK' && order.indexOf(s.id) >= 0).map(s => { const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0), c = m.meta.blobs[g]; if (!c) return null;
+    const el = document.createElement('button'); el.className = 'mark3d'; el.setAttribute('aria-label', s.key); el.innerHTML = `<span class="mark ${s.k}"${s.derived && !s.edited ? ' style="opacity:.75"' : ''}></span>`;
+    el.onclick = () => onPick && onPick(s.key); container.appendChild(el); return { el, local: new THREE.Vector3(c[0], c[2], -c[1]) }; }).filter(Boolean);
+  const wv = new THREE.Vector3(); let mk = 0;
+  const placeMarks = () => { const w = container.clientWidth, h = container.clientHeight, check = mk++ % 8 === 0;
+    for (const x of marks) { obj.localToWorld(wv.copy(x.local)); const d = camera.position.distanceTo(wv); const v = wv.clone().project(camera);
+      x.el.style.transform = `translate(${(v.x + 1) / 2 * w}px,${(1 - v.y) / 2 * h}px)`;
+      if (check) { ray.set(camera.position, wv.clone().sub(camera.position).normalize()); const hit = ray.intersectObject(obj)[0]; x.hidden = !!hit && hit.distance < d - .04; }
+      x.el.style.opacity = x.hidden || v.z > 1 ? 0 : 1; x.el.style.pointerEvents = x.hidden ? 'none' : 'auto'; } };
+  // появление: тон 0→1 за 560 мс, камера доезжает с поворота 25° до фронта за 800 мс
+  const target = col.slice(); let rv = null;
+  if (opts.reveal && !reduceMotion()) { for (let i = 0; i < m.nv; i++) col.set(BASE3, i * 3); geo.attributes.color.needsUpdate = true;
+    const a0 = 25 * Math.PI / 180; camera.position.set(Math.sin(a0) * 4.2, 0, Math.cos(a0) * 4.2); rv = { t0: performance.now() }; }
+  const reveal = () => { if (!rv) return; const t = performance.now() - rv.t0, k = Math.min(1, t / 560), e = 1 - (1 - k) ** 3;
+    for (let i = 0; i < col.length; i++) { const b = BASE3[i % 3]; col[i] = b + (target[i] - b) * e; } geo.attributes.color.needsUpdate = true;
+    const c = Math.min(1, t / 800), ec = 1 - (1 - c) ** 3, a = 25 * Math.PI / 180 * (1 - ec); if (!fly) camera.position.set(Math.sin(a) * 4.2, 0, Math.cos(a) * 4.2);
+    if (k >= 1 && c >= 1) rv = null; };
+  let alive = true; function anim() { if (!alive) return; if (!renderer.domElement.isConnected) { api.dispose(); return; } reveal();
     if (fly) { fly.k = Math.min(1, fly.k + .06); const e = 1 - (1 - fly.k) ** 3; ctl.target.lerpVectors(fly.from.t, fly.to.t, e); camera.position.lerpVectors(fly.from.p, fly.to.p, e); if (fly.k >= 1) fly = null; }
-    ctl.update(); renderer.render(scene, camera); requestAnimationFrame(anim); }
+    ctl.update(); renderer.render(scene, camera); placeMarks(); requestAnimationFrame(anim); }
   let isBack = false;
   const api = { turn(back) { isBack = back; const d = camera.position.distanceTo(ctl.target); flyTo(ctl.target, d, back); },
     focus(zone) { const [y, d] = ZONES[zone] || ZONES.all; flyTo(new THREE.Vector3(0, y, 0), d, isBack); },
