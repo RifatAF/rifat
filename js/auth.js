@@ -1,5 +1,5 @@
 // Быстрый вход (Google, Telegram), согласие на обработку данных и проверка противопоказаний перед тестом.
-import { device } from './core.js';
+import { device, ic } from './core.js';
 import { track } from './track.js';
 
 const app = () => document.querySelector('#app');
@@ -61,22 +61,24 @@ export async function ensureLogin(role, cont, opts = {}) {
 export function loginScreen(role, cont, opts = {}) {
   const pro = role === 'specialist';
   const consented = () => ['cons', 'consh'].every(id => document.getElementById(id) && document.getElementById(id).checked);
-  show(`<div class="scr fade"><div class="pad" style="padding-top:8px">${opts.back ? '<button class="round" id="lback" style="background:transparent">‹</button>' : '<div style="height:44px"></div>'}</div>
-   <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:14px">
-    <div class="row" style="gap:8px"><span class="caps" style="color:var(--coralT)">${pro ? 'Кабинет специалиста' : 'Быстрый вход'}</span><span class="pill" style="background:var(--lime);font-size:11px;padding:4px 9px">Бета</span></div>
+  show(`<div class="scr fade"><div class="top-bar">${opts.back ? `<button class="round" id="lback" aria-label="Назад">${ic('chevron-left')}</button>` : '<div style="height:48px"></div>'}<span style="flex:1"></span>${pro ? '' : '<span class="step-n" style="padding-right:8px">шаг 1 из 2</span>'}</div>
+   <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:var(--s3)">
+    <div class="eyebrow">${pro ? 'Кабинет специалиста · бета' : 'Быстрый вход · бета'}</div>
     <h1>${pro ? 'Войдите, чтобы вести клиентов' : 'Войди в один тап'}</h1>
     <p class="sub">${pro ? 'Вход привязывает кабинет к вам: результаты клиентов из дома может забрать только вошедший специалист.' : 'Без паролей. Нужно, чтобы участники беты могли вернуться к своим результатам и получить ответ от специалиста.'}</p>
-    <label class="card row" style="padding:14px 16px;align-items:flex-start"><input type="checkbox" id="cons" ${localStorage.getItem(CONSENT_KEY) ? 'checked' : ''} style="width:22px;height:22px;flex:none;margin-top:2px;accent-color:#1E2533">
-     <span style="font-size:14px;line-height:1.45">Мне есть 18 лет. Принимаю <a href="/terms" target="_blank" style="color:var(--navy);font-weight:600">соглашение</a> и <a href="/privacy" target="_blank" style="color:var(--navy);font-weight:600">политику конфиденциальности</a>. Понимаю, что это оценка движения, а не диагноз.</span></label>
-    <label class="card row" style="padding:14px 16px;align-items:flex-start"><input type="checkbox" id="consh" ${localStorage.getItem(CONSENT_KEY) ? 'checked' : ''} style="width:22px;height:22px;flex:none;margin-top:2px;accent-color:#1E2533">
+    <label class="card row" style="align-items:flex-start;border-radius:var(--r-md)"><input type="checkbox" class="check" id="cons" ${localStorage.getItem(CONSENT_KEY) ? 'checked' : ''}>
+     <span style="font-size:14px;line-height:1.45">Мне есть 18 лет. Принимаю <a href="/terms" target="_blank">соглашение</a> и <a href="/privacy" target="_blank">политику конфиденциальности</a>. Понимаю, что это оценка движения, а не диагноз.</span></label>
+    <label class="card row" style="align-items:flex-start;border-radius:var(--r-md)"><input type="checkbox" class="check" id="consh" ${localStorage.getItem(CONSENT_KEY) ? 'checked' : ''}>
      <span style="font-size:14px;line-height:1.45">Отдельно соглашаюсь на обработку данных о здоровье: жалобы, боль, результаты теста${pro ? ' моих клиентов в моем кабинете' : ''}. Отозвать согласие: удалить аккаунт в настройках.</span></label>
-    <div id="lbtns" style="display:flex;flex-direction:column;gap:12px;align-items:center;transition:opacity .2s"></div>
-    ${pro ? '<a href="/pricing" target="_blank" class="sub" style="font-size:14px;text-align:center;color:var(--navy);font-weight:600">Тарифы и возможности ›</a>' : ''}
-    <p id="lerr" class="sub" style="font-size:13px;color:#C0392B;min-height:18px;text-align:center"></p>
-   </div></div>`);
+    <span class="ondevice">${ic('cpu', 's')}Видео не записывается и не уходит с телефона. Сохраняется только скелет движения.</span>
+    ${pro ? '<a href="/pricing" target="_blank" class="link" style="text-align:center;display:block;line-height:48px">Тарифы и возможности</a>' : ''}
+   </div>
+   <div class="dock"><p id="lhint" style="font-size:13px;color:var(--sub);text-align:center">Отметь оба согласия, чтобы войти</p>
+    <div id="lbtns" style="display:flex;flex-direction:column;gap:var(--s2);align-items:stretch;transition:opacity .2s"></div>
+    <p id="lerr" style="font-size:13px;color:var(--over-t);min-height:18px;text-align:center"></p></div></div>`);
   if (opts.back) document.getElementById('lback').onclick = opts.back;
   const box = document.getElementById('lbtns'), err = document.getElementById('lerr'), cons = document.getElementById('cons'), consh = document.getElementById('consh');
-  const sync = () => { const ok = consented(); box.style.opacity = ok ? '1' : '.4'; box.style.pointerEvents = ok ? 'auto' : 'none'; if (ok) { localStorage.setItem(CONSENT_KEY, String(Date.now())); err.textContent = ''; } else localStorage.removeItem(CONSENT_KEY); };
+  const sync = () => { const ok = consented(); document.getElementById('lhint').style.display = ok ? 'none' : ''; box.style.opacity = ok ? '1' : '.45'; box.style.pointerEvents = ok ? 'auto' : 'none'; if (ok) { localStorage.setItem(CONSENT_KEY, String(Date.now())); err.textContent = ''; } else localStorage.removeItem(CONSENT_KEY); };
   cons.onchange = sync; consh.onchange = sync; sync();
   const done = async (a, body) => {
     if (!consented()) { err.textContent = 'Отметь оба согласия выше'; return; }
@@ -86,18 +88,18 @@ export function loginScreen(role, cont, opts = {}) {
     catch (e) { err.textContent = 'Не получилось войти: ' + e.message; }
   };
   providers().then(list => {
-    if (!list.length) { box.innerHTML = '<p class="sub" style="font-size:14px">Вход временно недоступен.</p><button class="btn" id="lskip">Продолжить</button>'; document.getElementById('lskip').onclick = cont; return; }
-    if (list.includes('tg-app')) { box.insertAdjacentHTML('beforeend', '<button class="btn" id="tgapp" style="background:#2AABEE">Войти через Telegram</button>'); document.getElementById('tgapp').onclick = () => done('telegram', { initData: TG().initData }); }
-    if (list.includes('google')) { const d = document.createElement('div'); d.id = 'gbtn'; d.style.minHeight = '44px'; box.appendChild(d);
+    if (!list.length) { box.innerHTML = '<p class="sub" style="font-size:14px;text-align:center">Вход временно недоступен.</p><button class="btn" id="lskip">Продолжить</button>'; document.getElementById('lskip').onclick = cont; return; }
+    if (list.includes('tg-app')) { box.insertAdjacentHTML('beforeend', '<button class="btn" id="tgapp">Войти через Telegram</button>'); document.getElementById('tgapp').onclick = () => done('telegram', { initData: TG().initData }); }
+    if (list.includes('google')) { const d = document.createElement('div'); d.id = 'gbtn'; d.style.minHeight = '48px'; d.style.display = 'flex'; d.style.justifyContent = 'center'; box.appendChild(d);
       loadScript('https://accounts.google.com/gsi/client').then(() => {
         window.google.accounts.id.initialize({ client_id: cfg.google, callback: r => done('google', { credential: r.credential }), ux_mode: 'popup', auto_select: false, itp_support: true });
-        window.google.accounts.id.renderButton(d, { theme: 'outline', size: 'large', shape: 'pill', text: 'continue_with', locale: 'ru', width: Math.min(340, box.clientWidth || 320) });
+        window.google.accounts.id.renderButton(d, { theme: 'outline', size: 'large', shape: 'rectangular', text: 'continue_with', locale: 'ru', width: Math.min(400, box.clientWidth || 320) });
       }).catch(() => { d.innerHTML = '<p class="sub" style="font-size:13px">Google сейчас недоступен</p>'; }); }
     if (list.includes('tg-web')) {
       // своя кнопка вместо iframe-виджета: без артефактов на фоне, и вход идет через страницу Telegram с возвратом на сайт
       localStorage.setItem('bp_login_role', role);
       const u = `https://oauth.telegram.org/auth?bot_id=${cfg.telegramId}&origin=${encodeURIComponent(location.origin)}&request_access=write&return_to=${encodeURIComponent(location.origin + '/')}`;
-      box.insertAdjacentHTML('beforeend', `<a class="btn" id="tgweb" href="${u}" style="background:#2AABEE;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:10px;max-width:340px;width:100%"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M9.8 15.2 9.6 19c.4 0 .6-.2.8-.4l2-1.9 4.1 3c.8.4 1.3.2 1.5-.7l2.7-12.6c.3-1.1-.4-1.6-1.2-1.3L3.7 11.3c-1.1.4-1.1 1-.2 1.3l4.1 1.3 9.6-6c.5-.3.9-.1.5.2"/></svg>Войти через Telegram</a>`);
+      box.insertAdjacentHTML('beforeend', `<a class="btn" id="tgweb" href="${u}" style="text-decoration:none"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M9.8 15.2 9.6 19c.4 0 .6-.2.8-.4l2-1.9 4.1 3c.8.4 1.3.2 1.5-.7l2.7-12.6c.3-1.1-.4-1.6-1.2-1.3L3.7 11.3c-1.1.4-1.1 1-.2 1.3l4.1 1.3 9.6-6c.5-.3.9-.1.5.2"/></svg>Войти через Telegram</a>`);
     }
   });
 }
@@ -118,24 +120,24 @@ const RF_DAYS = 30;
 export const safetyOk = () => { const t = +localStorage.getItem('bp_rf') || 0; return Date.now() - t < RF_DAYS * 864e5; };
 export function safetyScreen(cont, back, booking) {
   const sel = new Set();
-  show(`<div class="scr fade"><div class="pad" style="padding-top:8px">${back ? '<button class="round" id="sback" style="background:transparent">‹</button>' : '<div style="height:44px"></div>'}</div>
-   <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:12px">
-    <div class="caps" style="color:var(--coralT)">Перед тестом</div><h1>Есть ли у тебя сейчас что-то из этого?</h1>
+  show(`<div class="scr fade"><div class="top-bar">${back ? `<button class="round" id="sback" aria-label="Назад">${ic('chevron-left')}</button>` : '<div style="height:48px"></div>'}<span style="flex:1"></span><span class="step-n" style="padding-right:8px">шаг 2 из 2</span></div>
+   <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:var(--s3)">
+    <div class="eyebrow">Перед тестом</div><h1 style="font-size:26px">Есть ли у тебя сейчас что-то из этого?</h1>
     <p class="sub" style="font-size:14px">В тесте приседания и стойка на одной ноге. Если что-то из списка есть, сначала нужен врач.</p>
-    ${FLAGS.map(([k, t]) => `<label class="list-item" data-k="${k}" style="background:#fff"><input type="checkbox" style="width:22px;height:22px;flex:none;accent-color:#1E2533"><span style="font-size:15px;line-height:1.35">${t}</span></label>`).join('')}
-   </div><div class="pad" style="padding:14px 20px 24px"><button class="btn" id="sok">Ничего из этого нет</button></div></div>`);
+    <div class="group">${FLAGS.map(([k, t]) => `<label class="chk-row" data-k="${k}"><input type="checkbox" class="check"><span>${t}</span></label>`).join('')}</div>
+   </div><div class="dock"><p style="font-size:13px;color:var(--sub);text-align:center">Спросим снова через ${RF_DAYS} дней</p><button class="btn" id="sok">Ничего из этого нет</button></div></div>`);
   if (back) document.getElementById('sback').onclick = back;
-  app().querySelectorAll('[data-k]').forEach(l => l.querySelector('input').onchange = e => { e.target.checked ? sel.add(l.dataset.k) : sel.delete(l.dataset.k); l.classList.toggle('on', e.target.checked);
+  app().querySelectorAll('[data-k]').forEach(l => l.querySelector('input').onchange = e => { e.target.checked ? sel.add(l.dataset.k) : sel.delete(l.dataset.k); 
     document.getElementById('sok').textContent = sel.size ? 'Дальше' : 'Ничего из этого нет'; });
   document.getElementById('sok').onclick = () => {
     if (!sel.size) { track('safety_ok'); localStorage.setItem('bp_rf', String(Date.now())); return cont(); }
     track('safety_stop');
     const urgent = sel.has('urgent');
-    show(`<div class="scr pad fade" style="justify-content:center;gap:16px">
+    show(`<div class="scr fade"><div class="empty" style="flex:1;justify-content:center">${ic('info')}
       <h1>${urgent ? 'Нужен врач сегодня' : 'Сначала к врачу'}</h1>
-      <p class="sub">${urgent ? 'Онемение в паху и проблемы с мочеиспусканием при боли в спине требуют срочного осмотра. Обратись в неотложную помощь.' : 'С такими признаками тест движения сейчас может навредить или показать неверную картину. Покажись врачу, а когда он разрешит нагрузку, возвращайся.'}</p>
-      ${urgent ? '' : `<a class="btn lime" style="text-decoration:none" href="${booking || 'https://t.me/BodyPassport_bot'}" target="_blank">Спросить специалиста</a>`}
-      <button class="btn ghost" id="sre">Я ошибся в ответах</button></div>`);
+      <p class="sub">${urgent ? 'Онемение в паху и проблемы с мочеиспусканием при боли в спине требуют срочного осмотра. Обратись в неотложную помощь.' : 'С такими признаками тест движения сейчас может навредить или показать неверную картину. Покажись врачу, а когда он разрешит нагрузку, возвращайся.'}</p></div>
+      <div class="dock">${urgent ? '' : `<a class="btn" style="text-decoration:none" href="${booking || 'https://t.me/BodyPassport_bot'}" target="_blank">Спросить специалиста</a>`}
+      <button class="btn ghost" id="sre">Я ошибся в ответах</button></div></div>`);
     document.getElementById('sre').onclick = () => safetyScreen(cont, back, booking);
   };
 }
