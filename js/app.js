@@ -151,7 +151,7 @@ async function resultLink() { return location.origin + location.pathname + '#r='
 export function onboarding() {
   go(`<div class="scr fade">
     <div class="row pad" style="padding-top:16px"><img src="icons/logo.svg" width="28" height="28" alt=""><b style="font-size:16px;font-weight:600;flex:1">BodyPassport</b><span class="eyebrow">бета</span></div>
-    <div class="pad" style="margin-top:16px"><div class="hero"><img src="img/img_onb_skeleton.webp" alt=""><div class="joint-tag"><small>колено</small><b>11°</b></div><span class="ondevice">${ic('cpu', 's')}Модель на телефоне</span></div></div>
+    <div class="pad" style="margin-top:16px"><div class="hero"><img src="img/hero_squat.webp" alt="Присед с поднятыми руками, поверх тела линии скелета"><div class="joint-tag"><small>колено П</small><b>11°</b></div><span class="ondevice">${ic('cpu', 's')}Модель на телефоне</span></div></div>
     <div class="pad" style="margin-top:24px"><h1>Как ты двигаешься: тест за 3 минуты</h1>
       <p class="sub" style="margin-top:12px">Камера измерит углы плеч, таза и коленей и подскажет, что укрепить, растянуть и расслабить. Это оценка движения, не диагноз.</p>
       <div class="row" style="margin-top:20px"><span class="avatar">РА</span><div><b style="font-size:14px;font-weight:600;display:block">Методика Рифата Аюпова</b><span style="font-size:13px;color:var(--sub)">биомеханик, кинезиотерапевт</span></div></div></div>
