@@ -179,7 +179,8 @@ export const UNITS = {
 export const ORDER = ['stand', 'ohs_front', 'sls', 'thold', 'bends', 'calf', 'profile', 'side', 'back'];
 // «боком» уже включает стойку боком: отдельная стойка не нужна
 export const sortUnits = u => ORDER.filter(x => u.includes(x) && !(x === 'profile' && u.includes('side')));
-const consumerProtocol = () => sortUnits(['stand', 'ohs_front', 'sls', FULL ? 'side' : 'profile', ...(FULL ? ['back'] : []), ...(STRENGTH ? ['thold', 'bends', 'calf'] : [])]);
+const consumerProtocol = () => sortUnits(['stand', 'ohs_front', 'sls', FULL ? 'side' : 'profile', ...(FULL ? ['back'] : []), ...(FULL && STRENGTH ? ['thold', 'bends', 'calf'] : [])]);
+// быстрый тест: 4 теста (стойка, присед, одна нога, стойка боком) без поворотов и силового блока; сила и симметрия только в точном
 export const rowsOf = p => sortUnits(p).flatMap(u => UNITS[u]);
 const QUICK = rowsOf(['stand', 'ohs_front', 'sls', 'profile']), FULLS = rowsOf(['stand', 'ohs_front', 'sls', 'side', 'back']), STR = rowsOf(['thold', 'bends', 'calf']);
 export const SETUP_SEC = 36;
@@ -200,7 +201,7 @@ export async function prep() {
       <div style="flex:1;max-width:150px;text-align:center"><div class="measure sm" style="justify-content:center"><b>2–4</b><u>м</u></div><div style="border-top:2px dashed var(--line);margin-top:6px"></div></div>
       <svg width="40" height="76" viewBox="0 0 200 380" aria-hidden="true"><circle cx="100" cy="44" r="24" fill="var(--figure)" stroke="var(--faint)" stroke-width="5"/><path d="M78 72 L122 72 Q140 74 144 92 L156 176 Q158 186 150 188 Q144 188 142 180 L132 112 L128 190 L130 268 L128 352 Q128 362 118 362 Q110 362 110 352 L104 210 L96 210 L90 352 Q90 362 82 362 Q72 362 72 352 L70 268 L72 190 L68 112 L58 180 Q56 188 50 188 Q42 186 44 176 L56 92 Q60 74 78 72 Z" fill="var(--figure)" stroke="var(--faint)" stroke-width="5"/></svg></div>
       ${[['Телефон вертикально. <b>Точнее всего на штативе</b> на уровне пояса; подойдет и пол у стены'], ['В кадре весь рост, от макушки до стоп'], ['Дальше ведет голос, экран можно не видеть']].map(([t], i) => `<div class="row" style="align-items:flex-start;padding:10px 0;border-top:1px solid var(--line-2)"><span class="step-n" style="width:20px;padding-top:2px">${i + 1}</span><span style="flex:1;font-size:15px;line-height:1.4">${t}</span></div>`).join('')}</div>
-    <div class="group"><div class="row" style="min-height:64px"><div style="flex:1;min-width:0"><b style="font-size:15px">${FULL ? 'Точный · с поворотами' : 'Быстрый · лицом и боком'}</b><div style="font-size:13px;color:var(--sub)">${cam.back ? 'Основная камера' : 'Фронтальная камера'}${STRENGTH ? ' · сила и симметрия' : ''} · ${steps.length} ${plural3(steps.length, 'шаг', 'шага', 'шагов')}</div></div><button class="link" id="chg">Изменить</button></div></div>
+    <div class="group"><div class="row" style="min-height:64px"><div style="flex:1;min-width:0"><b style="font-size:15px">${FULL ? 'Точный · с поворотами' : 'Быстрый · лицом и боком'}</b><div style="font-size:13px;color:var(--sub)">${cam.back ? 'Основная камера' : 'Фронтальная камера'}${FULL && STRENGTH ? ' · сила и симметрия' : ''} · ${steps.length} ${plural3(steps.length, 'шаг', 'шага', 'шагов')}</div></div><button class="link" id="chg">Изменить</button></div></div>
     ${device.inApp ? `<div class="card row" style="align-items:flex-start">${ic('info')}<span style="font-size:14px;line-height:1.4">Ты открыл ссылку внутри приложения соцсети. Камера здесь может не работать: открой через меню «⋯» → «Открыть в браузере».</span></div>` : ''}
    </div>
    <div class="dock"><span class="ondevice" style="justify-content:center">${ic('cpu', 's')}Модель уже на телефоне · видео не уходит</span><button class="btn" id="start">Начать тест</button><button class="btn ghost" id="cant">Какой-то шаг не смогу сделать</button></div></div>`);
@@ -215,17 +216,17 @@ function prepSheet(toSteps, keep) {
   document.querySelectorAll('#prepsheet').forEach(x => x.remove());
   const d = document.createElement('div'); d.className = 'sheet'; d.id = 'prepsheet'; if (keep) d.style.animation = 'none';
   d.innerHTML = `<div${keep ? ' style="animation:none"' : ''}><h2>Настройки теста</h2>
-    <div class="seg" style="margin-top:var(--s4)"><button id="m0" class="${FULL ? '' : 'on'}">Быстрый · ${mins(SETUP_SEC + secs(QUICK) + (STRENGTH ? secs(STR) : 0))} мин</button><button id="m1" class="${FULL ? 'on' : ''}">Точный · ${mins(SETUP_SEC + secs(FULLS) + (STRENGTH ? secs(STR) : 0))} мин</button></div>
+    <div class="seg" style="margin-top:var(--s4)"><button id="m0" class="${FULL ? '' : 'on'}">Быстрый · ${mins(SETUP_SEC + secs(QUICK))} мин</button><button id="m1" class="${FULL ? 'on' : ''}">Точный · ${mins(SETUP_SEC + secs(FULLS) + (STRENGTH ? secs(STR) : 0))} мин</button></div>
     <div class="eyebrow" style="margin-top:var(--s5)">Камера</div><div class="seg" style="margin-top:8px"><button id="c0" class="${cam.back ? '' : 'on'}">Фронтальная</button><button id="c1" class="${cam.back ? 'on' : ''}">Основная</button></div>
     <p class="sub" style="font-size:13px;margin-top:6px">${cam.back ? 'Точнее картинка. Экран не видно, ведет голос.' : 'Видишь себя на экране во время теста.'}</p>
-    <label class="card row" style="margin-top:var(--s4);align-items:flex-start"><input type="checkbox" class="check" id="strc" ${STRENGTH ? 'checked' : ''}><div style="flex:1"><b style="font-size:15px">Сила и симметрия</b><div class="sub" style="font-size:13px">Сравнит левую и правую сторону: плечи, бока, икры, бедра. Добавляет ${mins(secs(STR))} мин</div></div></label>
+    ${FULL ? `<label class="card row" style="margin-top:var(--s4);align-items:flex-start"><input type="checkbox" class="check" id="strc" ${STRENGTH ? 'checked' : ''}><div style="flex:1"><b style="font-size:15px">Сила и симметрия</b><div class="sub" style="font-size:13px">Сравнит левую и правую сторону: плечи, бока, икры, бедра. Добавляет ${mins(secs(STR))} мин</div></div></label>` : `<p class="sub" style="font-size:13px;margin-top:var(--s4)">Быстрый: 4 теста лицом и боком, около ${mins(SETUP_SEC + secs(QUICK))} мин. Сила и симметрия левой и правой стороны есть в точном тесте.</p>`}
     <div id="stepsat" class="eyebrow" style="margin-top:var(--s5)">Шаги</div><div style="margin-top:8px">${stepList(consumerProtocol(), PRE)}</div>
     <button class="btn" id="psx" style="margin-top:var(--s5)">Готово</button></div>`;
   document.body.appendChild(d);
   const close = () => { d.remove(); prep(); };
   d.onclick = e => { if (e.target === d) close(); }; d.querySelector('#psx').onclick = close;
   bindStepList(PRE, prep);
-  $('#strc').onchange = e => { STRENGTH = e.target.checked; localStorage.setItem('bp_str', STRENGTH ? '1' : '0'); prep(); };
+  if ($('#strc')) $('#strc').onchange = e => { STRENGTH = e.target.checked; localStorage.setItem('bp_str', STRENGTH ? '1' : '0'); prep(); };
   $('#m0').onclick = () => { FULL = false; prep(); }; $('#m1').onclick = () => { FULL = true; prep(); };
   $('#c0').onclick = () => { cam.back = false; localStorage.setItem('bp_back', '0'); prep(); }; $('#c1').onclick = () => { cam.back = true; localStorage.setItem('bp_back', '1'); prep(); };
   if (toSteps) d.querySelector('#stepsat').scrollIntoView({ block: 'start' });
