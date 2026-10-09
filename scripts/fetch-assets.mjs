@@ -26,7 +26,7 @@ const OUT = 'public';
 const SKIP = new Set(['api', 'scripts', 'node_modules', 'public', '.git', '.vercel', 'package.json', 'package-lock.json', 'AUDIT.md', '.gitignore', '.vercelignore', 'vercel.json', '_headers', 'tests']);
 await rm(OUT, { recursive: true, force: true }); await mkdir(OUT, { recursive: true });
 const { readdir } = await import('node:fs/promises');
-for (const e of await readdir('.')) if (!SKIP.has(e)) await cp(e, OUT + '/' + e, { recursive: true });
+for (const e of await readdir('.')) if (!SKIP.has(e) && !e.endsWith('.md')) await cp(e, OUT + '/' + e, { recursive: true });
 
 const idx = JSON.parse((await get('voice/index.json')).toString('utf8'));
 const files = ['models/pose_landmarker_full.task', 'models/pose_landmarker_lite.task', 'data/body3d.bin', ...new Set(Object.values(idx).map(f => 'voice/' + f))];
