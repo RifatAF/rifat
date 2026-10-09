@@ -7,7 +7,7 @@ import { meSync, logout, getMe } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
 import { gate, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, START_CLIENTS } from './plans.js';
 import { C, voice, cam, startMotion, initPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast } from './core.js';
-import { cleanResult, verdict, verdictCard, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, ex, totalMin, workout, onboarding, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen } from './app.js';
+import { cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, ex, totalMin, workout, onboarding, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen } from './app.js';
 
 const $ = s => document.querySelector(s);
 // имя специалиста для отчетов по умолчанию: из аккаунта (в бете кабинетом пользуются разные специалисты)
@@ -368,7 +368,7 @@ function confLine(sc) {
 }
 function hypCard(a, an, s, open, evid) {
   const m = C.muscles[s.id], obs = seen2(an, s), chk = a.check || {}, why = (a.hypWhy || {})[s.key], sc = scoreSpot(s, an.findings, evid);
-  return `<div class="card" data-card="${s.key}"><b style="font-size:16px">${title(s)}</b>
+  return `<div class="card" data-card="${s.key}"><b style="font-size:16px">${ntitle(s)}</b>
     <div class="why" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:13px;color:var(--sub)">${s.edited ? `<span class="src">ПРАВКА</span><span>${why ? 'причина: ' + esc(why) : 'изменено специалистом'}</span>` : obs.length && !s.derived ? `<span class="src">ЗАМЕР</span><span>${esc(obs.map(x => x.replace(' (на границе нормы)', '')).join(' · '))}</span>${obs.some(x => /на границе нормы/.test(x)) ? '<span class="edge">на границе нормы</span>' : ''}` : `<span class="src hyp">ЦЕПЬ</span><span>${esc(s.byChain ? 'по цепи «' + s.byChain + '»' : 'вывод по связи мышц')}</span>`}</div>
     ${confLine(sc)}
     <div class="seg" style="margin-top:8px;border-radius:var(--r-sm)">${STATE4.map(([k, n]) => `<button data-k="${s.key}" data-s="${k}" class="${s.k === k ? 'on' : ''}" style="min-height:44px;padding:4px 2px;border-radius:var(--r-xs);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:12px"><span class="mark sm ${k}"></span>${n}</button>`).join('')}</div>
@@ -489,7 +489,7 @@ export async function result(aid, view = 'measured') {
     <div class="pad" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s3);padding-bottom:var(--s5)">${body}</div>${dock}</div>`);
   document.querySelectorAll('[data-v]').forEach(b => b.onclick = async () => { await savePlan(a); result(aid, b.dataset.v); });
   if ($('#rc')) $('#rc').onclick = async () => { $('#rc').textContent = 'Считаю…'; await recalc(a); const y = scrollY; await result(aid, view); scrollTo(0, y); };
-  if (view === 'measured') { let bk = numLabels.filter(l => sp.find(x => x.key === l.key).back).length > numLabels.length / 2, first = !REVEALED.has(aid); REVEALED.add(aid); const lab = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 3)).map(s => ({ key: s.key, title: C.muscles[s.id].zone + (s.side === 'RIGHT' ? ' справа' : s.side === 'LEFT' ? ' слева' : ''), sub: toneText(s, 0).toLowerCase(), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
+  if (view === 'measured') { let bk = numLabels.filter(l => sp.find(x => x.key === l.key).back).length > numLabels.length / 2, first = !REVEALED.has(aid); REVEALED.add(aid); const lab = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 3)).map(s => ({ key: s.key, title: (SHORT[s.id] || C.muscles[s.id].name) + (s.side === 'RIGHT' ? ' · П' : ' · Л'), sub: toneText(s, 0).toLowerCase(), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
     const dh = () => drawHeat($('#heat'), sp, bk, null, numLabels, { reveal: first }); dh(); first = false; if (bk) { $('#mb2').classList.add('on'); $('#mf').classList.remove('on'); }
     $('#mf').onclick = () => { bk = false; $('#mf').classList.add('on'); $('#mb2').classList.remove('on'); dh(); }; $('#mb2').onclick = () => { bk = true; $('#mb2').classList.add('on'); $('#mf').classList.remove('on'); dh(); };
     if ($('#tohyp')) $('#tohyp').onclick = () => result(aid, 'hyp');
@@ -509,7 +509,7 @@ export async function result(aid, view = 'measured') {
     if (btn.dataset.v === 'no' && a.check[k]) { a.hyp = a.hyp || {}; a.hyp[k] = 'OK'; } // не подтвердилось руками: в отчет как норма
     if (btn.dataset.v === 'yes' && a.hyp && a.hyp[k] === 'OK') delete a.hyp[k];
     await put('assessments', a); const y = scrollY; await result(aid, view); scrollTo(0, y); });
-  if (view === 'hyp') { let back = false; const lab = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 4)).map(s => ({ key: s.key, title: C.muscles[s.id].zone + (s.side === 'RIGHT' ? ' справа' : s.side === 'LEFT' ? ' слева' : ''), sub: toneText(s, 0).toLowerCase(), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
+  if (view === 'hyp') { let back = false; const lab = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 4)).map(s => ({ key: s.key, title: (SHORT[s.id] || C.muscles[s.id].name) + (s.side === 'RIGHT' ? ' · П' : ' · Л'), sub: toneText(s, 0).toLowerCase(), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
     let v3 = null, mode3 = false, cur = sp;
     const draw2 = () => { if (mode3) { if (v3) v3.turn(back); return; } drawHeat($('#heat'), cur, back, null, lab); }; draw2();
     $('#hf').onclick = async () => { if (mode3) await $('#h3').onclick(); back = false; $('#hf').classList.add('on'); $('#hb').classList.remove('on'); draw2(); }; $('#hb').onclick = async () => { if (mode3) await $('#h3').onclick(); back = true; $('#hb').classList.add('on'); $('#hf').classList.remove('on'); draw2(); };
@@ -527,7 +527,7 @@ export async function result(aid, view = 'measured') {
       const list = hypList(a, cur, top), testable = list.filter(x => C.muscles[x.id] && C.muscles[x.id].proTest), chk = a.check || {}; $('#hcnt').textContent = `${testable.filter(x => chk[x.key]).length} из ${testable.length}`; };
     const bindCard = el => {
       el.querySelectorAll('[data-s]').forEach(b => b.onclick = async () => { const key = b.dataset.k, to = b.dataset.s, s = cur.find(x => x.key === key), from = s ? s.k : null; if (to === from) return;
-        const why = await whySheet(`${title(s)} → ${STATE4.find(x => x[0] === to)[1].toLowerCase()}`); if (!why) return;
+        const why = await whySheet(`${ntitle(s)} → ${STATE4.find(x => x[0] === to)[1].toLowerCase()}`); if (!why) return;
         a.hyp = a.hyp || {}; a.hyp[key] = to; a.hypWhy = { ...(a.hypWhy || {}), [key]: why }; await logOverride(a, key, from, to, why); await put('assessments', a); refresh(key); });
       el.querySelectorAll('[data-chk]').forEach(btn => btn.onclick = async () => { a.check = a.check || {}; const k = btn.dataset.chk;
         a.check[k] = a.check[k] === btn.dataset.v ? undefined : btn.dataset.v; if (!a.check[k]) delete a.check[k];

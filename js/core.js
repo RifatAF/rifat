@@ -207,7 +207,7 @@ export function drawMark(ctx, x, y, k, o = {}) {
   if (k === 'WEAK') { ctx.beginPath(); ctx.arc(0, 0, 7, 0, 7); ctx.strokeStyle = c; ctx.lineWidth = 3.5; ctx.stroke(); }
   ctx.restore();
 }
-const VW = 360, OX = 80;
+const VW = 384, OX = 92;
 // маска силуэта считается один раз: проверка 88 тысяч точек по контурам тормозила каждое касание карты
 let bodyMask = null;
 function mask() { if (bodyMask) return bodyMask; const parts = bodyParts(), tc = document.createElement('canvas').getContext('2d'); bodyMask = new Uint8Array(200 * 440);
@@ -217,29 +217,41 @@ const easeOut = t => 1 - (1 - t) ** 3;
  * labels: [{ key, title, sub, color, text, value?, n? }]. value — короткий замер (mono, цвет состояния), n — номер точки вместо маркера.
  * opts.reveal — анимация появления (первый показ результата). Если у всех подписей есть n, поля под выноски не нужны: фигура во всю ширину.
  */
-export function drawHeat(cv, spots, back, selected, labels = [], opts = {}) {
-  const mine = spots.filter(s => s.back === back);
-  const W = 200, H = 440, inside = mask(), parts = bodyParts();
-  const vals = new Float32Array(W * H).fill(NaN);
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (!inside[y * W + x]) continue;
-    let num = 0, den = .55;
-    for (const s of mine) { const dx = x - s.x * 200, dy = y - s.y * 440, sg = 13 + 13 * Math.abs(s.tone); const g = Math.exp(-(dx * dx + dy * dy) / (2 * sg * sg)); num += g * s.tone; den += g; }
-    vals[y * W + x] = num / den; }
-  const off = document.createElement('canvas'); off.width = W; off.height = H; const o = off.getContext('2d');
+// Анатомические фигуры мышц на схеме 200×440 (левая сторона тела; правая зеркально по x = 200 − x).
+// Спереди левая сторона человека справа на картинке, сзади слева. [cx, cy, rx, ry, наклон°], у мышцы может быть несколько фигур.
+export const SHAPES = {
+  // спереди
+  scm: [[108, 66, 3.5, 19, -24]], scalene: [[112, 74, 3.5, 9, 35]], deep_neck_flex: [[103, 66, 2.5, 13, 0]],
+  pec_major: [[123, 103, 21, 13, 12]], pec_minor: [[127, 99, 8, 7, -20]], deltoid: [[147, 98, 9, 15, -8]], biceps: [[162, 135, 6.5, 20, -5]],
+  forearm_flex: [[168, 222, 5.5, 26, -3]], serratus: [[141, 132, 6, 14, 12]], rectus_abd: [[106, 168, 6.5, 40, 0]], abdominals: [[110, 165, 14, 42, 0]],
+  obliques: [[133, 178, 9, 28, -8]], iliopsoas: [[114, 244, 7, 16, -25]], tfl: [[143, 262, 5.5, 13, 10]], rectus_fem: [[123, 296, 8, 33, 2]],
+  vastus_lat: [[139, 300, 6.5, 32, -3]], vmo: [[112, 334, 7, 9, 20]], adductors: [[108, 283, 7.5, 26, 6]], tibialis: [[123, 385, 4, 22, -3]], peroneus: [[134, 385, 3.5, 20, -3]],
+  // сзади
+  upper_trap: [[80, 88, 19, 7, 16]], levator: [[92, 71, 3, 12, 22]], suboccipital: [[95, 53, 6, 3.5, 0]], rhomboid: [[89, 117, 7, 13, -22]],
+  lower_trap: [[89, 152, 6, 19, 22]], thoracic_ext: [[95, 125, 3.5, 24, 0]], erector: [[95, 196, 4.5, 38, 0]], ql: [[87, 224, 6.5, 12, 8]],
+  lats: [[71, 172, 13, 32, 14]], triceps: [[37, 140, 6.5, 22, 4]], glute_med: [[67, 251, 12, 8, -12]], glute_max: [[81, 272, 15, 15, 0]],
+  hamstrings: [[80, 315, 9.5, 30, 0]], calf: [[80, 382, 8, 21, 0]],
+};
+const mirrorX = (sh, side) => side === 'RIGHT' ? sh.map(([x, y, rx, ry, r]) => [200 - x, y, rx, ry, -r]) : sh;
+export const shapeOf = s => SHAPES[s.id] ? mirrorX(SHAPES[s.id], s.side) : null;
+const ell = ([x, y, rx, ry, r]) => { const p = new Path2D(); p.ellipse(x, y, rx, ry, r * Math.PI / 180, 0, Math.PI * 2); return p; };
+// точка зоны для маркера, подписи и касания: центр первой фигуры мышцы, иначе координаты из каталога
+const anchor = s => { const sh = shapeOf(s); return sh ? { ...s, x: sh[0][0] / 200, y: sh[0][1] / 440 } : s; };
+export function drawHeat(cv, spots0, back, selected, labels = [], opts = {}) {
+  const spots = spots0.map(anchor), mine = spots.filter(s => s.back === back);
+  const parts = bodyParts();
+  // все фигуры этой стороны: тонкий контур как анатомическая подсказка, мышцы с отклонением заливаются цветом состояния
+  const outline = Object.entries(SHAPES).filter(([id]) => C.muscles && C.muscles[id] && (C.muscles[id].view === 'back') === back).flatMap(([id]) => [...SHAPES[id], ...mirrorX(SHAPES[id], 'RIGHT')]).map(ell);
+  const fillShapes = k => mine.filter(s => Math.abs(s.tone) > .05 && SHAPES[s.id]).sort((a, b) => Math.abs(a.tone) - Math.abs(b.tone)).flatMap(s => { const [r, g, b] = ramp(s.tone * k * (s.derived && !s.edited ? .75 : 1)); return shapeOf(s).map(e => [ell(e), `rgb(${r},${g},${b})`]); });
   const numbered = labels.length && labels.every(l => l.n), vw = numbered ? 200 : VW, ox = numbered ? 0 : OX;
   const ctx = cv.getContext('2d'); const sc = cv.clientWidth * devicePixelRatio / vw; cv.width = vw * sc; cv.height = 440 * sc;
   const shown = labels.filter(l => mine.some(s => s.key === l.key));
   const marks = mine.filter(s => s.k !== 'OK' && (!s.derived || s.byChain || s.edited) && !shown.some(l => l.key === s.key && l.n)).sort((a, b) => Math.abs(b.tone) - Math.abs(a.tone)).slice(0, 8);
-  const lvl = f => f < -.6 ? 0 : f < -.3 ? 1 : f < .3 ? 2 : f < .6 ? 3 : 4;
-  const fill = k => { const img = o.createImageData(W, H);
-    for (let i = 0; i < W * H; i++) { const f0 = vals[i]; if (Number.isNaN(f0)) continue; const f = f0 * k; let [r, g, b] = ramp(f);
-      const rr = vals[i + 1], dd = vals[i + W]; if (k > .99 && ((i % W + 1 < W && !Number.isNaN(rr) && lvl(rr) !== lvl(f)) || (i + W < W * H && !Number.isNaN(dd) && lvl(dd) !== lvl(f)))) { r *= .9; g *= .9; b *= .9; }
-      img.data.set([r, g, b, 235], i * 4); }
-    o.putImageData(img, 0, 0); };
   const render = (figA, toneK, markT, labA) => {
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); ctx.scale(sc, sc); ctx.save(); ctx.translate(ox, 0); ctx.globalAlpha = figA;
     ctx.fillStyle = '#E9E7E1'; parts.forEach(pp => ctx.fill(pp));
-    if (toneK > 0) { fill(toneK); ctx.imageSmoothingQuality = 'high'; for (const pp of parts) { ctx.save(); ctx.clip(pp); ctx.drawImage(off, 0, 0, 200, 440); ctx.restore(); } }
+    ctx.strokeStyle = 'rgba(17,20,24,.10)'; ctx.lineWidth = .8; for (const pp of parts) { ctx.save(); ctx.clip(pp); outline.forEach(e => ctx.stroke(e)); ctx.restore(); }
+    if (toneK > 0) { const fs = fillShapes(toneK); for (const pp of parts) { ctx.save(); ctx.clip(pp); ctx.globalAlpha = figA * .88; for (const [e, c] of fs) { ctx.fillStyle = c; ctx.fill(e); } ctx.restore(); } ctx.globalAlpha = figA; }
     ctx.strokeStyle = '#D5D2CA'; ctx.lineWidth = 1.2; parts.forEach(pp => ctx.stroke(pp)); ctx.globalAlpha = 1;
     marks.forEach((s, i) => { const t = markT(i); if (t <= 0) return; const sc2 = t < .7 ? .4 + (1.15 - .4) * (t / .7) : 1.15 - .15 * ((t - .7) / .3);
       drawMark(ctx, s.x * 200, s.y * 440, s.k, { derived: s.derived && !s.edited, scale: t >= 1 ? 1 : sc2, alpha: Math.min(1, t * 2) }); });
@@ -309,10 +321,13 @@ export async function body3D(container, spots, onPick, opts = {}) {
     const blobs = Object.entries(m.meta.blobs).map(([g, c]) => [+g, c]).filter(([g]) => Math.abs(tone.get(g) || 0) > .02);
     for (let i = 0; i < m.nv; i++) { const g = m.grp[i];
       if (g === 255) { out.set(BASE3, i * 3); continue; }
-      const x = m.pos[i * 3], y = m.pos[i * 3 + 1], z = m.pos[i * 3 + 2]; let num = 0, den = .9;
-      for (const [bg, c] of blobs) { const t = tone.get(bg), sg = 75 * (.8 + .6 * Math.abs(t)); const d2 = (x - c[0]) ** 2 + (y - c[1]) ** 2 + (z - c[2]) ** 2; const w = Math.exp(-d2 / (2 * sg * sg)); num += w * t; den += w; }
-      if (tone.has(g)) { num += 2.5 * tone.get(g); den += 2.5; }
-      let v = Math.max(-1, Math.min(1, num / den * 1.3)); if (g === 0) v *= .7; const [r, gg, b] = ramp(v);
+      // мышца красится своим цветом целиком и только она; соседям достается слабый край, чтобы граница читалась, но цвет не «растекался»
+      let v;
+      if (tone.has(g)) v = Math.max(-1, Math.min(1, tone.get(g) * 1.15));
+      else { const x = m.pos[i * 3], y = m.pos[i * 3 + 1], z = m.pos[i * 3 + 2]; let num = 0, den = 1;
+        for (const [bg, c] of blobs) { const t = tone.get(bg), sg = 22; const d2 = (x - c[0]) ** 2 + (y - c[1]) ** 2 + (z - c[2]) ** 2; if (d2 > 9 * sg * sg) continue; const w = .35 * Math.exp(-d2 / (2 * sg * sg)); num += w * t; den += w; }
+        v = Math.max(-1, Math.min(1, num / den)); }
+      if (g === 0) v *= .7; const [r, gg, b] = ramp(v);
       // цвета шкалы заданы в sRGB, а рендер считает в линейном пространстве: переводим, иначе модель выглядит блеклой
       out[i * 3] = lin(r); out[i * 3 + 1] = lin(gg); out[i * 3 + 2] = lin(b); } };
   paint(spots, col);
