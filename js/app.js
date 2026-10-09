@@ -73,7 +73,9 @@ const exSec = e => Math.max(10, e.durationSec) + 20;
 export const minutes = e => Math.max(1, Math.ceil(exSec(e) / 60));
 export const totalMin = list => Math.max(1, Math.round(list.reduce((x, e) => x + exSec(e), 0) / 60));
 let view3d = null;
-export function go(html) { if (view3d) { view3d.dispose(); view3d = null; } backFn = null; app.innerHTML = html; window.scrollTo(0, 0);
+// тот же экран заново (правка, переключение вкладки): без анимации появления, иначе экран мигает
+let lastHead = '';
+export function go(html) { if (view3d) { view3d.dispose(); view3d = null; } backFn = null; const head = html.slice(0, 260); if (head === lastHead) html = html.replace(' fade', ''); lastHead = head; app.innerHTML = html; window.scrollTo(0, 0);
   const tc = document.querySelector('meta[name=theme-color]'); if (tc) tc.content = html.includes('class="cam"') ? '#0A0C0F' : / dark[ "]/.test(html.slice(0, 200)) ? '#111418' : '#F4F3EF'; }
 
 // ---------- «назад»: жест и системная кнопка ведут на шаг назад в приложении, а не закрывают его ----------
@@ -153,7 +155,7 @@ export function onboarding() {
     <div class="row pad" style="padding-top:16px"><img src="icons/logo.svg" width="28" height="28" alt=""><b style="font-size:16px;font-weight:600;flex:1">BodyPassport</b><span class="eyebrow">бета</span></div>
     <div class="pad" style="margin-top:16px"><div class="hero"><img src="img/hero_squat.webp" alt="Присед с поднятыми руками, поверх тела линии скелета"><div class="joint-tag"><small>колено П</small><b>11°</b></div><span class="ondevice">${ic('cpu', 's')}Модель на телефоне</span></div></div>
     <div class="pad" style="margin-top:24px"><h1>Как ты двигаешься: тест за 3 минуты</h1>
-      <p class="sub" style="margin-top:12px">Камера измерит углы плеч, таза и коленей и подскажет, что укрепить, растянуть и расслабить. Это оценка движения, не диагноз.</p>
+      <p class="sub" style="margin-top:12px">Камера измерит углы плеч, таза и коленей и подскажет, что укрепить, растянуть и расслабить. Это оценка движения, а не медицинское заключение.</p>
       <div class="row" style="margin-top:20px"><span class="avatar">РА</span><div><b style="font-size:14px;font-weight:600;display:block">Методика Рифата Аюпова</b><span style="font-size:13px;color:var(--sub)">биомеханик, кинезиотерапевт</span></div></div></div>
     <div class="dock"><button class="btn" id="next">Начать тест <span class="meta">· бесплатно</span></button><button class="btn ghost" id="pro">Я специалист</button></div></div>`);
   $('#next').onclick = () => { track('onb_done'); prep(); }; $('#pro').onclick = () => openPro();
@@ -647,7 +649,7 @@ export function map() {
      ${MODE3D ? `<div class="row" style="gap:6px;flex-wrap:wrap;justify-content:center;margin:8px 4px 0">${[['all', 'Всё тело'], ['head', 'Шея'], ['shoulders', 'Плечи'], ['back', 'Спина'], ['pelvis', 'Таз'], ['knees', 'Колени'], ['feet', 'Стопы']].map(([z, n]) => `<button class="pill" data-z="${z}">${n}</button>`).join('')}</div>
        <div style="padding:12px 12px 4px"><div style="height:8px;border-radius:4px;background:${RAMP_CSS}"></div><div class="row" style="justify-content:space-between;font-size:12px;margin-top:6px"><span style="color:var(--weak-t)">Слабость</span><span style="color:var(--sub)">Норма</span><span style="color:var(--over-t)">Перегрузка</span></div></div>` : ''}
      <div id="selbox" style="margin:8px 4px 0"></div></div>
-     <div class="row" style="justify-content:space-between;margin:8px 4px 0;gap:8px;flex-wrap:wrap"><span class="ondevice">${ic('cpu', 's')}Посчитано на телефоне</span><span style="font-size:12px;color:var(--sub)">Оценка движения, не диагноз</span></div></div>
+     <div class="row" style="justify-content:space-between;margin:8px 4px 0;gap:8px;flex-wrap:wrap"><span class="ondevice">${ic('cpu', 's')}Посчитано на телефоне</span><span style="font-size:12px;color:var(--sub)">Оценка движения, не медицинское заключение</span></div></div>
    <div class="pad" style="margin-top:16px">${verdictCard(top, a.findings, 'Сильных перекосов не видно')}</div>
    <div class="dock">${pl.length ? `<button class="btn" id="plan">${ic('play', 's')}Комплекс на сегодня · ${totalMin(pl.map(ex))} мин</button>` : `<button class="btn" id="again">${ic('rotate-ccw', 's')}${SHARED ? 'Пройти свой тест' : 'Пройти тест заново'}</button>`}<button class="btn ghost" id="more">Подробнее: лево/право, запись, поделиться</button></div></div>`);
   if (device.webgl2 && !device.weak) preload3D();
@@ -762,7 +764,7 @@ export async function passportImage({ eyebrow, name, date, sp, sections = [], de
   o.fillStyle = '#111418'; o.fillRect(0, H - FH, W, FH);
   o.fillStyle = '#fff'; o.font = '700 46px Onest, sans-serif'; o.fillText(String(footer.name).slice(0, 36), M, H - FH + 76);
   if (footer.contact) { o.fillStyle = '#D0D3D8'; o.font = '400 38px Onest, sans-serif'; o.fillText(String(footer.contact).slice(0, 44), M, H - FH + 128); }
-  o.fillStyle = '#B9BDC4'; o.font = '400 30px Onest, sans-serif'; o.fillText('BodyPassport · методика Р. Аюпова · оценка движения, не диагноз', M, H - 36);
+  o.fillStyle = '#B9BDC4'; o.font = '400 30px Onest, sans-serif'; o.fillText('BodyPassport · методика Р. Аюпова · оценка движения', M, H - 36);
   return new Promise(r => out.toBlob(r, 'image/png'));
 }
 async function resultImage() {
