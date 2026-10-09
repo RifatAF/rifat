@@ -58,6 +58,21 @@ export async function ensureLogin(role, cont, opts = {}) {
   loginScreen(role, cont, opts); return false;
 }
 
+/** Клиент по ссылке специалиста: без аккаунта, только согласия (18+, условия, данные о здоровье). Результат уходит специалисту зашифрованным. */
+export const linkConsentOk = () => !!localStorage.getItem(CONSENT_KEY);
+export function linkConsent(cont, who) {
+  show(`<div class="scr fade"><div class="top-bar"><div style="height:48px"></div><span style="flex:1"></span><span class="step-n" style="padding-right:8px">шаг 1 из 2</span></div>
+   <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:var(--s3)">
+    <div class="eyebrow">Тест от специалиста</div><h1>Без регистрации</h1>
+    <p class="sub">Аккаунт не нужен. Результат зашифруется на телефоне и уйдет только ${who ? 'специалисту: ' + esc(who) : 'вашему специалисту'}.</p>
+    <label class="card row" style="align-items:flex-start;border-radius:var(--r-md)"><input type="checkbox" class="check" id="cons"><span style="font-size:14px;line-height:1.45">Мне есть 18 лет. Принимаю <a href="/terms" target="_blank">соглашение</a> и <a href="/privacy" target="_blank">политику конфиденциальности</a>. Понимаю, что это оценка движения, а не медицинское заключение.</span></label>
+    <label class="card row" style="align-items:flex-start;border-radius:var(--r-md)"><input type="checkbox" class="check" id="consh"><span style="font-size:14px;line-height:1.45">Отдельно соглашаюсь на обработку данных о здоровье: боль и результат теста для моего специалиста.</span></label>
+    <span class="ondevice">${ic('cpu', 's')}Видео не записывается и не уходит с телефона. Сохраняется только скелет движения.</span>
+   </div><div class="pad" style="padding:14px 20px 24px"><p id="cerr" class="sub" style="font-size:13px;min-height:18px;color:var(--over-t)"></p><button class="btn" id="cgo">Продолжить</button></div></div>`);
+  document.getElementById('cgo').onclick = () => { if (!['cons', 'consh'].every(id => document.getElementById(id).checked)) { document.getElementById('cerr').textContent = 'Отметьте оба пункта'; return; }
+    localStorage.setItem(CONSENT_KEY, String(Date.now())); track('login_ok', { c: 'link_no_account' }, false); cont(); };
+}
+
 export function loginScreen(role, cont, opts = {}) {
   const pro = role === 'specialist';
   const consented = () => ['cons', 'consh'].every(id => document.getElementById(id) && document.getElementById(id).checked);
