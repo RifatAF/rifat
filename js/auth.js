@@ -108,13 +108,14 @@ export function loginScreen(role, cont, opts = {}) {
     if (list.includes('google')) { const d = document.createElement('div'); d.id = 'gbtn'; d.style.minHeight = '48px'; d.style.display = 'flex'; d.style.justifyContent = 'center'; box.appendChild(d);
       loadScript('https://accounts.google.com/gsi/client').then(() => {
         window.google.accounts.id.initialize({ client_id: cfg.google, callback: r => done('google', { credential: r.credential }), ux_mode: 'popup', auto_select: false, itp_support: true });
-        window.google.accounts.id.renderButton(d, { theme: 'outline', size: 'large', shape: 'rectangular', text: 'continue_with', locale: 'ru', width: Math.min(400, box.clientWidth || 320) });
+        window.google.accounts.id.renderButton(d, { theme: list.includes('tg-app') ? 'outline' : 'filled_black', size: 'large', shape: 'pill', text: 'continue_with', locale: 'ru', width: Math.min(400, box.clientWidth || 320) });
       }).catch(() => { d.innerHTML = '<p class="sub" style="font-size:13px">Google сейчас недоступен</p>'; }); }
     if (list.includes('tg-web')) {
       // своя кнопка вместо iframe-виджета: без артефактов на фоне, и вход идет через страницу Telegram с возвратом на сайт
       localStorage.setItem('bp_login_role', role);
       const u = `https://oauth.telegram.org/auth?bot_id=${cfg.telegramId}&origin=${encodeURIComponent(location.origin)}&request_access=write&return_to=${encodeURIComponent(location.origin + '/')}`;
-      box.insertAdjacentHTML('beforeend', `<a class="btn" id="tgweb" href="${u}" style="text-decoration:none"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M9.8 15.2 9.6 19c.4 0 .6-.2.8-.4l2-1.9 4.1 3c.8.4 1.3.2 1.5-.7l2.7-12.6c.3-1.1-.4-1.6-1.2-1.3L3.7 11.3c-1.1.4-1.1 1-.2 1.3l4.1 1.3 9.6-6c.5-.3.9-.1.5.2"/></svg>Войти через Telegram</a>`);
+      // основной вход Google, Telegram дополнительный: второстепенная кнопка под ним
+      box.insertAdjacentHTML('beforeend', `${list.includes('google') ? '<p class="sub" style="font-size:13px;text-align:center;margin:2px 0">или</p>' : ''}<a class="btn${list.includes('google') ? ' line' : ''}" id="tgweb" href="${u}" style="text-decoration:none"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="${list.includes('google') ? '#229ED9' : '#fff'}" d="M9.8 15.2 9.6 19c.4 0 .6-.2.8-.4l2-1.9 4.1 3c.8.4 1.3.2 1.5-.7l2.7-12.6c.3-1.1-.4-1.6-1.2-1.3L3.7 11.3c-1.1.4-1.1 1-.2 1.3l4.1 1.3 9.6-6c.5-.3.9-.1.5.2"/></svg>Войти через Telegram</a>${pro && list.includes('google') ? '<p class="sub" style="font-size:12px;text-align:center">Через Telegram бот сразу пишет, когда клиент прошел тест по ссылке</p>' : ''}`);
     }
   });
 }
