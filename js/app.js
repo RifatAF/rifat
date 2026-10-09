@@ -786,8 +786,12 @@ export async function passportImage({ eyebrow, name, date, sp, sections = [], de
   breaks.push(y + 16); y += 64; wrap(footer.note || 'Предварительная оценка движения по камере телефона, не медицинское заключение.', M, 30, 400, '#5B6068');
   const FH = 220, H = y + M + FH, out = document.createElement('canvas'); out.width = W; out.height = H; const o = out.getContext('2d'); o.drawImage(cv, 0, 0);
   o.fillStyle = '#111418'; o.fillRect(0, H - FH, W, FH);
-  o.fillStyle = '#fff'; o.font = '700 46px Onest, sans-serif'; o.fillText(String(footer.name).slice(0, 36), M, H - FH + 76);
-  if (footer.contact) { o.fillStyle = '#D0D3D8'; o.font = '400 38px Onest, sans-serif'; o.fillText(String(footer.contact).slice(0, 44), M, H - FH + 128); }
+  // фото специалиста в кружке слева от имени
+  let tx = M; if (footer.photo) { try { const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = footer.photo; });
+    const D = 132, cx = M + D / 2, cy = H - FH + 92; o.save(); o.beginPath(); o.arc(cx, cy, D / 2, 0, Math.PI * 2); o.clip(); o.drawImage(im, M, cy - D / 2, D, D); o.restore();
+    o.strokeStyle = 'rgba(255,255,255,.35)'; o.lineWidth = 3; o.beginPath(); o.arc(cx, cy, D / 2, 0, Math.PI * 2); o.stroke(); tx = M + D + 28; } catch (e) {} }
+  o.fillStyle = '#fff'; o.font = '700 46px Onest, sans-serif'; o.fillText(String(footer.name).slice(0, tx > M ? 30 : 36), tx, H - FH + 76);
+  if (footer.contact) { o.fillStyle = '#D0D3D8'; o.font = '400 38px Onest, sans-serif'; o.fillText(String(footer.contact).slice(0, tx > M ? 36 : 44), tx, H - FH + 128); }
   o.fillStyle = '#B9BDC4'; o.font = '400 30px Onest, sans-serif'; o.fillText('BodyPassport · методика Р. Аюпова · оценка движения', M, H - 36);
   if (raw) { out.breaks = breaks; return out; }
   return new Promise(r => out.toBlob(r, 'image/png'));

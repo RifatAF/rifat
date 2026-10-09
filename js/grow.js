@@ -13,6 +13,10 @@ export async function sendFeedback(fb) {
   if (!r.ok) throw new Error(r.status); track('fb_sent', { s: fb.s ?? -1, c: fb.k }, false);
 }
 
+// разработчик и автор методики: лицо и прямой контакт в бете повышают доверие и число сообщений о проблемах
+export const DEV = { name: 'Рифат Аюпов', role: 'разработчик и автор методики', tg: 'RifatAiupov', photo: 'img/rifat.jpg' };
+export const devCard = (note = 'отвечаю сам') => `<a class="row" href="https://t.me/${DEV.tg}" target="_blank" rel="noopener" style="gap:12px;margin-top:12px;padding:10px 12px;border-radius:16px;background:var(--surface);text-decoration:none;color:inherit">
+  <img src="${DEV.photo}" alt="" width="44" height="44" style="border-radius:50%;object-fit:cover;flex:none"><span style="flex:1;min-width:0;line-height:1.3"><b style="font-size:15px">${DEV.name}</b><span style="display:block;font-size:12px;font-weight:400;color:var(--sub)">${DEV.role}${note ? ' · ' + note : ''}</span></span><span style="font-size:13px;font-weight:600;color:#229ED9">@${DEV.tg}</span></a>`;
 function sheet(html) {
   const d = document.createElement('div'); d.className = 'sheet'; d.innerHTML = `<div>${html}</div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; return d;
@@ -22,7 +26,7 @@ const contactBox = () => meSync() ? `<label class="row" style="margin-top:12px;f
 /** Свободный отзыв или идея: из меню и настроек. */
 export function feedbackSheet(where = 'menu', preset = {}) {
   const d = sheet(`<h2 style="font-size:21px">Отзыв или идея</h2>
-    <p class="sub" style="font-size:14px;margin-top:6px">Что понравилось, что неудобно, чего не хватает. Читаю каждый отзыв лично. Рифат Аюпов, автор методики.</p>
+    <p class="sub" style="font-size:14px;margin-top:6px">Что понравилось, что неудобно, чего не хватает. Читаю каждый отзыв лично.</p>${devCard()}
     <textarea id="fbt" rows="5" maxlength="2000" placeholder="Например: не понял, куда встать на втором шаге…" style="width:100%;margin-top:14px;border-radius:16px;border:1px solid var(--line);padding:12px 14px;font:16px Onest;background:#fff;resize:vertical">${esc(preset.t || '')}</textarea>
     ${contactBox()}
     <p id="fbe" class="sub" style="font-size:13px;min-height:18px;margin-top:6px;color:var(--over-t)"></p>
@@ -40,7 +44,7 @@ export function feedbackSheet(where = 'menu', preset = {}) {
 export async function bugSheet() {
   if (document.querySelector('.sheet #bgt')) return;
   const d = sheet(`<h2 style="font-size:21px">Что-то не так?</h2>
-    <p class="sub" style="font-size:14px;margin-top:6px">Опишите одной фразой, что случилось или что ожидали увидеть. Это бета: каждое сообщение читаю в тот же день.</p>
+    <p class="sub" style="font-size:14px;margin-top:6px">Опишите одной фразой, что случилось или что ожидали увидеть. Это бета: каждое сообщение читаю в тот же день.</p>${devCard('отвечаю сам')}
     <textarea id="bgt" rows="4" maxlength="1500" placeholder="Например: на шаге «одна нога» зависло, кнопка «Ещё раз» не нажималась" style="width:100%;margin-top:14px;border-radius:16px;border:1px solid var(--line);padding:12px 14px;font:16px Onest;background:#fff;resize:vertical"></textarea>
     <label class="row" style="margin-top:12px;font-size:14px;align-items:flex-start;gap:10px"><input type="checkbox" id="bgd" checked style="width:20px;height:20px;flex:none;accent-color:var(--ink);margin-top:1px"><span>Приложить сведения о телефоне и последние нажатия. Без имен клиентов, видео и результатов.</span></label>
     ${contactBox()}

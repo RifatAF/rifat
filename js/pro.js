@@ -2,7 +2,7 @@
 // Все данные в IndexedDB на телефоне специалиста; на сервер ничего не уходит.
 import { analyze, fmt, recompute } from './analysis.js';
 import { track } from './track.js';
-import { npsCard, bindNps, installCard, bindInstall, feedbackSheet, referralSheet, myRef, bugSheet } from './grow.js';
+import { npsCard, bindNps, installCard, bindInstall, feedbackSheet, referralSheet, myRef, bugSheet, DEV } from './grow.js';
 import { meSync, logout, getMe } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
 import { gate, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, START_CLIENTS } from './plans.js';
@@ -102,11 +102,13 @@ export const TEMPLATES = [
 function orderTemplates(sp) { const o = TEMPLATE_ORDER[sp]; if (o) TEMPLATES.sort((a, b) => o.indexOf(a[0]) - o.indexOf(b[0])); }
 // профиль специалиста: имя для шапки и отчетов, контакт для записи в отчете клиенту
 async function profileForm() {
-  const name = (await meta('profile')) || defaultAuthor(), contact = (await meta('contact')) || '', logo = (await meta('logo')) || '';
+  const name = (await meta('profile')) || defaultAuthor(), contact = (await meta('contact')) || '', logo = (await meta('logo')) || '', photo = (await meta('photo')) || '';
   go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:18px">Мой профиль</b></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:14px;margin-top:8px">
     <label><b>Имя и специальность</b><input id="pn" value="${esc(name)}" placeholder="Анна Смирнова, персональный тренер" class="field" style="margin-top:8px"></label>
     <label><b>Контакт для записи</b><input id="pc" value="${esc(contact)}" placeholder="@telegram, телефон или сайт" class="field" style="margin-top:8px"></label>
+    <div><b>Ваше фото для отчета</b><div class="row" style="gap:12px;margin-top:8px"><div style="width:64px;height:64px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${photo ? `<img src="${photo}" alt="" style="width:100%;height:100%;object-fit:cover">` : ic('user-plus', 's')}</div>
+      <label class="btn line" style="height:48px;flex:1;cursor:pointer">${photo ? 'Заменить' : 'Загрузить'}<input type="file" id="phf" accept="image/*" style="display:none"></label>${photo ? '<button class="btn ghost" id="phe" style="height:48px;width:auto;padding:0 14px">Настроить</button>' : ''}</div></div>
     <div><b>Логотип для отчета</b><div class="row" style="gap:12px;margin-top:8px"><div id="lgv" style="width:64px;height:64px;border-radius:14px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${logo ? `<img src="${logo}" alt="" style="max-width:100%;max-height:100%">` : ic('image', 's')}</div>
       <label class="btn line" style="height:48px;flex:1;cursor:pointer">${logo ? 'Заменить' : 'Загрузить'}<input type="file" id="lgf" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none"></label>${logo ? '<button class="btn ghost" id="lgx" style="height:48px;width:auto;padding:0 14px">Убрать</button>' : ''}</div></div>
     <p class="sub" style="font-size:13px">Имя, контакт и логотип появятся в отчете клиенту (картинка и PDF), который он сохранит и покажет друзьям.</p>
@@ -121,6 +123,46 @@ async function profileForm() {
       await setMeta('profile', $('#pn').value.trim().slice(0, 80) || defaultAuthor()); await setMeta('contact', $('#pc').value.trim().slice(0, 60));
       await setMeta('logo', c.toDataURL('image/png')); toast('Логотип сохранен'); profileForm(); } catch (err) { toast('Не удалось прочитать картинку'); } };
   if ($('#lgx')) $('#lgx').onclick = async () => { await setMeta('logo', ''); profileForm(); };
+  const keep = async () => { await setMeta('profile', $('#pn').value.trim().slice(0, 80) || defaultAuthor()); await setMeta('contact', $('#pc').value.trim().slice(0, 60)); };
+  $('#phf').onchange = async e => { const f = e.target.files[0]; if (!f) return; if (f.size > 15e6) return toast('Файл больше 15 МБ'); await keep();
+    const src = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(f); });
+    const out = await photoEditor(src); if (out) { await setMeta('photo', out.photo); await setMeta('photoSrc', out.src); await setMeta('photoSet', out.set); toast('Фото сохранено'); } profileForm(); };
+  if ($('#phe')) $('#phe').onclick = async () => { await keep(); const src = (await meta('photoSrc')) || photo; const out = await photoEditor(src, await meta('photoSet'));
+    if (out) { await setMeta('photo', out.photo); await setMeta('photoSet', out.set); toast('Фото сохранено'); } profileForm(); };
+}
+/** Настройка фото в кружке: масштаб, сдвиг пальцем или мышью, яркость. Возвращает { photo: JPEG 360×360, src, set } или null. */
+async function photoEditor(src, set0) {
+  // исходник ужимаем до 1200 px: в кабинете хранится он (для повторной настройки) и готовый кружок
+  const im0 = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = src; }).catch(() => null); if (!im0) { toast('Не удалось открыть фото'); return null; }
+  const k0 = Math.min(1, 1200 / Math.max(im0.width, im0.height)), sc = document.createElement('canvas'); sc.width = Math.round(im0.width * k0); sc.height = Math.round(im0.height * k0);
+  sc.getContext('2d').drawImage(im0, 0, 0, sc.width, sc.height); const small = sc.toDataURL('image/jpeg', .9);
+  const st = { zoom: 1, dx: 0, dy: 0, bright: 1, ...(set0 || {}) };
+  return new Promise(res => { const d = document.createElement('div'); d.className = 'sheet';
+    d.innerHTML = `<div><h2 style="font-size:20px">Фото для отчета</h2><p class="sub" style="font-size:13px;margin-top:4px">Двигайте фото пальцем, лицо по центру круга.</p>
+      <div style="display:flex;justify-content:center;margin-top:12px"><canvas id="pe" width="560" height="560" style="width:260px;height:260px;border-radius:24px;background:var(--surface);touch-action:none;cursor:grab"></canvas></div>
+      <label class="row" style="gap:10px;margin-top:14px;font-size:14px"><span style="width:80px">Масштаб</span><input type="range" id="pz" min="1" max="4" step=".01" value="${st.zoom}" style="flex:1;accent-color:var(--ink)"></label>
+      <label class="row" style="gap:10px;margin-top:8px;font-size:14px"><span style="width:80px">Яркость</span><input type="range" id="pb" min=".7" max="1.4" step=".01" value="${st.bright}" style="flex:1;accent-color:var(--ink)"></label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px"><button class="btn line" id="prs">Сбросить</button><button class="btn" id="pok">Готово</button></div>
+      <button class="btn ghost" id="pcx" style="margin-top:8px">Отмена</button></div>`;
+    document.body.appendChild(d); const cv = d.querySelector('#pe'), g = cv.getContext('2d'); const img = new Image();
+    // фото вписано в круг по короткой стороне, zoom от этого; dx, dy в долях диаметра и не дают открыть пустой край
+    const fit = S => { const base = S / Math.min(img.width, img.height), w = img.width * base * st.zoom, h = img.height * base * st.zoom, lim = (v, a) => Math.max(-a, Math.min(a, v));
+      st.dx = lim(st.dx, (w - S) / 2 / S); st.dy = lim(st.dy, (h - S) / 2 / S); return { w, h, x: (S - w) / 2 + st.dx * S, y: (S - h) / 2 + st.dy * S }; };
+    // в редакторе круг диаметром 500 с полями 30 px: снаружи видно, что обрежется
+    const draw = () => { const f = fit(500); g.clearRect(0, 0, 560, 560); g.save(); g.filter = `brightness(${st.bright})`; g.drawImage(img, 30 + f.x, 30 + f.y, f.w, f.h); g.restore();
+      g.save(); g.fillStyle = 'rgba(244,243,239,.8)'; g.beginPath(); g.rect(0, 0, 560, 560); g.arc(280, 280, 250, 0, Math.PI * 2, true); g.fill('evenodd');
+      g.strokeStyle = '#fff'; g.lineWidth = 4; g.beginPath(); g.arc(280, 280, 250, 0, Math.PI * 2); g.stroke(); g.restore(); };
+    img.onload = draw; img.src = small;
+    let drag = null; cv.onpointerdown = e => { drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; };
+    cv.onpointermove = e => { if (!drag) return; const k = 1 / (cv.clientWidth * 500 / 560); st.dx += (e.clientX - drag.x) * k; st.dy += (e.clientY - drag.y) * k; drag = { x: e.clientX, y: e.clientY }; draw(); };
+    cv.onpointerup = cv.onpointercancel = () => { drag = null; cv.style.cursor = 'grab'; };
+    cv.onwheel = e => { e.preventDefault(); st.zoom = Math.max(1, Math.min(4, st.zoom * (e.deltaY < 0 ? 1.06 : 1 / 1.06))); d.querySelector('#pz').value = st.zoom; draw(); };
+    d.querySelector('#pz').oninput = e => { st.zoom = +e.target.value; draw(); }; d.querySelector('#pb').oninput = e => { st.bright = +e.target.value; draw(); };
+    d.querySelector('#prs').onclick = () => { Object.assign(st, { zoom: 1, dx: 0, dy: 0, bright: 1 }); d.querySelector('#pz').value = 1; d.querySelector('#pb').value = 1; draw(); };
+    const done = v => { d.remove(); res(v); }; d.querySelector('#pcx').onclick = () => done(null);
+    d.querySelector('#pok').onclick = () => { const c = document.createElement('canvas'); c.width = 360; c.height = 360; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 360, 360);
+      const f = fit(360); x.filter = `brightness(${st.bright})`; x.drawImage(img, f.x, f.y, f.w, f.h);
+      done({ photo: c.toDataURL('image/jpeg', .88), src: small, set: { zoom: st.zoom, dx: st.dx, dy: st.dy, bright: st.bright } }); }; });
 }
 // пример клиента: специалист видит результат до первой своей съемки
 async function openDemo() {
@@ -197,7 +239,7 @@ export async function proHome(query = '', pulled = null) {
   const list = q ? sorted : sorted.slice(0, 6);
   const lastBackup = await meta('lastBackup'); const needBackup = realN && (!lastBackup || Date.now() - lastBackup > 7 * DAY);
   const iosRisk = realN && pst.ios && !pst.standalone && !pst.persisted;
-  const name = (await meta('profile')) || defaultAuthor();
+  const name = (await meta('profile')) || defaultAuthor(), myPhoto = await meta('photo');
   const own = asses.filter(a => byId[a.clientId] && !byId[a.clientId].demo), real = clients.filter(c => !c.demo);
   const spName = (SPECIALTIES.find(x => x[0] === sp) || ['', ''])[1].split(',')[0];
   const row = (c, sub) => `<div class="list-item" data-id="${c.id}" style="border-radius:0;padding:var(--s3) 0;background:transparent"><span class="avatar">${esc(c.name.slice(0, 1).toUpperCase())}</span><div style="flex:1;min-width:0"><b>${esc(c.name)}</b><div style="font-size:13px;color:var(--sub)">${sub}</div></div><span class="chev">${ic('chevron-right', 's')}</span></div>`;
@@ -210,7 +252,7 @@ export async function proHome(query = '', pulled = null) {
     manual: [['посмотреть', review.length], ['сеансов за неделю', own.filter(a => a.template === 'posture' && a.date > Date.now() - 7 * DAY).length], ['до/после сделано', own.filter(a => a.templateName === 'После сеанса').length]],
     sport: [['посмотреть', review.length], ['ретеста на неделе', soon.length], ['асимметрий > 12%', real.filter(c => { const a = last(c.id); if (!a) return false; const f = analyze(a, C).f; return ['sym_delt', 'sym_bend', 'sym_calf', 'sym_quad'].some(k => Array.isArray(f[k]) && Math.abs(f[k][0] - f[k][1]) / Math.max(1e-6, Math.abs(f[k][0]), Math.abs(f[k][1])) > .12); }).length]] })[sp] || [['посмотреть', review.length], ['ретеста на неделе', soon.length], ['клиентов', real.length]];
   go(`<div class="scr fade"><div style="padding-top:16px">
-    <div class="pad row" style="align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--sub)">${esc(name)}${spName ? ' · ' + esc(spName.toLowerCase()) : ''}</div><h1>Сегодня</h1><div style="font-size:14px;color:var(--sub);margin-top:2px">${today[0].toUpperCase() + today.slice(1)}</div></div><button class="round" id="menu" aria-label="Меню">${ic('menu')}</button></div>
+    <div class="pad row" style="align-items:flex-start">${myPhoto ? `<img src="${myPhoto}" alt="" width="44" height="44" style="border-radius:50%;object-fit:cover;flex:none;margin:2px 12px 0 0" id="mph">` : ''}<div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--sub)">${esc(name)}${spName ? ' · ' + esc(spName.toLowerCase()) : ''}</div><h1>Сегодня</h1><div style="font-size:14px;color:var(--sub);margin-top:2px">${today[0].toUpperCase() + today.slice(1)}</div></div><button class="round" id="menu" aria-label="Меню">${ic('menu')}</button></div>
     ${real.length ? `<div class="pad kpi" style="margin-top:var(--s4)">${kv.map(([t, v]) => `<div><b style="color:${v && v !== '—' && v !== '0%' ? 'var(--ink)' : 'var(--faint)'}">${v}</b><span>${t}</span></div>`).join('')}</div>` : ''}
     <div class="pad tools" style="margin-top:var(--s2)"><button class="tool" id="join">${ic('mail')}Тест по ссылке</button><button class="tool" id="rtq">${ic('rotate-ccw')}Ретест</button><button class="tool" id="repq">${ic('file-text')}Отчёт</button><button class="tool" id="cmpq">${ic('arrow-right-left')}Было→стало</button></div>
     ${review.length ? h3('Нужно посмотреть', review.length) + `<div class="pad"><div class="group">${review.map(a => `<div class="list-item" data-a="${a.id}" style="border-radius:0;padding:var(--s3) 0;background:transparent"><span class="dot"></span><div style="flex:1;min-width:0"><b>${esc(byId[a.clientId].name)}</b><div style="font-size:13px;color:var(--sub)">${a.source === 'home' ? 'прошёл тест по ссылке' : 'гипотеза не подтверждена'} · ${esc(a.templateName || 'оценка')} · ${fmtDate(a.date)}</div></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div></div>` : ''}
@@ -227,7 +269,7 @@ export async function proHome(query = '', pulled = null) {
   </div><div class="dock"><button class="btn" id="new">${ic('plus', 's')}${({ trainer: 'Скрининг клиента', manual: 'До сеанса', sport: 'Спортивный тест' })[sp] || 'Новая оценка'}</button></div></div>`);
   if (pulled && pulled.length) toast('Пришли результаты по ссылке: ' + pulled.join(', '));
   if ($('#demo')) $('#demo').onclick = openDemo;
-  bindInstall();
+  bindInstall(); if ($('#mph')) $('#mph').onclick = profileForm;
   $('#new').onclick = () => quickStart(); $('#join').onclick = sendJoin; $('#menu').onclick = proMenu; if ($('#bk')) $('#bk').onclick = backup; if ($('#bk2')) $('#bk2').onclick = backup;
   // инструменты в одно касание: клиент один — сразу действие, иначе выбор из последних
   const lastTwo = id => asses.filter(a => a.clientId === id).sort((x, y) => x.date - y.date).slice(-2);
@@ -264,6 +306,7 @@ async function proMenu() {
       ${r('mb', 'download', 'Сохранить копию с паролем')}
       <label class="row-link">${ic('upload', 's')}<span>Восстановить из копии</span>${ic('chevron-right', 's chev')}<input type="file" id="mr" accept=".json,.bpbackup,application/json" style="display:none"></label>
       ${r('mbug', 'info', 'Сообщить о проблеме')}
+      <a class="row-link" href="https://t.me/${DEV.tg}" target="_blank" rel="noopener"><img src="${DEV.photo}" alt="" width="22" height="22" style="border-radius:50%;object-fit:cover"><span>Написать разработчику · @${DEV.tg}</span>${ic('chevron-right', 's chev')}</a>
       ${r('mfb', 'message-square', 'Отзыв или идея')}
       ${r('mc', 'rotate-ccw', 'Перейти в режим клиента')}
       ${u && u.admin ? r('mst', 'info', 'Статистика и отзывы (админ)') : ''}
@@ -863,14 +906,14 @@ async function report(aid) {
   if (!same) after.push({ h: 'Проверим снова', text: fmtDate(a.nextDate) + ': тот же тест, сравним с сегодняшним' });
   const checked = Object.keys(a.check || {}).length > 0 || sp.some(s => s.edited);
   const note = 'Предварительная оценка движения по камере телефона, не медицинское заключение. ' + (checked ? 'Выводы проверены специалистом на приеме.' : 'Выводы о мышцах пока не проверены руками.');
-  const logo = await meta('logo');
-  const cv = await passportImage({ eyebrow: 'ПАСПОРТ ДВИЖЕНИЯ', name: c.name, date: 'Оценка ' + fmtDate(a.date), sp, sections, delta, footer: { name: author, contact: contact ? 'Запись: ' + contact : location.host, after, note, logo }, raw: true });
+  const logo = await meta('logo'), photo = await meta('photo');
+  const cv = await passportImage({ eyebrow: 'ПАСПОРТ ДВИЖЕНИЯ', name: c.name, date: 'Оценка ' + fmtDate(a.date), sp, sections, delta, footer: { name: author, contact: contact ? 'Запись: ' + contact : location.host, after, note, logo, photo }, raw: true });
   // предпросмотр перед отправкой: специалист видит ровно то, что получит клиент
   const base = `bodypassport-${c.name.replace(/[^\p{L}\p{N}]+/gu, '-')}-${new Date(a.date).toISOString().slice(0, 10)}`;
   const d = document.createElement('div'); d.className = 'sheet';
   d.innerHTML = `<div><h2 style="font-size:20px">Отчет клиенту</h2><p class="sub" style="font-size:13px;margin-top:4px">Так его увидит ${esc(c.name)}. PDF удобно распечатать, картинку переслать в мессенджер.</p>
     <div style="margin-top:12px;max-height:46dvh;overflow:auto;border-radius:16px;border:1px solid var(--line)"><img src="${cv.toDataURL('image/jpeg', .8)}" alt="Отчет" style="width:100%;display:block"></div>
-    ${logo ? '' : '<button class="link" id="rplg" style="font-size:13px;margin-top:8px">Добавить свой логотип в отчет</button>'}
+    ${logo && photo ? '' : `<button class="link" id="rplg" style="font-size:13px;margin-top:8px">Добавить в отчет ${photo ? 'логотип' : logo ? 'свое фото' : 'свое фото и логотип'}</button>`}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn" id="rpdf">${ic('file-text', 's')}PDF</button><button class="btn line" id="rpng">${ic('image', 's')}Картинка</button></div>
     <button class="btn ghost" id="rpx" style="margin-top:8px">Закрыть</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; d.querySelector('#rpx').onclick = () => d.remove();
