@@ -110,6 +110,16 @@ export function spots(a) {
  *  Раньше выведенные по цепи в списки не попадали вовсе, и, например, грудные при сутулости не показывались. */
 export const topOf = all => all.filter(s => s.k !== 'OK' && (!s.derived || s.byChain)).sort((x, y) => (!!x.derived - !!y.derived) || Math.abs(y.tone) - Math.abs(x.tone));
 export const title = s => `${C.muscles[s.id].zone || C.muscles[s.id].name} ${sideWord(s.side)}: ${s.ambiguous ? 'признаки противоречат' : s.derived ? toneText(s, 3).replace('похоже', 'возможно') : toneText(s, 3)}`;
+// для специалиста: конкретная мышца вместо области тела («Средняя ягодичная справа: похоже, не включается»)
+const pluralName = id => /мышцы|^\S+(ые|ие|тели)(\s|$)/i.test(C.muscles[id].name + ' ');
+export const ntitle = s => { let t = s.ambiguous ? 'признаки противоречат' : TONE[s.k][3]; if (s.derived && !s.edited) t = t.replace('похоже', 'возможно'); if (pluralName(s.id)) t = t.replace('ата', 'аты').replace('ается', 'аются');
+  return `${C.muscles[s.id].name} ${sideWord(s.side)}: ${t}`; };
+// короткие названия для подписей на схеме: узнаваемые специалисту сокращения
+export const SHORT = { upper_trap: 'Верх. трапеция', levator: 'Подн. лопатку', suboccipital: 'Подзатылочные', lower_trap: 'Ниж. трапеция', rhomboid: 'Ромбовидные', erector: 'Разгиб. спины',
+  ql: 'Квадр. поясн.', glute_med: 'Ср. ягодичная', glute_max: 'Б. ягодичная', hamstrings: 'Задн. бедра', calf: 'Икроножная', scm: 'ГКС', scalene: 'Лестничные', deep_neck_flex: 'Глуб. сгибат.',
+  pec_minor: 'М. грудная', obliques: 'Косые живота', iliopsoas: 'Илиопсоас', tfl: 'Напр. фасции', rectus_fem: 'Прямая бедра', adductors: 'Приводящие', pec_major: 'Б. грудная',
+  lats: 'Широчайшая', serratus: 'Зубчатая', rectus_abd: 'Прямая живота', vmo: 'Вн. широкая', abdominals: 'Пресс', thoracic_ext: 'Грудн. разгиб.', tibialis: 'Большеберцовая',
+  vastus_lat: 'Нар. широкая', triceps: 'Трицепс', biceps: 'Бицепс', deltoid: 'Дельтовидная', forearm_flex: 'Предплечье', peroneus: 'Малоберцовые' };
 export const tech = s => s.k === 'OK' ? C.muscles[s.id].name : `${TONE[s.k][4]} ${C.muscles[s.id].gen}`;
 const seen = (a, s) => [...new Set(a.findings.filter(f => f.muscles.some(m => m.id === s.id && (m.side === s.side || m.side === 'BOTH'))).map(f => f.observed))];
 export function zoneImg(id) { if (['suboccipital', 'scm', 'scalene', 'deep_neck_flex', 'levator'].includes(id)) return 'img_neck'; if (['upper_trap', 'lower_trap', 'rhomboid', 'lats', 'thoracic_ext', 'serratus', 'triceps', 'deltoid'].includes(id)) return 'img_muscles_back';
