@@ -14,7 +14,7 @@ export const PLANS = {
 // что требует тарифа Про: остальное доступно бесплатно
 const PRO = {
   clients: `Больше ${START_CLIENTS} клиентов`,
-  invite: 'Тест клиента из дома по ссылке',
+  invite: 'Тест клиента по ссылке',
   compare: 'Было → стало: сравнение с прошлой оценкой',
   repeat: 'Повторяемость последних тестов',
 };
@@ -28,11 +28,11 @@ export const SPECIALTIES = [
 ];
 // порядок шаблонов протокола под специализацию: первый открывается по умолчанию
 export const TEMPLATE_ORDER = {
-  kinesio: ['knee', 'low_back', 'neck', 'full', 'screen', 'run', 'posture'],
-  trainer: ['screen', 'full', 'knee', 'low_back', 'run', 'neck', 'posture'],
-  manual: ['posture', 'neck', 'low_back', 'knee', 'screen', 'full', 'run'],
-  sport: ['run', 'screen', 'knee', 'full', 'low_back', 'neck', 'posture'],
-  studio: ['screen', 'full', 'knee', 'low_back', 'neck', 'posture', 'run'],
+  kinesio: ['knee', 'low_back', 'low_back_mid', 'low_back_up', 'neck', 'full', 'screen', 'run', 'posture'],
+  trainer: ['screen', 'full', 'knee', 'low_back', 'low_back_mid', 'low_back_up', 'run', 'neck', 'posture'],
+  manual: ['posture', 'neck', 'low_back', 'low_back_mid', 'low_back_up', 'knee', 'screen', 'full', 'run'],
+  sport: ['run', 'screen', 'knee', 'full', 'low_back', 'low_back_mid', 'low_back_up', 'neck', 'posture'],
+  studio: ['screen', 'full', 'knee', 'low_back', 'low_back_mid', 'low_back_up', 'neck', 'posture', 'run'],
 };
 
 export function plan() {

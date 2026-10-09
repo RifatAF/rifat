@@ -302,17 +302,20 @@ export async function body3D(container, spots, onPick, opts = {}) {
   const THREE = await import('three');
   const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
   const m = await loadMesh(); const order = m.meta.order;
-  const tone = new Map(); for (const s of spots) { const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0); if (order.indexOf(s.id) >= 0) tone.set(g, s.tone); }
-  const blobs = Object.entries(m.meta.blobs).map(([g, c]) => [+g, c]).filter(([g]) => Math.abs(tone.get(g) || 0) > .02);
   const col = new Float32Array(m.nv * 3), lin = c => (c / 255) ** 2.2, BASE3 = ramp(0).map(lin);
-  for (let i = 0; i < m.nv; i++) { const g = m.grp[i];
-    if (g === 255) { col.set(BASE3, i * 3); continue; }
-    const x = m.pos[i * 3], y = m.pos[i * 3 + 1], z = m.pos[i * 3 + 2]; let num = 0, den = .9;
-    for (const [bg, c] of blobs) { const t = tone.get(bg), sg = 75 * (.8 + .6 * Math.abs(t)); const d2 = (x - c[0]) ** 2 + (y - c[1]) ** 2 + (z - c[2]) ** 2; const w = Math.exp(-d2 / (2 * sg * sg)); num += w * t; den += w; }
-    if (tone.has(g)) { num += 2.5 * tone.get(g); den += 2.5; }
-    let v = Math.max(-1, Math.min(1, num / den * 1.3)); if (g === 0) v *= .7; const [r, gg, b] = ramp(v);
-    // цвета шкалы заданы в sRGB, а рендер считает в линейном пространстве: переводим, иначе модель выглядит блеклой
-    col.set([(r / 255) ** 2.2, (gg / 255) ** 2.2, (b / 255) ** 2.2], i * 3); }
+  // раскраска по тону: пересчитывается и при правке специалиста, без пересоздания сцены
+  const paint = (spots, out) => {
+    const tone = new Map(); for (const s of spots) { const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0); if (order.indexOf(s.id) >= 0) tone.set(g, s.tone); }
+    const blobs = Object.entries(m.meta.blobs).map(([g, c]) => [+g, c]).filter(([g]) => Math.abs(tone.get(g) || 0) > .02);
+    for (let i = 0; i < m.nv; i++) { const g = m.grp[i];
+      if (g === 255) { out.set(BASE3, i * 3); continue; }
+      const x = m.pos[i * 3], y = m.pos[i * 3 + 1], z = m.pos[i * 3 + 2]; let num = 0, den = .9;
+      for (const [bg, c] of blobs) { const t = tone.get(bg), sg = 75 * (.8 + .6 * Math.abs(t)); const d2 = (x - c[0]) ** 2 + (y - c[1]) ** 2 + (z - c[2]) ** 2; const w = Math.exp(-d2 / (2 * sg * sg)); num += w * t; den += w; }
+      if (tone.has(g)) { num += 2.5 * tone.get(g); den += 2.5; }
+      let v = Math.max(-1, Math.min(1, num / den * 1.3)); if (g === 0) v *= .7; const [r, gg, b] = ramp(v);
+      // цвета шкалы заданы в sRGB, а рендер считает в линейном пространстве: переводим, иначе модель выглядит блеклой
+      out[i * 3] = lin(r); out[i * 3 + 1] = lin(gg); out[i * 3 + 2] = lin(b); } };
+  paint(spots, col);
   const geo = new THREE.BufferGeometry();
   // модель: x человека, z вверх, перед = −y → Three: X = x, Y = z, Z = −y
   const p2 = new Float32Array(m.nv * 3), n2 = new Float32Array(m.nv * 3);
@@ -326,7 +329,7 @@ export async function body3D(container, spots, onPick, opts = {}) {
   scene.add(new THREE.HemisphereLight(0xffffff, 0x8a7f70, 1.1)); const dl = new THREE.DirectionalLight(0xffffff, 2.2); dl.position.set(1, 2, 3); scene.add(dl); const bl = new THREE.DirectionalLight(0xffffff, 1.2); bl.position.set(-1, 1, -3); scene.add(bl);
   const W = container.clientWidth, H = container.clientHeight;
   const camera = new THREE.PerspectiveCamera(30, W / H, .1, 50); camera.position.set(0, 0, 4.2);
-  const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.setSize(W, H); container.innerHTML = ''; container.appendChild(renderer.domElement); if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
+  const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(device.weak ? 1.25 : 1.75, devicePixelRatio)); renderer.setSize(W, H); container.innerHTML = ''; container.appendChild(renderer.domElement); if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
   container.insertAdjacentHTML('beforeend', '<a href="/licenses" target="_blank" style="position:absolute;right:12px;bottom:6px;font-size:12px;color:#5B6068;text-decoration:none">3D: Z-Anatomy, CC BY-SA 4.0</a><div class="hint3d">Двумя пальцами: приблизить и повернуть</div>');
   setTimeout(() => { const h = container.querySelector('.hint3d'); if (h) h.style.opacity = 0; }, 3000);
   // масштаб к точке под пальцами, сдвиг двумя пальцами: можно рассмотреть шею или стопу, а не только центр
@@ -347,16 +350,20 @@ export async function body3D(container, spots, onPick, opts = {}) {
   renderer.domElement.addEventListener('pointerup', e => { if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 8) return; const r = renderer.domElement.getBoundingClientRect();
     ray.setFromCamera({ x: (e.clientX - r.left) / r.width * 2 - 1, y: -((e.clientY - r.top) / r.height) * 2 + 1 }, camera);
     const hit = ray.intersectObject(obj)[0]; if (!hit) return; const g = m.grp[hit.face.a]; if (g > 0 && g < 255) { const id = order[(g - 1) >> 1]; onPick && onPick(id + ':' + ((g - 1) % 2 ? 'RIGHT' : 'LEFT')); } });
-  // маркеры состояния поверх модели: точка зоны проецируется на экран каждый кадр, за телом прячется
-  const marks = spots.filter(s => s.k !== 'OK' && order.indexOf(s.id) >= 0).map(s => { const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0), c = m.meta.blobs[g]; if (!c) return null;
-    const el = document.createElement('button'); el.className = 'mark3d'; el.setAttribute('aria-label', s.key); el.innerHTML = `<span class="mark ${s.k}"${s.derived && !s.edited ? ' style="opacity:.75"' : ''}></span>`;
-    el.onclick = () => onPick && onPick(s.key); container.appendChild(el); return { el, local: new THREE.Vector3(c[0], c[2], -c[1]) }; }).filter(Boolean);
-  const wv = new THREE.Vector3(); let mk = 0;
-  const placeMarks = () => { const w = container.clientWidth, h = container.clientHeight, check = mk++ % 8 === 0;
-    for (const x of marks) { obj.localToWorld(wv.copy(x.local)); const d = camera.position.distanceTo(wv); const v = wv.clone().project(camera);
-      x.el.style.transform = `translate(${(v.x + 1) / 2 * w}px,${(1 - v.y) / 2 * h}px)`;
-      if (check) { ray.set(camera.position, wv.clone().sub(camera.position).normalize()); const hit = ray.intersectObject(obj)[0]; x.hidden = !!hit && hit.distance < d - .04; }
-      x.el.style.opacity = x.hidden || v.z > 1 ? 0 : 1; x.el.style.pointerEvents = x.hidden ? 'none' : 'auto'; } };
+  // маркеры состояния поверх модели. Видимость без трассировки лучей: маркер виден, если его сторона тела смотрит на камеру
+  // (трассировка по сетке на каждом кадре тормозила вращение на телефонах)
+  let marks = [];
+  const buildMarks = spots => { marks.forEach(x => x.el.remove());
+    marks = spots.filter(s => s.k !== 'OK' && order.indexOf(s.id) >= 0).map(s => { const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0), c = m.meta.blobs[g]; if (!c) return null;
+      const el = document.createElement('button'); el.className = 'mark3d'; el.setAttribute('aria-label', s.key); el.innerHTML = `<span class="mark ${s.k}"${s.derived && !s.edited ? ' style="opacity:.75"' : ''}></span>`;
+      el.onclick = () => onPick && onPick(s.key); container.appendChild(el); return { el, local: new THREE.Vector3(c[0], c[2], -c[1]), vis: null }; }).filter(Boolean); };
+  buildMarks(spots);
+  const wv = new THREE.Vector3(), nv = new THREE.Vector3(), cv3 = new THREE.Vector3();
+  const placeMarks = () => { const w = container.clientWidth, h = container.clientHeight;
+    for (const x of marks) { obj.localToWorld(wv.copy(x.local));
+      nv.set(wv.x, 0, wv.z).normalize(); cv3.copy(camera.position).sub(wv); const vis = nv.dot(cv3) > -0.05 * cv3.length();
+      const p = cv3.copy(wv).project(camera); x.el.style.transform = `translate(${((p.x + 1) / 2 * w).toFixed(1)}px,${((1 - p.y) / 2 * h).toFixed(1)}px)`;
+      if (vis !== x.vis) { x.vis = vis; x.el.style.opacity = vis ? 1 : 0; x.el.style.pointerEvents = vis ? 'auto' : 'none'; } } };
   // появление: тон 0→1 за 560 мс, камера доезжает с поворота 25° до фронта за 800 мс
   const target = col.slice(); let rv = null;
   if (opts.reveal && !reduceMotion()) { for (let i = 0; i < m.nv; i++) col.set(BASE3, i * 3); geo.attributes.color.needsUpdate = true;
@@ -365,12 +372,17 @@ export async function body3D(container, spots, onPick, opts = {}) {
     for (let i = 0; i < col.length; i++) { const b = BASE3[i % 3]; col[i] = b + (target[i] - b) * e; } geo.attributes.color.needsUpdate = true;
     const c = Math.min(1, t / 800), ec = 1 - (1 - c) ** 3, a = 25 * Math.PI / 180 * (1 - ec); if (!fly) camera.position.set(Math.sin(a) * 4.2, 0, Math.cos(a) * 4.2);
     if (k >= 1 && c >= 1) rv = null; };
-  let alive = true; function anim() { if (!alive) return; if (!renderer.domElement.isConnected) { api.dispose(); return; } reveal();
-    if (fly) { fly.k = Math.min(1, fly.k + .06); const e = 1 - (1 - fly.k) ** 3; ctl.target.lerpVectors(fly.from.t, fly.to.t, e); camera.position.lerpVectors(fly.from.p, fly.to.p, e); if (fly.k >= 1) fly = null; }
-    ctl.update(); renderer.render(scene, camera); placeMarks(); requestAnimationFrame(anim); }
+  // кадр рисуется только когда что-то меняется: вращение, перелет, появление; в покое GPU не занят
+  let alive = true, dirty = true; ctl.addEventListener('change', () => { dirty = true; });
+  function anim() { if (!alive) return; if (!renderer.domElement.isConnected) { api.dispose(); return; }
+    if (rv) { reveal(); dirty = true; }
+    if (fly) { fly.k = Math.min(1, fly.k + .06); const e = 1 - (1 - fly.k) ** 3; ctl.target.lerpVectors(fly.from.t, fly.to.t, e); camera.position.lerpVectors(fly.from.p, fly.to.p, e); if (fly.k >= 1) fly = null; dirty = true; }
+    ctl.update(); if (dirty) { dirty = false; renderer.render(scene, camera); placeMarks(); } requestAnimationFrame(anim); }
   let isBack = false;
   const api = { turn(back) { isBack = back; const d = camera.position.distanceTo(ctl.target); flyTo(ctl.target, d, back); },
     focus(zone) { const [y, d] = ZONES[zone] || ZONES.all; flyTo(new THREE.Vector3(0, y, 0), d, isBack); },
+    /** Новая раскраска и маркеры (правка специалиста) без пересоздания сцены и сброса камеры. */
+    update(spots) { paint(spots, col); target.set(col); geo.attributes.color.needsUpdate = true; buildMarks(spots); dirty = true; },
     dispose() { if (!alive) return; alive = false; ctl.dispose(); geo.dispose(); mat.dispose(); renderer.dispose(); try { renderer.forceContextLoss(); } catch (e) {} } };
   anim(); return api;
 }

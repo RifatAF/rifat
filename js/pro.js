@@ -4,6 +4,7 @@ import { analyze, fmt, recompute } from './analysis.js';
 import { track } from './track.js';
 import { npsCard, bindNps, installCard, bindInstall, feedbackSheet, referralSheet, myRef } from './grow.js';
 import { meSync, logout, getMe } from './auth.js';
+import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
 import { gate, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, START_CLIENTS } from './plans.js';
 import { C, voice, cam, startMotion, initPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast } from './core.js';
 import { cleanResult, verdict, verdictCard, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, ex, totalMin, workout, onboarding, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen } from './app.js';
@@ -55,10 +56,15 @@ const byClient = async id => (await all('assessments')).filter(a => a.clientId =
 const meta = async k => (await get('meta', k))?.v; const setMeta = (k, v) => put('meta', { k, v });
 
 // ---------- шаблоны протоколов ----------
+// зона боли в пояснице по шаблону (ТЗ v2.1): LOW, MID, UPPER
+const LUMBAR = { low_back: 'LOW', low_back_mid: 'MID', low_back_up: 'UPPER' };
 export const TEMPLATES = [
-  ['knee', 'Колено', ['stand', 'ohs_front', 'sls', 'calf', 'profile', 'back']],
-  ['low_back', 'Поясница', ['stand', 'ohs_front', 'sls', 'bends', 'side']],
-  ['neck', 'Шея и плечи', ['stand', 'thold', 'bends', 'side']],
+  // шаблоны по жалобе сокращены до 3–4 тестов (ТЗ v2.1, раздел 5): каждая лишняя метрика добавляет шум
+  ['knee', 'Колено', ['stand', 'ohs_front', 'sls', 'profile']],
+  ['low_back', 'Поясница, низ', ['stand', 'ohs_front', 'profile']],
+  ['low_back_mid', 'Поясница, середина', ['stand', 'ohs_front', 'profile', 'sls']],
+  ['low_back_up', 'Поясница, верх', ['stand', 'ohs_front', 'profile', 'bends']],
+  ['neck', 'Шея и плечи', ['stand', 'thold', 'profile']],
   ['run', 'Бег', ['stand', 'ohs_front', 'sls', 'calf', 'side']],
   ['full', 'Полный', ['stand', 'ohs_front', 'sls', 'thold', 'bends', 'calf', 'side', 'back']],
   ['screen', 'Первичный скрининг', ['stand', 'ohs_front', 'sls', 'side']],
@@ -156,8 +162,8 @@ export async function proHome(query = '', pulled = null) {
   go(`<div class="scr fade"><div style="padding-top:16px">
     <div class="pad row" style="align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--sub)">${esc(name)}${spName ? ' · ' + esc(spName.toLowerCase()) : ''}</div><h1>Сегодня</h1><div style="font-size:14px;color:var(--sub);margin-top:2px">${today[0].toUpperCase() + today.slice(1)}</div></div><button class="round" id="menu" aria-label="Меню">${ic('menu')}</button></div>
     ${real.length ? `<div class="pad kpi" style="margin-top:var(--s4)">${kv.map(([t, v]) => `<div><b style="color:${v && v !== '—' && v !== '0%' ? 'var(--ink)' : 'var(--faint)'}">${v}</b><span>${t}</span></div>`).join('')}</div>` : ''}
-    <div class="pad tools" style="margin-top:var(--s2)"><button class="tool" id="join">${ic('mail')}Из дома</button><button class="tool" id="rtq">${ic('rotate-ccw')}Ретест</button><button class="tool" id="repq">${ic('file-text')}Отчёт</button><button class="tool" id="cmpq">${ic('arrow-right-left')}Было→стало</button></div>
-    ${review.length ? h3('Нужно посмотреть', review.length) + `<div class="pad"><div class="group">${review.map(a => `<div class="list-item" data-a="${a.id}" style="border-radius:0;padding:var(--s3) 0;background:transparent"><span class="dot"></span><div style="flex:1;min-width:0"><b>${esc(byId[a.clientId].name)}</b><div style="font-size:13px;color:var(--sub)">${a.source === 'home' ? 'пришёл из дома' : 'гипотеза не подтверждена'} · ${esc(a.templateName || 'оценка')} · ${fmtDate(a.date)}</div></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div></div>` : ''}
+    <div class="pad tools" style="margin-top:var(--s2)"><button class="tool" id="join">${ic('mail')}Тест по ссылке</button><button class="tool" id="rtq">${ic('rotate-ccw')}Ретест</button><button class="tool" id="repq">${ic('file-text')}Отчёт</button><button class="tool" id="cmpq">${ic('arrow-right-left')}Было→стало</button></div>
+    ${review.length ? h3('Нужно посмотреть', review.length) + `<div class="pad"><div class="group">${review.map(a => `<div class="list-item" data-a="${a.id}" style="border-radius:0;padding:var(--s3) 0;background:transparent"><span class="dot"></span><div style="flex:1;min-width:0"><b>${esc(byId[a.clientId].name)}</b><div style="font-size:13px;color:var(--sub)">${a.source === 'home' ? 'прошёл тест по ссылке' : 'гипотеза не подтверждена'} · ${esc(a.templateName || 'оценка')} · ${fmtDate(a.date)}</div></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div></div>` : ''}
     ${soon.length ? h3('Ретесты', soon.length) + `<div class="pad"><div class="group">${soon.map(({ c, a }) => { const d = Math.ceil((a.nextDate - Date.now()) / DAY);
       return `<div class="row" style="min-height:64px"><span class="step-n" style="width:56px;color:${d < 0 ? 'var(--over-t)' : 'var(--sub)'}">${d < 0 ? '−' + (-d) + ' дн.' : d === 0 ? 'сегодня' : '+' + d + ' дн.'}</span><div style="flex:1;min-width:0;cursor:pointer" data-id="${c.id}"><b>${esc(c.name)}</b><div style="font-size:13px;color:var(--sub)">${fmtDate(a.nextDate)}</div></div><button class="pill" data-msg="${c.id}">Напомнить</button></div>`; }).join('')}</div></div>` : ''}
     ${h3(q ? 'Поиск' : 'Последние клиенты', clients.length > list.length && !q ? 'из ' + clients.length : '')}
@@ -167,7 +173,7 @@ export async function proHome(query = '', pulled = null) {
     ${needBackup ? `<div class="pad" style="margin-top:var(--s3)"><button class="link" id="bk" style="width:100%;color:var(--sub);font-weight:500;font-size:13px">Клиенты хранятся только на этом телефоне · <u>сохранить копию</u></button></div>` : ''}
     ${list.length ? npsCard(own.length) + installCard() : ''}
   </div><div class="dock"><button class="btn" id="new">${ic('plus', 's')}${({ trainer: 'Скрининг клиента', manual: 'До сеанса', sport: 'Спортивный тест' })[sp] || 'Новая оценка'}</button></div></div>`);
-  if (pulled && pulled.length) toast('Пришли результаты из дома: ' + pulled.join(', '));
+  if (pulled && pulled.length) toast('Пришли результаты по ссылке: ' + pulled.join(', '));
   if ($('#demo')) $('#demo').onclick = openDemo;
   bindNps(); bindInstall();
   $('#new').onclick = () => quickStart(); $('#join').onclick = sendJoin; $('#menu').onclick = proMenu; if ($('#bk')) $('#bk').onclick = backup;
@@ -201,6 +207,7 @@ function proMenu() {
     <div class="group" style="margin-top:var(--s3)">
       ${r('msp', 'settings', 'Специализация: ' + esc(((SPECIALTIES.find(x => x[0] === localStorage.getItem('bp_sp')) || ['', 'не выбрана'])[1]).split(',')[0]))}
       ${r('mp', 'user-plus', 'Мой профиль: имя и контакт')}
+      ${r('mexp', 'info', 'Мой опыт по признакам')}
       ${r('mref', 'star', 'Пригласить коллегу')}
       ${r('demo2', 'file-text', 'Пример оценки')}
       ${r('mb', 'download', 'Сохранить резервную копию')}
@@ -215,6 +222,7 @@ function proMenu() {
   d.querySelector('#mb').onclick = () => { d.remove(); backup(); };
   if (d.querySelector('#mst')) d.querySelector('#mst').onclick = () => { d.remove(); funnelScreen(); };
   d.querySelector('#mref').onclick = () => { d.remove(); referralSheet(); };
+  d.querySelector('#mexp').onclick = () => { d.remove(); experienceScreen(); };
   d.querySelector('#demo2').onclick = () => { d.remove(); openDemo(); };
   d.querySelector('#mfb').onclick = () => { d.remove(); feedbackSheet('menu'); };
   d.querySelector('#msp').onclick = () => { d.remove(); specialtyScreen(proHome); };
@@ -317,7 +325,7 @@ async function quickStart() {
 
 async function newAssessment(clientId, retestOf, opts = {}) {
   const c = await get('clients', clientId); const prev = retestOf ? await get('assessments', retestOf) : null;
-  let tpl = prev ? TEMPLATES.find(t => t[0] === prev.template) || ['custom', prev.templateName || 'Свой', prev.protocol] : opts.tpl || TEMPLATES[0]; let units = prev ? prev.protocol : tpl[2]; const pain = {}; const pre = {}; let expect = '';
+  let tpl = prev ? TEMPLATES.find(t => t[0] === prev.template) || ['custom', prev.templateName || 'Свой', prev.protocol] : opts.tpl || TEMPLATES[0]; let units = prev ? prev.protocol : tpl[2]; const pain = {}; const pre = {}; let expect = '', painSide = prev && prev.painSide || null;
   const draw = () => { const rows = rowsOf(units);
     const session = prev && prev.template === 'posture' && Date.now() - prev.date < 12 * 3600e3; // массаж: «после сеанса» в тот же день
     const goalBtn = t => { const r = rowsOf(t[2]); return `<button class="list-item" data-t="${t[0]}" style="background:#fff;text-align:left;font:inherit;color:inherit;border:1.5px solid ${tpl[0] === t[0] ? 'var(--ink)' : 'transparent'}"><div style="flex:1"><b style="font-size:16px">${t[1]}</b><div style="font-size:13px;color:var(--sub)">${r.length} ${r.length === 1 ? 'шаг' : r.length < 5 ? 'шага' : 'шагов'} · ${mins(SETUP_SEC + secs(r))} мин</div></div>${tpl[0] === t[0] ? ic('check', 's') : ''}</button>`; };
@@ -329,6 +337,7 @@ async function newAssessment(clientId, retestOf, opts = {}) {
       <details class="card"><summary style="font-weight:600">Шаги, боль, камера</summary>
         <div style="margin-top:10px">${stepList(units, pre)}</div>
         <div class="row" style="flex-wrap:wrap;gap:6px;margin-top:10px">${Object.keys(UNITS).map(u => `<label style="display:flex;align-items:center;gap:6px;font-size:14px;background:var(--bg);border-radius:99px;padding:6px 12px"><input type="checkbox" data-u="${u}" ${units.includes(u) ? 'checked' : ''} ${u === 'stand' ? 'disabled' : ''}>${UNIT_NAMES[u]}</label>`).join('')}</div>
+        <div style="margin-top:14px"><b style="font-size:14px">Сторона боли</b><div class="seg" style="margin-top:6px">${[['LEFT', 'Слева'], ['RIGHT', 'Справа'], ['BOTH', 'С двух'], ['', 'Нет']].map(([k, n]) => `<button data-ps="${k}" class="${(painSide || '') === k ? 'on' : ''}">${n}</button>`).join('')}</div></div>
         <div style="margin-top:14px"><b style="font-size:14px">Боль сейчас, 0–10</b><div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">${PAIN.map(([k, n]) => `<div class="row" style="background:var(--bg);border-radius:12px;padding:6px 12px"><span style="width:110px;font-size:14px">${n}</span><input type="range" min="0" max="10" value="${pain[k] || 0}" data-p="${k}" style="flex:1;accent-color:var(--ink)"><b style="width:24px;text-align:right" id="pv_${k}">${pain[k] || 0}</b></div>`).join('')}</div></div>
         <div style="margin-top:14px"><b style="font-size:14px">Камера</b><div class="seg" style="margin-top:6px"><button id="c0" class="${cam.back ? '' : 'on'}">Фронтальная</button><button id="c1" class="${cam.back ? 'on' : ''}">Основная</button></div></div>
       </details>
@@ -338,14 +347,79 @@ async function newAssessment(clientId, retestOf, opts = {}) {
     document.querySelectorAll('[data-u]').forEach(b => b.onchange = () => { units = sortUnits(b.checked ? [...units, b.dataset.u] : units.filter(x => x !== b.dataset.u)); tpl = ['custom', 'Свой', units]; draw(); });
     document.querySelectorAll('[data-p]').forEach(r => r.oninput = () => { pain[r.dataset.p] = +r.value; $('#pv_' + r.dataset.p).textContent = r.value; });
     $('#expect').oninput = e => { expect = e.target.value; };
+    document.querySelectorAll('[data-ps]').forEach(b => b.onclick = () => { painSide = b.dataset.ps || null; document.querySelectorAll('[data-ps]').forEach(x => x.classList.toggle('on', x === b)); });
     $('#c0').onclick = () => { cam.back = false; localStorage.setItem('bp_back', '0'); draw(); }; $('#c1').onclick = () => { cam.back = true; localStorage.setItem('bp_back', '1'); draw(); };
     $('#go').onclick = async () => { voice.unlock(); startMotion(); $('#go').textContent = 'Загружаю модель…';
       try { await initPose(); } catch (e) { toast('Не удалось загрузить модель: ' + e.message); return draw(); }
       track('assess_start', { n: units.length }, false);
       const r = await runProtocol(units, { target: prev && prev.setup, onCancel: () => clientCard(clientId), pre }); if (!r) return;
-      const a = { id: uid(), clientId, date: r.date, template: tpl[0], templateName: session ? 'После сеанса' : tpl[0] === 'posture' && !prev ? 'До сеанса' : tpl[1], protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, limits: r.limits || {}, pain, hyp: {}, plan: null, note: '', expect: expect.trim().slice(0, 500), nextDate: r.date + 30 * DAY, prevId: prev ? prev.id : null, draft: true };
+      const a = { id: uid(), clientId, date: r.date, template: tpl[0], templateName: session ? 'После сеанса' : tpl[0] === 'posture' && !prev ? 'До сеанса' : tpl[1], protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, limits: r.limits || {}, pain, painSide, lumbarZone: LUMBAR[tpl[0]] || (prev && prev.lumbarZone) || null, hyp: {}, plan: null, note: '', expect: expect.trim().slice(0, 500), nextDate: r.date + 30 * DAY, prevId: prev ? prev.id : null, draft: true };
       await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); track('assess_done', { n: units.length }, false); result(a.id); }; };
   draw(); if (opts.autostart) $('#go').click();
+}
+
+// ---------- вкладка «Гипотеза»: карточка мышцы обновляется на месте, без перерисовки экрана ----------
+const hypList = (a, sp, top) => (top.length ? top : sp.filter(s => s.k !== 'OK').slice(0, 8)).concat(sp.filter(s => s.edited && s.k === 'OK' && !top.includes(s))).slice(0, 14);
+const STATE4 = [['WEAK', 'Слабость'], ['HYPER', 'Перегруз'], ['SHORT', 'Укороч.'], ['OK', 'Норма']];
+function confLine(sc) {
+  if (!sc || sc.S == null) return '';
+  const lab = sc.labels.filter(l => l !== 'PRELIMINARY').map(l => LABELS[l]).join(' · ');
+  return `<button class="link" data-conf="${esc(sc.rule)}" style="min-height:32px;font-size:13px;font-weight:500;color:var(--sub);text-align:left">Уверенность: <b style="color:${sc.band === 'LOW' ? 'var(--short-t)' : 'var(--ink)'}">${BAND_NAMES[sc.band]}</b> · ${String(sc.S).replace('.', ',')}${lab ? ' · ' + esc(lab) : ''}</button>`;
+}
+function hypCard(a, an, s, open, evid) {
+  const m = C.muscles[s.id], obs = seen2(an, s), chk = a.check || {}, why = (a.hypWhy || {})[s.key], sc = scoreSpot(s, an.findings, evid);
+  return `<div class="card" data-card="${s.key}"><b style="font-size:16px">${title(s)}</b>
+    <div class="why" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:13px;color:var(--sub)">${s.edited ? `<span class="src">ПРАВКА</span><span>${why ? 'причина: ' + esc(why) : 'изменено специалистом'}</span>` : obs.length && !s.derived ? `<span class="src">ЗАМЕР</span><span>${esc(obs.map(x => x.replace(' (на границе нормы)', '')).join(' · '))}</span>${obs.some(x => /на границе нормы/.test(x)) ? '<span class="edge">на границе нормы</span>' : ''}` : `<span class="src hyp">ЦЕПЬ</span><span>${esc(s.byChain ? 'по цепи «' + s.byChain + '»' : 'вывод по связи мышц')}</span>`}</div>
+    ${confLine(sc)}
+    <div class="seg" style="margin-top:8px;border-radius:var(--r-sm)">${STATE4.map(([k, n]) => `<button data-k="${s.key}" data-s="${k}" class="${s.k === k ? 'on' : ''}" style="min-height:44px;padding:4px 2px;border-radius:var(--r-xs);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:12px"><span class="mark sm ${k}"></span>${n}</button>`).join('')}</div>
+    ${m && m.proTest ? `<details style="margin-top:var(--s3);border-top:1px solid var(--line-2);padding-top:4px" ${open ? 'open' : ''}><summary class="row" style="font-size:14px;font-weight:600;color:var(--focus)"><span style="flex:1">Проверь руками${chk[s.key] === 'yes' ? ' · подтвердилось' : chk[s.key] === 'no' ? ' · не подтвердилось' : ''}</span>${ic('chevron-down', 's')}</summary>
+      <p style="font-size:14px;line-height:1.45;margin-top:4px">${m.proTest}</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s2);margin-top:10px"><button class="btn${chk[s.key] === 'yes' ? '' : ' line'}" data-chk="${s.key}" data-v="yes" style="height:48px;border-radius:var(--r-sm);font-size:15px">Подтвердилось</button><button class="btn${chk[s.key] === 'no' ? '' : ' line'}" data-chk="${s.key}" data-v="no" style="height:48px;border-radius:var(--r-sm);font-size:15px">Не подтвердилось</button></div></details>` : ''}</div>`;
+}
+// причина правки обязательна (ТЗ v2.1, раздел 6): быстрый выбор или свой текст
+const WHY = ['Пальпация', 'Мышечный тест', 'Жалобы и анамнез', 'Визуальная оценка'];
+function whySheet(text) {
+  return new Promise(res => { const d = document.createElement('div'); d.className = 'sheet';
+    d.innerHTML = `<div><h2>Почему меняете?</h2><p class="sub" style="font-size:14px;margin-top:6px">${esc(text)}. Причина сохранится в журнале правок и в карточке.</p>
+      <div class="row" style="flex-wrap:wrap;gap:8px;margin-top:var(--s4)">${WHY.map(w => `<button class="pill" data-w="${w}" style="min-height:44px">${w}</button>`).join('')}</div>
+      <input class="field" id="wt" placeholder="Или своими словами" maxlength="140" style="margin-top:var(--s3);height:48px">
+      <button class="btn" id="wok" style="margin-top:var(--s4)">Сохранить правку</button><button class="btn ghost" id="wx" style="margin-top:var(--s2)">Отмена</button></div>`;
+    document.body.appendChild(d); let pick = '';
+    const done = v => { d.remove(); res(v); };
+    d.querySelectorAll('[data-w]').forEach(b => b.onclick = () => { pick = b.dataset.w; d.querySelectorAll('[data-w]').forEach(x => x.classList.toggle('on', x === b)); });
+    d.querySelector('#wok').onclick = () => { const t = (d.querySelector('#wt').value.trim() || pick).slice(0, 140); if (!t) { d.querySelector('#wt').focus(); return toast('Выберите причину'); } done(t); };
+    d.querySelector('#wx').onclick = () => done(null); d.onclick = e => { if (e.target === d) done(null); }; });
+}
+async function logOverride(a, key, from, to, why) {
+  a.overrides = [...(a.overrides || []), { key, from, to, why, t: Date.now() }].slice(-100);
+  const log = (await meta('overrideLog')) || []; log.push({ a: a.id, key, from, to, why, t: Date.now() }); await setMeta('overrideLog', log.slice(-1000));
+}
+// разбивка уверенности: из чего сложился балл
+function confSheet(sc, back) {
+  const d = document.createElement('div'); d.className = 'sheet'; const p = n => String(n).replace('.', ',');
+  d.innerHTML = `<div><div class="eyebrow">Уверенность вывода</div><h2 style="margin-top:6px">${esc(RULE_NAMES[sc.rule] || sc.rule)}</h2>
+    <div class="group" style="margin-top:var(--s4)">
+      <div class="row" style="min-height:56px"><span style="flex:1">Опыт специалиста ×0,50</span><b class="num">${sc.eExp == null ? 'не задан' : p(sc.parts.exp)}</b></div>
+      <div class="row" style="min-height:56px"><span style="flex:1">Исследования ×0,35<small style="display:block;font-size:12px;color:var(--sub)">${esc(sc.source)}</small></span><b class="num">${p(sc.parts.res)}</b></div>
+      <div class="row" style="min-height:56px"><span style="flex:1">Замер ×0,15<small style="display:block;font-size:12px;color:var(--sub)">до проверки повторяемости не больше половины веса</small></span><b class="num">${p(sc.parts.data)}</b></div>
+      <div class="row" style="min-height:56px"><b style="flex:1">Итого · ${BAND_NAMES[sc.band]}</b><b class="num">${p(sc.S)}</b></div></div>
+    ${sc.labels.length ? `<p style="font-size:13px;color:var(--short-t);margin-top:var(--s3)">${sc.labels.map(l => esc(LABELS[l])).join('. ')}.</p>` : ''}
+    <p class="sub" style="font-size:13px;margin-top:var(--s3)">Высокая уверенность невозможна без исследований: опыт и замер вместе дают не больше средней.</p>
+    <button class="btn line" id="cfe" style="margin-top:var(--s4)">Указать свой опыт по признакам</button><button class="btn" id="cfx" style="margin-top:var(--s2)">Понятно</button></div>`;
+  document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
+  d.querySelector('#cfx').onclick = () => d.remove(); d.querySelector('#cfe').onclick = () => { d.remove(); experienceScreen(back); };
+}
+// профиль специалиста: доля клиентов, у которых он видит признак (e_exp). Хранится на телефоне, переносится резервной копией
+async function experienceScreen(back) {
+  const ev = (await meta('eexp')) || {};
+  go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>Мой опыт по признакам</b><small>влияет на уверенность выводов</small></div></div>
+   <div class="pad" style="padding-bottom:var(--s5)"><p class="sub" style="font-size:14px;margin:var(--s2) 0 var(--s4)">У какой доли ваших клиентов с таким признаком вывод о мышцах подтверждается на практике? Не знаете — оставьте пустым: вывод будет помечен «нужна оценка специалиста».</p>
+    <div class="group">${Object.entries(RULE_NAMES).map(([id, n]) => `<div class="row" style="min-height:64px;flex-wrap:wrap;gap:8px"><span style="flex:1 1 60%;font-size:15px">${n}${RESEARCH[id] ? `<small style="display:block;font-size:12px;color:var(--sub)">исследования: ${String(RESEARCH[id][0]).replace('.', ',')}</small>` : ''}</span>
+      <select class="field" data-ev="${id}" style="width:104px;height:44px;padding:0 8px;font-size:15px"><option value="">—</option>${[10, 20, 30, 40, 50, 60, 70, 80, 90, 95].map(v => `<option value="${v}" ${ev[id] != null && Math.round(ev[id] * 100) === v ? 'selected' : ''}>${v}%</option>`).join('')}</select></div>`).join('')}</div>
+    <button class="link" id="evr" style="margin-top:var(--s3);color:var(--over-t)">Сбросить всё</button></div></div>`);
+  $('#back').onclick = () => (back || proHome)();
+  document.querySelectorAll('[data-ev]').forEach(sl => sl.onchange = async () => { const v = sl.value ? +sl.value / 100 : null; if (v == null) delete ev[sl.dataset.ev]; else ev[sl.dataset.ev] = v; await setMeta('eexp', ev); toast('Сохранено'); });
+  $('#evr').onclick = async () => { if (!confirm('Сбросить ваш опыт по всем признакам?')) return; await setMeta('eexp', {}); experienceScreen(back); };
 }
 
 // ---------- результат: измерено, гипотеза, назначение ----------
@@ -355,7 +429,7 @@ function proSpots(a) {
 }
 export async function result(aid, view = 'measured') {
   const a = await get('assessments', aid); if (!a) return proHome(); const c = await get('clients', a.clientId);
-  const an = analyze(a, C); const sp = proSpots(a); const top = sp.filter(s => s.k !== 'OK' && (!s.derived || s.edited || s.byChain)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
+  const an = analyze(a, C); const sp = proSpots(a); const evid = (await meta('eexp')) || {}; const top = sp.filter(s => s.k !== 'OK' && (!s.derived || s.edited || s.byChain)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
   const q = Object.entries(a.quality || {}); const qa = q.length ? Math.round(q.reduce((x, [, v]) => x + v, 0) / q.length) : null;
   const facts = an.findings.slice(0, 3);
   const tab = (k, t) => `<button class="${view === k ? 'on' : ''}" data-v="${k}">${t}</button>`;
@@ -390,25 +464,18 @@ export async function result(aid, view = 'measured') {
       <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">${[['yes', 'Совпало'], ['part', 'Частично'], ['no', 'Не совпало']].map(([k, n]) => `<button class="pill ${a.expectMatch === k ? 'on' : ''}" data-em="${k}">${n}</button>`).join('')}</div></div>` : ''}
     ${q.length ? `<div class="group" style="padding:var(--s4)"><div class="eyebrow">Качество съемки${qa != null ? ' · ' + qa + ' из 100' : ''}</div>${q.map(([k, v]) => `<div class="row" style="margin-top:8px;font-size:14px"><span style="flex:1">${esc(QNAMES[k] || k)}</span><b class="num" style="color:${v < 60 ? 'var(--over-t)' : 'var(--text)'}">${esc(v)}${v < 60 ? ' · не для строгого сравнения' : ''}</b></div>`).join('')}</div>` : ''}
     ${a.limits && Object.keys(a.limits).length ? `<div class="group" style="padding:var(--s4)"><div class="eyebrow" style="color:var(--short-t)">Не смог выполнить</div>${Object.entries(a.limits).map(([u, l]) => `<div style="margin-top:8px;font-size:14px"><b>${esc(UNIT_NAMES[u] || u)}</b>: ${esc([...(l.reasons || []), l.level, l.side && l.side !== 'BOTH' ? (l.side === 'LEFT' ? 'слева' : 'справа') : ''].filter(Boolean).join(', ').toLowerCase())}${l.alt ? ' · сделан вариант с опорой' : ''}</div>`).join('')}</div>` : ''}
-    ${Object.values(a.pain || {}).some(v => v > 0) ? `<div class="group" style="padding:var(--s4)"><div class="eyebrow">Боль до теста</div>${PAIN.filter(([k]) => a.pain[k] > 0).map(([k, n]) => `<div class="row" style="margin-top:6px"><span style="flex:1">${n}</span><b class="num">${a.pain[k]} / 10</b></div>`).join('')}</div>` : ''}
+    ${Object.values(a.pain || {}).some(v => v > 0) ? `<div class="group" style="padding:var(--s4)"><div class="eyebrow">Боль до теста${a.painSide ? ' · ' + ({ LEFT: 'слева', RIGHT: 'справа', BOTH: 'с двух сторон' })[a.painSide] : ''}${a.lumbarZone ? ' · поясница: ' + ({ LOW: 'низ', MID: 'середина', UPPER: 'верх' })[a.lumbarZone] : ''}</div>${PAIN.filter(([k]) => a.pain[k] > 0).map(([k, n]) => `<div class="row" style="margin-top:6px"><span style="flex:1">${n}</span><b class="num">${a.pain[k]} / 10</b></div>`).join('')}</div>` : ''}
     <details class="group" style="padding:var(--s2) var(--s4)"><summary style="font-weight:600">Все показатели</summary>${Object.entries(an.f).filter(([k, v]) => typeof v === 'number' && !k.startsWith('const')).map(([k, v]) => { const mt = METRICS.find(x => x[0] === k); return `<div class="row" style="font-size:13px;margin-top:4px"><span style="flex:1;${mt ? '' : 'font:500 12px var(--mono);'}color:var(--sub)">${mt ? mt[1] : k}</span><b class="num">${fmt(v)}${mt ? mt[2] : ''}</b></div>`; }).join('')}</details></div></details>`;
     dock = `<div class="dock bar"><button class="btn line" id="rt" style="width:56px;flex:none;padding:0" aria-label="${a.nextDate && a.retestSet ? 'Ретест ' + fmtDate(a.nextDate) + ' назначен' : 'Ретест через 4 недели'}">${ic(a.nextDate && a.retestSet ? 'check' : 'rotate-ccw')}</button><button class="btn" id="send">Отправить клиенту</button></div>`; }
-  if (view === 'hyp') { const chk = a.check || {}, list = (top.length ? top : sp.filter(s => s.k !== 'OK').slice(0, 8)).concat(sp.filter(s => s.edited && s.k === 'OK')).slice(0, 14);
-    const firstOpen = list.find(s => C.muscles[s.id] && C.muscles[s.id].proTest && !chk[s.key]);
+  if (view === 'hyp') { const chk = a.check || {}, list = hypList(a, sp, top);
     const testable = list.filter(s => C.muscles[s.id] && C.muscles[s.id].proTest);
     body = `
     <div class="card" style="padding:12px 8px"><div class="seg" style="margin:0 4px"><button id="hf" class="on">Спереди</button><button id="hb">Сзади</button>${device.webgl2 ? '<button id="h3">3D</button>' : ''}</div>
       <div id="hvis" style="width:100%;max-width:360px;margin:8px auto 0"><canvas id="heat" style="width:100%;display:block"></canvas></div>
       <div id="hz" class="row" style="display:none;gap:6px;flex-wrap:wrap;justify-content:center;margin:8px 8px 0">${[['all', 'Всё тело'], ['head', 'Шея'], ['shoulders', 'Плечи'], ['back', 'Спина'], ['pelvis', 'Таз'], ['knees', 'Колени'], ['feet', 'Стопы']].map(([z, n]) => `<button class="pill" data-z="${z}">${n}</button>`).join('')}</div></div>
-    <p class="sub" style="font-size:14px">Черновик по замеру и цепям. Проверьте руками: в отчёт пойдёт ваша версия.</p>
-    ${list.map(s => { const m = C.muscles[s.id], obs = seen2(an, s);
-      return `<div class="card"><b style="font-size:16px">${title(s)}</b>
-      <div class="why" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:13px;color:var(--sub)">${s.edited ? '<span class="src">ПРАВКА</span><span>изменено специалистом</span>' : obs.length && !s.derived ? `<span class="src">ЗАМЕР</span><span>${esc(obs.map(x => x.replace(' (на границе нормы)', '')).join(' · '))}</span>` : `<span class="src hyp">ЦЕПЬ</span><span>${esc(s.byChain ? 'по цепи «' + s.byChain + '»' : 'вывод по связи мышц')}</span>`}</div>
-      <div class="seg" style="margin-top:12px;border-radius:var(--r-sm)">${[['WEAK', 'Слабость'], ['HYPER', 'Перегруз'], ['SHORT', 'Укороч.'], ['OK', 'Норма']].map(([k, n]) => `<button data-k="${s.key}" data-s="${k}" class="${s.k === k ? 'on' : ''}" style="min-height:44px;padding:4px 2px;border-radius:var(--r-xs);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:12px"><span class="mark sm ${k}"></span>${n}</button>`).join('')}</div>
-      ${m && m.proTest ? `<details style="margin-top:var(--s3);border-top:1px solid var(--line-2);padding-top:4px" ${s === firstOpen ? 'open' : ''}><summary class="row" style="font-size:14px;font-weight:600;color:var(--focus)"><span style="flex:1">Проверь руками${chk[s.key] === 'yes' ? ' · подтвердилось' : chk[s.key] === 'no' ? ' · не подтвердилось' : ''}</span>${ic('chevron-down', 's')}</summary>
-        <p style="font-size:14px;line-height:1.45;margin-top:4px">${m.proTest}</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s2);margin-top:10px"><button class="btn${chk[s.key] === 'yes' ? '' : ' line'}" data-chk="${s.key}" data-v="yes" style="height:48px;border-radius:var(--r-sm);font-size:15px">Подтвердилось</button><button class="btn${chk[s.key] === 'no' ? '' : ' line'}" data-chk="${s.key}" data-v="no" style="height:48px;border-radius:var(--r-sm);font-size:15px">Не подтвердилось</button></div></details>` : ''}</div>`; }).join('')}`;
-    dock = `<div class="dock bar"><div style="flex:1;font-size:14px;align-self:center">Проверено руками <b class="num">${testable.filter(s => chk[s.key]).length} из ${testable.length}</b></div><button class="btn line" id="addm" style="width:auto;padding:0 18px">${ic('plus', 's')}Мышца</button></div>`; }
+    <p class="sub" style="font-size:14px">Черновик по замеру и цепям. Проверьте руками: в отчёт пойдёт ваша версия. Уверенность считается по опыту, исследованиям и замеру.</p>
+    <div id="hlist" style="display:flex;flex-direction:column;gap:var(--s3)">${list.map((s, i) => hypCard(a, an, s, i === list.findIndex(x => C.muscles[x.id] && C.muscles[x.id].proTest && !chk[x.key]), evid)).join('')}</div>`;
+    dock = `<div class="dock bar"><div style="flex:1;font-size:14px;align-self:center">Проверено руками <b class="num" id="hcnt">${testable.filter(s => chk[s.key]).length} из ${testable.length}</b></div><button class="btn line" id="addm" style="width:auto;padding:0 18px">${ic('plus', 's')}Мышца</button></div>`; }
   if (view === 'plan') { const pl = a.plan || { ex: plan(top), text: '' }; const recs = muscleRecs(a);
     body = `<div class="card"><div class="row"><div class="eyebrow" style="flex:1">Рекомендации по мышцам</div>${recs.length ? '<button class="pill" id="addall" style="font-size:12px">Добавить все</button>' : ''}</div>
       ${recs.length ? recs.map((r, i) => `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line-2)"><div class="row"><i class="bar" style="background:${TONE_HEX[r.s.k]};height:22px"></i><b style="flex:1;font-size:15px">${r.head}</b>${r.all.length ? `<button class="pill" data-add="${i}" style="font-size:12px">Добавить</button>` : ''}</div>
@@ -437,22 +504,38 @@ export async function result(aid, view = 'measured') {
   if ($('#cmp')) $('#cmp').onclick = async () => { await savePlan(a); a.draft = false; await put('assessments', a); compare(a.prevId, aid); };
   $('#fin').onclick = async () => { await savePlan(a); a.draft = false; await put('assessments', a); clientCard(a.clientId); };
   document.querySelectorAll('[data-em]').forEach(btn => btn.onclick = async () => { a.expectMatch = a.expectMatch === btn.dataset.em ? null : btn.dataset.em; await put('assessments', a); const y = scrollY; await result(aid, view); scrollTo(0, y); });
-  if (view !== 'plan') document.querySelectorAll('[data-chk]').forEach(btn => btn.onclick = async () => { a.check = a.check || {}; const k = btn.dataset.chk;
+  if (view === 'measured') document.querySelectorAll('[data-chk]').forEach(btn => btn.onclick = async () => { a.check = a.check || {}; const k = btn.dataset.chk;
     a.check[k] = a.check[k] === btn.dataset.v ? undefined : btn.dataset.v; if (!a.check[k]) delete a.check[k];
     if (btn.dataset.v === 'no' && a.check[k]) { a.hyp = a.hyp || {}; a.hyp[k] = 'OK'; } // не подтвердилось руками: в отчет как норма
     if (btn.dataset.v === 'yes' && a.hyp && a.hyp[k] === 'OK') delete a.hyp[k];
     await put('assessments', a); const y = scrollY; await result(aid, view); scrollTo(0, y); });
   if (view === 'hyp') { let back = false; const lab = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 4)).map(s => ({ key: s.key, title: C.muscles[s.id].zone + (s.side === 'RIGHT' ? ' справа' : s.side === 'LEFT' ? ' слева' : ''), sub: toneText(s, 0).toLowerCase(), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
-    let v3 = null, mode3 = false;
-    const draw2 = () => { if (mode3) { if (v3) v3.turn(back); return; } drawHeat($('#heat'), sp, back, null, lab); }; draw2();
+    let v3 = null, mode3 = false, cur = sp;
+    const draw2 = () => { if (mode3) { if (v3) v3.turn(back); return; } drawHeat($('#heat'), cur, back, null, lab); }; draw2();
     $('#hf').onclick = async () => { if (mode3) await $('#h3').onclick(); back = false; $('#hf').classList.add('on'); $('#hb').classList.remove('on'); draw2(); }; $('#hb').onclick = async () => { if (mode3) await $('#h3').onclick(); back = true; $('#hb').classList.add('on'); $('#hf').classList.remove('on'); draw2(); };
-    // 3D-модель с той же картой (с правками специалиста); касание мышцы прокручивает к ее строке
+    // 3D-модель с той же картой (с правками специалиста); касание мышцы прокручивает к ее карточке
     if ($('#h3')) $('#h3').onclick = async () => { mode3 = !mode3; HYP3D = mode3; $('#h3').classList.toggle('on', mode3); $('#hf').classList.toggle('on', !mode3 && !back); $('#hb').classList.toggle('on', !mode3 && back); $('#hz').style.display = mode3 ? 'flex' : 'none';
       if (!mode3) { if (v3) v3.dispose(); v3 = null; $('#hvis').style.height = ''; $('#hvis').innerHTML = '<canvas id="heat" style="width:100%;display:block"></canvas>'; draw2(); return; }
-      $('#hvis').style.height = '380px'; v3 = await body3D($('#hvis'), sp, key => { const el = document.querySelector(`[data-k="${key}"]`); if (el) el.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+      $('#hvis').style.height = '380px'; try { v3 = await body3D($('#hvis'), cur, key => { const el = document.querySelector(`[data-card="${key}"]`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }); }
+      catch (e) { toast('3D не загрузилось, показываю схему'); mode3 = true; return $('#h3').onclick(); }
       v3.turn(back); document.querySelectorAll('[data-z]').forEach(b => b.onclick = () => v3.focus(b.dataset.z)); };
     if (HYP3D && $('#h3')) { HYP3D = false; $('#h3').click(); }
-    document.querySelectorAll('[data-s]').forEach(b => b.onclick = async () => { a.hyp = a.hyp || {}; a.hyp[b.dataset.k] = b.dataset.s; await put('assessments', a); const y = scrollY; await result(aid, 'hyp'); scrollTo(0, y); });
+    // правка на месте: перерисовываются только карточка, схема или 3D и счетчик
+    const refresh = key => { cur = proSpots(a); const s = cur.find(x => x.key === key) || cur.find(x => x.key === key);
+      const el = document.querySelector(`[data-card="${key}"]`); if (el && s) { const open = el.querySelector('details') && el.querySelector('details').open; el.outerHTML = hypCard(a, an, s, open, evid); bindCard(document.querySelector(`[data-card="${key}"]`)); }
+      if (mode3 && v3) v3.update(cur); else if ($('#heat')) drawHeat($('#heat'), cur, back, null, lab);
+      const list = hypList(a, cur, top), testable = list.filter(x => C.muscles[x.id] && C.muscles[x.id].proTest), chk = a.check || {}; $('#hcnt').textContent = `${testable.filter(x => chk[x.key]).length} из ${testable.length}`; };
+    const bindCard = el => {
+      el.querySelectorAll('[data-s]').forEach(b => b.onclick = async () => { const key = b.dataset.k, to = b.dataset.s, s = cur.find(x => x.key === key), from = s ? s.k : null; if (to === from) return;
+        const why = await whySheet(`${title(s)} → ${STATE4.find(x => x[0] === to)[1].toLowerCase()}`); if (!why) return;
+        a.hyp = a.hyp || {}; a.hyp[key] = to; a.hypWhy = { ...(a.hypWhy || {}), [key]: why }; await logOverride(a, key, from, to, why); await put('assessments', a); refresh(key); });
+      el.querySelectorAll('[data-chk]').forEach(btn => btn.onclick = async () => { a.check = a.check || {}; const k = btn.dataset.chk;
+        a.check[k] = a.check[k] === btn.dataset.v ? undefined : btn.dataset.v; if (!a.check[k]) delete a.check[k];
+        if (btn.dataset.v === 'no' && a.check[k]) { a.hyp = a.hyp || {}; a.hyp[k] = 'OK'; a.hypWhy = { ...(a.hypWhy || {}), [k]: 'не подтвердилось руками' }; } // не подтвердилось руками: в отчет как норма
+        if (btn.dataset.v === 'yes' && a.hyp && a.hyp[k] === 'OK') delete a.hyp[k];
+        await put('assessments', a); refresh(k); });
+      el.querySelectorAll('[data-conf]').forEach(b => b.onclick = () => { const s = cur.find(x => x.key === el.dataset.card); confSheet(scoreSpot(s, an.findings, evid), () => result(aid, 'hyp')); }); };
+    document.querySelectorAll('[data-card]').forEach(bindCard);
     $('#addm').onclick = () => { const d = document.createElement('div'); d.className = 'sheet';
       d.innerHTML = `<div><h2>Добавить мышцу</h2>
         <select id="mm" class="field" style="margin-top:12px;padding:0 10px">${Object.entries(C.muscles).sort((x, y) => (x[1].zone || '').localeCompare(y[1].zone || '')).map(([id, m]) => `<option value="${id}">${m.zone || m.name} — ${m.name}</option>`).join('')}</select>
@@ -707,7 +790,7 @@ function cleanRemote(r) {
 }
 async function addResult(c, r) {
   r = cleanRemote(r); const prev = (await byClient(c.id)).at(-1); const tpl = TEMPLATES.find(t => t[2].join() === (r.protocol || []).join());
-  const a = { id: uid(), clientId: c.id, date: r.date || Date.now(), template: tpl ? tpl[0] : 'custom', templateName: 'Дома · ' + (tpl ? tpl[1] : 'свой протокол'), protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup,
+  const a = { id: uid(), clientId: c.id, date: r.date || Date.now(), template: tpl ? tpl[0] : 'custom', templateName: 'По ссылке · ' + (tpl ? tpl[1] : 'свой протокол'), protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup,
     limits: r.limits || {}, pain: r.pain || {}, hyp: {}, plan: null, note: '', nextDate: (r.date || Date.now()) + 30 * DAY, prevId: prev ? prev.id : null, draft: true, source: 'home' };
   await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses || {} });
 }
