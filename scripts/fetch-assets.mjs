@@ -8,13 +8,21 @@ import { dirname } from 'node:path';
 const ORIGINS = (process.env.ASSETS_ORIGIN || 'https://bodypassport.vercel.app,https://test.rifataiupov.com').split(',');
 const MP = { 'models/pose_landmarker_full.task': 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task',
   'models/pose_landmarker_lite.task': 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task' };
-const MIN = { 'models/pose_landmarker_full.task': 1e6, 'models/pose_landmarker_lite.task': 1e6, 'data/body3d.bin': 1e6 };
+// MediaPipe и three.js отдаются с нашего домена: в РФ jsdelivr бывает недоступен или медленный, а модель на приеме должна открыться всегда.
+// Версии закреплены так же, как в коде (js/core.js, index.html); без них сборка падает.
+const CDN = 'https://cdn.jsdelivr.net/npm/', TV = '@mediapipe/tasks-vision@0.10.20/', TH = 'three@0.160.0/';
+const VENDOR = { 'vendor/mediapipe/vision_bundle.mjs': CDN + TV + 'vision_bundle.mjs',
+  'vendor/mediapipe/wasm/vision_wasm_internal.js': CDN + TV + 'wasm/vision_wasm_internal.js', 'vendor/mediapipe/wasm/vision_wasm_internal.wasm': CDN + TV + 'wasm/vision_wasm_internal.wasm',
+  'vendor/mediapipe/wasm/vision_wasm_nosimd_internal.js': CDN + TV + 'wasm/vision_wasm_nosimd_internal.js', 'vendor/mediapipe/wasm/vision_wasm_nosimd_internal.wasm': CDN + TV + 'wasm/vision_wasm_nosimd_internal.wasm',
+  'vendor/three/three.module.js': CDN + TH + 'build/three.module.js', 'vendor/three/addons/controls/OrbitControls.js': CDN + TH + 'examples/jsm/controls/OrbitControls.js' };
+Object.assign(MP, VENDOR);
+const MIN = { 'models/pose_landmarker_full.task': 1e6, 'models/pose_landmarker_lite.task': 1e6, 'data/body3d.bin': 1e6, 'vendor/mediapipe/wasm/vision_wasm_internal.wasm': 1e6, 'vendor/three/three.module.js': 3e5 };
 
 const exists = p => access(p).then(() => true, () => false);
 async function get(path) {
   for (const o of ORIGINS) {
     try { const r = await fetch(o.replace(/\/$/, '') + '/' + path + '?build=' + Date.now(), { signal: AbortSignal.timeout(60000) });
-      if (r.ok) { const b = Buffer.from(await r.arrayBuffer()); if (b.length >= (MIN[path] || 100)) return b; } } catch (e) {}
+      if (r.ok) { const b = Buffer.from(await r.arrayBuffer()); if (b.length >= (MIN[path] || 100) && !/^\s*<(!doctype|html)/i.test(b.subarray(0, 64).toString())) return b; } } catch (e) {}
   }
   if (MP[path]) { const r = await fetch(MP[path]); if (r.ok) return Buffer.from(await r.arrayBuffer()); }
   throw new Error('не удалось получить ' + path);
@@ -29,7 +37,7 @@ const { readdir } = await import('node:fs/promises');
 for (const e of await readdir('.')) if (!SKIP.has(e) && !e.endsWith('.md')) await cp(e, OUT + '/' + e, { recursive: true });
 
 const idx = JSON.parse((await get('voice/index.json')).toString('utf8'));
-const files = ['models/pose_landmarker_full.task', 'models/pose_landmarker_lite.task', 'data/body3d.bin', ...new Set(Object.values(idx).map(f => 'voice/' + f))];
+const files = ['models/pose_landmarker_full.task', 'models/pose_landmarker_lite.task', 'data/body3d.bin', ...Object.keys(VENDOR), ...new Set(Object.values(idx).map(f => 'voice/' + f))];
 await save(OUT + '/voice/index.json', JSON.stringify(idx));
 let n = 0;
 for (let i = 0; i < files.length; i += 10) await Promise.all(files.slice(i, i + 10).map(async f => { if (await exists(OUT + '/' + f)) return; await save(OUT + '/' + f, await get(f)); n++; }));

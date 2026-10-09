@@ -1,6 +1,8 @@
 // Камера, MediaPipe, голос, тепловая карта (2D и 3D). Без сервера: все считается в браузере.
 import { P } from './analysis.js';
-const MP = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.20';
+import { track } from './track.js';
+// MediaPipe со своего домена (кладет scripts/fetch-assets.mjs при сборке), jsdelivr только запасной вариант
+const MP_LOCAL = new URL('../vendor/mediapipe', import.meta.url).href, MP_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.20';
 
 // ---------- контент ----------
 export const C = {};
@@ -95,21 +97,36 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 
 // ---------- камера и MediaPipe ----------
 let landmarker = null;
+// какая модель и где считается: пишется в результат теста и в отчет о проблеме, чтобы ретест на другом телефоне был объясним
+export const poseInfo = { model: null, deleg: null, loadSec: null, src: null };
 export async function initPose() {
   if (landmarker) return landmarker;
-  const { PoseLandmarker, FilesetResolver } = await import(MP + '/vision_bundle.mjs');
-  const fs = await FilesetResolver.forVisionTasks(MP + '/wasm');
-  // на слабых телефонах облегченная модель: точность чуть ниже, но кадров в секунду вдвое больше
-  const model = device.weak ? 'models/pose_landmarker_lite.task' : 'models/pose_landmarker_full.task';
-  const opts = (d) => ({ baseOptions: { modelAssetPath: model, delegate: d }, runningMode: 'VIDEO', numPoses: 1, minPoseDetectionConfidence: .4, minPosePresenceConfidence: .4, minTrackingConfidence: .4 });
-  try { landmarker = await PoseLandmarker.createFromOptions(fs, opts('GPU')); } catch (e) { landmarker = await PoseLandmarker.createFromOptions(fs, opts('CPU')); }
+  const t0 = performance.now();
+  try {
+    let MP = MP_LOCAL, mod; try { mod = await import(MP + '/vision_bundle.mjs'); } catch (e) { MP = MP_CDN; mod = await import(MP + '/vision_bundle.mjs'); }
+    const { PoseLandmarker, FilesetResolver } = mod; poseInfo.src = MP === MP_LOCAL ? 'local' : 'cdn';
+    const fs = await FilesetResolver.forVisionTasks(MP + '/wasm');
+    // на слабых телефонах облегченная модель: точность чуть ниже, но кадров в секунду вдвое больше
+    poseInfo.model = device.weak ? 'lite' : 'full'; const model = `models/pose_landmarker_${poseInfo.model}.task`;
+    const opts = (d) => ({ baseOptions: { modelAssetPath: model, delegate: d }, runningMode: 'VIDEO', numPoses: 1, minPoseDetectionConfidence: .4, minPosePresenceConfidence: .4, minTrackingConfidence: .4 });
+    try { landmarker = await PoseLandmarker.createFromOptions(fs, opts('GPU')); poseInfo.deleg = 'GPU'; } catch (e) { landmarker = await PoseLandmarker.createFromOptions(fs, opts('CPU')); poseInfo.deleg = 'CPU'; }
+  } catch (e) { track('pose_fail', { c: String(e && e.message || e).slice(0, 50), d: (performance.now() - t0) / 1000 }, false); throw e; }
+  poseInfo.loadSec = Math.round((performance.now() - t0) / 100) / 10;
+  track('pose_init', { c: `${poseInfo.deleg} ${poseInfo.model} ${poseInfo.src}`, d: poseInfo.loadSec }, false);
   return landmarker;
 }
+// модель и MediaPipe заранее, пока человек читает инструкцию: на плохом Wi-Fi клиент не стоит и не ждет «Загружаю модель…»
+let prefetched = false;
+export function prefetchPose() { if (prefetched || landmarker) return; prefetched = true;
+  const go = () => [`models/pose_landmarker_${device.weak ? 'lite' : 'full'}.task`, MP_LOCAL + '/vision_bundle.mjs', MP_LOCAL + '/wasm/vision_wasm_internal.js', MP_LOCAL + '/wasm/vision_wasm_internal.wasm']
+    .forEach(u => fetch(u, { priority: 'low' }).catch(() => {}));
+  (window.requestIdleCallback || (f => setTimeout(f, 1500)))(go); }
 export const cam = { video: null, stream: null, back: localStorage.getItem('bp_back') === '1', frame: null, running: false };
 export async function startCamera(video) {
   stopCamera();
   cam.video = video;
-  cam.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: cam.back ? 'environment' : 'user', width: { ideal: device.weak ? 1280 : 1920 }, height: { ideal: device.weak ? 720 : 1080 } } });
+  try { cam.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: cam.back ? 'environment' : 'user', width: { ideal: device.weak ? 1280 : 1920 }, height: { ideal: device.weak ? 720 : 1080 } } }); }
+  catch (e) { track('cam_err', { c: (e && e.name) || 'unknown' }, false); throw e; }
   // самый широкий угол, который позволяет камера (на части Android есть зум меньше 1)
   try { const tr = cam.stream.getVideoTracks()[0], caps = tr.getCapabilities ? tr.getCapabilities() : {};
     if (caps.zoom) await tr.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] }); } catch (e) {}

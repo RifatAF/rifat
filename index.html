@@ -193,6 +193,9 @@ details>summary{cursor:pointer;list-style:none;min-height:var(--tap);display:fle
 /* шторка */
 .sheet{position:fixed;inset:0;background:rgba(10,12,16,.4);display:flex;align-items:flex-end;z-index:20;animation:fdin var(--d3) var(--ease-out)}
 .sheet>div{background:var(--bg);width:100%;max-width:480px;max-height:92dvh;overflow:auto;margin:0 auto;border-radius:var(--r-xl) var(--r-xl) 0 0;padding:28px var(--gutter) calc(env(safe-area-inset-bottom) + 28px);position:relative;animation:up var(--d3) var(--ease-out);box-shadow:var(--sh-3)}
+#bugtab{position:fixed;right:0;top:46%;z-index:15;writing-mode:vertical-rl;transform:rotate(180deg);background:var(--ink);color:#fff;border:0;border-radius:0 10px 10px 0;padding:10px 5px;font:600 11px Onest;letter-spacing:.04em;opacity:.55;cursor:pointer}
+#bugtab:hover,#bugtab:focus-visible{opacity:1}
+body:has(.cam) #bugtab,body:has(.sheet) #bugtab{display:none}
 .sheet>div::before{content:'';position:absolute;top:8px;left:50%;width:36px;height:5px;margin-left:-18px;border-radius:3px;background:var(--line)}
 
 /* движение */
@@ -254,7 +257,7 @@ if (!Array.prototype.at) Array.prototype.at = function (i) { i = Math.trunc(i) |
 if (!Array.prototype.findLastIndex) Array.prototype.findLastIndex = function (f) { for (let i = this.length - 1; i >= 0; i--) if (f(this[i], i, this)) return i; return -1; };
 if (window.CanvasRenderingContext2D && !CanvasRenderingContext2D.prototype.roundRect) CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h) { this.rect(x, y, w, h); };
 </script>
-<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script type="importmap">{"imports":{"three":"./vendor/three/three.module.js","three/addons/":"./vendor/three/addons/"}}</script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

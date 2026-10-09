@@ -4,9 +4,23 @@
 import { put, list, get } from '@vercel/blob';
 import { currentUser, isAdmin } from './_session.js';
 
-const KINDS = { result: [1, 5], nps: [0, 10], free: [0, 5] };
-const PLACES = new Set(['map', 'result', 'home', 'menu', 'settings', 'done']);
+const KINDS = { result: [1, 5], nps: [0, 10], free: [0, 5], bug: [0, 0] };
+const PLACES = new Set(['map', 'result', 'home', 'menu', 'settings', 'done', 'any']);
+// диагностика к сообщению о проблеме: устройство, браузер, последние нажатия (только id кнопок) и ошибки, без имен и данных клиентов
+function diag(d) { if (!d || typeof d !== 'object') return null; const o = {};
+  for (const k of ['os', 'br', 'ua', 'scr', 'net', 'role', 'path', 'model', 'deleg', 'screen', 'storage']) if (d[k] != null) o[k] = clip(String(d[k]), 200);
+  for (const k of ['mem', 'cpu', 'sec', 'fps', 'loadSec', 'quota']) if (Number.isFinite(+d[k])) o[k] = +d[k];
+  if (typeof d.pwa === 'boolean') o.pwa = d.pwa; if (typeof d.persisted === 'boolean') o.persisted = d.persisted;
+  for (const k of ['trail', 'errors']) if (Array.isArray(d[k])) o[k] = d[k].slice(-40).map(x => clip(String(x), 200));
+  return o; }
 const clip = (v, n) => typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000b-\u001f<>]/g, '').trim().slice(0, n) : '';
+// жалоба сразу приходит администраторам в Telegram (ADMIN_IDS вида t_<id>), чтобы не ждать сводки
+async function notify(fb) { const tok = process.env.TELEGRAM_BOT_TOKEN; if (!tok) return;
+  const ids = String(process.env.ADMIN_IDS || '').split(',').map(x => x.trim()).filter(x => /^t_\d+$/.test(x)).map(x => x.slice(2));
+  const d = fb.d || {}, text = `Проблема (${fb.r}): ${fb.t}\n${d.os || ''} · ${d.br || ''} · ${d.scr || ''}${d.pwa ? ' · PWA' : ''}${d.fps ? ' · ' + d.fps + ' fps' : ''}${d.model ? ' · ' + d.model : ''}\n` +
+    (d.errors && d.errors.length ? 'Ошибки: ' + d.errors.slice(-2).join(' | ') + '\n' : '') + (fb.contact ? 'Контакт: ' + fb.contact.handle : 'без контакта');
+  await Promise.all(ids.map(id => fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: id, text: text.slice(0, 3500), disable_web_page_preview: true }), signal: AbortSignal.timeout(4000) }).catch(() => {}))); }
 async function readAll(stream) { const ch = []; for await (const c of stream) ch.push(Buffer.from(c)); return Buffer.concat(ch).toString('utf8'); }
 
 export default async function handler(req, res) {
@@ -16,7 +30,7 @@ export default async function handler(req, res) {
       const origin = req.headers.origin; let oh = null; try { oh = origin ? new URL(origin).host : null; } catch (e) { oh = '?'; }
       if (origin && oh !== req.headers.host) return res.status(403).json({ error: 'origin' });
       const raw = typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {});
-      if (raw.length > 6000) return res.status(413).json({ error: 'too large' });
+      if (raw.length > 16000) return res.status(413).json({ error: 'too large' });
       let b; try { b = JSON.parse(raw); } catch (e) { return res.status(400).json({ error: 'bad body' }); }
       const range = KINDS[b && b.k]; if (!range) return res.status(400).json({ error: 'kind' });
       const score = b.s == null || b.s === '' ? null : Math.round(+b.s);
@@ -24,9 +38,11 @@ export default async function handler(req, res) {
       const text = clip(b.t, 2000);
       if (score == null && !text) return res.status(400).json({ error: 'empty' });
       const fb = { at: Date.now(), k: b.k, s: score, t: text, w: PLACES.has(b.w) ? b.w : 'menu', r: b.r === 'pro' ? 'pro' : 'client', v: clip(b.v, 20) };
+      if (b.k === 'bug') { if (!text) return res.status(400).json({ error: 'empty' }); fb.d = diag(b.d); }
       if (b.contact === true) { const u = await currentUser(req).catch(() => null);
         fb.contact = { name: u ? clip(u.name, 80) : '', handle: u ? (u.username ? '@' + clip(u.username, 40) : clip(u.email, 120)) : '', note: clip(b.c, 120) }; }
       const day = new Date(fb.at).toISOString().slice(0, 10);
+      if (fb.k === 'bug') await notify(fb).catch(() => {});
       await put(`feedback/${day}/${fb.at}-${Math.random().toString(36).slice(2, 8)}.json`, JSON.stringify(fb), { access: 'private', contentType: 'application/json', addRandomSuffix: false });
       return res.status(200).json({ ok: true });
     }
