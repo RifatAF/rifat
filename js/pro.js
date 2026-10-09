@@ -102,15 +102,25 @@ export const TEMPLATES = [
 function orderTemplates(sp) { const o = TEMPLATE_ORDER[sp]; if (o) TEMPLATES.sort((a, b) => o.indexOf(a[0]) - o.indexOf(b[0])); }
 // профиль специалиста: имя для шапки и отчетов, контакт для записи в отчете клиенту
 async function profileForm() {
-  const name = (await meta('profile')) || defaultAuthor(), contact = (await meta('contact')) || '';
+  const name = (await meta('profile')) || defaultAuthor(), contact = (await meta('contact')) || '', logo = (await meta('logo')) || '';
   go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:18px">Мой профиль</b></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:14px;margin-top:8px">
     <label><b>Имя и специальность</b><input id="pn" value="${esc(name)}" placeholder="Анна Смирнова, персональный тренер" class="field" style="margin-top:8px"></label>
     <label><b>Контакт для записи</b><input id="pc" value="${esc(contact)}" placeholder="@telegram, телефон или сайт" class="field" style="margin-top:8px"></label>
-    <p class="sub" style="font-size:13px">Имя и контакт появятся в шапке кабинета и в отчете, который клиент сохранит и покажет друзьям.</p>
+    <div><b>Логотип для отчета</b><div class="row" style="gap:12px;margin-top:8px"><div id="lgv" style="width:64px;height:64px;border-radius:14px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${logo ? `<img src="${logo}" alt="" style="max-width:100%;max-height:100%">` : ic('image', 's')}</div>
+      <label class="btn line" style="height:48px;flex:1;cursor:pointer">${logo ? 'Заменить' : 'Загрузить'}<input type="file" id="lgf" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none"></label>${logo ? '<button class="btn ghost" id="lgx" style="height:48px;width:auto;padding:0 14px">Убрать</button>' : ''}</div></div>
+    <p class="sub" style="font-size:13px">Имя, контакт и логотип появятся в отчете клиенту (картинка и PDF), который он сохранит и покажет друзьям.</p>
    </div><div class="pad" style="padding:20px"><button class="btn" id="ps">Сохранить</button></div></div>`);
   $('#back').onclick = () => proHome();
   $('#ps').onclick = async () => { await setMeta('profile', $('#pn').value.trim().slice(0, 80) || defaultAuthor()); await setMeta('contact', $('#pc').value.trim().slice(0, 60)); proHome(); };
+  // логотип ужимается до 256 px и хранится в кабинете как PNG: попадает в копию и в отчеты, на сервер не уходит
+  $('#lgf').onchange = async e => { const f = e.target.files[0]; if (!f) return; if (f.size > 5e6) return toast('Файл больше 5 МБ');
+    try { const url = URL.createObjectURL(f), im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
+      const k = Math.min(1, 256 / Math.max(im.width || 256, im.height || 256)), c = document.createElement('canvas'); c.width = Math.max(1, Math.round((im.width || 256) * k)); c.height = Math.max(1, Math.round((im.height || 256) * k));
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      await setMeta('profile', $('#pn').value.trim().slice(0, 80) || defaultAuthor()); await setMeta('contact', $('#pc').value.trim().slice(0, 60));
+      await setMeta('logo', c.toDataURL('image/png')); toast('Логотип сохранен'); profileForm(); } catch (err) { toast('Не удалось прочитать картинку'); } };
+  if ($('#lgx')) $('#lgx').onclick = async () => { await setMeta('logo', ''); profileForm(); };
 }
 // пример клиента: специалист видит результат до первой своей съемки
 async function openDemo() {
@@ -853,10 +863,25 @@ async function report(aid) {
   if (!same) after.push({ h: 'Проверим снова', text: fmtDate(a.nextDate) + ': тот же тест, сравним с сегодняшним' });
   const checked = Object.keys(a.check || {}).length > 0 || sp.some(s => s.edited);
   const note = 'Предварительная оценка движения по камере телефона, не медицинское заключение. ' + (checked ? 'Выводы проверены специалистом на приеме.' : 'Выводы о мышцах пока не проверены руками.');
-  const blob = await passportImage({ eyebrow: 'ПАСПОРТ ДВИЖЕНИЯ', name: c.name, date: 'Оценка ' + fmtDate(a.date), sp, sections, delta, footer: { name: author, contact: contact ? 'Запись: ' + contact : location.host, after, note } });
-  const file = new File([blob], `bodypassport-${c.name}.png`, { type: 'image/png' });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: 'Паспорт движения' }).then(() => track('report_shared', { c: 'file' }, false)).catch(() => {});
-  else { const l = document.createElement('a'); l.href = URL.createObjectURL(blob); l.download = file.name; l.click(); track('report_shared', { c: 'download' }, false); }
+  const logo = await meta('logo');
+  const cv = await passportImage({ eyebrow: 'ПАСПОРТ ДВИЖЕНИЯ', name: c.name, date: 'Оценка ' + fmtDate(a.date), sp, sections, delta, footer: { name: author, contact: contact ? 'Запись: ' + contact : location.host, after, note, logo }, raw: true });
+  // предпросмотр перед отправкой: специалист видит ровно то, что получит клиент
+  const base = `bodypassport-${c.name.replace(/[^\p{L}\p{N}]+/gu, '-')}-${new Date(a.date).toISOString().slice(0, 10)}`;
+  const d = document.createElement('div'); d.className = 'sheet';
+  d.innerHTML = `<div><h2 style="font-size:20px">Отчет клиенту</h2><p class="sub" style="font-size:13px;margin-top:4px">Так его увидит ${esc(c.name)}. PDF удобно распечатать, картинку переслать в мессенджер.</p>
+    <div style="margin-top:12px;max-height:46dvh;overflow:auto;border-radius:16px;border:1px solid var(--line)"><img src="${cv.toDataURL('image/jpeg', .8)}" alt="Отчет" style="width:100%;display:block"></div>
+    ${logo ? '' : '<button class="link" id="rplg" style="font-size:13px;margin-top:8px">Добавить свой логотип в отчет</button>'}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn" id="rpdf">${ic('file-text', 's')}PDF</button><button class="btn line" id="rpng">${ic('image', 's')}Картинка</button></div>
+    <button class="btn ghost" id="rpx" style="margin-top:8px">Закрыть</button></div>`;
+  document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; d.querySelector('#rpx').onclick = () => d.remove();
+  if (d.querySelector('#rplg')) d.querySelector('#rplg').onclick = () => { d.remove(); profileForm(); };
+  const send = async (blob, name, type, kind) => { const file = new File([blob], name, { type });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: 'Паспорт движения' }); track('report_shared', { c: kind }, false); } catch (e) {} }
+    else { const l = document.createElement('a'); l.href = URL.createObjectURL(blob); l.download = name; l.click(); track('report_shared', { c: kind + '_download' }, false); } };
+  d.querySelector('#rpdf').onclick = async () => { const b = d.querySelector('#rpdf'); b.disabled = true; b.textContent = 'Собираю PDF…';
+    try { const { canvasToPdf } = await import('./pdf.js'); await send(await canvasToPdf(cv, 'BodyPassport'), base + '.pdf', 'application/pdf', 'pdf'); } catch (e) { toast('Не удалось собрать PDF: ' + e.message); }
+    b.disabled = false; b.innerHTML = ic('file-text', 's') + 'PDF'; };
+  d.querySelector('#rpng').onclick = async () => send(await new Promise(r => cv.toBlob(r, 'image/png')), base + '.png', 'image/png', 'png');
 }
 
 // сообщение клиенту о ретесте: текст в мессенджер одним касанием
@@ -940,6 +965,10 @@ async function sendJoin() {
   draw(); document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
 }
 /** Забирает новые результаты с сервера (по ссылкам клиентам и по общей ссылке), расшифровывает и кладет в карточки. */
+// вернулись в приложение на главный экран кабинета: проверяем, не пришли ли результаты по ссылке (для входа через Google, где бота нет)
+let pullAt = 0;
+document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible' || !document.getElementById('join') || !document.getElementById('menu') || Date.now() - pullAt < 30000) return;
+  pullAt = Date.now(); pullResults().then(n => { if (n.length && document.getElementById('join')) proHome('', n); }).catch(() => {}); });
 export async function pullResults() {
   const clients = (await all('clients')).filter(c => c.invite); const bx = await meta('inbox');
   const boxes = b => [b.id].concat(b.old && Date.now() < LEGACY_UNTIL ? [b.old] : []);

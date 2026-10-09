@@ -30,6 +30,19 @@ const legacyOk = () => Date.now() < LEGACY_UNTIL;
 // может ли пользователь читать и удалять этот ящик
 const owns = (u, id) => { const p = parse(id); return p ? p.tag === ownerTag(u.id) : legacyOk(); };
 
+// уведомление владельцу ящика: метка владельца → id аккаунта хранится отдельно (сам id ящика его не раскрывает).
+// Telegram-аккаунтам бот пишет сразу; сообщение без имени клиента и без данных теста, они зашифрованы.
+const ownerPath = tag => `relayowner/${tag}.json`;
+async function rememberOwner(u) { if (u.relayTag === ownerTag(u.id)) return;
+  await put(ownerPath(ownerTag(u.id)), JSON.stringify({ uid: u.id }), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true });
+  u.relayTag = ownerTag(u.id); await saveUser(u); }
+async function notifyOwner(tag, origin) {
+  const tok = process.env.TELEGRAM_BOT_TOKEN; if (!tok) return;
+  const r = await get(ownerPath(tag), { access: 'private', useCache: false }).catch(() => null); if (!r || !r.stream) return;
+  const { uid } = JSON.parse(await readAll(r.stream)); if (!/^t_\d+$/.test(uid || '')) return;
+  await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(4000),
+    body: JSON.stringify({ chat_id: uid.slice(2), text: 'BodyPassport: клиент прошел тест по вашей ссылке. Результат в кабинете: ' + (origin || 'https://bodypassport.vercel.app') + '/?pro=1', disable_web_page_preview: true }) }).catch(() => {});
+}
 async function readAll(stream) { const chunks = []; for await (const c of stream) chunks.push(Buffer.from(c)); return Buffer.concat(chunks).toString('utf8'); }
 
 // ежедневная уборка (Vercel Cron): старые неразобранные результаты и события
@@ -61,10 +74,12 @@ export default async function handler(req, res) {
       if (blobs.length >= PER_ID) return res.status(429).json({ error: 'too many' });
       const name = `relay/${id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`;
       await put(name, body, { access: 'private', contentType: 'application/json', addRandomSuffix: false });
+      const pid = parse(id); if (pid) await notifyOwner(pid.tag, req.headers.host ? 'https://' + req.headers.host : null).catch(() => {});
       return res.status(200).json({ ok: true });
     }
     const u = await currentUser(req);
     if (!u || u.role !== 'specialist') return res.status(401).json({ error: 'login' });
+    await rememberOwner(u).catch(() => {}); // старые ссылки тоже начнут присылать уведомления, как только специалист откроет кабинет
     if (req.method === 'POST') { // a === 'new': новый подписанный ящик
       if (!SECRET) return res.status(503).json({ error: 'not configured' });
       const day = new Date().toISOString().slice(0, 10);

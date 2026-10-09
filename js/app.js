@@ -4,7 +4,7 @@ import { track } from './track.js';
 import { rateCard, bindRate, installCard, bindInstall, feedbackSheet, shareApp, appLink, mountBugTab } from './grow.js';
 import { proHome, motionViewer, consumerPoses } from './pro.js';
 import { seal } from './core.js';
-import { ensureLogin, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, logout, deleteAccount, betaUsers, providers, config } from './auth.js';
+import { ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, logout, deleteAccount, betaUsers, providers, config } from './auth.js';
 import { C, loadContent, voice, sleep, phone, startMotion, initPose, poseInfo, prefetchPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, RAMP_CSS, body3D, preload3D, device, keepAwake, ic, toast, reduceMotion } from './core.js';
 export { ic, toast };
 
@@ -574,7 +574,8 @@ function joinForm() {
 const PREI = {}, PAINI = {};
 async function inviteWelcome() {
   track('inv_open');
-  if (!(await ensureLogin('client', inviteWelcome))) return;
+  // клиенту по ссылке аккаунт не нужен: пожилые бросали тест на экране входа. Только согласия и проверка безопасности
+  if (!linkConsentOk()) return linkConsent(inviteWelcome, (INV() || {}).s);
   if (!safetyOk()) return safetyScreen(inviteWelcome, null, bot());
   voice.preload(Object.values(SAY));
   const inv = INV(); const rows = rowsOf(inv.p); const pain = PAINI;
@@ -747,12 +748,19 @@ async function shareResult() {
 
 // ---------- картинки-отчеты (1080 px): общая верстка для клиента и специалиста ----------
 // sections: [{ h, rows: [{ k?, text, col? }] }], delta: { name, was, now, u, state }, footer: { name, contact }
-export async function passportImage({ eyebrow, name, date, sp, sections = [], delta = null, footer }) {
+export async function passportImage({ eyebrow, name, date, sp, sections = [], delta = null, footer, raw = false }) {
   const W = 1080, M = 72, cv = document.createElement('canvas'); cv.width = W; cv.height = 4200; const g = cv.getContext('2d');
   await document.fonts.ready; try { await document.fonts.load('500 32px "JetBrains Mono"'); } catch (e) {}
   g.fillStyle = '#F4F3EF'; g.fillRect(0, 0, W, cv.height);
   let y = M + 32; g.fillStyle = '#5B6068'; g.font = '500 32px "JetBrains Mono", monospace'; g.fillText(eyebrow, M, y);
-  y += 96; g.fillStyle = '#111418'; g.font = '700 84px Onest, sans-serif'; g.fillText(String(name).slice(0, 22), M, y);
+  // логотип специалиста в правом верхнем углу, вписан в квадрат 110 px над именем
+  if (footer && footer.logo) { try { const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = footer.logo; });
+    const k = Math.min(110 / im.width, 110 / im.height), lw = im.width * k, lh = im.height * k; g.drawImage(im, W - M - lw, 28 + (110 - lh) / 2, lw, lh); } catch (e) {} }
+  // имя целиком: шрифт уменьшается до 56 px, дальше многоточие; справа место под логотип
+  { const maxW = W - M * 2 - (footer && footer.logo ? 140 : 0); let fs = 84, t = String(name).slice(0, 60); g.fillStyle = '#111418';
+    const fit = () => { g.font = `700 ${fs}px Onest, sans-serif`; return g.measureText(t).width <= maxW; };
+    while (!fit() && fs > 56) fs -= 4; while (!fit() && t.length > 4) t = t.slice(0, -2).trimEnd() + '…';
+    y += 96; g.fillText(t, M, y); }
   y += 56; g.fillStyle = '#5B6068'; g.font = '400 40px Onest, sans-serif'; g.fillText(date, M, y);
   // две карты в белых плитках
   y += 48; const tw = (W - M * 2 - 24) / 2, th = tw * 1.45;
@@ -761,26 +769,27 @@ export async function passportImage({ eyebrow, name, date, sp, sections = [], de
     const hc = document.createElement('canvas'); hc.style.width = '200px'; holder.appendChild(hc); drawHeat(hc, sp, back, null, [], { reveal: false });
     const ih = th - 120, iw = ih * hc.width / hc.height; g.drawImage(hc, x + (tw - iw) / 2, y + 40, iw, ih);
     g.fillStyle = '#5B6068'; g.font = '500 32px "JetBrains Mono", monospace'; g.textAlign = 'center'; g.fillText(back ? 'СЗАДИ' : 'СПЕРЕДИ', x + tw / 2, y + th - 32); g.textAlign = 'left'; }
-  holder.remove(); y += th + 24;
+  holder.remove(); y += th + 24; const breaks = [y]; // где можно резать на страницы PDF: между блоками, а не внутри
   const wrap = (t, x0, size, weight, col, lh = 1.3) => { g.font = `${weight} ${size}px Onest, sans-serif`; g.fillStyle = col; let cur = '';
     for (const w of String(t).split(' ')) { const tt = cur ? cur + ' ' + w : w; if (g.measureText(tt).width > W - x0 - M && cur) { y += size * lh; g.fillText(cur, x0, y); cur = w; } else cur = tt; }
     if (cur) { y += size * lh; g.fillText(cur, x0, y); } };
-  for (const sec of sections) { if (!sec.rows.length) continue; y += 64; g.fillStyle = '#111418'; g.font = '700 46px Onest, sans-serif'; g.fillText(sec.h, M, y); y += 8;
-    for (const r of sec.rows) { y += 16; const y0 = y; if (r.k) { wrap(r.text, M + 72, 56, r.bold ? 700 : 400, '#111418', 1.2); drawMark(g, M + 26, y0 + 36, r.k, { scale: 2.2 }); }
+  for (const sec of sections) { if (!sec.rows.length) continue; breaks.push(y + 12); y += 64; g.fillStyle = '#111418'; g.font = '700 46px Onest, sans-serif'; g.fillText(sec.h, M, y); y += 8;
+    for (const [ri, r] of sec.rows.entries()) { if (ri) breaks.push(y + 10); y += 16; const y0 = y; if (r.k) { wrap(r.text, M + 72, 56, r.bold ? 700 : 400, '#111418', 1.2); drawMark(g, M + 26, y0 + 36, r.k, { scale: 2.2 }); }
       else wrap(r.text, M, 40, 400, r.col || '#16181C'); } }
-  if (delta) { y += 72; g.fillStyle = '#111418'; g.font = '700 46px Onest, sans-serif'; g.fillText(delta.h, M, y); y += 40;
+  if (delta) { breaks.push(y + 16); y += 72; g.fillStyle = '#111418'; g.font = '700 46px Onest, sans-serif'; g.fillText(delta.h, M, y); y += 40;
     g.fillStyle = '#5B6068'; g.font = '400 40px Onest, sans-serif'; g.fillText(delta.name, M, y + 10); y += 150;
     g.fillStyle = '#868B93'; g.font = '400 68px Onest, sans-serif'; const was = fmt(delta.was) + delta.u; g.fillText(was, M, y); const wx = M + g.measureText(was).width + 32;
     g.font = '400 56px Onest, sans-serif'; g.fillText('→', wx, y - 6); g.fillStyle = '#111418'; g.font = '600 132px Onest, sans-serif'; g.fillText(fmt(delta.now) + delta.u, wx + 90, y + 18);
     if (delta.note) { y += 70; g.fillStyle = delta.state === 'better' ? '#1E7149' : delta.state === 'worse' ? '#B3343B' : '#5B6068'; g.font = '600 40px Onest, sans-serif'; g.fillText(delta.note, M, y); } }
-  for (const extra of footer.after || []) { y += 72; g.fillStyle = '#111418'; g.font = '700 46px Onest, sans-serif'; g.fillText(extra.h, M, y); y += 8; wrap(extra.text, M, 40, 400, '#16181C'); }
+  for (const extra of footer.after || []) { breaks.push(y + 16); y += 72; g.fillStyle = '#111418'; g.font = '700 46px Onest, sans-serif'; g.fillText(extra.h, M, y); y += 8; wrap(extra.text, M, 40, 400, '#16181C'); }
   // оговорка на каждой картинке: картинку пересылают дальше, а подпись под ней ставит специалист
-  y += 64; wrap(footer.note || 'Предварительная оценка движения по камере телефона, не медицинское заключение.', M, 30, 400, '#5B6068');
+  breaks.push(y + 16); y += 64; wrap(footer.note || 'Предварительная оценка движения по камере телефона, не медицинское заключение.', M, 30, 400, '#5B6068');
   const FH = 220, H = y + M + FH, out = document.createElement('canvas'); out.width = W; out.height = H; const o = out.getContext('2d'); o.drawImage(cv, 0, 0);
   o.fillStyle = '#111418'; o.fillRect(0, H - FH, W, FH);
   o.fillStyle = '#fff'; o.font = '700 46px Onest, sans-serif'; o.fillText(String(footer.name).slice(0, 36), M, H - FH + 76);
   if (footer.contact) { o.fillStyle = '#D0D3D8'; o.font = '400 38px Onest, sans-serif'; o.fillText(String(footer.contact).slice(0, 44), M, H - FH + 128); }
   o.fillStyle = '#B9BDC4'; o.font = '400 30px Onest, sans-serif'; o.fillText('BodyPassport · методика Р. Аюпова · оценка движения', M, H - 36);
+  if (raw) { out.breaks = breaks; return out; }
   return new Promise(r => out.toBlob(r, 'image/png'));
 }
 async function resultImage() {
@@ -1001,6 +1010,8 @@ export async function funnelScreen(days = 14) {
   if (location.hash.startsWith('#r=')) { try { SHARED = cleanResult(await unpackResult(location.hash.slice(3))); } catch (e) { SHARED = null; } }
   if (location.hash.startsWith('#join=')) { try { const inv = { ...cleanInv(seal.unpack(location.hash.slice(6))), join: true }; localStorage.setItem('bp_inv', JSON.stringify(inv)); localStorage.setItem('bp_mode', 'client'); history.replaceState(null, '', location.pathname); return inviteWelcome(); } catch (e) {} }
   if (location.hash.startsWith('#inv=')) { try { const inv = cleanInv(seal.unpack(location.hash.slice(5))); localStorage.setItem('bp_inv', JSON.stringify(inv)); localStorage.setItem('bp_mode', 'client'); history.replaceState(null, '', location.pathname); return inviteWelcome(); } catch (e) {} }
+  // ссылка из уведомления бота «результат в кабинете»
+  if (new URLSearchParams(location.search).get('pro') === '1') { localStorage.setItem('bp_mode', 'pro'); history.replaceState(null, '', location.pathname); }
   if (!SHARED && localStorage.getItem('bp_mode') === 'pro') return openPro();
   SHARED || tests().length ? map() : onboarding();
 })();
