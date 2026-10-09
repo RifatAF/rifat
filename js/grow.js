@@ -1,12 +1,12 @@
 // Рост продукта: отзывы, «порекомендуете ли» (NPS), приглашение коллег, установка на экран телефона.
 import { meSync } from './auth.js';
-import { track } from './track.js';
-import { toast } from './core.js';
+import { track, diagnostics } from './track.js';
+import { toast, poseInfo, cam } from './core.js';
 
 const esc = v => String(v ?? '').replace(/[&<>"'`]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' })[c]);
 const role = () => localStorage.getItem('bp_mode') === 'pro' ? 'pro' : 'client';
 const LS = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
-export const VERSION = '2026-10-07';
+export const VERSION = '2026-10-09';
 
 export async function sendFeedback(fb) {
   const r = await fetch('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...fb, r: role(), v: VERSION }) });
@@ -34,6 +34,34 @@ export function feedbackSheet(where = 'menu', preset = {}) {
       d.firstElementChild.innerHTML = '<h2 style="font-size:21px">Спасибо!</h2><p class="sub" style="margin-top:8px">Отзыв получен. Лучшие идеи появятся в следующих версиях.</p><button class="btn" id="fbok" style="margin-top:16px">Готово</button>';
       d.querySelector('#fbok').onclick = () => d.remove(); }
     catch (e) { d.querySelector('#fbs').textContent = 'Отправить'; d.querySelector('#fbe').textContent = 'Не отправилось, проверьте интернет'; } };
+}
+
+/** «Что-то не так»: одна фраза от человека плюс сведения об устройстве и последние нажатия. Приходит автору в Telegram сразу. */
+export async function bugSheet() {
+  if (document.querySelector('.sheet #bgt')) return;
+  const d = sheet(`<h2 style="font-size:21px">Что-то не так?</h2>
+    <p class="sub" style="font-size:14px;margin-top:6px">Опишите одной фразой, что случилось или что ожидали увидеть. Это бета: каждое сообщение читаю в тот же день.</p>
+    <textarea id="bgt" rows="4" maxlength="1500" placeholder="Например: на шаге «одна нога» зависло, кнопка «Ещё раз» не нажималась" style="width:100%;margin-top:14px;border-radius:16px;border:1px solid var(--line);padding:12px 14px;font:16px Onest;background:#fff;resize:vertical"></textarea>
+    <label class="row" style="margin-top:12px;font-size:14px;align-items:flex-start;gap:10px"><input type="checkbox" id="bgd" checked style="width:20px;height:20px;flex:none;accent-color:var(--ink);margin-top:1px"><span>Приложить сведения о телефоне и последние нажатия. Без имен клиентов, видео и результатов.</span></label>
+    ${contactBox()}
+    <p id="bge" class="sub" style="font-size:13px;min-height:18px;margin-top:6px;color:var(--over-t)"></p>
+    <button class="btn" id="bgs" style="margin-top:6px">Отправить</button><button class="btn ghost" id="bgx" style="margin-top:8px;border:0">Отмена</button>`);
+  const c = d.querySelector('#fbc'); if (c) c.checked = true;
+  d.querySelector('#bgx').onclick = () => d.remove(); setTimeout(() => d.querySelector('#bgt').focus(), 50);
+  d.querySelector('#bgs').onclick = async () => { const t = d.querySelector('#bgt').value.trim(); if (!t) { d.querySelector('#bge').textContent = 'Напишите пару слов'; return; }
+    d.querySelector('#bgs').textContent = 'Отправляю…';
+    let st = {}; try { if (navigator.storage) { const [p, e] = await Promise.all([navigator.storage.persisted ? navigator.storage.persisted() : null, navigator.storage.estimate ? navigator.storage.estimate() : null]); st = { persisted: p === true, quota: e ? Math.round(e.quota / 1048576) : null }; } } catch (e) {}
+    const dg = d.querySelector('#bgd').checked ? diagnostics({ model: poseInfo.model, deleg: poseInfo.deleg, loadSec: poseInfo.loadSec, fps: cam.fps ? Math.round(cam.fps) : null, ...st }) : null;
+    try { await sendFeedback({ k: 'bug', t, w: 'any', d: dg, contact: !!(c && c.checked) }); track('bug_sent', null, false);
+      d.firstElementChild.innerHTML = '<h2 style="font-size:21px">Получил, спасибо!</h2><p class="sub" style="margin-top:8px">Разберусь и напишу, если оставили контакт.</p><button class="btn" id="bgok" style="margin-top:16px">Готово</button>';
+      d.querySelector('#bgok').onclick = () => d.remove(); }
+    catch (e) { d.querySelector('#bgs').textContent = 'Отправить'; d.querySelector('#bge').textContent = 'Не отправилось, проверьте интернет'; } };
+}
+/** Язычок «Проблема?» у края экрана на всех экранах, кроме камеры. */
+export function mountBugTab() {
+  if (document.getElementById('bugtab')) return;
+  const b = document.createElement('button'); b.id = 'bugtab'; b.type = 'button'; b.textContent = 'Проблема?'; b.setAttribute('aria-label', 'Сообщить о проблеме');
+  b.onclick = bugSheet; document.body.appendChild(b);
 }
 
 /** Оценка результата одним касанием (клиент, под картой). Один раз на тест. */

@@ -272,6 +272,13 @@ export function features(t) {
     put('asym_calf', (sl2 - sr2) / Math.max(1, Math.max(sl2, sr2)) * 100); f.sym_calf = [cl.calf_reps_l, cr.calf_reps_r]; }
   // передняя поверхность бедра: на одной ноге приседаешь мельче той ногой, что слабее; плюс = правая мельче
   if (Number.isFinite(sr.sls_depth_r) && Number.isFinite(sl.sls_depth_l)) { put('asym_quad', sl.sls_depth_l - sr.sls_depth_r); f.sym_quad = [sl.sls_depth_l, sr.sls_depth_r]; }
+  // признаки из шагов с плохой съемкой (качество ниже 60 или один повтор): слабые находки по ним не показываем, см. findings()
+  const Q = t.quality || {}, low = k => (Q[k] != null && Q[k] < 60) || (t.moves && t.moves[k] && t.moves[k].quality === 'DOUBTFUL');
+  const LQ = { stand: ['shoulder_tilt', 'pelvic_tilt', 'head_tilt', 'trunk_lateral', 'hand_rot'], side_stand: ['head_forward', 'knee_hyper', 'shoulder_shift', 'hip_shift'],
+    ohs_front: ['valgus_max', 'sq_shift', 'foot_out_max', 'sq_depth', 'oh_reach'], ohs_back: ['valgus_max', 'sq_shift', 'sq_pelvis'], ohs_side: ['sq_lean', 'sq_arms', 'sq_heel'],
+    sls_r: ['sls_valgus_r', 'sls_drop_r', 'sls_trunk_r', 'asym_quad'], sls_l: ['sls_valgus_l', 'sls_drop_l', 'sls_trunk_l', 'asym_quad'], t_hold: ['asym_delt'], bends: ['asym_bend', 'bend_sum'], calf_r: ['asym_calf'], calf_l: ['asym_calf'] };
+  const lowq = {}; for (const [k, fs] of Object.entries(LQ)) if (low(k)) for (const x of fs) lowq[x] = true;
+  if (Object.keys(lowq).length) f.lowq = lowq;
   return f;
 }
 
@@ -297,6 +304,8 @@ export function findings(rules, f) {
     const thr = r.absGreater != null ? r.absGreater : r.greater != null ? r.greater : r.less != null ? r.less : null, at = thr != null ? Math.abs(thr) : 0;
     const unit = at < 1 ? .03 : at >= 12 ? 3 : 1.5, gap = r.absGreater != null ? Math.abs(v) - thr : r.greater != null ? v - thr : thr != null ? thr - v : 0;
     const borderline = thr != null && gap < Math.max(unit, at * .12);
+    // плохая съемка: находки на границе или с порогом до 5° (уровень погрешности одной камеры) скорее шум
+    if (f.lowq && f.lowq[r.feature] && (borderline || at <= 5)) continue;
     let side = 'BOTH';
     if (r.sideFrom) { const sv = f[r.sideFrom]; if (sv === undefined) continue; const sg = Math.sign(sv) * (r.sideNegate ? -1 : 1); side = sg > 0 ? 'RIGHT' : sg < 0 ? 'LEFT' : 'BOTH'; }
     const muscles = r.muscles.map(m => ({ id: m.id, state: m.state, side: m.side === 'same' ? side : m.side === 'opposite' ? opp(side) : 'BOTH' }));

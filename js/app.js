@@ -1,11 +1,11 @@
 // BodyPassport web: тот же поток, тексты и дизайн, что в Android-версии.
 import { P, F, G, Movement, sideView, levelled, analyze, fmt, standSnapshot, sideSnapshot } from './analysis.js';
 import { track } from './track.js';
-import { rateCard, bindRate, installCard, bindInstall, feedbackSheet, shareApp, appLink } from './grow.js';
+import { rateCard, bindRate, installCard, bindInstall, feedbackSheet, shareApp, appLink, mountBugTab } from './grow.js';
 import { proHome, motionViewer, consumerPoses } from './pro.js';
 import { seal } from './core.js';
 import { ensureLogin, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, logout, deleteAccount, betaUsers, providers, config } from './auth.js';
-import { C, loadContent, voice, sleep, phone, startMotion, initPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, RAMP_CSS, body3D, preload3D, device, keepAwake, ic, toast, reduceMotion } from './core.js';
+import { C, loadContent, voice, sleep, phone, startMotion, initPose, poseInfo, prefetchPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, RAMP_CSS, body3D, preload3D, device, keepAwake, ic, toast, reduceMotion } from './core.js';
 export { ic, toast };
 
 const $ = s => document.querySelector(s);
@@ -202,7 +202,7 @@ const stepsOf = () => rowsOf(consumerProtocol().filter(u => !PRE[u] || PRE[u].al
 export async function prep() {
   if (!(await ensureLogin('client', prep, { back: onboarding }))) return;
   if (!safetyOk()) return safetyScreen(prep, onboarding, bot());
-  voice.preload(Object.values(SAY));
+  voice.preload(Object.values(SAY)); prefetchPose();
   const reopen = !!document.getElementById('prepsheet');
   const steps = stepsOf(), m = mins(SETUP_SEC + secs(steps));
   go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button></div>
@@ -212,7 +212,7 @@ export async function prep() {
       <svg width="34" height="56" viewBox="0 0 34 56" aria-hidden="true"><rect x="2" y="2" width="30" height="52" rx="6" fill="none" stroke="var(--ink)" stroke-width="2.5"/><circle cx="17" cy="9" r="2.5" fill="var(--ink)"/></svg>
       <div style="flex:1;max-width:150px;text-align:center"><div class="measure sm" style="justify-content:center"><b>2–4</b><u>м</u></div><div style="border-top:2px dashed var(--line);margin-top:6px"></div></div>
       <svg width="40" height="76" viewBox="0 0 200 380" aria-hidden="true"><circle cx="100" cy="44" r="24" fill="var(--figure)" stroke="var(--faint)" stroke-width="5"/><path d="M78 72 L122 72 Q140 74 144 92 L156 176 Q158 186 150 188 Q144 188 142 180 L132 112 L128 190 L130 268 L128 352 Q128 362 118 362 Q110 362 110 352 L104 210 L96 210 L90 352 Q90 362 82 362 Q72 362 72 352 L70 268 L72 190 L68 112 L58 180 Q56 188 50 188 Q42 186 44 176 L56 92 Q60 74 78 72 Z" fill="var(--figure)" stroke="var(--faint)" stroke-width="5"/></svg></div>
-      ${[['Телефон вертикально. <b>Точнее всего на штативе</b> на уровне пояса; подойдет и пол у стены'], ['В кадре весь рост, от макушки до стоп'], ['Дальше ведет голос, экран можно не видеть']].map(([t], i) => `<div class="row" style="align-items:flex-start;padding:10px 0;border-top:1px solid var(--line-2)"><span class="step-n" style="width:20px;padding-top:2px">${i + 1}</span><span style="flex:1;font-size:15px;line-height:1.4">${t}</span></div>`).join('')}</div>
+      ${[['Телефон вертикально. <b>Точнее всего на штативе</b> на уровне пояса; подойдет и пол у стены'], ['В кадре весь рост, от макушки до стоп. Свободное место около 3 × 1,5 м'], ['Шорты и майка: в широких штанах камера ошибается в коленях. Свет спереди или сбоку, не из окна за спиной'], ['Дальше ведет голос, экран можно не видеть']].map(([t], i) => `<div class="row" style="align-items:flex-start;padding:10px 0;border-top:1px solid var(--line-2)"><span class="step-n" style="width:20px;padding-top:2px">${i + 1}</span><span style="flex:1;font-size:15px;line-height:1.4">${t}</span></div>`).join('')}</div>
     <div class="group"><div class="row" style="min-height:64px"><div style="flex:1;min-width:0"><b style="font-size:15px">${FULL ? 'Точный · с поворотами' : 'Быстрый · лицом и боком'}</b><div style="font-size:13px;color:var(--sub)">${cam.back ? 'Основная камера' : 'Фронтальная камера'}${FULL && STRENGTH ? ' · сила и симметрия' : ''} · ${steps.length} ${plural3(steps.length, 'шаг', 'шага', 'шагов')}</div></div><button class="link" id="chg">Изменить</button></div></div>
     ${device.inApp ? `<div class="card row" style="align-items:flex-start">${ic('info')}<span style="font-size:14px;line-height:1.4">Ты открыл ссылку внутри приложения соцсети. Камера здесь может не работать: открой через меню «⋯» → «Открыть в браузере».</span></div>` : ''}
    </div>
@@ -407,12 +407,12 @@ export async function runProtocol(protocol, opts = {}) {
   const step = (i, title, sub, fc) => { if (i !== null) { si = i; segs.forEach((b, k) => b.style.width = k < i ? '100%' : k === i ? '8%' : '0'); stepLabel = `Шаг ${i + 1} из ${steps.length}`; lastStatus = ''; } if (fc !== undefined) focus = fc; $('#tt').textContent = title; $('#cue').textContent = sub || ''; bar(0, ''); $('#reps').hidden = true; };
   const bar = (frac, label) => { $('#pbf').style.width = Math.max(0, Math.min(1, frac)) * 100 + '%'; if (label !== undefined) $('#pbt').textContent = label; if (segs[si]) segs[si].style.width = Math.max(8, frac * 100) + '%'; };
   const say = async text => { if (stop) return; $('#cue').textContent = text; await voice.speak(text); };
-  let lastHint = '', lastHintAt = 0;
-  const hint = (text, gap = 4000) => { const now = Date.now(); if (now - lastHintAt < gap || (text === lastHint && now - lastHintAt < 7000)) return; lastHint = text; lastHintAt = now; lastIssue = text; $('#cue').textContent = text; voice.say(text); };
+  let lastHint = '', lastHintAt = 0, hints = 0; const fpsS = [];
+  const hint = (text, gap = 4000) => { const now = Date.now(); if (now - lastHintAt < gap || (text === lastHint && now - lastHintAt < 7000)) return; lastHint = text; lastHintAt = now; hints++; lastIssue = text; $('#cue').textContent = text; voice.say(text); };
   // ---- запись ----
   const grab = (fr, rolls) => { const f = cam.frame; if (f && f.pose && (!fr.length || fr.at(-1).t !== f.t)) { fr.push({ t: f.t, p: levelled(f.pose, f.w, f.h, corr()), w: f.world }); rolls.push(phone.roll); } };
   const poses = {}, quality = {}; let W = 1, H = 1;
-  const keep = (key, fr, rolls, vis) => { const f = cam.frame; if (f) { W = f.w; H = f.h; } if (!fr.length) return; poses[key] = packPoses(fr, W, H);
+  const keep = (key, fr, rolls, vis) => { const f = cam.frame; if (f) { W = f.w; H = f.h; } if (cam.fps) fpsS.push(cam.fps); if (!fr.length) return; poses[key] = packPoses(fr, W, H);
     const m = rolls.reduce((a, b) => a + b, 0) / rolls.length, sd = Math.sqrt(rolls.reduce((a, b) => a + (b - m) ** 2, 0) / rolls.length) || 0;
     quality[key] = Math.round(100 * Math.min(1, (vis ?? .9) / .9) * Math.min(1, (cam.fps || 20) / 20) * (light < 45 ? .7 : 1) * (sd > 2 ? .8 : 1)); };
   // удержание позы заданное время: полоса показывает, сколько осталось; extra(p, left) — подсказки по ходу
@@ -452,7 +452,7 @@ export async function runProtocol(protocol, opts = {}) {
       if (!bad && fullyVisible(cam.frame && cam.frame.pose)) { if (!okSince) okSince = Date.now(); bar((Date.now() - okSince) / 1500, 'Стой на месте'); if (Date.now() - okSince > 1500) break; }
       else { okSince = 0; bar(0, bad || ''); hint(bad || SAY.farther, 3500); }
       if (Date.now() - t0 > 120000) { stop = true; stopCamera(); return cancel(); } await sleep(150); }
-    if (stop) return; setupDone = true; sil.style.transition = 'opacity .32s'; sil.style.opacity = 0; await say(SAY.seen); }
+    if (stop) return; track('setup', { d: (Date.now() - t0) / 1000, n: hints }, false); setupDone = true; sil.style.transition = 'opacity .32s'; sil.style.opacity = 0; await say(SAY.seen); }
   // ---- тесты ----
   const med = a => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v[v.length >> 1] ?? 0; };
   let snapshot = null, side = null, setup = null; const moves = {}; let k = 0;
@@ -516,16 +516,20 @@ export async function runProtocol(protocol, opts = {}) {
     await runUnit(u);
     // «Получилось» или «Еще раз»: повтор шага один раз, второй неудачный повтор не спрашиваем
     if (!skip && !stop) { const bad = retakeOf(u, moves);
-      if (bad) { const again = await retakeScreen(lastIssue, light >= 45, level, fullyVisible(cam.frame && cam.frame.pose)); if (stop) return;
+      if (bad) { track('retake', { c: u, r: lastIssue || 'нет движения' }, false); const again = await retakeScreen(lastIssue, light >= 45, level, fullyVisible(cam.frame && cam.frame.pose)); if (stop) return;
         if (again) { k = k0; lastIssue = ''; await runUnit(u); } else skip = true; }
       else if (k > k0) await okFlash(steps[k - 1] ? steps[k - 1][0] : '', k); }
-    if (skip && !stop) { voice.beep('stop'); step(null, 'Не получается? Ничего страшного', 'Ответь на пару вопросов'); limits[u] = await cantSheet(u); skip = false;
+    if (skip && !stop) { track('step_skip', { c: u }, false); voice.beep('stop'); step(null, 'Не получается? Ничего страшного', 'Ответь на пару вопросов'); limits[u] = await cantSheet(u); skip = false;
       if (/опор|неглуб/i.test(limits[u].level || '') && (u === 'ohs_front' || u === 'sls')) { limits[u].alt = 'support'; await runAlt(u); } else k = k0 + (UNITS[u] || []).length; }
   }
   if (stop) return;
   step(null, 'Готово', 'Считаю результат'); bar(1, ''); cam.onFrame = null; await say(SAY.finish); stopCamera();
   track('test_done', { n: units.length, d: Math.round((Date.now() - tStart) / 1000) }, false);
-  return { date: Date.now(), protocol: units, full: units.includes('side') || units.includes('profile'), snapshot, side, moves, poses, quality, limits, setup };
+  const fpsMed = fpsS.length ? [...fpsS].sort((a, b) => a - b)[fpsS.length >> 1] : null, qv = Object.values(quality);
+  track('cam_q', { n: fpsMed || 0, q: qv.length ? Math.min(...qv) : 0, c: `${poseInfo.deleg} ${poseInfo.model}` }, false);
+  // техника съемки: без нее ретест на другом телефоне нельзя отличить от изменения у человека
+  const tech = { model: poseInfo.model, deleg: poseInfo.deleg, fps: fpsMed && Math.round(fpsMed), pitch: phone.ok && Number.isFinite(phone.pitch) ? Math.round(phone.pitch) : null, rules: C.bodymap && C.bodymap.version };
+  return { date: Date.now(), protocol: units, full: units.includes('side') || units.includes('profile'), snapshot, side, moves, poses, quality, limits, setup, tech };
 }
 
 async function runTest() {
@@ -581,7 +585,7 @@ async function inviteWelcome() {
    <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:14px;margin-top:16px">
     ${stepList(inv.p, PREI)}
     <div><b>Где болит сейчас, 0–10</b>${PAINZ.map(([k, n]) => `<div class="row" style="background:var(--surface);border-radius:var(--r-md);padding:6px 16px;margin-top:6px;min-height:52px"><span style="width:110px;font-size:14px">${n}</span><input type="range" min="0" max="10" value="${pain[k] || 0}" data-p="${k}" style="flex:1;accent-color:var(--ink)"><b style="width:22px;text-align:right" id="pv_${k}">${pain[k] || 0}</b></div>`).join('')}</div>
-    <p class="sub" style="font-size:13px">Поставьте телефон, отойдите на 2–4 метра, в кадре весь рост. Около ${mins(SETUP_SEC + secs(rows))} мин.</p>
+    <p class="sub" style="font-size:13px">Поставьте телефон, отойдите на 2–4 метра, в кадре весь рост. Шорты лучше широких штанов, свет не за спиной. Около ${mins(SETUP_SEC + secs(rows))} мин.</p>
     <label class="card row" style="padding:12px 14px;align-items:flex-start"><input type="checkbox" id="share_ok" ${localStorage.getItem('bp_share_' + inv.i) ? 'checked' : ''} class="check" style="margin-top:2px">
      <span style="font-size:14px;line-height:1.45">Согласен передать ${inv.join ? 'анкету, ' : ''}оценку боли и результат теста специалисту: ${esc(inv.s)}. Данные шифруются на телефоне, сервер их не читает.</span></label>
    </div><div class="pad" style="padding:14px 20px 24px"><button class="btn" id="go">Начать тест</button></div></div>`);
@@ -770,6 +774,8 @@ export async function passportImage({ eyebrow, name, date, sp, sections = [], de
     g.font = '400 56px Onest, sans-serif'; g.fillText('→', wx, y - 6); g.fillStyle = '#111418'; g.font = '600 132px Onest, sans-serif'; g.fillText(fmt(delta.now) + delta.u, wx + 90, y + 18);
     if (delta.note) { y += 70; g.fillStyle = delta.state === 'better' ? '#1E7149' : delta.state === 'worse' ? '#B3343B' : '#5B6068'; g.font = '600 40px Onest, sans-serif'; g.fillText(delta.note, M, y); } }
   for (const extra of footer.after || []) { y += 72; g.fillStyle = '#111418'; g.font = '700 46px Onest, sans-serif'; g.fillText(extra.h, M, y); y += 8; wrap(extra.text, M, 40, 400, '#16181C'); }
+  // оговорка на каждой картинке: картинку пересылают дальше, а подпись под ней ставит специалист
+  y += 64; wrap(footer.note || 'Предварительная оценка движения по камере телефона, не медицинское заключение.', M, 30, 400, '#5B6068');
   const FH = 220, H = y + M + FH, out = document.createElement('canvas'); out.width = W; out.height = H; const o = out.getContext('2d'); o.drawImage(cv, 0, 0);
   o.fillStyle = '#111418'; o.fillRect(0, H - FH, W, FH);
   o.fillStyle = '#fff'; o.font = '700 46px Onest, sans-serif'; o.fillText(String(footer.name).slice(0, 36), M, H - FH + 76);
@@ -927,7 +933,7 @@ async function accountBlock(el, close) {
 // ---------- воронка беты (только администратор): обезличенные шаги из js/track.js ----------
 const FUNNEL = [['client', 'Клиент', [['app_open', 'Открыли приложение'], ['onb_done', 'Прошли знакомство'], ['login_ok', 'Вошли'], ['safety_ok', 'Скрининг: можно'], ['safety_stop', 'Скрининг: к врачу'],
   ['test_start', 'Начали тест'], ['test_done', 'Закончили тест'], ['test_cancel', 'Прервали тест'], ['map_view', 'Открыли карту'], ['share_result', 'Поделились'], ['inv_open', 'Открыли ссылку специалиста'], ['result_sent', 'Отправили результат'], ['result_fail', 'Не смогли отправить'], ['fb_sent', 'Оставили оценку или отзыв'], ['ref_share', 'Поделились приложением'], ['install_shown', 'Видели «Установить»'], ['install_ok', 'Установили на экран']]],
-  ['pro', 'Специалист', [['pro_open', 'Открыли кабинет'], ['assess_start', 'Начали оценку'], ['assess_done', 'Закончили оценку'], ['report_sent', 'Отчет клиенту'], ['retest_set', 'Назначили ретест'], ['invite_sent', 'Ссылка клиенту'], ['join_sent', 'Общая ссылка'], ['result_pulled', 'Получили результат из дома'], ['fb_sent', 'Оценка или отзыв'], ['ref_share', 'Пригласили коллегу']]]];
+  ['pro', 'Специалист', [['pro_open', 'Открыли кабинет'], ['assess_start', 'Начали оценку'], ['assess_done', 'Закончили оценку'], ['report_sent', 'Отчет клиенту'], ['retest_set', 'Назначили ретест'], ['invite_sent', 'Ссылка клиенту'], ['join_sent', 'Общая ссылка'], ['result_pulled', 'Получили результат из дома'], ['retest_done', 'Сделали ретест'], ['compare_open', 'Открыли «Было → стало»'], ['report_shared', 'Отправили отчет'], ['gate_hit', 'Уперлись в тариф'], ['backup_done', 'Сделали копию'], ['db_empty', 'Пустой кабинет после входа'], ['db_other', 'Нашли базу другого входа'], ['fb_sent', 'Оценка или отзыв'], ['bug_sent', 'Сообщили о проблеме']]]];
 export async function funnelScreen(days = 14) {
   go('<div class="spin"></div>');
   let d; try { const r = await fetch('/api/ev?a=stats&days=' + days, { cache: 'no-store' }); if (!r.ok) throw new Error(r.status); d = await r.json(); } catch (e) { toast('Не удалось загрузить: ' + e.message); return map(); }
@@ -939,16 +945,32 @@ export async function funnelScreen(days = 14) {
   const src = Object.entries(d.sources || {}).sort((a, b) => b[1] - a[1]).slice(0, 10);
   const [fb, users] = await Promise.all([fetch('/api/feedback?days=' + Math.max(days, 30), { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null), betaUsers().catch(() => [])]);
   const refs = users.filter(u => u.invited).sort((a, b) => b.invitedPro - a.invitedPro || b.invited - a.invited).slice(0, 10);
-  const kind = { result: 'оценка теста', nps: 'порекомендует', free: 'отзыв' };
+  const kind = { result: 'оценка теста', nps: 'порекомендует', free: 'отзыв', bug: 'проблема' };
+  const bugs = fb ? fb.items.filter(x => x.k === 'bug') : [], M = d.medians || {}, med = (k, u = '') => M[k] ? `${M[k].p50}${u} <span style="color:var(--sub)">(p90 ${M[k].p90}, n ${M[k].n})</span>` : '—';
+  const det = (k, t) => { const o = Object.entries((d.detail || {})[k] || {}).sort((a, b) => b[1] - a[1]).slice(0, 8); return o.length ? `<div style="margin-top:10px;font-size:13px"><b>${t}</b>${o.map(([c, n]) => `<div class="row" style="margin-top:4px"><span style="flex:1;word-break:break-word">${esc(c)}</span><b>${n}</b></div>`).join('')}</div>` : ''; };
+  const weeks = Object.entries(d.weeks || {}).sort(), us = (d.users || []).filter(u => u.r === 'pro');
+  const bugCard = `<div class="card" style="padding:14px 16px"><b>Проблемы от участников (${bugs.length})</b>${bugs.length ? bugs.slice(0, 30).map(x => { const g = x.d || {};
+      return `<details style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);font-size:14px"><summary style="cursor:pointer;line-height:1.4"><span style="color:var(--sub);font-size:12px">${new Date(x.at).toLocaleString('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · ${x.r === 'pro' ? 'специалист' : 'клиент'} · ${esc(g.os || '')} ${esc(g.br || '')}</span><br>${esc(x.t)}</summary>
+        <div style="font-size:12px;color:var(--sub);margin-top:6px;line-height:1.5;word-break:break-word">${esc([g.scr, g.pwa ? 'PWA' : 'браузер', g.net, g.mem ? g.mem + ' ГБ' : '', g.cpu ? g.cpu + ' ядер' : '', g.model ? 'модель ' + g.model + ' ' + (g.deleg || '') : '', g.loadSec ? 'загрузка ' + g.loadSec + ' с' : '', g.fps ? g.fps + ' fps' : '', g.persisted === false ? 'хранилище НЕ закреплено' : g.persisted ? 'хранилище закреплено' : ''].filter(Boolean).join(' · '))}
+        ${g.errors && g.errors.length ? '<div style="color:var(--over-t);margin-top:4px">' + g.errors.map(esc).join('<br>') + '</div>' : ''}${g.trail ? '<div style="margin-top:4px;font-family:monospace;font-size:11px">' + g.trail.map(esc).join('<br>') + '</div>' : ''}
+        ${x.contact ? `<div style="margin-top:4px;color:var(--weak-t)">Контакт: ${esc(x.contact.name)} ${esc(x.contact.handle)}</div>` : ''}</div></details>`; }).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Пока никто не сообщил</div>'}</div>`;
+  const techCard = `<div class="card" style="padding:14px 16px"><b>Техника камеры</b><div style="font-size:13px;margin-top:8px;line-height:1.7">Загрузка модели, с: ${med('pose_init.d')}<br>Встать в кадр, с: ${med('setup.d')}<br>Подсказок до кадра: ${med('setup.n')}<br>Кадров в секунду: ${med('cam_q.n')}<br>Худшее качество шага: ${med('cam_q.q')}<br>Длина теста, с: ${med('test_done.d')}</div>
+    ${det('pose_init', 'Где считается модель')}${det('pose_fail', 'Модель не загрузилась')}${det('cam_err', 'Ошибки камеры')}${det('retake', 'Пересъемки по шагам')}${det('step_skip', '«Не могу» по шагам')}${det('rage', 'Злые тапы (4 нажатия подряд)')}${det('slow', 'Подвисания интерфейса')}${det('storage', 'Хранилище кабинета')}${det('gate_hit', 'Упор в тариф')}</div>`;
+  const usersCard = `<div class="card" style="padding:14px 16px"><b>Специалисты по неделям</b><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px;font-size:13px">${weeks.length ? weeks.map(([w, n]) => `<span class="pill">с ${esc(w.slice(5))}: <b>${n}</b></span>`).join('') : '<span class="sub">Пока нет данных</span>'}</div>
+    ${us.length ? `<div style="margin-top:10px;font-size:12px;color:var(--sub)">Псевдоним · активных дней · оценок · отчетов · ретестов · проблем</div>` + us.slice(0, 40).map(u => `<div class="row" style="font-size:13px;margin-top:4px;font-family:monospace"><span style="flex:1">${esc(u.id)}</span><span>${u.days} · ${u.assess} · ${u.reports} · ${u.retests} · ${u.bugs}</span></div>`).join('') : ''}
+    <p class="sub" style="font-size:12px;margin-top:8px">Псевдоним одинаков у одного аккаунта, но имя и почту по нему не узнать.</p></div>`;
   go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:17px">Статистика · ${days} дней</b></div>
     <div class="pad" style="display:flex;flex-direction:column;gap:10px;padding-bottom:30px">
      <p class="sub" style="font-size:13px">Число вкладок, где шаг был хотя бы раз, сумма по дням. Процент от первого шага.</p>
      <div class="seg">${[7, 14, 30].map(n => `<button data-d="${n}" class="${n === days ? 'on' : ''}">${n} дней</button>`).join('')}</div>
+     ${bugCard}
      ${FUNNEL.map(block).join('')}
+     ${usersCard}
+     ${techCard}
      <div class="kpi"><div><b>${d.testMedianSec ? Math.round(d.testMedianSec / 60 * 10) / 10 : '—'}</b><span>мин на тест, медиана (${d.testN || 0})</span></div><div><b>${fb && fb.resultAvg != null ? fb.resultAvg : '—'}</b><span>польза теста из 5 (${fb ? fb.resultN : 0})</span></div><div><b>${fb && fb.nps != null ? fb.nps : '—'}</b><span>NPS специалистов (${fb ? fb.npsN : 0})</span></div></div>
      <div class="card" style="padding:14px 16px"><b>Откуда приходят</b>${src.length ? src.map(([k, n]) => `<div class="row" style="font-size:14px;margin-top:8px"><span style="flex:1;word-break:break-all">${esc(k)}</span><b>${n}</b></div>`).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Пока нет данных</div>'}<p class="sub" style="font-size:12px;margin-top:8px">Метка из ссылки ?ref= или ?utm_source=. Коды r… это приглашения пользователей.</p></div>
      <div class="card" style="padding:14px 16px"><b>Приглашения</b>${refs.length ? refs.map(u => `<div class="row" style="font-size:14px;margin-top:8px"><span style="flex:1">${esc(u.name)}</span><span style="color:var(--sub)">${u.invited} пришли · </span><b>${u.invitedPro} спец.</b></div>`).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Пока никто не пригласил</div>'}</div>
-     <div class="card" style="padding:14px 16px"><b>Отзывы</b>${fb && fb.items.length ? fb.items.slice(0, 40).map(x => `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);font-size:14px;line-height:1.45"><div class="row" style="gap:8px;font-size:12px;color:var(--sub)"><span>${new Date(x.at).toLocaleDateString('ru', { day: 'numeric', month: 'short' })}</span><span>${x.r === 'pro' ? 'специалист' : 'клиент'}</span><span>${kind[x.k] || ''}${x.s != null ? ': <b style="color:var(--text)">' + x.s + '</b>' : ''}</span></div>${x.t ? `<div style="margin-top:4px">${esc(x.t)}</div>` : ''}${x.contact ? `<div style="margin-top:4px;font-size:13px;color:var(--weak-t)">Можно связаться: ${esc(x.contact.name)} ${esc(x.contact.handle)}</div>` : ''}</div>`).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Отзывов пока нет</div>'}</div>
+     <div class="card" style="padding:14px 16px"><b>Отзывы</b>${fb && fb.items.some(x => x.k !== 'bug') ? fb.items.filter(x => x.k !== 'bug').slice(0, 40).map(x => `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);font-size:14px;line-height:1.45"><div class="row" style="gap:8px;font-size:12px;color:var(--sub)"><span>${new Date(x.at).toLocaleDateString('ru', { day: 'numeric', month: 'short' })}</span><span>${x.r === 'pro' ? 'специалист' : 'клиент'}</span><span>${kind[x.k] || ''}${x.s != null ? ': <b style="color:var(--text)">' + x.s + '</b>' : ''}</span></div>${x.t ? `<div style="margin-top:4px">${esc(x.t)}</div>` : ''}${x.contact ? `<div style="margin-top:4px;font-size:13px;color:var(--weak-t)">Можно связаться: ${esc(x.contact.name)} ${esc(x.contact.handle)}</div>` : ''}</div>`).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Отзывов пока нет</div>'}</div>
      <div class="card" style="padding:14px 16px"><b>Ошибки в браузере</b>${errs.length ? errs.map(([m, n]) => `<div style="font-size:13px;margin-top:8px;word-break:break-word"><b>${n}×</b> ${esc(m)}</div>`).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Ошибок нет</div>'}</div>
     </div></div>`);
   $('#back').onclick = () => localStorage.getItem('bp_mode') === 'pro' ? openPro() : map();
@@ -959,7 +981,7 @@ export async function funnelScreen(days = 14) {
 (async () => {
   track('app_open', { r: REF });
   try { await loadContent(); } catch (e) { app.innerHTML = '<div class="scr pad" style="justify-content:center;gap:16px"><h1>Не удалось загрузить данные</h1><p class="sub">Проверь интернет и обнови страницу.</p><button class="btn" id="rl">Обновить</button></div>'; $('#rl').onclick = () => location.reload(); return; }
-  await voice.init();
+  mountBugTab(); await voice.init();
   await Promise.all([getMe(), config()]); claimLegacy();
   if ('serviceWorker' in navigator) {
     // когда выходит новая версия, страница один раз перезагружается сама
