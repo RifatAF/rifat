@@ -123,9 +123,9 @@ export function referralSheet() {
     <p class="sub" style="font-size:14px;margin-top:8px">Коллега заходит по вашей ссылке и открывает кабинет специалиста: вам +${REF_SLOTS} бесплатных слота клиентов навсегда.</p>
     <div class="kpi" style="margin-top:14px"><div><b>${u.invited || 0}</b><span>пришли по ссылке</span></div><div><b>${u.invitedPro || 0}</b><span>коллег</span></div><div><b style="color:var(--ok-t)">${u.isPro ? '∞' : max}</b><span>слотов</span></div></div>
     <div class="card row" style="margin-top:12px;padding:12px 14px"><span style="flex:1;font-size:14px;word-break:break-all">${esc(url)}</span></div>
-    <button class="btn" id="rfs" style="margin-top:12px">Скопировать текст и ссылку</button><button class="btn ghost" id="rfx" style="margin-top:8px;border:0">Закрыть</button>`);
+    <button class="btn" id="rfs" style="margin-top:12px">Пригласить</button><button class="btn ghost" id="rfx" style="margin-top:8px;border:0">Закрыть</button>`);
   d.querySelector('#rfx').onclick = () => d.remove();
-  d.querySelector('#rfs').onclick = () => copyRefText();
+  d.querySelector('#rfs').onclick = () => { d.remove(); copyRefText(); };
 }
 
 // установка на главный экран: Android/Chrome дает событие, iOS Safari только через «Поделиться»
