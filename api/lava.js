@@ -22,8 +22,8 @@ export function authorized(req) {
   const basic = process.env.LAVA_WEBHOOK_BASIC || '', key = process.env.LAVA_WEBHOOK_KEY || '';
   const h = String(req.headers.authorization || '');
   if (basic && /^Basic /i.test(h)) { let dec = ''; try { dec = Buffer.from(h.slice(6).trim(), 'base64').toString('utf8'); } catch (e) {} if (eq(dec, basic)) return true; }
-  const k = req.headers['x-api-key'];
-  if (key && k && eq(k, key)) return true;
+  // ключ вебхука из кабинета lava.top: принимаем из X-Api-Key, Api-Key или Authorization (с Bearer или без)
+  if (key) for (const v of [req.headers['x-api-key'], req.headers['api-key'], req.headers['apikey'], h.replace(/^Bearer\s+/i, '')]) if (v && eq(String(v).trim(), key)) return true;
   return false;
 }
 async function tg(chat, text) {

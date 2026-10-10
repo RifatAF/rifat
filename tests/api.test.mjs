@@ -175,6 +175,9 @@ test('lava.top: оплата включает PRO по почте, продле�
   // ключ в заголовке как второй способ
   delete process.env.LAVA_WEBHOOK_BASIC; process.env.LAVA_WEBHOOK_KEY = 'k123';
   assert.equal((await post({ eventType: 'x' }, { 'x-api-key': 'k123' })).code, 200);
+  assert.equal((await post({ eventType: 'x' }, { authorization: 'Bearer k123' })).code, 200);
+  assert.equal((await post({ eventType: 'x' }, { authorization: 'k123' })).code, 200);
+  assert.equal((await post({ eventType: 'x' }, { 'x-api-key': 'k124' })).code, 401);
   delete process.env.LAVA_WEBHOOK_KEY;
   assert.equal((await post({ eventType: 'x' }, { 'x-api-key': 'k123' })).code, 503, 'не настроено');
 });
