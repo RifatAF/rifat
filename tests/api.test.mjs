@@ -12,6 +12,7 @@ mock.module('@vercel/blob', { namedExports: {
   del: async x => { for (const n of [].concat(x)) store.delete(n); },
   list: async ({ prefix, limit = 1000 }) => ({ blobs: [...store].filter(([k]) => k.startsWith(prefix)).slice(0, limit).map(([k, v]) => ({ pathname: k, url: k, uploadedAt: v.uploadedAt })), hasMore: false }),
 } });
+const SESS = await import(R + '_session.js'); SESS.APP.beta = false; // тесты тарифов в полном режиме; бета проверяется отдельно
 const relay = (await import(R + 'relay.js')).default, ev = (await import(R + 'ev.js')).default, auth = (await import(R + 'auth.js')).default, cron = (await import(R + 'cron.js')).default;
 const cookie = uid => { const b = Buffer.from(JSON.stringify({ uid, exp: Date.now() + 1e7 })).toString('base64url'); return `bp_s=${b}.${crypto.createHmac('sha256', 'test-secret').update(b).digest('base64url')}`; };
 function call(h, { method = 'GET', query = {}, body, headers = {} } = {}) {
@@ -180,4 +181,36 @@ test('lava.top: оплата включает PRO по почте, продле�
   assert.equal((await post({ eventType: 'x' }, { 'x-api-key': 'k124' })).code, 401);
   delete process.env.LAVA_WEBHOOK_KEY;
   assert.equal((await post({ eventType: 'x' }, { 'x-api-key': 'k123' })).code, 503, 'не настроено');
+});
+
+test('режим: владелец по почте — админ, бета дает всем PRO, переключает только админ', async () => {
+  store.set('users/g_owner.json', { body: JSON.stringify({ id: 'g_owner', email: 'aypovrifat@gmail.com', role: 'specialist', consentVersion: '2026-10-v2' }), uploadedAt: '' });
+  user('t_600', 'specialist');
+  let me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('g_owner') } }); assert.equal(me.j.user.admin, true, 'владелец админ без ADMIN_IDS');
+  assert.equal((await call(auth, { method: 'POST', query: { a: 'appmode' }, body: { beta: true }, headers: { cookie: cookie('t_600') } })).code, 403);
+  assert.equal((await call(auth, { method: 'POST', query: { a: 'appmode' }, body: { beta: true }, headers: { cookie: cookie('g_owner') } })).j.beta, true);
+  me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_600') } }); assert.equal(me.j.user.isPro, true); assert.equal(me.j.user.planBeta, true);
+  assert.equal((await call(auth, { query: { a: 'config' } })).j.beta, true);
+  assert.equal((await call(auth, { method: 'POST', query: { a: 'appmode' }, body: { beta: false }, headers: { cookie: cookie('g_owner') } })).j.beta, false);
+  me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_600') } }); assert.equal(me.j.user.isPro, false);
+});
+test('ev: сброс только админом и только со словом СБРОС', async () => {
+  await call(ev, { method: 'POST', body: JSON.stringify({ s: 'reset1', r: 'client', ev: [{ e: 'app_open', t: 1 }] }) });
+  assert.ok([...store.keys()].some(k => k.startsWith('ev/')));
+  assert.equal((await call(ev, { method: 'DELETE', query: { a: 'reset', confirm: 'СБРОС' }, headers: { cookie: cookie('t_2') } })).code, 403);
+  assert.equal((await call(ev, { method: 'DELETE', query: { a: 'reset' }, headers: { cookie: cookie('t_1') } })).code, 400, 'без подтверждения');
+  const r = await call(ev, { method: 'DELETE', query: { a: 'reset', confirm: 'СБРОС' }, headers: { cookie: cookie('t_1') } }); assert.equal(r.code, 200); assert.ok(r.j.deleted >= 1);
+  assert.ok(![...store.keys()].some(k => k.startsWith('ev/') || k.startsWith('feedback/')));
+});
+const remind = (await import(R + 'remind.js')).default, remindMod = await import(R + 'remind.js');
+test('напоминания: расписание от специалиста, рассылка раз в событие, выключение удаляет', async () => {
+  user('t_700', 'specialist'); const now = Date.now();
+  assert.equal((await call(remind, { method: 'POST', body: { on: true, items: [] } })).code, 401, 'без входа');
+  const items = [{ t: now + 20 * 3600e3, k: 'retest', n: 'Сидорова' }, { t: now + 30 * 3600e3, k: 'consult', n: 'Иванов', timed: true }, { t: now + 5 * 864e5, k: 'retest', n: 'Позже' }, { t: now, k: 'hack', n: 'x' }];
+  const r = await call(remind, { method: 'POST', body: { on: true, items, tz: 180 }, headers: { cookie: cookie('t_700') } }); assert.equal(r.j.count, 3, 'неизвестный тип отброшен');
+  const rec = JSON.parse(store.get('users/t_700.json') ? store.get('remind/t_700.json').body : '{}');
+  assert.equal(remindMod.due(rec).length, 2, 'только ближайшие 36 часов');
+  assert.match(remindMod.message(remindMod.due(rec), 180, 'https://x.app'), /Повторный тест: Сидорова[\s\S]*Консультация в \d\d:\d\d: Иванов/);
+  assert.equal((await call(remind, { query: { a: 'cron' } })).code, 401, 'cron без секрета');
+  const off = await call(remind, { method: 'POST', body: { on: false }, headers: { cookie: cookie('t_700') } }); assert.equal(off.j.on, false); assert.ok(!store.has('remind/t_700.json'));
 });

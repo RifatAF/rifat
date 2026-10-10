@@ -18,6 +18,8 @@ export const lastErrors = [];
 
 function flush() {
   if (!q.length) return;
+  // администратор тестирует сам: его действия не попадают в статистику (переключатель в панели администратора)
+  try { if (localStorage.getItem('bp_noev') === '1') { q.length = 0; return; } } catch (e) {}
   const body = JSON.stringify({ s: sid, r: role(), ev: q.splice(0, 40) });
   try { if (navigator.sendBeacon && navigator.sendBeacon('/api/ev', body)) return; } catch (e) {}
   fetch('/api/ev', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'text/plain' } }).catch(() => {});

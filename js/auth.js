@@ -45,6 +45,7 @@ export async function setRole(role) { me = (await post('role', { role })).user; 
 export async function logout() { await post('logout').catch(() => {}); me = null; }
 export async function deleteAccount() { await post('delete'); me = null; }
 export async function betaUsers() { return (await post('users')).users; }
+export async function setAppMode(beta) { const j = await post('appmode', { beta }); cfg = { ...(cfg || {}), beta: j.beta }; return j.beta; }
 
 /** Пускает дальше, если человек вошел. Если вход на сайте еще не настроен или сервер недоступен, не блокирует. */
 export async function ensureLogin(role, cont, opts = {}) {
@@ -67,7 +68,7 @@ export function linkConsent(cont, who) {
     <p class="sub">Аккаунт не нужен. Результат зашифруется на телефоне и уйдет только ${who ? 'специалисту: ' + esc(who) : 'вашему специалисту'}.</p>
     <label class="card row" style="align-items:flex-start;border-radius:var(--r-md)"><input type="checkbox" class="check" id="cons"><span style="font-size:14px;line-height:1.45">Мне есть 18 лет. Принимаю <a href="/terms" target="_blank">соглашение</a> и <a href="/privacy" target="_blank">политику конфиденциальности</a>. Понимаю, что это оценка движения, а не медицинское заключение.</span></label>
     <label class="card row" style="align-items:flex-start;border-radius:var(--r-md)"><input type="checkbox" class="check" id="consh"><span style="font-size:14px;line-height:1.45">Отдельно соглашаюсь на обработку данных о здоровье: боль и результат теста для моего специалиста.</span></label>
-    <span class="ondevice">${ic('cpu', 's')}Видео не записывается и не уходит с телефона. Сохраняется только скелет движения.</span>
+    <span class="ondevice">${ic('cpu', 's')}Видео не записывается. Сохраняются только координаты суставов.</span>
    </div><div class="pad" style="padding:14px 20px 24px"><p id="cerr" class="sub" style="font-size:13px;min-height:18px;color:var(--over-t)"></p><button class="btn" id="cgo">Продолжить</button></div></div>`);
   document.getElementById('cgo').onclick = () => { if (!['cons', 'consh'].every(id => document.getElementById(id).checked)) { document.getElementById('cerr').textContent = 'Отметьте оба пункта'; return; }
     localStorage.setItem(CONSENT_KEY, String(Date.now())); track('login_ok', { c: 'link_no_account' }, false); cont(); };
@@ -78,17 +79,17 @@ export function loginScreen(role, cont, opts = {}) {
   const consented = () => ['cons', 'consh'].every(id => document.getElementById(id) && document.getElementById(id).checked);
   show(`<div class="scr fade"><div class="top-bar">${opts.back ? `<button class="round" id="lback" aria-label="Назад">${ic('chevron-left')}</button>` : '<div style="height:48px"></div>'}<span style="flex:1"></span>${pro ? '' : '<span class="step-n" style="padding-right:8px">шаг 1 из 2</span>'}</div>
    <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:var(--s3)">
-    <div class="eyebrow">${pro ? 'Кабинет специалиста · бета' : 'Быстрый вход · бета'}</div>
-    <h1>${pro ? 'Войдите, чтобы вести клиентов' : 'Войди в один тап'}</h1>
-    <p class="sub">${pro ? 'Вход привязывает кабинет к вам: результаты клиентов из дома может забрать только вошедший специалист.' : 'Без паролей. Нужно, чтобы участники беты могли вернуться к своим результатам и получить ответ от специалиста.'}</p>
+    <div class="eyebrow">${pro ? 'Кабинет специалиста' : 'Вход'}${configSync().beta !== false ? ' · бета' : ''}</div>
+    <h1>${pro ? 'Вход в кабинет' : 'Вход в BodyPassport'}</h1>
+    <p class="sub">${pro ? 'Кабинет привязан к вашему аккаунту. Результаты клиентов видите только вы.' : 'Аккаунт сохранит ваши результаты и историю тестов. Пароль не нужен: вход через Google или Telegram.'}</p>
     <label class="card row" style="align-items:flex-start;border-radius:var(--r-md)"><input type="checkbox" class="check" id="cons" ${localStorage.getItem(CONSENT_KEY) ? 'checked' : ''}>
      <span style="font-size:14px;line-height:1.45">Мне есть 18 лет. Принимаю <a href="/terms" target="_blank">соглашение</a> и <a href="/privacy" target="_blank">политику конфиденциальности</a>. Понимаю, что это оценка движения, а не диагноз.</span></label>
     <label class="card row" style="align-items:flex-start;border-radius:var(--r-md)"><input type="checkbox" class="check" id="consh" ${localStorage.getItem(CONSENT_KEY) ? 'checked' : ''}>
      <span style="font-size:14px;line-height:1.45">Отдельно соглашаюсь на обработку данных о здоровье: жалобы, боль, результаты теста${pro ? ' моих клиентов в моем кабинете' : ''}. Отозвать согласие: удалить аккаунт в настройках.</span></label>
-    <span class="ondevice">${ic('cpu', 's')}Видео не записывается и не уходит с телефона. Сохраняется только скелет движения.</span>
-    ${pro ? '<a href="/pricing" target="_blank" class="link" style="text-align:center;display:block;line-height:48px">Тарифы и возможности</a>' : ''}
+    <span class="ondevice">${ic('cpu', 's')}Видео не записывается. Сохраняются только координаты суставов.</span>
+    ${pro && configSync().beta === false ? '<a href="/pricing" target="_blank" class="link" style="text-align:center;display:block;line-height:48px">Тарифы и возможности</a>' : ''}
    </div>
-   <div class="dock"><p id="lhint" style="font-size:13px;color:var(--sub);text-align:center">Отметь оба согласия, чтобы войти</p>
+   <div class="dock"><p id="lhint" style="font-size:13px;color:var(--sub);text-align:center">Отметьте оба пункта, чтобы продолжить</p>
     <div id="lbtns" style="display:flex;flex-direction:column;gap:var(--s2);align-items:stretch;transition:opacity .2s"></div>
     <p id="lerr" style="font-size:13px;color:var(--over-t);min-height:18px;text-align:center"></p></div></div>`);
   if (opts.back) document.getElementById('lback').onclick = opts.back;
@@ -96,7 +97,7 @@ export function loginScreen(role, cont, opts = {}) {
   const sync = () => { const ok = consented(); document.getElementById('lhint').style.display = ok ? 'none' : ''; box.style.opacity = ok ? '1' : '.45'; box.style.pointerEvents = ok ? 'auto' : 'none'; if (ok) { localStorage.setItem(CONSENT_KEY, String(Date.now())); err.textContent = ''; } else localStorage.removeItem(CONSENT_KEY); };
   cons.onchange = sync; consh.onchange = sync; sync();
   const done = async (a, body) => {
-    if (!consented()) { err.textContent = 'Отметь оба согласия выше'; return; }
+    if (!consented()) { err.textContent = 'Отметьте оба пункта выше'; return; }
     err.textContent = 'Вхожу…';
     try { const r = await post(a, { ...body, role, consent: true, health: true, ref: localStorage.getItem('bp_ref') }); me = r.user;
       if (pro && me.role !== 'specialist') me = await setRole('specialist'); track('login_ok'); err.textContent = ''; window.dispatchEvent(new Event('bp-login')); cont(); }

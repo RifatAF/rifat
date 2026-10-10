@@ -1,6 +1,6 @@
 // Обезличенные события воронки и ошибки из браузера (js/track.js). Пачка событий одной вкладки = один файл в Blob.
 // Сводку видит только администратор беты: GET /api/ev?a=stats&days=14.
-import { put, list, get } from '@vercel/blob';
+import { put, list, get, del } from '@vercel/blob';
 import crypto from 'node:crypto';
 import { currentUser, isAdmin, sessionUid } from './_session.js';
 // псевдоним аккаунта: одинаков для одного человека, но по нему нельзя узнать id, имя или почту
@@ -74,7 +74,16 @@ export default async function handler(req, res) {
     }
     if (req.method === 'GET' && req.query.a === 'stats') {
       const u = await currentUser(req); if (!isAdmin(u)) return res.status(403).json({ error: 'forbidden' });
-      return res.status(200).json(await stats(Math.max(1, Math.min(31, +req.query.days || 14))));
+      return res.status(200).json(await stats(Math.max(1, Math.min(90, +req.query.days || 14))));
+    }
+    // сброс статистики и отзывов перед реальным запуском: только админ и только с подтверждающим словом
+    if (req.method === 'DELETE' && req.query.a === 'reset') {
+      const u = await currentUser(req); if (!isAdmin(u)) return res.status(403).json({ error: 'forbidden' });
+      if (String(req.query.confirm || '') !== 'СБРОС') return res.status(400).json({ error: 'нужно подтверждение' });
+      let n = 0;
+      for (const prefix of ['ev/', 'feedback/']) { let cursor; do { const r = await list({ prefix, limit: 1000, cursor }); cursor = r.hasMore ? r.cursor : undefined;
+        const urls = r.blobs.map(b => b.url); if (urls.length) { await del(urls); n += urls.length; } } while (cursor); }
+      return res.status(200).json({ ok: true, deleted: n });
     }
     return res.status(405).json({ error: 'method' });
   } catch (e) { console.error('ev', e); return res.status(500).json({ error: 'server' }); }

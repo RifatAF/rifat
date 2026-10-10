@@ -42,17 +42,28 @@ export async function allUsers() {
   return out;
 }
 
-// администраторы беты: id пользователей через запятую (t_<telegram id>, g_<google sub>) или email Google
+// владелец сервиса: администратор всегда (почта Google подтверждена при входе)
+const OWNERS = ['aypovrifat@gmail.com'];
+// администраторы: id пользователей через запятую (t_<telegram id>, g_<google sub>) или email Google
 export function isAdmin(u) {
-  const list = String(process.env.ADMIN_IDS || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+  const list = OWNERS.concat(String(process.env.ADMIN_IDS || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean));
   return !!u && (list.includes(String(u.id).toLowerCase()) || (!!u.email && list.includes(String(u.email).toLowerCase())));
 }
 // тариф: Про только оплаченный, пока не истек. Бесплатного периода больше нет (v2.0): Старт = 5 слотов клиентов навсегда
 export const BASE_SLOTS = 5, REF_SLOTS = 3;
 // за каждого приглашенного коллегу, который открыл кабинет специалиста, +3 слота навсегда
 export const maxClientSlots = u => BASE_SLOTS + REF_SLOTS * Math.max(0, (u && u.invitedPro) || 0);
+// режим приложения переключает администратор: бета (у всех специалистов PRO, оплаты нет) или полный (Free и PRO)
+export const APP = { beta: true, at: 0 };
+export async function loadApp(force) {
+  if (!force && Date.now() - APP.at < 30e3) return APP;
+  try { const r = await get('config/app.json', { access: 'private', useCache: false }); if (r && r.stream) { const j = JSON.parse(await readStream(r.stream)); APP.beta = j.beta !== false; } } catch (e) {}
+  APP.at = Date.now(); return APP;
+}
+export async function saveApp(beta) { APP.beta = !!beta; APP.at = Date.now(); await put('config/app.json', JSON.stringify({ beta: APP.beta, t: Date.now() }), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true }); return APP; }
 export function effectivePlan(u) {
   if (u && ['pro', 'studio'].includes(u.plan) && (u.planUntil || 0) > Date.now()) return { plan: u.plan, until: u.planUntil, beta: false };
+  if (APP.beta) return { plan: 'pro', until: null, beta: true };
   return { plan: 'start', until: null, beta: false };
 }
 export const isPro = u => effectivePlan(u).plan !== 'start';
@@ -83,6 +94,6 @@ export async function creditReferral(u, isNew) {
 export const CONSENT_VERSION = '2026-10-v2';
 export const publicUser = u => { if (!u) return u; const p = effectivePlan(u);
   return { id: u.id, provider: u.provider, name: u.name, email: u.email || null, photo: u.photo || null, role: u.role || null, specialty: u.specialty || null, admin: isAdmin(u), plan: p.plan, planUntil: p.until, planBeta: p.beta, consentOk: u.consentVersion === CONSENT_VERSION,
-    refCode: u.refCode || null, invited: u.invited || 0, invitedPro: u.invitedPro || 0, invitedColleagues: u.invitedPro || 0, maxClientSlots: maxClientSlots(u), isPro: p.plan !== 'start', payEmail: u.payEmail || null }; };
+    refCode: u.refCode || null, invited: u.invited || 0, invitedPro: u.invitedPro || 0, invitedColleagues: u.invitedPro || 0, maxClientSlots: maxClientSlots(u), isPro: p.plan !== 'start', planBeta: p.beta, payEmail: u.payEmail || null }; };
 
 export async function currentUser(req) { const uid = sessionUid(req); return uid ? loadUser(uid) : null; }

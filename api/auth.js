@@ -1,6 +1,6 @@
 // Быстрый вход: Google (Google Identity Services) и Telegram (виджет на сайте или Mini App внутри Telegram).
 import crypto from 'node:crypto';
-import { setSession, clearSession, sessionUid, loadUser, saveUser, deleteUser, allUsers, publicUser, isAdmin, effectivePlan, CONSENT_VERSION, maxClientSlots, ensureRefIndex, creditReferral } from './_session.js';
+import { setSession, clearSession, sessionUid, loadUser, saveUser, deleteUser, allUsers, publicUser, isAdmin, effectivePlan, CONSENT_VERSION, maxClientSlots, ensureRefIndex, loadApp, saveApp, APP, creditReferral } from './_session.js';
 
 const GOOGLE_ID = process.env.GOOGLE_CLIENT_ID || '';
 const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
@@ -72,7 +72,8 @@ export default async function handler(req, res) {
   const a = String(req.query.a || '');
   try {
     if (!process.env.SESSION_SECRET) return res.status(503).json({ error: 'вход не настроен' });
-    if (req.method === 'GET' && a === 'config') return res.status(200).json({ google: GOOGLE_ID || null, telegram: TG_TOKEN && TG_NAME ? TG_NAME : null, telegramWeb: await widgetReady(String(req.headers.host || '').split(':')[0]), telegramId: TG_TOKEN ? TG_TOKEN.split(':')[0] : null });
+    await loadApp();
+    if (req.method === 'GET' && a === 'config') return res.status(200).json({ beta: APP.beta, google: GOOGLE_ID || null, telegram: TG_TOKEN && TG_NAME ? TG_NAME : null, telegramWeb: await widgetReady(String(req.headers.host || '').split(':')[0]), telegramId: TG_TOKEN ? TG_TOKEN.split(':')[0] : null });
     if (req.method === 'GET' && a === 'me') { const uid = sessionUid(req); const u = uid && await loadUser(uid); if (!u) { if (uid) clearSession(res); return res.status(401).json({ user: null }); }
       if (!u.refCode && process.env.SESSION_SECRET) { await ensureRefIndex(u); await saveUser(u); } // код приглашения для тех, кто вошел до реферальной программы
       return res.status(200).json({ user: publicUser(u) }); }
@@ -98,6 +99,8 @@ export default async function handler(req, res) {
     if (a === 'payemail') { const e = String(b.email || '').trim().toLowerCase().slice(0, 120);
       if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]{2,}$/.test(e)) return res.status(400).json({ error: 'проверьте почту' });
       u.payEmail = e; await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
+    // переключатель режима: бета или полный (только администратор)
+    if (a === 'appmode') { if (!isAdmin(u)) return res.status(403).json({ error: 'forbidden' }); await saveApp(b.beta !== false); return res.status(200).json({ beta: APP.beta }); }
     if (a === 'logout') { clearSession(res); return res.status(200).json({ ok: true }); }
     if (a === 'delete') { await deleteUser(u.id); clearSession(res); return res.status(200).json({ ok: true }); }
     if (a === 'users') { if (!isAdmin(u)) return res.status(403).json({ error: 'forbidden' });

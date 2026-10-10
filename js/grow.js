@@ -45,7 +45,7 @@ export function feedbackSheet(where = 'menu', preset = {}) {
 export async function bugSheet() {
   if (document.querySelector('.sheet #bgt')) return;
   const d = sheet(`<h2 style="font-size:21px">Что-то не так?</h2>
-    <p class="sub" style="font-size:14px;margin-top:6px">Опишите одной фразой, что случилось или что ожидали увидеть. Это бета: каждое сообщение читаю в тот же день.</p>${devCard('отвечаю сам')}
+    <p class="sub" style="font-size:14px;margin-top:6px">Опишите одной фразой, что случилось или что ожидали увидеть. Каждое сообщение читаю в тот же день.</p>${devCard('отвечаю сам')}
     <textarea id="bgt" rows="4" maxlength="1500" placeholder="Например: на шаге «одна нога» зависло, кнопка «Ещё раз» не нажималась" style="width:100%;margin-top:14px;border-radius:16px;border:1px solid var(--line);padding:12px 14px;font:16px Onest;background:#fff;resize:vertical"></textarea>
     <label class="row" style="margin-top:12px;font-size:14px;align-items:flex-start;gap:10px"><input type="checkbox" id="bgd" checked style="width:20px;height:20px;flex:none;accent-color:var(--ink);margin-top:1px"><span>Приложить сведения о телефоне и последние нажатия. Без имен клиентов, видео и результатов.</span></label>
     ${contactBox()}
