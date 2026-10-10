@@ -153,7 +153,7 @@ export async function installNow(done) {
 }
 export function installCard() {
   if (standalone() || LS.get('bp_inst') === 'no' || (!deferred && !iOS()) || (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData)) return '';
-  return `<div class="pad" style="margin-top:16px"><div class="card row" id="inst" style="gap:12px"><img src="icons/icon-192.png" alt="" width="44" height="44" style="border-radius:12px;flex:none"><div style="flex:1;min-width:0"><b style="font-size:15px">Установить на экран</b><div style="font-size:13px;color:var(--sub)">Открывается как приложение, без браузера</div></div><button class="pill" id="insty" style="background:var(--brand);color:#fff;border:0">Установить</button><button id="instx" aria-label="Скрыть" style="background:none;border:0;font-size:20px;color:var(--faint);width:32px;height:44px">×</button></div></div>`;
+  return `<div class="pad" style="margin-top:16px"><div class="card row" id="inst" style="gap:12px"><img src="icons/bp-192.png" alt="" width="44" height="44" style="border-radius:12px;flex:none"><div style="flex:1;min-width:0"><b style="font-size:15px">Установить на экран</b><div style="font-size:13px;color:var(--sub)">Открывается как приложение, без браузера</div></div><button class="pill" id="insty" style="background:var(--brand);color:#fff;border:0">Установить</button><button id="instx" aria-label="Скрыть" style="background:none;border:0;font-size:20px;color:var(--faint);width:32px;height:44px">×</button></div></div>`;
 }
 export function bindInstall() {
   const box = document.getElementById('inst'); if (!box) return; track('install_shown');
