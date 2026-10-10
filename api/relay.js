@@ -48,7 +48,7 @@ async function readAll(stream) { const chunks = []; for await (const c of stream
 // ежедневная уборка (Vercel Cron): старые неразобранные результаты и события
 export async function cleanup() {
   let n = 0;
-  for (const [prefix, days] of [['relay/', KEEP_DAYS], ['ev/', EV_KEEP_DAYS], ['feedback/', 365]]) {
+  for (const [prefix, days] of [['relay/', KEEP_DAYS], ['ev/', EV_KEEP_DAYS], ['feedback/', 365], ['share/', 90], ['sharecount/', 2]]) {
     const edge = Date.now() - days * 864e5; let cursor;
     do { const r = await list({ prefix, limit: 1000, cursor }); cursor = r.hasMore ? r.cursor : undefined;
       const old = r.blobs.filter(b => new Date(b.uploadedAt).getTime() < edge).map(b => b.url);

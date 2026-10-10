@@ -6,7 +6,8 @@ const EVENTS = new Set(['app_open', 'onb_done', 'login_ok', 'safety_ok', 'safety
   'fb_sent', 'ref_share', 'install_shown', 'install_ok',
   // бета: техника и трение
   'pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'db_empty', 'db_other', 'backup_done', 'restore_done',
-  'gate_hit', 'compare_open', 'retest_done', 'report_shared', 'bug_sent', 'rage', 'slow']);
+  'gate_hit', 'compare_open', 'retest_done', 'report_shared', 'bug_sent', 'rage', 'slow',
+  'pro_click', 'vas_done', 'report_link', 'progress_sent']);
 let sid; try { sid = sessionStorage.getItem('bp_sid'); if (!sid) { sid = Math.random().toString(36).slice(2, 12); sessionStorage.setItem('bp_sid', sid); } } catch (e) { sid = Math.random().toString(36).slice(2, 12); }
 const t0 = Date.now(), q = [], seen = new Set(); let errs = 0;
 const role = () => { try { return localStorage.getItem('bp_mode') === 'pro' ? 'pro' : 'client'; } catch (e) { return 'client'; } };
@@ -60,3 +61,6 @@ function err(m, f, l) { const x = { m: clip(m || 'unknown'), f: clip(f || '').sp
   if (errs++ >= 5) return; track('err', x, false); flush(); }
 addEventListener('error', e => err(e.message, e.filename, e.lineno));
 addEventListener('unhandledrejection', e => { const r = e.reason; err(r && r.message ? r.message : String(r), r && r.stack ? (String(r.stack).match(/\/([\w.-]+\.js):(\d+)/) || [])[1] : '', r && r.stack ? +((String(r.stack).match(/\.js:(\d+)/) || [])[1] || 0) : 0); });
+
+// шкала боли VAS 0–10 и комплаенс: чистые функции в js/vas.js (без DOM, проверяются в tests/api.test.mjs)
+export { vasDelta, vasLog, vasSave, vasStats } from './vas.js';

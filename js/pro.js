@@ -1,14 +1,17 @@
 // Кабинет специалиста: клиенты, оценки по протоколам, три слоя результата, резервная копия.
 // Все данные в IndexedDB на телефоне специалиста; на сервер ничего не уходит.
 import { analyze, fmt, recompute } from './analysis.js';
-import { track } from './track.js';
+import { track, vasStats } from './track.js';
 import { npsCard, bindNps, installCard, bindInstall, feedbackSheet, referralSheet, myRef, bugSheet, DEV } from './grow.js';
 import { meSync, logout, getMe } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
-import { gate, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, START_CLIENTS } from './plans.js';
+import { gate, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, PAY_URL, REF_SLOTS } from './plans.js';
 import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast } from './core.js';
-import { cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, ex, totalMin, workout, onboarding, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen } from './app.js';
+import { cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, ex, totalMin, workout, onboarding, progressChart, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen } from './app.js';
 
+// активные клиенты занимают слоты; пример и закрытые (пришли сверх лимита) не считаются
+const activeCount = cs => cs.filter(c => !c.demo && !c.locked).length;
+const checkSlotsQuiet = n => { const s = slots(n); return s.pro || s.used < s.max; };
 const $ = s => document.querySelector(s);
 // имя специалиста для отчетов по умолчанию: из аккаунта (в бете кабинетом пользуются разные специалисты)
 const defaultAuthor = () => { const u = meSync(); return u && u.name ? u.name : 'Специалист'; };
@@ -102,28 +105,29 @@ export const TEMPLATES = [
 function orderTemplates(sp) { const o = TEMPLATE_ORDER[sp]; if (o) TEMPLATES.sort((a, b) => o.indexOf(a[0]) - o.indexOf(b[0])); }
 // профиль специалиста: имя для шапки и отчетов, контакт для записи в отчете клиенту
 async function profileForm() {
-  const name = (await meta('profile')) || defaultAuthor(), contact = (await meta('contact')) || '', logo = (await meta('logo')) || '', photo = (await meta('photo')) || '';
-  go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:18px">Мой профиль</b></div>
+  const name = (await meta('profile')) || defaultAuthor(), contact = (await meta('contact')) || '', logo = (await meta('logo')) || '', photo = (await meta('photo')) || '', title = (await meta('title')) || '';
+  go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:18px">Мой личный бренд</b></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:14px;margin-top:8px">
-    <label><b>Имя и специальность</b><input id="pn" value="${esc(name)}" placeholder="Анна Смирнова, персональный тренер" class="field" style="margin-top:8px"></label>
-    <label><b>Контакт для записи</b><input id="pc" value="${esc(contact)}" placeholder="@telegram, телефон или сайт" class="field" style="margin-top:8px"></label>
+    <label><b>ФИО или название клиники</b><input id="pn" value="${esc(name)}" placeholder="Анна Смирнова" class="field" style="margin-top:8px"></label>
+    <label><b>Специализация</b><input id="pt" value="${esc(title)}" placeholder="Кинезиотерапевт, реабилитолог" class="field" style="margin-top:8px"></label>
+    <label><b>Контакты</b><input id="pc" value="${esc(contact)}" placeholder="@telegram, Instagram или телефон" class="field" style="margin-top:8px"></label>
     <div><b>Ваше фото для отчета</b><div class="row" style="gap:12px;margin-top:8px"><div style="width:64px;height:64px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${photo ? `<img src="${photo}" alt="" style="width:100%;height:100%;object-fit:cover">` : ic('user-plus', 's')}</div>
       <label class="btn line" style="height:48px;flex:1;cursor:pointer">${photo ? 'Заменить' : 'Загрузить'}<input type="file" id="phf" accept="image/*" style="display:none"></label>${photo ? '<button class="btn ghost" id="phe" style="height:48px;width:auto;padding:0 14px">Настроить</button>' : ''}</div></div>
-    <div><b>Логотип для отчета</b><div class="row" style="gap:12px;margin-top:8px"><div id="lgv" style="width:64px;height:64px;border-radius:14px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${logo ? `<img src="${logo}" alt="" style="max-width:100%;max-height:100%">` : ic('image', 's')}</div>
+    <div><b>Логотип для отчета</b>${isPro() ? '' : ' <span class="pill" style="font-size:12px;padding:2px 8px">PRO</span>'}<div class="row" style="gap:12px;margin-top:8px"><div id="lgv" style="width:64px;height:64px;border-radius:14px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${logo ? `<img src="${logo}" alt="" style="max-width:100%;max-height:100%">` : ic('image', 's')}</div>
       <label class="btn line" style="height:48px;flex:1;cursor:pointer">${logo ? 'Заменить' : 'Загрузить'}<input type="file" id="lgf" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none"></label>${logo ? '<button class="btn ghost" id="lgx" style="height:48px;width:auto;padding:0 14px">Убрать</button>' : ''}</div></div>
-    <p class="sub" style="font-size:13px">Имя, контакт и логотип появятся в отчете клиенту (картинка и PDF), который он сохранит и покажет друзьям.</p>
+    <p class="sub" style="font-size:13px">Имя, специализация, контакты и фото появятся в отчете клиенту: в PDF, картинке и веб-ссылке. ${isPro() ? 'На PRO отчет выходит под вашим логотипом.' : `Логотип в отчете и отчет без плашки BodyPassport доступны на <a href="${PAY_URL}" target="_blank" rel="noopener">PRO</a>.`}</p>
    </div><div class="pad" style="padding:20px"><button class="btn" id="ps">Сохранить</button></div></div>`);
   $('#back').onclick = () => proHome();
-  $('#ps').onclick = async () => { await setMeta('profile', $('#pn').value.trim().slice(0, 80) || defaultAuthor()); await setMeta('contact', $('#pc').value.trim().slice(0, 60)); proHome(); };
+  $('#ps').onclick = async () => { await setMeta('profile', $('#pn').value.trim().slice(0, 80) || defaultAuthor()); await setMeta('contact', $('#pc').value.trim().slice(0, 60)); await setMeta('title', $('#pt').value.trim().slice(0, 60)); proHome(); };
   // логотип ужимается до 256 px и хранится в кабинете как PNG: попадает в копию и в отчеты, на сервер не уходит
   $('#lgf').onchange = async e => { const f = e.target.files[0]; if (!f) return; if (f.size > 5e6) return toast('Файл больше 5 МБ');
     try { const url = URL.createObjectURL(f), im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
       const k = Math.min(1, 256 / Math.max(im.width || 256, im.height || 256)), c = document.createElement('canvas'); c.width = Math.max(1, Math.round((im.width || 256) * k)); c.height = Math.max(1, Math.round((im.height || 256) * k));
       c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
-      await setMeta('profile', $('#pn').value.trim().slice(0, 80) || defaultAuthor()); await setMeta('contact', $('#pc').value.trim().slice(0, 60));
+      await keep();
       await setMeta('logo', c.toDataURL('image/png')); toast('Логотип сохранен'); profileForm(); } catch (err) { toast('Не удалось прочитать картинку'); } };
   if ($('#lgx')) $('#lgx').onclick = async () => { await setMeta('logo', ''); profileForm(); };
-  const keep = async () => { await setMeta('profile', $('#pn').value.trim().slice(0, 80) || defaultAuthor()); await setMeta('contact', $('#pc').value.trim().slice(0, 60)); };
+  const keep = async () => { await setMeta('profile', $('#pn').value.trim().slice(0, 80) || defaultAuthor()); await setMeta('contact', $('#pc').value.trim().slice(0, 60)); await setMeta('title', $('#pt').value.trim().slice(0, 60)); };
   $('#phf').onchange = async e => { const f = e.target.files[0]; if (!f) return; if (f.size > 15e6) return toast('Файл больше 15 МБ'); await keep();
     const src = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(f); });
     const out = await photoEditor(src); if (out) { await setMeta('photo', out.photo); await setMeta('photoSrc', out.src); await setMeta('photoSet', out.set); toast('Фото сохранено'); } profileForm(); };
@@ -205,6 +209,15 @@ function dictate(textarea, btn) {
 }
 
 // ---------- рабочий стол ----------
+// счетчик слотов в шапке кабинета: занято из доступных и кнопка «+3 слота» (готовый текст с реферальной ссылкой)
+function slotWidget(s) {
+  if (s.pro) return `<div class="pad" style="margin-top:var(--s3)"><div class="card row" id="slots" style="padding:10px 14px;font-size:14px"><span style="flex:1"><b>PRO</b> · клиентов без лимита</span></div></div>`;
+  const full = s.used >= s.max, pct = Math.min(100, Math.round(s.used / Math.max(1, s.max) * 100));
+  return `<div class="pad" style="margin-top:var(--s3)"><div class="card" id="slots" style="padding:12px 14px">
+    <div class="row" style="font-size:14px;gap:8px"><span style="flex:1">Использовано <b>${s.used} из ${s.max}</b> слотов</span><button class="pill" id="slget" style="background:var(--ink);color:#fff">Получить +${REF_SLOTS} слота</button></div>
+    <div style="height:6px;border-radius:3px;background:var(--surface);margin-top:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${full ? 'var(--over)' : 'var(--ink)'}"></div></div>
+    ${full ? `<div style="font-size:13px;margin-top:8px">Новых клиентов не добавить. Пригласите коллегу или <a href="${PAY_URL}" target="_blank" rel="noopener">перейдите на PRO</a>.</div>` : ''}</div></div>`;
+}
 export async function proHome(query = '', pulled = null) {
   track('pro_open');
   localStorage.setItem('bp_mode', 'pro');
@@ -233,7 +246,7 @@ export async function proHome(query = '', pulled = null) {
   const byId = Object.fromEntries(clients.map(c => [c.id, c]));
   const last = id => asses.filter(a => a.clientId === id).sort((x, y) => y.date - x.date)[0];
   // главный экран «Сегодня»: что посмотреть, кому ретест, последние клиенты
-  const review = asses.filter(a => a.draft && byId[a.clientId] && !byId[a.clientId].demo).sort((x, y) => y.date - x.date).slice(0, 5);
+  const review = asses.filter(a => a.draft && byId[a.clientId] && !byId[a.clientId].demo && !byId[a.clientId].locked).sort((x, y) => y.date - x.date).slice(0, 5);
   const soon = clients.map(c => ({ c, a: last(c.id) })).filter(x => x.a && x.a.nextDate && x.a.nextDate - Date.now() <= 7 * DAY).sort((x, y) => x.a.nextDate - y.a.nextDate);
   const q = query.trim().toLowerCase(); const sorted = clients.filter(c => !q || c.name.toLowerCase().includes(q)).sort((x, y) => (last(y.id)?.date || y.created) - (last(x.id)?.date || x.created));
   const list = q ? sorted : sorted.slice(0, 6);
@@ -253,6 +266,7 @@ export async function proHome(query = '', pulled = null) {
     sport: [['посмотреть', review.length], ['ретеста на неделе', soon.length], ['асимметрий > 12%', real.filter(c => { const a = last(c.id); if (!a) return false; const f = analyze(a, C).f; return ['sym_delt', 'sym_bend', 'sym_calf', 'sym_quad'].some(k => Array.isArray(f[k]) && Math.abs(f[k][0] - f[k][1]) / Math.max(1e-6, Math.abs(f[k][0]), Math.abs(f[k][1])) > .12); }).length]] })[sp] || [['посмотреть', review.length], ['ретеста на неделе', soon.length], ['клиентов', real.length]];
   go(`<div class="scr fade"><div style="padding-top:16px">
     <div class="pad row" style="align-items:flex-start">${myPhoto ? `<img src="${myPhoto}" alt="" width="44" height="44" style="border-radius:50%;object-fit:cover;flex:none;margin:2px 12px 0 0" id="mph">` : ''}<div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--sub)">${esc(name)}${spName ? ' · ' + esc(spName.toLowerCase()) : ''}</div><h1>Сегодня</h1><div style="font-size:14px;color:var(--sub);margin-top:2px">${today[0].toUpperCase() + today.slice(1)}</div></div><button class="round" id="menu" aria-label="Меню">${ic('menu')}</button></div>
+    ${slotWidget(slots(activeCount(clients)))}
     ${real.length ? `<div class="pad kpi" style="margin-top:var(--s4)">${kv.map(([t, v]) => `<div><b style="color:${v && v !== '—' && v !== '0%' ? 'var(--ink)' : 'var(--faint)'}">${v}</b><span>${t}</span></div>`).join('')}</div>` : ''}
     <div class="pad tools" style="margin-top:var(--s2)"><button class="tool" id="join">${ic('mail')}Тест по ссылке</button><button class="tool" id="rtq">${ic('rotate-ccw')}Ретест</button><button class="tool" id="repq">${ic('file-text')}Отчёт</button><button class="tool" id="cmpq">${ic('arrow-right-left')}Было→стало</button></div>
     ${review.length ? h3('Нужно посмотреть', review.length) + `<div class="pad"><div class="group">${review.map(a => `<div class="list-item" data-a="${a.id}" style="border-radius:0;padding:var(--s3) 0;background:transparent"><span class="dot"></span><div style="flex:1;min-width:0"><b>${esc(byId[a.clientId].name)}</b><div style="font-size:13px;color:var(--sub)">${a.source === 'home' ? 'прошёл тест по ссылке' : 'гипотеза не подтверждена'} · ${esc(a.templateName || 'оценка')} · ${fmtDate(a.date)}</div></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div></div>` : ''}
@@ -260,7 +274,7 @@ export async function proHome(query = '', pulled = null) {
       return `<div class="row" style="min-height:64px"><span class="step-n" style="width:56px;color:${d < 0 ? 'var(--over-t)' : 'var(--sub)'}">${d < 0 ? '−' + (-d) + ' дн.' : d === 0 ? 'сегодня' : '+' + d + ' дн.'}</span><div style="flex:1;min-width:0;cursor:pointer" data-id="${c.id}"><b>${esc(c.name)}</b><div style="font-size:13px;color:var(--sub)">${fmtDate(a.nextDate)}</div></div><button class="pill" data-msg="${c.id}">Напомнить</button></div>`; }).join('')}</div></div>` : ''}
     ${h3(q ? 'Поиск' : 'Последние клиенты', clients.length > list.length && !q ? 'из ' + clients.length : '')}
     ${clients.length > 6 || q ? `<div class="pad" style="margin-bottom:var(--s2)"><input id="q" class="field" style="height:48px" value="${esc(query)}" placeholder="Найти клиента"></div>` : ''}
-    <div class="pad">${list.length ? `<div class="group">${list.map(c => { const a = last(c.id); return row(c, a ? fmtDate(a.date) + ' · ' + esc(a.templateName || 'оценка') : 'оценок пока нет'); }).join('')}</div>`
+    <div class="pad">${list.length ? `<div class="group">${list.map(c => { const a = last(c.id); return row(c, c.locked ? 'закрыт: нет свободного слота' : a ? fmtDate(a.date) + ' · ' + esc(a.templateName || 'оценка') : 'оценок пока нет'); }).join('')}</div>`
       : q ? '<p class="sub">Никого не нашлось.</p>' : `<div class="card empty">${ic('file-text')}<b>Посмотрите, что получите</b><span class="sub" style="font-size:14px">Готовая оценка клиента с болью в колене: замер, гипотеза, решение и отчет.</span><button class="btn line" id="demo" style="margin-top:4px">Открыть пример</button></div>`}</div>
     ${lost ? `<div class="pad" style="margin-top:var(--s3)"><div class="card" style="border:1px solid var(--over-t);font-size:14px;line-height:1.45"><b>Кабинет пуст, хотя здесь было ${was} ${plural(was)}</b><div style="margin-top:6px">Телефон мог очистить данные сайта. Восстановите кабинет из копии через меню «Восстановить из копии». Если копии нет, напишите нам через «Проблема?».</div></div></div>` : ''}
     ${iosRisk ? `<div class="pad" style="margin-top:var(--s3)"><div class="card" style="font-size:14px;line-height:1.45"><b>Защитите базу клиентов</b><div style="margin-top:6px">Safari на iPhone может стереть кабинет, если не открывать его неделю. Установите приложение на экран «Домой»: «Поделиться» → «На экран Домой», и раз в неделю сохраняйте копию.</div><button class="btn line" id="bk2" style="height:44px;margin-top:10px">Сохранить копию сейчас</button></div></div>` : ''}
@@ -269,7 +283,7 @@ export async function proHome(query = '', pulled = null) {
   </div><div class="dock"><button class="btn" id="new">${ic('plus', 's')}${({ trainer: 'Скрининг клиента', manual: 'До сеанса', sport: 'Спортивный тест' })[sp] || 'Новая оценка'}</button></div></div>`);
   if (pulled && pulled.length) toast('Пришли результаты по ссылке: ' + pulled.join(', '));
   if ($('#demo')) $('#demo').onclick = openDemo;
-  bindInstall(); if ($('#mph')) $('#mph').onclick = profileForm;
+  bindInstall(); if ($('#mph')) $('#mph').onclick = profileForm; if ($('#slget')) $('#slget').onclick = copyRefText;
   $('#new').onclick = () => quickStart(); $('#join').onclick = sendJoin; $('#menu').onclick = proMenu; if ($('#bk')) $('#bk').onclick = backup; if ($('#bk2')) $('#bk2').onclick = backup;
   // инструменты в одно касание: клиент один — сразу действие, иначе выбор из последних
   const lastTwo = id => asses.filter(a => a.clientId === id).sort((x, y) => x.date - y.date).slice(-2);
@@ -301,7 +315,7 @@ async function proMenu() {
     ${p.plan === 'start' ? `<a class="row-link" href="/pricing" target="_blank" style="margin-top:var(--s2)"><span style="color:var(--sub);font-size:14px">${planLine()}</span>${ic('chevron-right', 's chev')}</a>` : ''}
     <div class="group" style="margin-top:var(--s3)">
       ${r('msp', 'settings', 'Специализация: ' + esc(((SPECIALTIES.find(x => x[0] === localStorage.getItem('bp_sp')) || ['', 'не выбрана'])[1]).split(',')[0]))}
-      ${r('mp', 'user-plus', 'Мой профиль: имя и контакт')}
+      ${r('mp', 'user-plus', 'Мой личный бренд')}${r('mref', 'user-plus', 'Пригласить коллегу: +3 слота')}
       ${r('demo2', 'file-text', 'Пример оценки')}
       ${r('mb', 'download', 'Сохранить копию с паролем')}
       <label class="row-link">${ic('upload', 's')}<span>Восстановить из копии</span>${ic('chevron-right', 's chev')}<input type="file" id="mr" accept=".json,.bpbackup,application/json" style="display:none"></label>
@@ -326,6 +340,7 @@ async function proMenu() {
   d.querySelector('#msp').onclick = () => { d.remove(); specialtyScreen(proHome); };
   d.querySelector('#mr').onchange = e => { const f = e.target.files[0]; d.remove(); if (f) restore(f); };
   d.querySelector('#mp').onclick = async () => { d.remove(); profileForm(); };
+  d.querySelector('#mref').onclick = () => { d.remove(); referralSheet(); };
   d.querySelector('#mc').onclick = () => { localStorage.setItem('bp_mode', 'client'); d.remove(); onboarding(); };
   if (d.querySelector('#mo')) d.querySelector('#mo').onclick = async () => { await logout(); localStorage.removeItem('bp_mode'); d.remove(); onboarding(); };
   d.querySelector('#mx').onclick = () => d.remove();
@@ -333,7 +348,7 @@ async function proMenu() {
 
 // ---------- карточка клиента: создание и правка ----------
 async function clientForm(id, thenAssess) {
-  if (!id && (await all('clients')).filter(x => !x.demo).length >= START_CLIENTS && !gate('clients')) return;
+  if (!id && !checkClientSlotAvailable(activeCount(await all('clients')))) return;
   const c = id ? await get('clients', id) : { id: uid(), created: Date.now(), name: '', dob: '', sex: '', height: '', leg: 'R', hand: 'R', activity: '', complaints: '', notes: '' };
   const sel = (n, opts, v) => `<select id="${n}" class="field" style="padding:0 10px">${opts.map(([k, t]) => `<option value="${k}" ${v === k ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
   const inp = (n, ph, v, type = 'text') => `<input id="${n}" type="${type}" value="${esc(v)}" placeholder="${ph}" class="field">`;
@@ -353,14 +368,26 @@ async function clientForm(id, thenAssess) {
     await put('clients', c); thenAssess ? newAssessment(c.id) : clientCard(c.id); };
 }
 
+// карточка клиента: занятия дома по ссылке (комплаенс и боль до/после), приходят зашифрованными от клиента
+function homeBlock(c) {
+  const v = c.progress && c.progress.vas; if (!v || !v.length) return '';
+  const w = vasStats(v, 7), m = vasStats(v, 30), f = x => x == null ? '—' : String(x).replace('.', ','), d = x => x == null ? '—' : (x > 0 ? '−' : x < 0 ? '+' : '') + f(Math.abs(x));
+  return `<div class="pad" style="margin-top:12px"><div class="card"><div class="eyebrow">Занятия дома</div>
+    <div class="kpi" style="margin-top:8px"><div><b>${w.compliance}%</b><span>выполнение, 7 дн.</span></div><div><b>${m.compliance}%</b><span>выполнение, 30 дн.</span></div><div><b style="color:${w.avgDelta > 0 ? 'var(--ok-t)' : 'var(--ink)'}">${d(w.avgDelta)}</b><span>боль за занятие, неделя</span></div></div>
+    <div style="font-size:13px;color:var(--sub);margin-top:8px">Боль за месяц: в среднем ${f(m.avgPre)} до → ${f(m.avgPost)} после, изменение ${d(m.avgDelta)}. Обновлено ${new Date(c.progress.at).toLocaleDateString('ru', { day: 'numeric', month: 'long' })}.</div></div></div>
+    ${progressChart(v).replace('<div class="pad" style="margin-top:12px">', '<div class="pad" style="margin-top:8px">')}`;
+}
 export async function clientCard(id) {
-  const c = await get('clients', id); if (!c) return proHome(); const as = await byClient(id); const last = as.at(-1);
+  const c = await get('clients', id); if (!c) return proHome();
+  if (c.locked) { if (!checkClientSlotAvailable(activeCount(await all('clients')))) return; delete c.locked; await put('clients', c); }
+  const as = await byClient(id); const last = as.at(-1);
   const age = c.dob ? Math.floor((Date.now() - new Date(c.dob)) / (365.25 * DAY)) : null;
   go(`<div class="fade" style="padding-bottom:40px"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><span style="flex:1"></span><button class="pill" id="edit">Изменить</button></div>
    <div class="pad"><h1>${esc(c.name)}</h1><p class="sub" style="font-size:14px;margin-top:4px">${[age != null ? age + ' ' + (age % 10 === 1 && age % 100 !== 11 ? 'год' : [2, 3, 4].includes(age % 10) && ![12, 13, 14].includes(age % 100) ? 'года' : 'лет') : '', c.sex === 'M' ? 'муж' : c.sex === 'F' ? 'жен' : '', c.height ? c.height + ' см' : '', c.hand === 'L' ? 'левша' : c.hand === 'R' ? 'правша' : '', c.activity].filter(Boolean).map(esc).join(' · ')}</p>
     ${c.complaints ? `<div class="card" style="margin-top:12px;font-size:15px;line-height:1.4"><div class="eyebrow">Жалобы</div>${esc(c.complaints)}</div>` : ''}
     ${c.notes ? `<div class="card" style="margin-top:8px;font-size:15px;line-height:1.4"><div class="eyebrow">Заметки</div>${esc(c.notes)}</div>` : ''}</div>
    ${last && last.nextDate ? `<div class="pad" style="margin-top:12px"><div class="card row" style="background:${last.nextDate - Date.now() <= 3 * DAY ? 'var(--short-s)' : '#fff'}"><div style="flex:1"><b>Повторный тест</b><div style="font-size:14px;color:var(--sub)">${fmtDate(last.nextDate)}</div></div><button class="pill" id="msg">Написать</button><button class="pill" id="cal" style="margin-left:6px">В календарь</button></div></div>` : ''}
+   ${homeBlock(c)}
    ${as.length >= 2 ? '<div class="pad" style="margin-top:14px"><button class="btn line" id="cmp">Было → стало</button></div>' : ''}${as.length >= 3 ? '<div class="pad" style="margin-top:8px"><button class="btn ghost" id="rel" style="background:#fff">Повторяемость: 3 последних теста</button></div>' : ''}
    <div class="pad" style="margin-top:14px;display:flex;flex-direction:column;gap:10px"><button class="btn" id="na">${last ? 'Повторный тест' : 'Новая оценка'}</button><button class="btn ghost" id="inv" style="background:#fff">Ссылка клиенту: тест дома</button>${last ? '<button class="btn ghost" id="nb">Новая оценка с другим протоколом</button>' : ''}</div>
    <h3 class="pad" style="margin:22px 0 8px;font-size:17px">История оценок</h3>
@@ -423,7 +450,7 @@ async function quickStart() {
   document.querySelectorAll('[data-pzs]').forEach(b => b.onclick = () => { pzs = pzs === b.dataset.pzs ? null : b.dataset.pzs; document.querySelectorAll('[data-pzs]').forEach(x => x.classList.toggle('on', x.dataset.pzs === pzs)); });
   const painOpts = () => pz ? { pain: { [pz]: pzv }, painSide: pzs } : {};
   // клиент из поля создается один раз (gate — единственное место про тариф), потом сразу камера
-  const client = async () => { if (picked) return picked; if (clients.length >= START_CLIENTS && !gate('clients')) return null; const n = nm.value.trim().slice(0, 80);
+  const client = async () => { if (picked) return picked; if (!checkClientSlotAvailable(activeCount(clients))) return null; const n = nm.value.trim().slice(0, 80);
     const c = { id: uid(), created: Date.now(), name: n, first: n.split(' ')[0], last: n.split(' ').slice(1).join(' '), dob: '', sex: '', height: '', leg: 'R', hand: 'R', activity: '', complaints: '', notes: '' };
     await put('clients', c); picked = c.id; return c.id; };
   go2.onclick = async () => { const id = await client(); if (id) newAssessment(id, null, { tpl, autostart: true, ...painOpts() }); };
@@ -906,15 +933,19 @@ async function report(aid) {
   if (!same) after.push({ h: 'Проверим снова', text: fmtDate(a.nextDate) + ': тот же тест, сравним с сегодняшним' });
   const checked = Object.keys(a.check || {}).length > 0 || sp.some(s => s.edited);
   const note = 'Предварительная оценка движения по камере телефона, не медицинское заключение. ' + (checked ? 'Выводы проверены специалистом на приеме.' : 'Выводы о мышцах пока не проверены руками.');
-  const logo = await meta('logo'), photo = await meta('photo');
-  const cv = await passportImage({ eyebrow: 'ПАСПОРТ ДВИЖЕНИЯ', name: c.name, date: 'Оценка ' + fmtDate(a.date), sp, sections, delta, footer: { name: author, contact: contact ? 'Запись: ' + contact : location.host, after, note, logo, photo }, raw: true });
+  // занятия дома: комплаенс и боль до/после (если клиент делал комплекс по ссылке)
+  const hv = c.progress && c.progress.vas || []; if (hv.length) { const m = vasStats(hv, 30), pairs = hv.filter(r => Number.isFinite(r.pre) && Number.isFinite(r.post));
+    sections.push({ h: 'Занятия дома, 30 дней', rows: [{ text: `Выполнено в ${m.activeDays} из 30 дней (${m.compliance}%)` }, ...(m.avgPre != null ? [{ text: `Боль в среднем: ${String(m.avgPre).replace('.', ',')} до занятия → ${String(m.avgPost).replace('.', ',')} после` }] : [])], chart: pairs.slice(-14) }); }
+  const pro = isPro(), logo = pro ? await meta('logo') : '', photo = await meta('photo'), title = await meta('title'), myLogo = await meta('logo');
+  const cv = await passportImage({ eyebrow: 'БИОМЕХАНИЧЕСКИЙ ПАСПОРТ', name: c.name, date: 'Оценка ' + fmtDate(a.date), sp, sections, delta, footer: { name: author, title, contact: contact ? 'Запись: ' + contact : location.host, after, note, logo, photo, brand: pro ? 'pro' : 'free' }, raw: true });
   // предпросмотр перед отправкой: специалист видит ровно то, что получит клиент
   const base = `bodypassport-${c.name.replace(/[^\p{L}\p{N}]+/gu, '-')}-${new Date(a.date).toISOString().slice(0, 10)}`;
   const d = document.createElement('div'); d.className = 'sheet';
   d.innerHTML = `<div><h2 style="font-size:20px">Отчет клиенту</h2><p class="sub" style="font-size:13px;margin-top:4px">Так его увидит ${esc(c.name)}. PDF удобно распечатать, картинку переслать в мессенджер.</p>
     <div style="margin-top:12px;max-height:46dvh;overflow:auto;border-radius:16px;border:1px solid var(--line)"><img src="${cv.toDataURL('image/jpeg', .8)}" alt="Отчет" style="width:100%;display:block"></div>
-    ${logo && photo ? '' : `<button class="link" id="rplg" style="font-size:13px;margin-top:8px">Добавить в отчет ${photo ? 'логотип' : logo ? 'свое фото' : 'свое фото и логотип'}</button>`}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn" id="rpdf">${ic('file-text', 's')}PDF</button><button class="btn line" id="rpng">${ic('image', 's')}Картинка</button></div>
+    ${!pro ? `<p class="sub" style="font-size:13px;margin-top:8px">${myLogo ? 'Ваш логотип' : 'Логотип'} и отчет без плашки BodyPassport: <a href="${PAY_URL}" target="_blank" rel="noopener">PRO</a></p>` : ''}${photo && (logo || !pro) ? '' : `<button class="link" id="rplg" style="font-size:13px;margin-top:8px">Добавить в отчет ${photo ? 'логотип' : 'свое фото'}</button>`}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn" id="rpdf">${ic('file-text', 's')}Скачать PDF</button><button class="btn line" id="rpng">${ic('image', 's')}Картинка</button></div>
+    <button class="btn line" id="rweb" style="margin-top:8px">${ic('mail', 's')}Поделиться веб-ссылкой</button>
     <button class="btn ghost" id="rpx" style="margin-top:8px">Закрыть</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; d.querySelector('#rpx').onclick = () => d.remove();
   if (d.querySelector('#rplg')) d.querySelector('#rplg').onclick = () => { d.remove(); profileForm(); };
@@ -925,6 +956,19 @@ async function report(aid) {
     try { const { canvasToPdf } = await import('./pdf.js'); await send(await canvasToPdf(cv, 'BodyPassport'), base + '.pdf', 'application/pdf', 'pdf'); } catch (e) { toast('Не удалось собрать PDF: ' + e.message); }
     b.disabled = false; b.innerHTML = ic('file-text', 's') + 'PDF'; };
   d.querySelector('#rpng').onclick = async () => send(await new Promise(r => cv.toBlob(r, 'image/png')), base + '.png', 'image/png', 'png');
+  d.querySelector('#rweb').onclick = async () => { const b = d.querySelector('#rweb'); b.disabled = true; b.textContent = 'Создаю ссылку…';
+    try { const url = await reportLink(cv, { name: c.name, date: fmtDate(a.date), author }); track('report_link', {}, false);
+      const text = `${c.name.split(' ')[0]}, здравствуйте! Ваш биомеханический паспорт по ссылке:`;
+      if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url); toast('Ссылка скопирована'); } }
+    catch (e) { toast('Не удалось создать ссылку: ' + e.message); }
+    b.disabled = false; b.innerHTML = ic('mail', 's') + 'Поделиться веб-ссылкой'; };
+}
+/** Веб-ссылка на отчет только для просмотра: картинка шифруется здесь, ключ во фрагменте ссылки, сервер видит только шифр. */
+async function reportLink(cv, info) {
+  const k = await seal.key(), body = await seal.encrypt(k, { img: cv.toDataURL('image/jpeg', .82), ...info });
+  const r = await fetch('/api/share', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body });
+  const j = await r.json().catch(() => ({})); if (!r.ok || !j.id) throw new Error(j.error || r.status);
+  return location.origin + '/#rep=' + j.id + '.' + k;
 }
 
 // сообщение клиенту о ретесте: текст в мессенджер одним касанием
@@ -1012,6 +1056,12 @@ async function sendJoin() {
 let pullAt = 0;
 document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible' || !document.getElementById('join') || !document.getElementById('menu') || Date.now() - pullAt < 30000) return;
   pullAt = Date.now(); pullResults().then(n => { if (n.length && document.getElementById('join')) proHome('', n); }).catch(() => {}); });
+/** Занятия клиента дома: VAS до/после и число упражнений. Только числа, иначе отбрасываем. */
+async function saveProgress(c, vas) {
+  const n = (v, lo, hi) => Number.isFinite(v) ? Math.max(lo, Math.min(hi, Math.round(v))) : undefined;
+  const list = (Array.isArray(vas) ? vas : []).slice(-60).map(r => r && typeof r === 'object' ? { t: n(r.t, 0, Date.now() + DAY), pre: n(r.pre, 0, 10), post: n(r.post, 0, 10), n: n(r.n, 0, 50), all: n(r.all, 0, 50) } : null).filter(r => r && r.t);
+  c.progress = { vas: list, at: Date.now() }; await put('clients', c);
+}
 export async function pullResults() {
   const clients = (await all('clients')).filter(c => c.invite); const bx = await meta('inbox');
   const boxes = b => [b.id].concat(b.old && Date.now() < LEGACY_UNTIL ? [b.old] : []);
@@ -1020,14 +1070,17 @@ export async function pullResults() {
   const got = [], done = p => fetch('/api/relay?p=' + encodeURIComponent(p), { method: 'DELETE' }).catch(() => {});
   for (const c of clients) for (const item of boxes(c.invite).flatMap(id => data[id] || [])) {
     let r; try { r = await seal.decrypt(c.invite.key, item.data); } catch (e) { done(item.p); continue; } // не расшифровывается этим ключом: мусор, иначе он занимает лимит ссылки
+    if (r && r.type === 'progress') { await saveProgress(c, r.vas); done(item.p); continue; }
     try { await addResult(c, r); got.push(c.name); done(item.p); } catch (e) { console.warn('relay item', e); } }
   if (bx) for (const item of boxes(bx).flatMap(id => data[id] || [])) {
     let m; try { m = await seal.decrypt(bx.key, item.data); } catch (e) { done(item.p); continue; }
+    if (m && m.type === 'progress') { const c = typeof m.token === 'string' && m.token.length >= 16 && (await all('clients')).find(x => x.remoteToken === m.token); if (c) await saveProgress(c, m.vas); done(item.p); continue; }
     try { const p0 = m.profile && typeof m.profile === 'object' ? m.profile : {}, pr = { name: str(p0.name, 40), surname: str(p0.surname, 60), dob: /^\d{4}-\d{2}-\d{2}$/.test(p0.dob) ? p0.dob : '', sex: ['M', 'F'].includes(p0.sex) ? p0.sex : '', height: /^\d{2,3}$/.test(p0.height) ? p0.height : '', hand: ['R', 'L'].includes(p0.hand) ? p0.hand : '', activity: str(p0.activity, 120), complaints: str(p0.complaints, 1000) };
       if (typeof m.token !== 'string' || !/^[A-Za-z0-9_-]{16,64}$/.test(m.token)) m.token = null;
       // тот же человек по общей ссылке повторно — в ту же карточку
       let c = m.token && (await all('clients')).find(x => x.remoteToken && x.remoteToken === m.token);
-      if (!c) c = { id: uid(), created: Date.now(), remoteToken: m.token, notes: '' };
+      // новый человек по общей ссылке сверх слотов Free: результат сохраняем, но карточка закрыта до свободного слота или PRO
+      if (!c) { c = { id: uid(), created: Date.now(), remoteToken: m.token, notes: '' }; if (!checkSlotsQuiet(activeCount(await all('clients')))) c.locked = true; }
       Object.assign(c, { name: [pr.name, pr.surname].filter(Boolean).join(' ') || 'Без имени', dob: pr.dob || c.dob || '', sex: pr.sex || c.sex || '', height: pr.height || c.height || '', hand: pr.hand || c.hand || 'R', leg: pr.hand || c.leg || 'R', activity: pr.activity || c.activity || '', complaints: pr.complaints || c.complaints || '' });
       if (!m.result || typeof m.result !== 'object') throw new Error('no result');
       await put('clients', c); await addResult(c, m.result); got.push(c.name); done(item.p); } catch (e) { console.warn('inbox item', e); } }

@@ -1,6 +1,6 @@
 // BodyPassport web: тот же поток, тексты и дизайн, что в Android-версии.
 import { P, F, G, Movement, sideView, levelled, analyze, fmt, standSnapshot, sideSnapshot } from './analysis.js';
-import { track } from './track.js';
+import { track, vasSave, vasLog, vasStats, vasDelta } from './track.js';
 import { rateCard, bindRate, installCard, bindInstall, feedbackSheet, shareApp, appLink, mountBugTab } from './grow.js';
 import { proHome, motionViewer, consumerPoses } from './pro.js';
 import { seal } from './core.js';
@@ -748,6 +748,18 @@ async function shareResult() {
 
 // ---------- картинки-отчеты (1080 px): общая верстка для клиента и специалиста ----------
 // sections: [{ h, rows: [{ k?, text, col? }] }], delta: { name, was, now, u, state }, footer: { name, contact }
+/** График боли 0–10 до и после занятий: пары столбиков по последним занятиям. Возвращает новую высоту. */
+export function vasChart(g, list, x, y, w, h) {
+  const n = Math.min(14, list.length), L = list.slice(-n), gap = 18, bw = Math.min(64, (w - 70 - gap * (n - 1)) / n / 2), base = y + h - 46, k = (h - 80) / 10;
+  g.strokeStyle = '#E2E0DA'; g.lineWidth = 2; g.font = '500 26px "JetBrains Mono", monospace'; g.fillStyle = '#868B93';
+  for (const v of [0, 5, 10]) { const yy = base - v * k; g.beginPath(); g.moveTo(x + 50, yy); g.lineTo(x + w, yy); g.stroke(); g.fillText(String(v), x, yy + 9); }
+  L.forEach((r, i) => { const x0 = x + 60 + i * (bw * 2 + gap);
+    g.fillStyle = '#C9CCD1'; g.fillRect(x0, base - r.pre * k, bw - 2, r.pre * k);
+    g.fillStyle = r.post < r.pre ? '#2D9467' : r.post > r.pre ? '#D9484F' : '#5B6068'; g.fillRect(x0 + bw, base - r.post * k, bw - 2, r.post * k); });
+  g.font = '400 30px Onest, sans-serif'; g.fillStyle = '#C9CCD1'; g.fillRect(x + 60, base + 22, 24, 24); g.fillStyle = '#5B6068'; g.fillText('до занятия', x + 94, base + 44);
+  g.fillStyle = '#2D9467'; g.fillRect(x + 330, base + 22, 24, 24); g.fillStyle = '#5B6068'; g.fillText('после', x + 364, base + 44);
+  return y + h + 12;
+}
 export async function passportImage({ eyebrow, name, date, sp, sections = [], delta = null, footer, raw = false }) {
   const W = 1080, M = 72, cv = document.createElement('canvas'); cv.width = W; cv.height = 4200; const g = cv.getContext('2d');
   await document.fonts.ready; try { await document.fonts.load('500 32px "JetBrains Mono"'); } catch (e) {}
@@ -773,7 +785,8 @@ export async function passportImage({ eyebrow, name, date, sp, sections = [], de
   const wrap = (t, x0, size, weight, col, lh = 1.3) => { g.font = `${weight} ${size}px Onest, sans-serif`; g.fillStyle = col; let cur = '';
     for (const w of String(t).split(' ')) { const tt = cur ? cur + ' ' + w : w; if (g.measureText(tt).width > W - x0 - M && cur) { y += size * lh; g.fillText(cur, x0, y); cur = w; } else cur = tt; }
     if (cur) { y += size * lh; g.fillText(cur, x0, y); } };
-  for (const sec of sections) { if (!sec.rows.length) continue; breaks.push(y + 12); y += 64; g.fillStyle = '#111418'; g.font = '700 46px Onest, sans-serif'; g.fillText(sec.h, M, y); y += 8;
+  for (const sec of sections) { if (!sec.rows.length && !(sec.chart && sec.chart.length)) continue; breaks.push(y + 12); y += 64; g.fillStyle = '#111418'; g.font = '700 46px Onest, sans-serif'; g.fillText(sec.h, M, y); y += 8;
+    if (sec.chart && sec.chart.length) { y += 24; y = vasChart(g, sec.chart, M, y, W - M * 2, 300); }
     for (const [ri, r] of sec.rows.entries()) { if (ri) breaks.push(y + 10); y += 16; const y0 = y; if (r.k) { wrap(r.text, M + 72, 56, r.bold ? 700 : 400, '#111418', 1.2); drawMark(g, M + 26, y0 + 36, r.k, { scale: 2.2 }); }
       else wrap(r.text, M, 40, 400, r.col || '#16181C'); } }
   if (delta) { breaks.push(y + 16); y += 72; g.fillStyle = '#111418'; g.font = '700 46px Onest, sans-serif'; g.fillText(delta.h, M, y); y += 40;
@@ -784,15 +797,21 @@ export async function passportImage({ eyebrow, name, date, sp, sections = [], de
   for (const extra of footer.after || []) { breaks.push(y + 16); y += 72; g.fillStyle = '#111418'; g.font = '700 46px Onest, sans-serif'; g.fillText(extra.h, M, y); y += 8; wrap(extra.text, M, 40, 400, '#16181C'); }
   // оговорка на каждой картинке: картинку пересылают дальше, а подпись под ней ставит специалист
   breaks.push(y + 16); y += 64; wrap(footer.note || 'Предварительная оценка движения по камере телефона, не медицинское заключение.', M, 30, 400, '#5B6068');
-  const FH = 220, H = y + M + FH, out = document.createElement('canvas'); out.width = W; out.height = H; const o = out.getContext('2d'); o.drawImage(cv, 0, 0);
+  // подвал: фото, имя, специализация, контакты. brand: 'pro' (свой бренд, «Powered by» мелко), 'free' (плашка «Сформировано в BodyPassport»)
+  const T = footer.title ? 1 : 0, FH = 220 + T * 44, H = y + M + FH, out = document.createElement('canvas'); out.width = W; out.height = H; const o = out.getContext('2d'); o.drawImage(cv, 0, 0);
   o.fillStyle = '#111418'; o.fillRect(0, H - FH, W, FH);
   // фото специалиста в кружке слева от имени
   let tx = M; if (footer.photo) { try { const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = footer.photo; });
-    const D = 132, cx = M + D / 2, cy = H - FH + 92; o.save(); o.beginPath(); o.arc(cx, cy, D / 2, 0, Math.PI * 2); o.clip(); o.drawImage(im, M, cy - D / 2, D, D); o.restore();
+    const D = 132, cx = M + D / 2, cy = H - FH + 92 + T * 14; o.save(); o.beginPath(); o.arc(cx, cy, D / 2, 0, Math.PI * 2); o.clip(); o.drawImage(im, M, cy - D / 2, D, D); o.restore();
     o.strokeStyle = 'rgba(255,255,255,.35)'; o.lineWidth = 3; o.beginPath(); o.arc(cx, cy, D / 2, 0, Math.PI * 2); o.stroke(); tx = M + D + 28; } catch (e) {} }
   o.fillStyle = '#fff'; o.font = '700 46px Onest, sans-serif'; o.fillText(String(footer.name).slice(0, tx > M ? 30 : 36), tx, H - FH + 76);
-  if (footer.contact) { o.fillStyle = '#D0D3D8'; o.font = '400 38px Onest, sans-serif'; o.fillText(String(footer.contact).slice(0, tx > M ? 36 : 44), tx, H - FH + 128); }
-  o.fillStyle = '#B9BDC4'; o.font = '400 30px Onest, sans-serif'; o.fillText('BodyPassport · методика Р. Аюпова · оценка движения', M, H - 36);
+  if (T) { o.fillStyle = '#B9BDC4'; o.font = '400 34px Onest, sans-serif'; o.fillText(String(footer.title).slice(0, tx > M ? 40 : 48), tx, H - FH + 122); }
+  if (footer.contact) { o.fillStyle = '#D0D3D8'; o.font = '400 38px Onest, sans-serif'; o.fillText(String(footer.contact).slice(0, tx > M ? 36 : 44), tx, H - FH + 128 + T * 44); }
+  if (footer.brand === 'free') { const t = 'Сформировано в BodyPassport'; o.font = '600 28px Onest, sans-serif'; const w = o.measureText(t).width + 36;
+    o.fillStyle = '#D4F25A'; o.beginPath(); o.roundRect(M, H - 66, w, 46, 12); o.fill(); o.fillStyle = '#111418'; o.fillText(t, M + 18, H - 33);
+    o.fillStyle = '#B9BDC4'; o.font = '400 26px Onest, sans-serif'; o.fillText('бесплатный тест движения: ' + location.host, M + w + 18, H - 33); }
+  else { o.fillStyle = footer.brand === 'pro' ? '#6E737B' : '#B9BDC4'; o.font = `400 ${footer.brand === 'pro' ? 24 : 30}px Onest, sans-serif`;
+    o.fillText(footer.brand === 'pro' ? 'Powered by BodyPassport' : 'BodyPassport · методика Р. Аюпова · оценка движения', M, H - 36); }
   if (raw) { out.breaks = breaks; return out; }
   return new Promise(r => out.toBlob(r, 'image/png'));
 }
@@ -856,10 +875,22 @@ export function muscle(key) {
 }
 
 // ---------- 7. тренировка ----------
+// шкала боли 0–10: один ползунок в шторке. Возвращает число или null (пропустили)
+function vasSheet(title, init = 0, skip = 'Пропустить') {
+  return new Promise(res => { const d = document.createElement('div'); d.className = 'sheet';
+    d.innerHTML = `<div><h2 style="font-size:21px">${title}</h2><p class="sub" style="font-size:14px;margin-top:6px">0 — нет боли, 10 — сильнейшая.</p>
+      <div class="row" style="gap:12px;margin-top:16px"><input type="range" id="vs" min="0" max="10" value="${init}" style="flex:1;accent-color:var(--ink)" aria-label="${title}"><b id="vsv" class="num" style="font-size:32px;width:44px;text-align:right">${init}</b></div>
+      <div class="row" style="justify-content:space-between;font-size:12px;color:var(--sub)"><span>нет боли</span><span>сильнейшая</span></div>
+      <button class="btn" id="vok" style="margin-top:16px">Готово</button><button class="btn ghost" id="vno" style="margin-top:8px;border:0">${skip}</button></div>`;
+    document.body.appendChild(d); const r = d.querySelector('#vs'); r.oninput = () => { d.querySelector('#vsv').textContent = r.value; };
+    d.querySelector('#vok').onclick = () => { d.remove(); res(+r.value); }; d.querySelector('#vno').onclick = () => { d.remove(); res(null); }; });
+}
 export async function workout(ids, reasons = {}) {
-  const list = ids.map(ex).filter(Boolean); let i = 0, closed = false; voice.unlock(); keepAwake(true);
+  const pre = await vasSheet('Оцените уровень боли или дискомфорта прямо сейчас (0–10)', 0, 'Пропустить и начать');
+  const list = ids.map(ex).filter(Boolean); let i = 0, closed = false, doneN = 0; voice.unlock(); keepAwake(true);
+  const finish = () => done(list, pre, doneN);
   const run = async () => {
-    if (closed) return; if (i >= list.length) return done(list);
+    if (closed) return; if (i >= list.length) return finish();
     const e = list[i], total = Math.max(10, e.durationSec); let left = total, playing = false; const rs = reasons[e.id];
     go(`<div class="scr dark fade" style="padding:16px 20px 28px">
       <div class="row"><div class="segs" style="flex:1">${list.map((_, k) => `<div><b style="width:${k <= i ? 100 : 0}%;background:${k === i ? '#fff' : 'var(--signal)'}"></b></div>`).join('')}</div><button class="round glass" id="x" aria-label="Закончить">${ic('x')}</button></div>
@@ -873,9 +904,9 @@ export async function workout(ids, reasons = {}) {
         ${e.check ? `<div class="row" style="background:rgba(255,255,255,.08);border-radius:var(--r-md);padding:12px;align-items:flex-start;gap:10px"><span style="color:var(--signal)">${ic('info', 's')}</span><span style="font-size:14px;line-height:1.4">${e.check}</span></div>` : ''}</div>
       <div class="row" style="justify-content:center;gap:28px;margin-top:16px"><button class="round" id="pv" aria-label="Назад" style="width:56px;height:56px;background:rgba(255,255,255,.1);color:#fff">${ic('skip-back')}</button><button class="round" id="pp" aria-label="Пауза" style="width:80px;height:80px;background:var(--signal);color:var(--cam-bg)">${ic('pause')}</button><button class="round" id="nx" aria-label="Дальше" style="width:56px;height:56px;background:rgba(255,255,255,.1);color:#fff">${ic('skip-forward')}</button></div></div>`);
     let token = {}; const myTok = token;
-    $('#x').onclick = () => { closed = true; voice.say(''); map(); };
+    $('#x').onclick = () => { closed = true; voice.say(''); keepAwake(false); if (doneN) finish(); else map(); };
     $('#pv').onclick = () => { token.dead = true; i = Math.max(0, i - 1); run(); };
-    $('#nx').onclick = () => { token.dead = true; mark(e); i++; run(); };
+    $('#nx').onclick = () => { token.dead = true; mark(e); doneN++; i++; run(); };
     $('#pp').onclick = () => { playing = !playing; $('#pp').innerHTML = ic(playing ? 'pause' : 'play'); $('#pp').setAttribute('aria-label', playing ? 'Пауза' : 'Продолжить'); };
     const full = e.title.split(' (')[0] + '. ' + e.steps.join(' ') + (e.check ? ' ' + e.check : '');
     voice.say(full); await voice.waitDone(); if (myTok.dead || closed) return; playing = true; $('#tm').style.opacity = 1; $('#tml').textContent = 'осталось';
@@ -883,18 +914,58 @@ export async function workout(ids, reasons = {}) {
       $('#tm').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`; $('#arc').style.strokeDashoffset = 283 * (left / total);
       const cur = Math.min(e.steps.length - 1, Math.floor((total - left) * Math.min(3, e.steps.length) / total)); app.querySelectorAll('.st').forEach((el, k) => el.style.opacity = k <= cur ? 1 : .45);
       if (left <= 3 && left > 0) voice.say(String(left)); }
-    voice.say('Отлично'); mark(e); i++; await sleep(700); run();
+    voice.say('Отлично'); mark(e); doneN++; i++; await sleep(700); run();
   };
   run();
 }
 function mark(e) { const d = JSON.parse(localStorage.getItem(K('bp_done')) || '[]'); d.push({ id: e.id, t: Date.now() }); localStorage.setItem(K('bp_done'), JSON.stringify(d.slice(-500))); }
 function streak() { const days = new Set(JSON.parse(localStorage.getItem(K('bp_done')) || '[]').map(x => new Date(x.t).toDateString())); let n = 0; const d = new Date(); if (!days.has(d.toDateString())) d.setDate(d.getDate() - 1); while (days.has(d.toDateString())) { n++; d.setDate(d.getDate() - 1); } return n; }
-function done(list) { keepAwake(false); const s = Math.max(1, streak());
-  go(`<div class="scr fade"><div class="empty" style="flex:1;justify-content:center"><span style="width:88px;height:88px;border-radius:50%;background:var(--ok-s);color:var(--ok-t);display:flex;align-items:center;justify-content:center">${ic('check')}</span>
-   <h1>Комплекс выполнен</h1><p class="sub">Делай так 2 недели и повтори тест. Сравним карты.</p></div>
-   <div class="pad kpi"><div><b>${list.length}</b><span>упражнения</span></div><div><b>${totalMin(list)}</b><span>мин на себя</span></div><div><b>${s}</b><span>дн. подряд</span></div></div>
+async function done(list, pre = null, n = list.length) { keepAwake(false); const s = Math.max(1, streak());
+  const post = await vasSheet('Оцените уровень боли после упражнений (0–10)', pre ?? 0);
+  const rec = { t: Date.now(), pre: pre ?? undefined, post: post ?? undefined, n, all: list.length }; const log = vasSave(rec, K('bp_vas'));
+  const dl = vasDelta(pre, post); track('vas_done', { n, d: dl ?? undefined }, false);
+  const w = vasStats(log, 7); sendProgress(log);
+  go(`<div class="scr fade"><div class="empty" style="flex:1;justify-content:center"><span class="${dl > 0 ? 'pop' : ''}" style="width:88px;height:88px;border-radius:50%;background:var(--ok-s);color:var(--ok-t);display:flex;align-items:center;justify-content:center">${ic('check')}</span>
+   <h1>${n < list.length ? `Сделано ${n} из ${list.length}` : 'Комплекс выполнен'}</h1>
+   ${dl > 0 ? `<p class="vasgood" style="font-size:18px;font-weight:600;color:var(--ok-t)">Отличный результат! Уровень боли снижен на ${dl} ${dl === 1 ? 'балл' : dl < 5 ? 'балла' : 'баллов'}</p>` : dl < 0 ? '<p class="sub">Боль после занятия выше. Уменьшите амплитуду, а если повторится, покажите это специалисту.</p>' : '<p class="sub">Делай так 2 недели и повтори тест. Сравним карты.</p>'}</div>
+   <div class="pad kpi"><div><b>${n}</b><span>упражнения</span></div><div><b>${w.compliance}%</b><span>дней из 7</span></div><div><b>${s}</b><span>дн. подряд</span></div></div>
+   ${progressChart(log)}
    <div class="dock"><button class="btn" id="back">К карте тела</button><p style="text-align:center;font-size:13px;color:var(--sub)">Повтори тест через 7 дней, чтобы увидеть изменения</p></div></div>`);
   $('#back').onclick = map; }
+// график прогресса клиента: боль до и после по последним занятиям (SVG, без библиотек)
+export function progressChart(log) {
+  const L = log.filter(r => Number.isFinite(r.pre) && Number.isFinite(r.post)).slice(-10); if (L.length < 2) return '';
+  const W = 320, H = 120, step = W / L.length, k = (H - 20) / 10, bw = Math.min(12, step / 2 - 3);
+  const bars = L.map((r, i) => { const x = i * step + step / 2; return `<rect x="${x - bw - 1}" y="${H - 10 - r.pre * k}" width="${bw}" height="${r.pre * k}" rx="2" fill="var(--faint)"/><rect x="${x + 1}" y="${H - 10 - r.post * k}" width="${bw}" height="${r.post * k}" rx="2" fill="${r.post < r.pre ? 'var(--ok-t)' : r.post > r.pre ? 'var(--over)' : 'var(--sub)'}"/>`; }).join('');
+  const m = vasStats(log, 30);
+  return `<div class="pad" style="margin-top:12px"><div class="card"><b style="font-size:15px">Боль до и после занятий</b>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;margin-top:8px" role="img" aria-label="График боли до и после занятий"><line x1="0" x2="${W}" y1="${H - 10}" y2="${H - 10}" stroke="var(--line)"/>${bars}</svg>
+    <div class="row" style="gap:14px;font-size:12px;color:var(--sub)"><span><i style="display:inline-block;width:10px;height:10px;background:var(--faint);border-radius:2px"></i> до</span><span><i style="display:inline-block;width:10px;height:10px;background:var(--ok-t);border-radius:2px"></i> после</span><span style="flex:1;text-align:right">за 30 дней: ${m.avgPre == null ? '—' : String(m.avgPre).replace('.', ',')} → ${m.avgPost == null ? '—' : String(m.avgPost).replace('.', ',')}</span></div></div></div>`;
+}
+// клиенту по ссылке специалиста: сводка занятий уходит специалисту тем же зашифрованным каналом, не чаще раза в 12 часов
+async function sendProgress(log) {
+  const inv = INV(); if (!inv || !localStorage.getItem('bp_share_' + inv.i)) return;
+  const last = +(localStorage.getItem('bp_prog_at') || 0); if (Date.now() - last < 12 * 3600e3) return;
+  const pr = PROFILE();
+  try { const body = await seal.encrypt(inv.k, { type: 'progress', token: inv.join ? pr && pr.token : undefined, vas: log.slice(-60) });
+    const r = await fetch('/api/relay?id=' + inv.i, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body });
+    if (r.ok) { localStorage.setItem('bp_prog_at', String(Date.now())); track('progress_sent', {}, false); } } catch (e) {}
+}
+
+// ---------- отчет специалиста по веб-ссылке: только просмотр, без входа ----------
+async function reportView(code) {
+  const [id, k] = String(code).split('.');
+  go('<div class="scr pad" style="justify-content:center;align-items:center"><span class="spin"></span><p class="sub">Открываю отчет…</p></div>');
+  let r = null; try { if (!/^[A-Za-z0-9_-]{22}$/.test(id || '') || !/^[A-Za-z0-9_-]{43}$/.test(k || '')) throw new Error('bad');
+    const res = await fetch('/api/share?id=' + id, { cache: 'no-store' }); if (!res.ok) throw new Error(res.status);
+    r = await seal.decrypt(k, await res.text()); if (typeof r.img !== 'string' || !r.img.startsWith('data:image/jpeg;base64,')) throw new Error('bad'); } catch (e) { r = null; }
+  if (!r) { go(`<div class="scr pad fade" style="justify-content:center;gap:14px"><h1>Отчет не открылся</h1><p class="sub">Ссылка устарела (отчет хранится 90 дней) или скопирована не целиком. Попросите специалиста прислать ее снова.</p><button class="btn" id="tst">Пройти свой тест движения</button></div>`); $('#tst').onclick = () => { history.replaceState(null, '', location.pathname); onboarding(); }; return; }
+  const str = (v, n) => esc(String(v || '').slice(0, n));
+  go(`<div class="fade" style="padding-bottom:32px"><div class="pad" style="padding-top:16px"><div class="eyebrow">Биомеханический паспорт</div><h1 style="margin-top:6px">${str(r.name, 80)}</h1><p class="sub" style="font-size:14px">${str(r.date, 40)}${r.author ? ' · ' + str(r.author, 80) : ''}</p></div>
+    <div class="pad" style="margin-top:12px"><img src="${r.img}" alt="Отчет" style="width:100%;display:block;border-radius:16px"></div>
+    <div class="pad" style="margin-top:14px;display:flex;flex-direction:column;gap:8px"><a class="btn" id="rdl" href="${r.img}" download="bodypassport-report.jpg" style="text-decoration:none">${ic('download', 's')}Сохранить картинку</a>
+    <p class="sub" style="font-size:12px;text-align:center">Только просмотр. Отчет зашифрован, ключ есть только в этой ссылке.</p></div></div>`);
+}
 
 // ---------- настройки ----------
 export function settings() {
@@ -1011,6 +1082,7 @@ export async function funnelScreen(days = 14) {
     history.replaceState(null, '', location.pathname); let role = 'client';
     try { role = await tgWebLogin(data); claimLegacy(); } catch (e) { toast('Не получилось войти через Telegram: ' + e.message); }
     return role === 'specialist' ? openPro() : INV() ? inviteWelcome() : prep(); }
+  if (location.hash.startsWith('#rep=')) return reportView(location.hash.slice(5));
   if (location.hash.startsWith('#r=')) { try { SHARED = cleanResult(await unpackResult(location.hash.slice(3))); } catch (e) { SHARED = null; } }
   if (location.hash.startsWith('#join=')) { try { const inv = { ...cleanInv(seal.unpack(location.hash.slice(6))), join: true }; localStorage.setItem('bp_inv', JSON.stringify(inv)); localStorage.setItem('bp_mode', 'client'); history.replaceState(null, '', location.pathname); return inviteWelcome(); } catch (e) {} }
   if (location.hash.startsWith('#inv=')) { try { const inv = cleanInv(seal.unpack(location.hash.slice(5))); localStorage.setItem('bp_inv', JSON.stringify(inv)); localStorage.setItem('bp_mode', 'client'); history.replaceState(null, '', location.pathname); return inviteWelcome(); } catch (e) {} }
