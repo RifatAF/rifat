@@ -61,10 +61,19 @@ export async function loadApp(force) {
   APP.at = Date.now(); return APP;
 }
 export async function saveApp(beta) { APP.beta = !!beta; APP.at = Date.now(); await put('config/app.json', JSON.stringify({ beta: APP.beta, t: Date.now() }), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true }); return APP; }
+// пробный PRO: 30 дней или до первого ретеста клиента, что раньше (только в полном режиме)
+export const TRIAL_DAYS = 30, PRO_PRICE = 899, REF_SHARE = 0.2, REF_MONTHS = 24;
+export const trialActive = u => !!u && u.trialUntil > Date.now() && !u.trialEndedBy;
 export function effectivePlan(u) {
   if (u && ['pro', 'studio'].includes(u.plan) && (u.planUntil || 0) > Date.now()) return { plan: u.plan, until: u.planUntil, beta: false };
   if (APP.beta) return { plan: 'pro', until: null, beta: true };
+  if (trialActive(u)) return { plan: 'pro', until: u.trialUntil, beta: false, trial: true };
   return { plan: 'start', until: null, beta: false };
+}
+// пробный период стартует, когда специалист впервые заходит в полном режиме
+export function startTrialIfNeeded(u) {
+  if (!u || u.role !== 'specialist' || APP.beta || u.trialUntil || u.paidEver) return false;
+  u.trialUntil = Date.now() + TRIAL_DAYS * 864e5; return true;
 }
 export const isPro = u => effectivePlan(u).plan !== 'start';
 
@@ -91,9 +100,11 @@ export async function creditReferral(u, isNew) {
   u.referredBy = owner.id; await saveUser(owner);
 }
 // версия политики и согласий: при смене версии вошедших просим согласиться заново
-export const CONSENT_VERSION = '2026-10-v2';
+export const CONSENT_VERSION = '2026-10-v3';
 export const publicUser = u => { if (!u) return u; const p = effectivePlan(u);
   return { id: u.id, provider: u.provider, name: u.name, email: u.email || null, photo: u.photo || null, role: u.role || null, specialty: u.specialty || null, admin: isAdmin(u), plan: p.plan, planUntil: p.until, planBeta: p.beta, consentOk: u.consentVersion === CONSENT_VERSION,
-    refCode: u.refCode || null, invited: u.invited || 0, invitedPro: u.invitedPro || 0, invitedColleagues: u.invitedPro || 0, maxClientSlots: maxClientSlots(u), isPro: p.plan !== 'start', planBeta: p.beta, payEmail: u.payEmail || null }; };
+    refCode: u.refCode || null, invited: u.invited || 0, invitedPro: u.invitedPro || 0, invitedColleagues: u.invitedPro || 0, maxClientSlots: maxClientSlots(u), isPro: p.plan !== 'start', planBeta: p.beta, payEmail: u.payEmail || null,
+    trial: !!p.trial, trialUntil: u.trialUntil || null, trialEndedBy: u.trialEndedBy || null, trialEndSeen: !!u.trialEndSeen, paidEver: !!u.paidEver,
+    balance: u.balance || 0, balanceLog: (u.balanceLog || []).slice(-20) }; };
 
 export async function currentUser(req) { const uid = sessionUid(req); return uid ? loadUser(uid) : null; }

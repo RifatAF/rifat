@@ -193,6 +193,10 @@ details>summary{cursor:pointer;list-style:none;min-height:var(--tap);display:fle
 /* шторка */
 .sheet{position:fixed;inset:0;background:rgba(10,12,16,.4);display:flex;align-items:flex-end;z-index:20;animation:fdin var(--d3) var(--ease-out)}
 .sheet>div{background:var(--bg);width:100%;max-width:480px;max-height:92dvh;overflow:auto;margin:0 auto;border-radius:var(--r-xl) var(--r-xl) 0 0;padding:28px var(--gutter) calc(env(safe-area-inset-bottom) + 28px);position:relative;animation:up var(--d3) var(--ease-out);box-shadow:var(--sh-3)}
+#betabar{position:fixed;top:0;left:0;right:0;z-index:20;height:calc(30px + env(safe-area-inset-top));padding:env(safe-area-inset-top) 12px 0;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--signal);color:var(--ink);font:500 12px Onest,sans-serif}
+#betabar button{border:0;background:var(--ink);color:#fff;border-radius:999px;padding:4px 10px;font:600 11px Onest,sans-serif;cursor:pointer}
+body.beta #app{padding-top:calc(30px + env(safe-area-inset-top))}body.beta .scr{min-height:calc(100dvh - 30px - env(safe-area-inset-top))}
+body:has(.cam) #betabar{display:none}body.beta:has(.cam) #app{padding-top:0}
 #bugtab{position:fixed;right:0;top:46%;z-index:15;writing-mode:vertical-rl;transform:rotate(180deg);background:var(--ink);color:#fff;border:0;border-radius:0 10px 10px 0;padding:10px 5px;font:600 11px Onest;letter-spacing:.04em;opacity:.55;cursor:pointer}
 #bugtab:hover,#bugtab:focus-visible{opacity:1}
 body:has(.cam) #bugtab,body:has(.sheet) #bugtab{display:none}

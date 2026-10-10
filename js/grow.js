@@ -1,5 +1,5 @@
 // Рост продукта: отзывы, «порекомендуете ли» (NPS), приглашение коллег, установка на экран телефона.
-import { meSync } from './auth.js';
+import { meSync, configSync } from './auth.js';
 import { track, diagnostics } from './track.js';
 import { refLink, copyRefText, BASE_SLOTS, REF_SLOTS } from './plans.js';
 import { toast, poseInfo, cam } from './core.js';
@@ -99,7 +99,7 @@ export function bindNps() {
   box.querySelector('#npsx').onclick = () => { LS.set('bp_nps', String(Date.now())); box.parentElement.remove(); };
   box.querySelectorAll('[data-nps]').forEach(b => b.onclick = () => { const s = +b.dataset.nps; LS.set('bp_nps', String(Date.now()));
     sendFeedback({ k: 'nps', s, w: 'home' }).catch(() => {});
-    box.innerHTML = s >= 9 ? `<b style="font-size:16px">Спасибо! Пригласите коллегу</b><p class="sub" style="font-size:14px;margin-top:4px">За каждого коллегу, который начнет работать в кабинете, вам +3 слота клиентов навсегда.</p><button class="btn" id="npsref" style="margin-top:12px;height:48px">Пригласить коллегу</button>`
+    box.innerHTML = s >= 9 ? `<b style="font-size:16px">Спасибо! Пригласите коллегу</b><p class="sub" style="font-size:14px;margin-top:4px">Поделитесь приложением с коллегой: это лучшая помощь проекту.</p><button class="btn" id="npsref" style="margin-top:12px;height:48px">Пригласить коллегу</button>`
       : `<b style="font-size:16px">Спасибо! Что мешает поставить 10?</b><button class="btn" id="npsmore" style="margin-top:12px;height:48px">Написать</button>`;
     const r = document.getElementById('npsref'); if (r) r.onclick = referralSheet;
     const m = document.getElementById('npsmore'); if (m) m.onclick = () => feedbackSheet('home', { k: 'nps', s, t: '' }); });
@@ -118,10 +118,10 @@ export async function shareApp() {
 export function referralSheet() {
   const u = meSync();
   if (!u || !u.refCode) { sheet('<h2 style="font-size:21px">Пригласить коллегу</h2><p class="sub" style="margin-top:8px">Войдите в кабинет, чтобы получить личную ссылку.</p><button class="btn" id="rfx" style="margin-top:16px">Понятно</button>').querySelector('#rfx').onclick = e => e.target.closest('.sheet').remove(); return; }
-  const url = refLink(), max = u.maxClientSlots || BASE_SLOTS;
-  const d = sheet(`<div class="eyebrow">Реферальная программа</div><h2 style="font-size:22px;margin-top:6px">+${REF_SLOTS} слота за каждого коллегу</h2>
-    <p class="sub" style="font-size:14px;margin-top:8px">Коллега заходит по вашей ссылке и открывает кабинет специалиста: вам +${REF_SLOTS} бесплатных слота клиентов навсегда.</p>
-    <div class="kpi" style="margin-top:14px"><div><b>${u.invited || 0}</b><span>пришли по ссылке</span></div><div><b>${u.invitedPro || 0}</b><span>коллег</span></div><div><b style="color:var(--ok-t)">${u.isPro ? '∞' : max}</b><span>слотов</span></div></div>
+  const url = refLink(), beta = configSync().beta !== false;
+  const d = sheet(`<div class="eyebrow">Пригласить коллегу</div><h2 style="font-size:22px;margin-top:6px">${beta ? 'Поделитесь BodyPassport с коллегой' : '20% оплат коллеги на ваш баланс'}</h2>
+    <p class="sub" style="font-size:14px;margin-top:8px">${beta ? 'Пока идет бета, все возможности открыты для всех. Приглашенные коллеги закрепятся за вами.' : 'Коллега заходит по вашей ссылке и оплачивает PRO: 20% каждой его оплаты 24 месяца приходят на ваш баланс. Баланс тратится на ваш PRO.'}</p>
+    <div class="kpi" style="margin-top:14px"><div><b>${u.invited || 0}</b><span>пришли по ссылке</span></div><div><b>${u.invitedPro || 0}</b><span>коллег</span></div><div><b style="color:var(--ok-t)">${beta ? '—' : (u.balance || 0).toLocaleString('ru') + ' ₽'}</b><span>на балансе</span></div></div>
     <div class="card row" style="margin-top:12px;padding:12px 14px"><span style="flex:1;font-size:14px;word-break:break-all">${esc(url)}</span></div>
     <button class="btn" id="rfs" style="margin-top:12px">Пригласить</button><button class="btn ghost" id="rfx" style="margin-top:8px;border:0">Закрыть</button>`);
   d.querySelector('#rfx').onclick = () => d.remove();
@@ -145,4 +145,46 @@ export function bindInstall() {
     if (deferred) { deferred.prompt(); const r = await deferred.userChoice.catch(() => null); deferred = null; if (r && r.outcome === 'accepted') { LS.set('bp_inst', 'done'); box.parentElement.remove(); } return; }
     sheet('<h2 style="font-size:21px">Установить на iPhone</h2><ol style="margin:12px 0 0 20px;line-height:1.7;font-size:15px"><li>Нажмите «Поделиться» внизу Safari (квадрат со стрелкой)</li><li>Выберите «На экран Домой»</li><li>Нажмите «Добавить»</li></ol><button class="btn" id="iox" style="margin-top:16px">Понятно</button>').querySelector('#iox').onclick = e => { LS.set('bp_inst', 'ios'); e.target.closest('.sheet').remove(); box.parentElement.remove(); };
   };
+}
+
+// ---------- бета: заметная плашка и анкета «как прошла работа» перед выходом ----------
+const SESSION_START = Date.now();
+addEventListener('pagehide', () => { try { const prev = JSON.parse(localStorage.getItem('bp_sess') || 'null');
+  const start = prev && prev.end > Date.now() - 20 * 60e3 ? prev.start : SESSION_START; // вернулся в течение 20 минут: та же сессия
+  localStorage.setItem('bp_sess', JSON.stringify({ start, end: Date.now() })); } catch (e) {} });
+const ISSUES = ['Камера не видела меня', 'Непонятно, что делать', 'Долго', 'Ошибки или зависания', 'Непонятен отчет', 'Ничего не мешало'];
+/** Анкета беты: оценка, удалось ли сделать задуманное, что мешало, что изменить. then() вызывается после отправки или пропуска. */
+export function exitSurvey(where = 'exit', then = null) {
+  track('fb_sent', { c: 'exit_open' }, false);
+  const pick = { s: 0, goal: null, issues: [] };
+  const d = sheet(`<div class="eyebrow">Бета-версия</div><h2 style="font-size:22px;margin-top:6px">${where === 'return' ? 'Как прошла прошлая работа с приложением?' : 'Перед выходом: как все прошло?'}</h2>
+    <p class="sub" style="font-size:14px;margin-top:6px">30 секунд. Ответы читает разработчик, по ним меняем приложение.</p>
+    <b style="display:block;margin-top:16px">Оценка</b><div class="row" id="exs" style="gap:6px;margin-top:8px">${[1, 2, 3, 4, 5].map(n => `<button class="pill" data-s="${n}" style="flex:1;min-height:48px;font-size:18px">${n}</button>`).join('')}</div>
+    <b style="display:block;margin-top:16px">Получилось сделать, что хотели?</b><div class="seg" style="margin-top:8px"><button data-g="yes">Да</button><button data-g="partly">Частично</button><button data-g="no">Нет</button></div>
+    <b style="display:block;margin-top:16px">Что мешало?</b><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px">${ISSUES.map(t => `<button class="pill" data-i="${t}">${t}</button>`).join('')}</div>
+    <textarea id="ext" class="field" rows="3" placeholder="Что добавить или изменить?" style="height:auto;padding:12px 16px;margin-top:14px"></textarea>
+    <p id="exe" style="font-size:13px;color:var(--over-t);min-height:18px"></p>
+    <button class="btn" id="exok">Отправить</button><button class="btn ghost" id="exno" style="margin-top:8px;border:0">Пропустить</button>`);
+  const done = () => { d.remove(); if (then) then(); };
+  d.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { pick.s = +b.dataset.s; d.querySelectorAll('[data-s]').forEach(x => { const on = +x.dataset.s <= pick.s; x.style.background = on ? 'var(--ink)' : ''; x.style.color = on ? '#fff' : ''; }); });
+  d.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { pick.goal = b.dataset.g; d.querySelectorAll('[data-g]').forEach(x => x.classList.toggle('on', x === b)); });
+  d.querySelectorAll('[data-i]').forEach(b => b.onclick = () => { const t = b.dataset.i, on = !pick.issues.includes(t); pick.issues = on ? [...pick.issues, t] : pick.issues.filter(x => x !== t); b.classList.toggle('on', on); });
+  d.querySelector('#exno').onclick = () => { LS.set('bp_exit_at', String(Date.now())); done(); };
+  d.querySelector('#exok').onclick = async () => { if (!pick.s) { d.querySelector('#exe').textContent = 'Поставьте оценку от 1 до 5'; return; }
+    const b = d.querySelector('#exok'); b.disabled = true; b.textContent = 'Отправляю…'; const sess = JSON.parse(LS.get('bp_sess') || 'null');
+    try { await sendFeedback({ k: 'exit', s: pick.s, t: d.querySelector('#ext').value.trim().slice(0, 2000), w: where, q: { goal: pick.goal, issues: pick.issues, sec: Math.round((Date.now() - SESSION_START) / 1000) } });
+      LS.set('bp_exit_at', String(Date.now())); if (sess) LS.set('bp_sess_rated', String(sess.start)); toast('Спасибо! Это очень помогает'); done(); }
+    catch (e) { b.disabled = false; b.textContent = 'Отправить'; d.querySelector('#exe').textContent = 'Не отправилось, попробуйте еще раз'; } };
+}
+/** Плашка беты сверху экрана (только в режиме «Бета»): видно, что это бета, и можно сразу оценить работу. */
+export function mountBetaBar() {
+  if (configSync().beta === false || document.getElementById('betabar')) return;
+  const b = document.createElement('div'); b.id = 'betabar';
+  b.innerHTML = `<span><b>Бета-версия</b> · все бесплатно</span><button id="betarate">Оценить работу</button>`;
+  document.body.prepend(b); document.body.classList.add('beta');
+  b.querySelector('#betarate').onclick = () => exitSurvey('banner');
+  // вернулся после работы (2+ минуты) больше чем через 20 минут: один раз в день спрашиваем про прошлую сессию
+  try { const s = JSON.parse(localStorage.getItem('bp_sess') || 'null'), lastAsk = +(LS.get('bp_exit_at') || 0);
+    if (s && s.end - s.start > 120e3 && Date.now() - s.end > 20 * 60e3 && LS.get('bp_sess_rated') !== String(s.start) && Date.now() - lastAsk > 20 * 3600e3)
+      setTimeout(() => { if (!document.querySelector('.sheet') && !document.querySelector('.cam')) exitSurvey('return'); }, 2500); } catch (e) {}
 }
