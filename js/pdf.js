@@ -25,7 +25,7 @@ export async function canvasToPdf(canvas, title = 'BodyPassport') {
   for (let top = 0; top < canvas.height;) {
     const bottom = cut(top), h = bottom - top; if (h < 40 && pages.length) break; // крошечный хвост не тянет на страницу
     const pc = document.createElement('canvas'); pc.width = PW; pc.height = pageH; const g = pc.getContext('2d');
-    g.fillStyle = '#F4F3EF'; g.fillRect(0, 0, PW, pageH); g.drawImage(canvas, 0, top, W, h, (PW - W) / 2, 0, W, h);
+    g.fillStyle = '#F3F6F6'; g.fillRect(0, 0, PW, pageH); g.drawImage(canvas, 0, top, W, h, (PW - W) / 2, 0, W, h);
     pages.push({ data: await jpeg(pc), w: PW, h: pageH }); top = bottom;
   }
   const parts = [], offs = []; let len = 0;

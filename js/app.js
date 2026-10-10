@@ -39,7 +39,7 @@ export const TONE = { HYPER: ['Перегрузка', 'var(--hyper)', 'var(--ove
 // подпись состояния в числе зоны: «Глубокие мышцы шеи · не включаются», «Сгибатели бедра · зажаты»
 const plural = id => { const z = (C.muscles[id] && C.muscles[id].zone) || ''; return /мышцы|^\S+(ые|ие|тели)\s/i.test(z + ' '); };
 export const toneText = (s, i) => { const t = TONE[s.k][i]; return plural(s.id) ? t.replace('ата', 'аты').replace('ается', 'аются') : t; };
-export const TONE_HEX = { HYPER: '#D9484F', SHORT: '#E07A2E', WEAK: '#3A72D8', OK: '#2D9467' };
+export const TONE_HEX = { HYPER: '#C8414A', SHORT: '#A3561A', WEAK: '#2F6BD8', OK: '#26775D' };
 export const TONE_TEXT_HEX = { HYPER: '#B3343B', SHORT: '#9E4E0E', WEAK: '#2A5CB8', OK: '#1E7149' };
 const sideWord = s => s === 'RIGHT' ? 'справа' : 'слева';
 // ---------- итог в три строки: глагол действия, мышца, одна измеренная деталь ----------
@@ -77,7 +77,7 @@ let view3d = null;
 // тот же экран заново (правка, переключение вкладки): без анимации появления, иначе экран мигает
 let lastHead = '';
 export function go(html) { if (view3d) { view3d.dispose(); view3d = null; } backFn = null; const head = html.slice(0, 260); if (head === lastHead) html = html.replace(' fade', ''); lastHead = head; app.innerHTML = html; window.scrollTo(0, 0);
-  const tc = document.querySelector('meta[name=theme-color]'); if (tc) tc.content = html.includes('class="cam"') ? '#0A0C0F' : / dark[ "]/.test(html.slice(0, 200)) ? '#111418' : '#F4F3EF'; }
+  const tc = document.querySelector('meta[name=theme-color]'); if (tc) tc.content = html.includes('class="cam"') ? '#0A0C0F' : / dark[ "]/.test(html.slice(0, 200)) ? '#13212B' : '#F3F6F6'; }
 
 // ---------- «назад»: жест и системная кнопка ведут на шаг назад в приложении, а не закрывают его ----------
 // В истории браузера держим одну запись-ловушку. Жест «назад» снимает ее, мы делаем шаг назад внутри
@@ -775,51 +775,51 @@ export function vasChart(g, list, x, y, w, h) {
   for (const v of [0, 5, 10]) { const yy = base - v * k; g.beginPath(); g.moveTo(x + 50, yy); g.lineTo(x + w, yy); g.stroke(); g.fillText(String(v), x, yy + 9); }
   L.forEach((r, i) => { const x0 = x + 60 + i * (bw * 2 + gap);
     g.fillStyle = '#C9CCD1'; g.fillRect(x0, base - r.pre * k, bw - 2, r.pre * k);
-    g.fillStyle = r.post < r.pre ? '#2D9467' : r.post > r.pre ? '#D9484F' : '#5B6068'; g.fillRect(x0 + bw, base - r.post * k, bw - 2, r.post * k); });
-  g.font = '400 30px Onest, sans-serif'; g.fillStyle = '#C9CCD1'; g.fillRect(x + 60, base + 22, 24, 24); g.fillStyle = '#5B6068'; g.fillText('до занятия', x + 94, base + 44);
-  g.fillStyle = '#2D9467'; g.fillRect(x + 330, base + 22, 24, 24); g.fillStyle = '#5B6068'; g.fillText('после', x + 364, base + 44);
+    g.fillStyle = r.post < r.pre ? '#26775D' : r.post > r.pre ? '#C8414A' : '#5A6872'; g.fillRect(x0 + bw, base - r.post * k, bw - 2, r.post * k); });
+  g.font = '400 30px Onest, sans-serif'; g.fillStyle = '#C9CCD1'; g.fillRect(x + 60, base + 22, 24, 24); g.fillStyle = '#5A6872'; g.fillText('до занятия', x + 94, base + 44);
+  g.fillStyle = '#26775D'; g.fillRect(x + 330, base + 22, 24, 24); g.fillStyle = '#5A6872'; g.fillText('после', x + 364, base + 44);
   return y + h + 12;
 }
 export async function passportImage({ eyebrow, name, date, sp, sections = [], delta = null, footer, raw = false }) {
   const W = 1080, M = 72, cv = document.createElement('canvas'); cv.width = W; cv.height = 4200; const g = cv.getContext('2d');
   await document.fonts.ready; try { await document.fonts.load('500 32px "JetBrains Mono"'); } catch (e) {}
-  g.fillStyle = '#F4F3EF'; g.fillRect(0, 0, W, cv.height);
-  let y = M + 32; g.fillStyle = '#5B6068'; g.font = '500 32px "JetBrains Mono", monospace'; g.fillText(eyebrow, M, y);
+  g.fillStyle = '#F3F6F6'; g.fillRect(0, 0, W, cv.height);
+  let y = M + 32; g.fillStyle = '#5A6872'; g.font = '500 32px "JetBrains Mono", monospace'; g.fillText(eyebrow, M, y);
   // логотип специалиста в правом верхнем углу, вписан в квадрат 110 px над именем
   if (footer && footer.logo) { try { const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = footer.logo; });
     const k = Math.min(110 / im.width, 110 / im.height), lw = im.width * k, lh = im.height * k; g.drawImage(im, W - M - lw, 28 + (110 - lh) / 2, lw, lh); } catch (e) {} }
   // имя целиком: шрифт уменьшается до 56 px, дальше многоточие; справа место под логотип
-  { const maxW = W - M * 2 - (footer && footer.logo ? 140 : 0); let fs = 84, t = String(name).slice(0, 60); g.fillStyle = '#111418';
+  { const maxW = W - M * 2 - (footer && footer.logo ? 140 : 0); let fs = 84, t = String(name).slice(0, 60); g.fillStyle = '#13212B';
     const fit = () => { g.font = `700 ${fs}px Onest, sans-serif`; return g.measureText(t).width <= maxW; };
     while (!fit() && fs > 56) fs -= 4; while (!fit() && t.length > 4) t = t.slice(0, -2).trimEnd() + '…';
     y += 96; g.fillText(t, M, y); }
-  y += 56; g.fillStyle = '#5B6068'; g.font = '400 40px Onest, sans-serif'; g.fillText(date, M, y);
+  y += 56; g.fillStyle = '#5A6872'; g.font = '400 40px Onest, sans-serif'; g.fillText(date, M, y);
   // две карты в белых плитках
   y += 48; const tw = (W - M * 2 - 24) / 2, th = tw * 1.45;
   const holder = document.createElement('div'); holder.style.cssText = 'position:fixed;left:-9999px;top:0;width:360px'; document.body.appendChild(holder);
   for (const [i, back] of [[0, false], [1, true]]) { const x = M + i * (tw + 24); g.fillStyle = '#fff'; g.beginPath(); g.roundRect(x, y, tw, th, 48); g.fill();
     const hc = document.createElement('canvas'); hc.style.width = '200px'; holder.appendChild(hc); drawHeat(hc, sp, back, null, [], { reveal: false });
     const ih = th - 120, iw = ih * hc.width / hc.height; g.drawImage(hc, x + (tw - iw) / 2, y + 40, iw, ih);
-    g.fillStyle = '#5B6068'; g.font = '500 32px "JetBrains Mono", monospace'; g.textAlign = 'center'; g.fillText(back ? 'СЗАДИ' : 'СПЕРЕДИ', x + tw / 2, y + th - 32); g.textAlign = 'left'; }
+    g.fillStyle = '#5A6872'; g.font = '500 32px "JetBrains Mono", monospace'; g.textAlign = 'center'; g.fillText(back ? 'СЗАДИ' : 'СПЕРЕДИ', x + tw / 2, y + th - 32); g.textAlign = 'left'; }
   holder.remove(); y += th + 24; const breaks = [y]; // где можно резать на страницы PDF: между блоками, а не внутри
   const wrap = (t, x0, size, weight, col, lh = 1.3) => { g.font = `${weight} ${size}px Onest, sans-serif`; g.fillStyle = col; let cur = '';
     for (const w of String(t).split(' ')) { const tt = cur ? cur + ' ' + w : w; if (g.measureText(tt).width > W - x0 - M && cur) { y += size * lh; g.fillText(cur, x0, y); cur = w; } else cur = tt; }
     if (cur) { y += size * lh; g.fillText(cur, x0, y); } };
-  for (const sec of sections) { if (!sec.rows.length && !(sec.chart && sec.chart.length)) continue; breaks.push(y + 12); y += 64; g.fillStyle = '#111418'; g.font = '700 46px Onest, sans-serif'; g.fillText(sec.h, M, y); y += 8;
+  for (const sec of sections) { if (!sec.rows.length && !(sec.chart && sec.chart.length)) continue; breaks.push(y + 12); y += 64; g.fillStyle = '#13212B'; g.font = '700 46px Onest, sans-serif'; g.fillText(sec.h, M, y); y += 8;
     if (sec.chart && sec.chart.length) { y += 24; y = vasChart(g, sec.chart, M, y, W - M * 2, 300); }
-    for (const [ri, r] of sec.rows.entries()) { if (ri) breaks.push(y + 10); y += 16; const y0 = y; if (r.k) { const fs = r.small ? 40 : 56; wrap(r.text, M + 72, fs, r.bold ? 700 : 400, '#111418', 1.25); drawMark(g, M + 26, y0 + (r.small ? 26 : 36), r.k, { scale: r.small ? 1.7 : 2.2 }); }
+    for (const [ri, r] of sec.rows.entries()) { if (ri) breaks.push(y + 10); y += 16; const y0 = y; if (r.k) { const fs = r.small ? 40 : 56; wrap(r.text, M + 72, fs, r.bold ? 700 : 400, '#13212B', 1.25); drawMark(g, M + 26, y0 + (r.small ? 26 : 36), r.k, { scale: r.small ? 1.7 : 2.2 }); }
       else wrap(r.text, M, 40, 400, r.col || '#16181C'); } }
-  if (delta) { breaks.push(y + 16); y += 72; g.fillStyle = '#111418'; g.font = '700 46px Onest, sans-serif'; g.fillText(delta.h, M, y); y += 40;
-    g.fillStyle = '#5B6068'; g.font = '400 40px Onest, sans-serif'; g.fillText(delta.name, M, y + 10); y += 150;
+  if (delta) { breaks.push(y + 16); y += 72; g.fillStyle = '#13212B'; g.font = '700 46px Onest, sans-serif'; g.fillText(delta.h, M, y); y += 40;
+    g.fillStyle = '#5A6872'; g.font = '400 40px Onest, sans-serif'; g.fillText(delta.name, M, y + 10); y += 150;
     g.fillStyle = '#868B93'; g.font = '400 68px Onest, sans-serif'; const was = fmt(delta.was) + delta.u; g.fillText(was, M, y); const wx = M + g.measureText(was).width + 32;
-    g.font = '400 56px Onest, sans-serif'; g.fillText('→', wx, y - 6); g.fillStyle = '#111418'; g.font = '600 132px Onest, sans-serif'; g.fillText(fmt(delta.now) + delta.u, wx + 90, y + 18);
-    if (delta.note) { y += 70; g.fillStyle = delta.state === 'better' ? '#1E7149' : delta.state === 'worse' ? '#B3343B' : '#5B6068'; g.font = '600 40px Onest, sans-serif'; g.fillText(delta.note, M, y); } }
-  for (const extra of footer.after || []) { breaks.push(y + 16); y += 72; g.fillStyle = '#111418'; g.font = '700 46px Onest, sans-serif'; g.fillText(extra.h, M, y); y += 8; wrap(extra.text, M, 40, 400, '#16181C'); }
+    g.font = '400 56px Onest, sans-serif'; g.fillText('→', wx, y - 6); g.fillStyle = '#13212B'; g.font = '600 132px Onest, sans-serif'; g.fillText(fmt(delta.now) + delta.u, wx + 90, y + 18);
+    if (delta.note) { y += 70; g.fillStyle = delta.state === 'better' ? '#1E7149' : delta.state === 'worse' ? '#B3343B' : '#5A6872'; g.font = '600 40px Onest, sans-serif'; g.fillText(delta.note, M, y); } }
+  for (const extra of footer.after || []) { breaks.push(y + 16); y += 72; g.fillStyle = '#13212B'; g.font = '700 46px Onest, sans-serif'; g.fillText(extra.h, M, y); y += 8; wrap(extra.text, M, 40, 400, '#16181C'); }
   // оговорка на каждой картинке: картинку пересылают дальше, а подпись под ней ставит специалист
-  breaks.push(y + 16); y += 64; wrap(footer.note || 'Предварительная оценка движения по камере телефона, не медицинское заключение.', M, 30, 400, '#5B6068');
+  breaks.push(y + 16); y += 64; wrap(footer.note || 'Предварительная оценка движения по камере телефона, не медицинское заключение.', M, 30, 400, '#5A6872');
   // подвал: фото, имя, специализация, контакты. brand: 'pro' (свой бренд, «Powered by» мелко), 'free' (плашка «Сформировано в BodyPassport»)
   const T = footer.title ? 1 : 0, FH = 220 + T * 44, H = y + M + FH, out = document.createElement('canvas'); out.width = W; out.height = H; const o = out.getContext('2d'); o.drawImage(cv, 0, 0);
-  o.fillStyle = '#111418'; o.fillRect(0, H - FH, W, FH);
+  o.fillStyle = '#13212B'; o.fillRect(0, H - FH, W, FH);
   // фото специалиста в кружке слева от имени
   let tx = M; if (footer.photo) { try { const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = footer.photo; });
     const D = 132, cx = M + D / 2, cy = H - FH + 92 + T * 14; o.save(); o.beginPath(); o.arc(cx, cy, D / 2, 0, Math.PI * 2); o.clip(); o.drawImage(im, M, cy - D / 2, D, D); o.restore();
@@ -828,7 +828,7 @@ export async function passportImage({ eyebrow, name, date, sp, sections = [], de
   if (T) { o.fillStyle = '#B9BDC4'; o.font = '400 34px Onest, sans-serif'; o.fillText(String(footer.title).slice(0, tx > M ? 40 : 48), tx, H - FH + 122); }
   if (footer.contact) { o.fillStyle = '#D0D3D8'; o.font = '400 38px Onest, sans-serif'; o.fillText(String(footer.contact).slice(0, tx > M ? 36 : 44), tx, H - FH + 128 + T * 44); }
   if (footer.brand === 'free') { const t = 'Сформировано в BodyPassport'; o.font = '600 28px Onest, sans-serif'; const w = o.measureText(t).width + 36;
-    o.fillStyle = '#D4F25A'; o.beginPath(); o.roundRect(M, H - 66, w, 46, 12); o.fill(); o.fillStyle = '#111418'; o.fillText(t, M + 18, H - 33);
+    o.fillStyle = '#0E5A6B'; o.beginPath(); o.roundRect(M, H - 66, w, 46, 12); o.fill(); o.fillStyle = '#FFFFFF'; o.fillText(t, M + 18, H - 33);
     o.fillStyle = '#B9BDC4'; o.font = '400 26px Onest, sans-serif'; o.fillText('бесплатный тест движения: ' + location.host, M + w + 18, H - 33); }
   else { o.fillStyle = footer.brand === 'pro' ? '#6E737B' : '#B9BDC4'; o.font = `400 ${footer.brand === 'pro' ? 24 : 30}px Onest, sans-serif`;
     o.fillText(footer.brand === 'pro' ? 'Powered by BodyPassport' : 'BodyPassport · методика Р. Аюпова · оценка движения', M, H - 36); }

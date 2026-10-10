@@ -748,7 +748,7 @@ export async function result(aid, view = 'measured') {
   const spotOf = f => sp.find(s => f.muscles.some(m => m.id === s.id && (m.side === s.side || m.side === 'BOTH')) && !s.derived);
   const numOf = t => String(t).match(/(\d+(?:[.,]\d+)?)\s*(°|%)/);
   const plainObs = t => { const m = numOf(t); return String(t).replace(' (на границе нормы)', '').replace(m ? m[0] : '§§', '').replace(/\s+на\s*$/, '').replace(/\s+на\s+(в|при)\s/, ' $1 ').replace(/\s{2,}/g, ' ').trim(); };
-  const numLabels = facts.map((f, i) => { const s = spotOf(f); return s ? { key: s.key, n: i + 1, title: '', sub: '', color: '#111418' } : null; }).filter(Boolean);
+  const numLabels = facts.map((f, i) => { const s = spotOf(f); return s ? { key: s.key, n: i + 1, title: '', sub: '', color: '#13212B' } : null; }).filter(Boolean);
   const hasBack = numLabels.some(l => sp.find(s => s.key === l.key).back);
   let dock = '';
   if (view === 'measured') { const conf = a.check || {};
