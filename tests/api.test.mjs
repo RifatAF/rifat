@@ -145,3 +145,36 @@ test('VAS: дельта, комплаенс и средние', async () => {
   const m = v.vasStats(log, 30, now); assert.equal(m.activeDays, 3); assert.equal(m.compliance, 10); assert.equal(m.avgDelta, 2.5);
   assert.equal(v.vasStats([], 7, now).avgDelta, null);
 });
+const lava = (await import(R + 'lava.js')).default;
+test('lava.top: оплата включает PRO по почте, продление по договору, повтор и возврат', async () => {
+  process.env.LAVA_WEBHOOK_BASIC = 'bp:secret-pass';
+  const auth64 = 'Basic ' + Buffer.from('bp:secret-pass').toString('base64');
+  const post = (body, h = { authorization: auth64 }) => call(lava, { method: 'POST', body, headers: h });
+  assert.equal((await post({ eventType: 'payment.success' }, {})).code, 401, 'без логина');
+  assert.equal((await post({ eventType: 'payment.success' }, { authorization: 'Basic ' + Buffer.from('bp:wrong').toString('base64') })).code, 401);
+  // специалист вошел через Telegram и указал почту для оплаты
+  user('t_500', 'specialist');
+  assert.equal((await call(auth, { method: 'POST', query: { a: 'payemail' }, body: { email: 'bad' }, headers: { cookie: cookie('t_500') } })).code, 400);
+  assert.equal((await call(auth, { method: 'POST', query: { a: 'payemail' }, body: { email: 'Anna@Mail.ru' }, headers: { cookie: cookie('t_500') } })).code, 200);
+  let r = await post({ eventType: 'payment.success', contractId: 'c-1', buyer: { email: 'anna@mail.ru' }, amount: 899, currency: 'RUB', status: 'completed' });
+  assert.equal(r.code, 200); assert.equal(r.j.uid, 't_500');
+  let me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_500') } }); assert.equal(me.j.user.isPro, true);
+  const until1 = me.j.user.planUntil; assert.ok(until1 > Date.now() + 30 * 864e5);
+  assert.equal((await post({ eventType: 'payment.success', contractId: 'c-1', buyer: { email: 'anna@mail.ru' } })).j.dup, true, 'повтор не продлевает');
+  // продление: другой договор, родитель c-1, почта может не совпасть
+  r = await post({ eventType: 'subscription.recurring.payment.success', contractId: 'c-2', parentContractId: 'c-1', buyer: { email: 'other@x.ru' } });
+  assert.equal(r.j.uid, 't_500'); me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_500') } }); assert.ok(me.j.user.planUntil >= until1 + 30 * 864e5);
+  // неизвестная почта: не привязано, лежит для администратора
+  r = await post({ eventType: 'payment.success', contractId: 'c-9', buyer: { email: 'nobody@x.ru' } }); assert.equal(r.j.matched, false); assert.ok(store.has('lava/unmatched/c-9.json'));
+  // отмена подписки ничего не выключает сразу
+  assert.equal((await post({ eventType: 'subscription.cancelled', contractId: 'c-2', parentContractId: 'c-1' })).j.ignored, 'subscription.cancelled');
+  me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_500') } }); assert.equal(me.j.user.isPro, true);
+  // возврат выключает
+  r = await post({ eventType: 'payment.refund', parentContractId: 'c-1' }); assert.equal(r.j.revoked, true);
+  me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_500') } }); assert.equal(me.j.user.isPro, false);
+  // ключ в заголовке как второй способ
+  delete process.env.LAVA_WEBHOOK_BASIC; process.env.LAVA_WEBHOOK_KEY = 'k123';
+  assert.equal((await post({ eventType: 'x' }, { 'x-api-key': 'k123' })).code, 200);
+  delete process.env.LAVA_WEBHOOK_KEY;
+  assert.equal((await post({ eventType: 'x' }, { 'x-api-key': 'k123' })).code, 503, 'не настроено');
+});
