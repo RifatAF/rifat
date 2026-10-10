@@ -1,6 +1,7 @@
 // Рост продукта: отзывы, «порекомендуете ли» (NPS), приглашение коллег, установка на экран телефона.
 import { meSync } from './auth.js';
 import { track, diagnostics } from './track.js';
+import { refLink, copyRefText, BASE_SLOTS, REF_SLOTS } from './plans.js';
 import { toast, poseInfo, cam } from './core.js';
 
 const esc = v => String(v ?? '').replace(/[&<>"'`]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' })[c]);
@@ -98,7 +99,7 @@ export function bindNps() {
   box.querySelector('#npsx').onclick = () => { LS.set('bp_nps', String(Date.now())); box.parentElement.remove(); };
   box.querySelectorAll('[data-nps]').forEach(b => b.onclick = () => { const s = +b.dataset.nps; LS.set('bp_nps', String(Date.now()));
     sendFeedback({ k: 'nps', s, w: 'home' }).catch(() => {});
-    box.innerHTML = s >= 9 ? `<b style="font-size:16px">Спасибо! Пригласите коллегу</b><p class="sub" style="font-size:14px;margin-top:4px">За каждого коллегу, который начнет работать в кабинете, вам +1 месяц Про после беты.</p><button class="btn" id="npsref" style="margin-top:12px;height:48px">Пригласить коллегу</button>`
+    box.innerHTML = s >= 9 ? `<b style="font-size:16px">Спасибо! Пригласите коллегу</b><p class="sub" style="font-size:14px;margin-top:4px">За каждого коллегу, который начнет работать в кабинете, вам +3 слота клиентов навсегда.</p><button class="btn" id="npsref" style="margin-top:12px;height:48px">Пригласить коллегу</button>`
       : `<b style="font-size:16px">Спасибо! Что мешает поставить 10?</b><button class="btn" id="npsmore" style="margin-top:12px;height:48px">Написать</button>`;
     const r = document.getElementById('npsref'); if (r) r.onclick = referralSheet;
     const m = document.getElementById('npsmore'); if (m) m.onclick = () => feedbackSheet('home', { k: 'nps', s, t: '' }); });
@@ -113,20 +114,18 @@ export async function shareApp() {
   if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url).catch(() => {}); toast('Ссылка скопирована'); }
 }
 
-/** Приглашение коллег-специалистов: ссылка с кодом, счетчик и бонус. */
+/** Приглашение коллег-специалистов: ссылка с кодом, счетчик и +3 слота клиентов за каждого. */
 export function referralSheet() {
   const u = meSync();
   if (!u || !u.refCode) { sheet('<h2 style="font-size:21px">Пригласить коллегу</h2><p class="sub" style="margin-top:8px">Войдите в кабинет, чтобы получить личную ссылку.</p><button class="btn" id="rfx" style="margin-top:16px">Понятно</button>').querySelector('#rfx').onclick = e => e.target.closest('.sheet').remove(); return; }
-  const months = Math.round((u.refBonusDays || 0) / 30), url = location.origin + '/?ref=' + u.refCode;
-  const d = sheet(`<div class="eyebrow">Реферальная программа</div><h2 style="font-size:22px;margin-top:6px">Пригласите коллегу, получите месяц Про</h2>
-    <p class="sub" style="font-size:14px;margin-top:8px">За каждого специалиста, который зайдет по вашей ссылке и откроет кабинет, вам +1 месяц Про после окончания беты. До 12 месяцев.</p>
-    <div class="kpi" style="margin-top:14px"><div><b>${u.invited || 0}</b><span>пришли по ссылке</span></div><div><b>${u.invitedPro || 0}</b><span>специалистов</span></div><div><b style="color:var(--ok-t)">+${months}</b><span>мес. Про</span></div></div>
+  const url = refLink(), max = u.maxClientSlots || BASE_SLOTS;
+  const d = sheet(`<div class="eyebrow">Реферальная программа</div><h2 style="font-size:22px;margin-top:6px">+${REF_SLOTS} слота за каждого коллегу</h2>
+    <p class="sub" style="font-size:14px;margin-top:8px">Коллега заходит по вашей ссылке и открывает кабинет специалиста: вам +${REF_SLOTS} бесплатных слота клиентов навсегда.</p>
+    <div class="kpi" style="margin-top:14px"><div><b>${u.invited || 0}</b><span>пришли по ссылке</span></div><div><b>${u.invitedPro || 0}</b><span>коллег</span></div><div><b style="color:var(--ok-t)">${u.isPro ? '∞' : max}</b><span>слотов</span></div></div>
     <div class="card row" style="margin-top:12px;padding:12px 14px"><span style="flex:1;font-size:14px;word-break:break-all">${esc(url)}</span></div>
-    <button class="btn" id="rfs" style="margin-top:12px">Отправить ссылку</button><button class="btn ghost" id="rfx" style="margin-top:8px;border:0">Закрыть</button>`);
+    <button class="btn" id="rfs" style="margin-top:12px">Скопировать текст и ссылку</button><button class="btn ghost" id="rfx" style="margin-top:8px;border:0">Закрыть</button>`);
   d.querySelector('#rfx').onclick = () => d.remove();
-  d.querySelector('#rfs').onclick = async () => { track('ref_share', { c: 'pro' }, false);
-    const text = 'Пользуюсь BodyPassport: видеотест движения по камере телефона, карта мышц, гипотеза и отчет клиенту за 3 минуты. В бете Про бесплатно.';
-    if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url).catch(() => {}); toast('Ссылка скопирована'); } };
+  d.querySelector('#rfs').onclick = () => copyRefText();
 }
 
 // установка на главный экран: Android/Chrome дает событие, iOS Safari только через «Поделиться»

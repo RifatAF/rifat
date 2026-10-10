@@ -47,18 +47,15 @@ export function isAdmin(u) {
   const list = String(process.env.ADMIN_IDS || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
   return !!u && (list.includes(String(u.id).toLowerCase()) || (!!u.email && list.includes(String(u.email).toLowerCase())));
 }
-// тариф: оплаченный, пока не истек; в бете все специалисты получают Про бесплатно до BETA_PRO_UNTIL
-export const BETA_UNTIL = Date.parse(process.env.BETA_PRO_UNTIL || '2026-12-31T23:59:59Z');
-// реферальная программа: за каждого приглашенного коллегу-специалиста +1 месяц Про после беты, до 12 месяцев
-export const REF_MAX = 12;
-export const refBonusDays = u => Math.min(REF_MAX, (u && u.invitedPro) || 0) * 30;
+// тариф: Про только оплаченный, пока не истек. Бесплатного периода больше нет (v2.0): Старт = 5 слотов клиентов навсегда
+export const BASE_SLOTS = 5, REF_SLOTS = 3;
+// за каждого приглашенного коллегу, который открыл кабинет специалиста, +3 слота навсегда
+export const maxClientSlots = u => BASE_SLOTS + REF_SLOTS * Math.max(0, (u && u.invitedPro) || 0);
 export function effectivePlan(u) {
-  if (!u) return { plan: 'start', until: null, beta: false };
-  if (['pro', 'studio'].includes(u.plan) && (u.planUntil || 0) > Date.now()) return { plan: u.plan, until: u.planUntil, beta: false };
-  const until = BETA_UNTIL + refBonusDays(u) * 864e5;
-  if (u.role === 'specialist' && Date.now() < until) return { plan: 'pro', until, beta: Date.now() < BETA_UNTIL };
+  if (u && ['pro', 'studio'].includes(u.plan) && (u.planUntil || 0) > Date.now()) return { plan: u.plan, until: u.planUntil, beta: false };
   return { plan: 'start', until: null, beta: false };
 }
+export const isPro = u => effectivePlan(u).plan !== 'start';
 
 // код приглашения: короткий, из подписи id; обратный индекс refs/<код>.json → id владельца
 export const refCode = uid => 'r' + crypto.createHmac('sha256', SECRET).update('ref:' + uid).digest('hex').slice(0, 8);
@@ -83,9 +80,9 @@ export async function creditReferral(u, isNew) {
   u.referredBy = owner.id; await saveUser(owner);
 }
 // версия политики и согласий: при смене версии вошедших просим согласиться заново
-export const CONSENT_VERSION = '2026-10-beta2';
+export const CONSENT_VERSION = '2026-10-v2';
 export const publicUser = u => { if (!u) return u; const p = effectivePlan(u);
   return { id: u.id, provider: u.provider, name: u.name, email: u.email || null, photo: u.photo || null, role: u.role || null, specialty: u.specialty || null, admin: isAdmin(u), plan: p.plan, planUntil: p.until, planBeta: p.beta, consentOk: u.consentVersion === CONSENT_VERSION,
-    refCode: u.refCode || null, invited: u.invited || 0, invitedPro: u.invitedPro || 0, refBonusDays: refBonusDays(u) }; };
+    refCode: u.refCode || null, invited: u.invited || 0, invitedPro: u.invitedPro || 0, invitedColleagues: u.invitedPro || 0, maxClientSlots: maxClientSlots(u), isPro: p.plan !== 'start' }; };
 
 export async function currentUser(req) { const uid = sessionUid(req); return uid ? loadUser(uid) : null; }

@@ -1,21 +1,22 @@
 // Тарифы и специализации. Один источник правды для кабинета и страницы /pricing.
-import { meSync, configSync } from './auth.js';
+import { meSync } from './auth.js';
 import { track } from './track.js';
 
-// дата конца беты одна, на сервере (BETA_PRO_UNTIL): приходит в /api/auth?a=config; здесь только запасное значение без сети
-const BETA_FALLBACK = Date.parse('2026-12-31T23:59:59Z');
-export const betaUntil = () => +configSync().betaUntil || BETA_FALLBACK;
-export const START_CLIENTS = 5;
+// v2.0: Старт = 5 слотов клиентов навсегда, +3 слота за каждого приглашенного коллегу; Про = безлимит и свой бренд в отчетах.
+// Числа совпадают с api/_session.js (BASE_SLOTS, REF_SLOTS): сервер считает, приложение показывает
+export const BASE_SLOTS = 5, REF_SLOTS = 3, START_CLIENTS = BASE_SLOTS;
+export const PRO_PRICE = '899 ₽ в месяц';
+export const PAY_URL = 'https://app.lava.top/products/4ffb6883-76b0-46f9-b109-b2fe71c0f3a2/af840345-4288-4395-b221-2044c7fdc255';
 
 export const PLANS = {
-  start: { name: 'Старт', price: 'Бесплатно' },
-  pro: { name: 'Про', price: '990 ₽ в месяц или 7 900 ₽ в год' },
-  studio: { name: 'Студия', price: '2 990 ₽ в месяц за всех, до 5 специалистов' },
+  start: { name: 'Free', price: 'Бесплатно' },
+  pro: { name: 'PRO', price: PRO_PRICE },
+  studio: { name: 'PRO', price: PRO_PRICE },
 };
-// что требует тарифа Про: только число клиентов. Функции не режем (совет перед пилотом: «злость на платные модули» в отзывах конкурентов),
-// на Старт все работает для первых ${START_CLIENTS} клиентов
+// что требует Про: число клиентов сверх слотов и свой бренд в отчете
 const PRO = {
-  clients: `Больше ${START_CLIENTS} клиентов`,
+  clients: 'Больше клиентов',
+  brand: 'Свой логотип в отчете',
 };
 
 export const SPECIALTIES = [
@@ -36,29 +37,60 @@ export const TEMPLATE_ORDER = {
 
 export function plan() {
   const u = meSync();
-  // без входа (вход еще не настроен на этом адресе) в бете открыт Про
-  const bu = betaUntil();
-  if (!u) return { plan: Date.now() < bu ? 'pro' : 'start', beta: Date.now() < bu, until: bu };
-  return { plan: u.plan || 'start', beta: !!u.planBeta, until: u.planUntil };
+  if (!u) return { plan: 'start', until: null };
+  return { plan: u.plan || 'start', until: u.planUntil };
 }
-export const can = f => !PRO[f] || plan().plan !== 'start';
+export const isPro = () => plan().plan !== 'start';
+/** Слоты клиентов: max с сервера (5 + 3 за коллегу), у Про без лимита. */
+export function slots(used = 0) {
+  const u = meSync(), pro = isPro();
+  const max = u && Number.isFinite(+u.maxClientSlots) ? +u.maxClientSlots : BASE_SLOTS;
+  return { used, max, pro, free: pro ? Infinity : Math.max(0, max - used), invited: (u && u.invitedPro) || 0 };
+}
+export const can = f => !PRO[f] || isPro();
+/** Можно ли завести еще одного клиента. Нет: показывает выбор «пригласить коллегу» или «PRO». */
+export function checkClientSlotAvailable(activeClientsCount) {
+  const s = slots(activeClientsCount);
+  if (s.pro || s.used < s.max) return true;
+  track('gate_hit', { c: 'clients' }, false); slotSheet(s); return false;
+}
+// ссылка-приглашение коллеге и готовый текст
+export const refLink = () => { const u = meSync(); return location.origin + '/' + (u && u.refCode ? '?ref=' + u.refCode : ''); };
+export const refText = () => 'Использую BodyPassport для составления 3D-отчетов биомеханики пациентов. Держи ссылку на бесплатный доступ: ' + refLink();
+export async function copyRefText() {
+  track('ref_share', { c: 'slots' }, false); const text = refText();
+  try { await navigator.clipboard.writeText(text); toastMsg('Текст и ссылка скопированы'); }
+  catch (e) { if (navigator.share) await navigator.share({ text }).catch(() => {}); }
+}
+function toastMsg(m) { const t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
+export function slotSheet(s = slots()) {
+  const d = document.createElement('div'); d.className = 'sheet';
+  d.innerHTML = `<div><h2>Все слоты заняты: ${s.used} из ${s.max}</h2>
+    <p class="sub" style="margin-top:8px">На тарифе Free ${BASE_SLOTS} клиентов навсегда и +${REF_SLOTS} за каждого коллегу, который откроет кабинет по вашей ссылке.</p>
+    <button class="btn" id="slref" style="margin-top:var(--s5)">Пригласить коллегу (+${REF_SLOTS} слота бесплатно)</button>
+    <a class="btn line" id="slpro" href="${PAY_URL}" target="_blank" rel="noopener" style="margin-top:var(--s2);text-decoration:none">Перейти на PRO (безлимит за ${PRO_PRICE})</a>
+    <p class="sub" style="font-size:12px;margin-top:8px">После оплаты PRO включается вручную в течение дня. Оплачивайте с тем же email, что у входа, или напишите в @BodyPassport_bot.</p>
+    <button class="btn ghost" id="slx" style="margin-top:var(--s2)">Не сейчас</button></div>`;
+  document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'slx') d.remove(); };
+  d.querySelector('#slref').onclick = () => copyRefText();
+  d.querySelector('#slpro').onclick = () => track('pro_click', {}, false);
+  return d;
+}
 
-/** Пускает к функции или показывает, какой тариф нужен. */
+/** Пускает к функции или показывает, что нужен PRO. */
 export function gate(f) {
   if (can(f)) return true;
+  if (f === 'clients') { slotSheet(); return false; }
   track('gate_hit', { c: f }, false);
-  // единственное место, где упоминается Про: шторка при упоре в лимит, один раз за сессию
-  let seen = false; try { seen = sessionStorage.getItem('bp_gate_seen') === '1'; sessionStorage.setItem('bp_gate_seen', '1'); } catch (e) {}
-  if (seen) { const t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = f === 'clients' ? `Лимит Старт: ${START_CLIENTS} клиентов` : PRO[f] + ': тариф Про'; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); return false; }
   const d = document.createElement('div'); d.className = 'sheet';
-  d.innerHTML = `<div><h2>${f === 'clients' ? `На тарифе Старт до ${START_CLIENTS} клиентов` : PRO[f] + ': в тарифе Про'}</h2>
-    <p class="sub" style="margin-top:8px">В бете Про бесплатен до ${new Date(betaUntil()).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>
-    <a class="btn" href="/pricing" target="_blank" style="margin-top:var(--s5);text-decoration:none">Подключить Про</a>
+  d.innerHTML = `<div><h2>${PRO[f]}: в тарифе PRO</h2>
+    <p class="sub" style="margin-top:8px">PRO: безлимит клиентов и ваш логотип в отчетах. ${PRO_PRICE}.</p>
+    <a class="btn" href="${PAY_URL}" target="_blank" rel="noopener" style="margin-top:var(--s5);text-decoration:none">Перейти на PRO</a>
     <button class="btn ghost" id="pwx" style="margin-top:var(--s2)">Не сейчас</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'pwx') d.remove(); };
   return false;
 }
 export function planLine() {
   const p = plan(), until = p.until ? new Date(p.until).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
-  return p.beta ? `Тариф Про бесплатно на время беты, до ${until}` : `Тариф ${PLANS[p.plan].name}${p.plan !== 'start' && until ? ', до ' + until : ''}`;
+  return `Тариф ${PLANS[p.plan].name}${p.plan !== 'start' && until ? ', до ' + until : ''}`;
 }
