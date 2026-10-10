@@ -19,7 +19,8 @@ function call(h, { method = 'GET', query = {}, body, headers = {} } = {}) {
   return new Promise(ok => { const res = { code: 200, h: {}, setHeader(k, v) { this.h[k] = v; }, status(c) { this.code = c; return this; }, json(j) { ok({ code: this.code, j }); }, end() { ok({ code: this.code }); } };
     Promise.resolve(h({ method, query, body, headers: { host: 'x.app', ...headers } }, res)); });
 }
-const user = (id, role) => store.set(`users/${id}.json`, { body: JSON.stringify({ id, role, name: 'N', consentVersion: '2026-10-v2' }), uploadedAt: new Date().toISOString() });
+// trialUntil: 1 означает «пробный уже был»: старые тесты проверяют Free; пробный проверяется отдельно
+const user = (id, role) => store.set(`users/${id}.json`, { body: JSON.stringify({ id, role, name: 'N', consentVersion: '2026-10-v3', trialUntil: 1 }), uploadedAt: new Date().toISOString() });
 const env = JSON.stringify({ v: 1, iv: 'a', ct: 'b' });
 
 test('relay: подписанный ящик, владелец, чужой специалист', async () => {
@@ -82,7 +83,7 @@ test('feedback: проверка оценки, контакт только по 
 });
 test('рефералы: код, засчет нового специалиста один раз, +3 слота, не за себя', async () => {
   const s = await import(R + '_session.js');
-  const owner = { id: 't_100', role: 'specialist', name: 'A', consentVersion: '2026-10-v2' }; await s.ensureRefIndex(owner); await s.saveUser(owner);
+  const owner = { id: 't_100', role: 'specialist', name: 'A', consentVersion: '2026-10-v3' }; await s.ensureRefIndex(owner); await s.saveUser(owner);
   assert.match(owner.refCode, /^r[0-9a-f]{8}$/);
   const newbie = { id: 't_101', role: 'specialist', ref: owner.refCode };
   await s.creditReferral(newbie, true); await s.creditReferral(newbie, false);
@@ -105,11 +106,11 @@ test('слоты: Free 5 навсегда, +3 за коллегу, без бес
 });
 test('регистрация по ?ref: у пригласившего maxClientSlots +3 в /me', async () => {
   const s = await import(R + '_session.js');
-  const owner = { id: 't_200', role: 'specialist', name: 'O', consentVersion: '2026-10-v2' }; await s.ensureRefIndex(owner); await s.saveUser(owner);
+  const owner = { id: 't_200', role: 'specialist', name: 'O', consentVersion: '2026-10-v3', trialUntil: 1 }; await s.ensureRefIndex(owner); await s.saveUser(owner);
   let me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_200') } });
   assert.equal(me.j.user.maxClientSlots, 5); assert.equal(me.j.user.isPro, false); assert.equal(me.j.user.invitedColleagues, 0);
   // новый пользователь пришел по ссылке и выбрал роль специалиста
-  store.set('users/t_201.json', { body: JSON.stringify({ id: 't_201', role: null, ref: owner.refCode, consentVersion: '2026-10-v2' }), uploadedAt: '' });
+  store.set('users/t_201.json', { body: JSON.stringify({ id: 't_201', role: null, ref: owner.refCode, consentVersion: '2026-10-v3' }), uploadedAt: '' });
   assert.equal((await call(auth, { method: 'POST', query: { a: 'role' }, body: { role: 'specialist' }, headers: { cookie: cookie('t_201') } })).code, 200);
   me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_200') } });
   assert.equal(me.j.user.maxClientSlots, 8); assert.equal(me.j.user.invitedColleagues, 1);
@@ -184,7 +185,7 @@ test('lava.top: оплата включает PRO по почте, продле�
 });
 
 test('режим: владелец по почте — админ, бета дает всем PRO, переключает только админ', async () => {
-  store.set('users/g_owner.json', { body: JSON.stringify({ id: 'g_owner', email: 'aypovrifat@gmail.com', role: 'specialist', consentVersion: '2026-10-v2' }), uploadedAt: '' });
+  store.set('users/g_owner.json', { body: JSON.stringify({ id: 'g_owner', email: 'aypovrifat@gmail.com', role: 'specialist', consentVersion: '2026-10-v3', trialUntil: 1 }), uploadedAt: '' });
   user('t_600', 'specialist');
   let me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('g_owner') } }); assert.equal(me.j.user.admin, true, 'владелец админ без ADMIN_IDS');
   assert.equal((await call(auth, { method: 'POST', query: { a: 'appmode' }, body: { beta: true }, headers: { cookie: cookie('t_600') } })).code, 403);
@@ -213,4 +214,38 @@ test('напоминания: расписание от специалиста, 
   assert.match(remindMod.message(remindMod.due(rec), 180, 'https://x.app'), /Повторный тест: Сидорова[\s\S]*Консультация в \d\d:\d\d: Иванов/);
   assert.equal((await call(remind, { query: { a: 'cron' } })).code, 401, 'cron без секрета');
   const off = await call(remind, { method: 'POST', body: { on: false }, headers: { cookie: cookie('t_700') } }); assert.equal(off.j.on, false); assert.ok(!store.has('remind/t_700.json'));
+});
+
+test('пробный PRO: 30 дней с первого входа в полном режиме, кончается первым ретестом, не повторяется', async () => {
+  SESS.APP.beta = false;
+  store.set('users/t_800.json', { body: JSON.stringify({ id: 't_800', role: 'specialist', consentVersion: '2026-10-v3' }), uploadedAt: '' });
+  let me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_800') } });
+  assert.equal(me.j.user.trial, true); assert.equal(me.j.user.isPro, true); assert.ok(me.j.user.trialUntil > Date.now() + 29 * 864e5);
+  me = await call(auth, { method: 'POST', query: { a: 'trialend' }, headers: { cookie: cookie('t_800') } });
+  assert.equal(me.j.user.isPro, false); assert.equal(me.j.user.trialEndedBy, 'retest');
+  me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_800') } }); assert.equal(me.j.user.trial, false, 'второй раз не стартует');
+  await call(auth, { method: 'POST', query: { a: 'trialseen' }, headers: { cookie: cookie('t_800') } });
+  me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_800') } }); assert.equal(me.j.user.trialEndSeen, true);
+  // в бете пробный не стартует
+  SESS.APP.beta = true; store.set('users/t_801.json', { body: JSON.stringify({ id: 't_801', role: 'specialist', consentVersion: '2026-10-v3' }), uploadedAt: '' });
+  me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_801') } }); assert.equal(me.j.user.trialUntil, null); SESS.APP.beta = false;
+});
+test('баланс за коллег: 20% от оплаты коллеги, годовой +365 дней, оплата балансом', async () => {
+  SESS.APP.beta = false; process.env.LAVA_WEBHOOK_BASIC = 'bp:pw'; const h = { authorization: 'Basic ' + Buffer.from('bp:pw').toString('base64') };
+  store.set('users/t_900.json', { body: JSON.stringify({ id: 't_900', role: 'specialist', consentVersion: '2026-10-v3', trialUntil: 1, balance: 800 }), uploadedAt: '' });
+  store.set('users/t_901.json', { body: JSON.stringify({ id: 't_901', role: 'specialist', name: 'Коллега Петров', consentVersion: '2026-10-v3', trialUntil: 1, referredBy: 't_900', payEmail: 'kol@x.ru' }), uploadedAt: '' });
+  const r = await call(lava, { method: 'POST', body: { eventType: 'payment.success', contractId: 'y-1', buyer: { email: 'kol@x.ru' }, amount: 6990 }, headers: h });
+  assert.equal(r.j.uid, 't_901'); assert.ok(r.j.until > Date.now() + 360 * 864e5, 'годовой');
+  let me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_900') } }); assert.equal(me.j.user.balance, 800 + 1398);
+  assert.equal(me.j.user.balanceLog.at(-1).n, 'Коллега');
+  me = await call(auth, { method: 'POST', query: { a: 'paybalance' }, headers: { cookie: cookie('t_900') } });
+  assert.equal(me.j.user.balance, 800 + 1398 - 899); assert.equal(me.j.user.isPro, true);
+  store.set('users/t_902.json', { body: JSON.stringify({ id: 't_902', role: 'specialist', consentVersion: '2026-10-v3', trialUntil: 1, balance: 100 }), uploadedAt: '' });
+  assert.equal((await call(auth, { method: 'POST', query: { a: 'paybalance' }, headers: { cookie: cookie('t_902') } })).code, 400, 'мало на балансе');
+  delete process.env.LAVA_WEBHOOK_BASIC;
+});
+test('анкета беты при выходе: оценка, цель, трудности; сводка админу', async () => {
+  assert.equal((await call(fb, { method: 'POST', body: JSON.stringify({ k: 'exit', s: 7 }) })).code, 400);
+  assert.equal((await call(fb, { method: 'POST', body: JSON.stringify({ k: 'exit', s: 4, w: 'exit', q: { goal: 'partly', issues: ['Камера', 'Долго'], sec: 300 } }) })).code, 200);
+  const l = await call(fb, { headers: { cookie: cookie('t_1') } }); assert.equal(l.j.exitN, 1); assert.equal(l.j.exitGoals.partly, 1); assert.equal(l.j.exitIssues['Камера'], 1);
 });

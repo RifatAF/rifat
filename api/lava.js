@@ -6,9 +6,10 @@
 // Не нашли человека: платеж лежит в lava/unmatched, администратору приходит сообщение в Telegram.
 import crypto from 'node:crypto';
 import { put, get } from '@vercel/blob';
-import { loadUser, saveUser, allUsers } from './_session.js';
+import { loadUser, saveUser, allUsers, REF_SHARE, REF_MONTHS } from './_session.js';
 
-const PRO_DAYS = 31;
+const PRO_DAYS = 31, YEAR_DAYS = 365, YEAR_MIN = 5000; // годовой: свой продукт (LAVA_YEAR_PRODUCT_ID) или сумма от 5000 ₽
+const isYear = b => (process.env.LAVA_YEAR_PRODUCT_ID && b.product && b.product.id === process.env.LAVA_YEAR_PRODUCT_ID) || +b.amount >= YEAR_MIN;
 const SUCCESS = /(^|\.)payment\.success$/; // payment.success и subscription.recurring.payment.success
 const REVOKE = /refund|chargeback/i;
 async function readAll(stream) { const ch = []; for await (const c of stream) ch.push(Buffer.from(c)); return Buffer.concat(ch).toString('utf8'); }
@@ -48,7 +49,7 @@ export default async function handler(req, res) {
     if (!b || typeof b !== 'object') return res.status(400).json({ error: 'bad body' });
     const ev = String(b.eventType || ''), cid = safe(b.contractId), parent = safe(b.parentContractId) || cid;
     const email = String((b.buyer && b.buyer.email) || b.email || '').trim().toLowerCase().slice(0, 120);
-    const pid = process.env.LAVA_PRODUCT_ID; if (pid && b.product && b.product.id && b.product.id !== pid) return res.status(200).json({ ok: true, skip: 'product' });
+    const pids = [process.env.LAVA_PRODUCT_ID, process.env.LAVA_YEAR_PRODUCT_ID].filter(Boolean); if (pids.length && b.product && b.product.id && !pids.includes(b.product.id)) return res.status(200).json({ ok: true, skip: 'product' });
     // журнал без платежных данных: что пришло и чем кончилось
     const note = { t: Date.now(), ev, cid, parent, status: String(b.status || '').slice(0, 40), amount: b.amount, currency: String(b.currency || '').slice(0, 8) };
     if (SUCCESS.test(ev)) {
@@ -59,11 +60,17 @@ export default async function handler(req, res) {
       if (!u) { await put(`lava/unmatched/${cid}.json`, JSON.stringify({ ...note, email }), J);
         for (const a of admins()) await tg(a, `BodyPassport: оплата PRO (${ev}) не привязалась к аккаунту. Почта покупателя: ${email || 'нет'}, договор ${cid}. Включите вручную в «Участники беты».`);
         return res.status(200).json({ ok: true, matched: false }); }
-      u.plan = 'pro'; u.planUntil = Math.max(Date.now(), u.planUntil || 0) + PRO_DAYS * 864e5; u.lavaContract = parent; u.paidVia = 'lava';
+      const days = isYear(b) ? YEAR_DAYS : PRO_DAYS;
+      u.plan = 'pro'; u.planUntil = Math.max(Date.now(), u.planUntil || 0) + days * 864e5; u.lavaContract = parent; u.paidVia = 'lava'; u.paidEver = true; u.firstPaidAt = u.firstPaidAt || Date.now();
       await saveUser(u);
+      // 20% оплаты приглашенного коллеги на баланс пригласившего, 24 месяца с его первой оплаты; баланс тратится только на свой PRO
+      if (u.referredBy && Date.now() - u.firstPaidAt < REF_MONTHS * 30.4 * 864e5) { const ref = await loadUser(u.referredBy).catch(() => null);
+        const amt = Math.round((+b.amount > 0 ? +b.amount : days === YEAR_DAYS ? 6990 : 899) * REF_SHARE);
+        if (ref && amt > 0) { ref.balance = (ref.balance || 0) + amt; ref.balanceLog = [...(ref.balanceLog || []), { t: Date.now(), a: amt, k: 'ref', n: String(u.name || '').split(' ')[0].slice(0, 30) }].slice(-100); await saveUser(ref);
+          if (/^t_\d+$/.test(ref.id)) await tg(ref.id.slice(2), `BodyPassport: коллега оплатил PRO, вам на баланс +${amt} ₽. Баланс можно потратить на свой PRO в меню кабинета.`); } }
       await put(`lava/contracts/${parent}.json`, JSON.stringify({ uid: u.id, t: Date.now() }), J);
       await put(`lava/done/${cid}.json`, JSON.stringify({ ...note, uid: u.id }), J);
-      if (/^t_\d+$/.test(u.id)) await tg(u.id.slice(2), `BodyPassport: PRO включен до ${new Date(u.planUntil).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' })}. Спасибо!`);
+      if (/^t_\d+$/.test(u.id)) await tg(u.id.slice(2), `BodyPassport: PRO ${days === YEAR_DAYS ? 'на год ' : ''}включен до ${new Date(u.planUntil).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' })}. Спасибо!`);
       return res.status(200).json({ ok: true, uid: u.id, until: u.planUntil });
     }
     if (REVOKE.test(ev)) {

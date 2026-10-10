@@ -7,7 +7,9 @@ import { track } from './track.js';
 // v2.0: Старт = 5 слотов клиентов навсегда, +3 слота за каждого приглашенного коллегу; Про = безлимит и свой бренд в отчетах.
 // Числа совпадают с api/_session.js (BASE_SLOTS, REF_SLOTS): сервер считает, приложение показывает
 export const BASE_SLOTS = 5, REF_SLOTS = 3, START_CLIENTS = BASE_SLOTS;
-export const PRO_PRICE = '899 ₽ в месяц';
+export const PRO_PRICE = '899 ₽ в месяц', PRO_YEAR = '6 990 ₽ в год';
+// ссылка на годовой продукт lava.top: пусто, пока основатель его не создал (тогда кнопки «Год» нет)
+export const PAY_URL_YEAR = '';
 export const PAY_URL = 'https://app.lava.top/products/4ffb6883-76b0-46f9-b109-b2fe71c0f3a2/af840345-4288-4395-b221-2044c7fdc255';
 
 export const PLANS = {
@@ -16,10 +18,7 @@ export const PLANS = {
   studio: { name: 'PRO', price: PRO_PRICE },
 };
 // что требует Про: число клиентов сверх слотов и свой бренд в отчете
-const PRO = {
-  clients: 'Больше клиентов',
-  brand: 'Свой логотип в отчете',
-};
+const PRO = { clients: 1, brand: 1, history: 1, home: 1, pdf: 1, weblink: 1, reminders: 1 };
 
 export const SPECIALTIES = [
   ['kinesio', 'Кинезиотерапевт, реабилитолог, ЛФК', 'Боль и восстановление: где перегрузка, что укрепить, проверка прогресса'],
@@ -43,6 +42,7 @@ export function plan() {
   return { plan: u.plan || 'start', until: u.planUntil };
 }
 export const isPro = () => isBeta() || plan().plan !== 'start';
+export const isTrial = () => !isBeta() && !!(meSync() && meSync().trial);
 /** Слоты клиентов: max с сервера (5 + 3 за коллегу), у Про без лимита. */
 export function slots(used = 0) {
   const u = meSync(), pro = isPro();
@@ -54,7 +54,7 @@ export const can = f => !PRO[f] || isPro();
 export function checkClientSlotAvailable(activeClientsCount) {
   const s = slots(activeClientsCount);
   if (s.pro || s.used < s.max) return true;
-  track('gate_hit', { c: 'clients' }, false); slotSheet(s); return false;
+  track('limit_hit', { c: 'clients' }, false); slotSheet(s); return false;
 }
 // ссылка-приглашение коллеге и готовый текст
 export const refLink = () => { const u = meSync(); return location.origin + '/' + (u && u.refCode ? '?ref=' + u.refCode : ''); };
@@ -63,7 +63,7 @@ export const refText = () => 'Использую BodyPassport для соста�
 export function copyRefText() {
   track('ref_share', { c: 'slots' }, false); const text = refText();
   const d = document.createElement('div'); d.className = 'sheet';
-  d.innerHTML = `<div><h2>Пригласить коллегу</h2><p class="sub" style="margin-top:6px">${isBeta() ? 'Отправьте коллеге этот текст со ссылкой.' : `Коллега откроет кабинет по ссылке, и у вас станет на ${REF_SLOTS} слота больше.`}</p>
+  d.innerHTML = `<div><h2>Пригласить коллегу</h2><p class="sub" style="margin-top:6px">${isBeta() ? 'Отправьте коллеге этот текст со ссылкой.' : 'Когда коллега оплатит PRO, вам на баланс придет 20% его оплат в течение 24 месяцев. Баланс тратится на ваш PRO.'}</p>
     <div class="card" style="margin-top:var(--s3);font-size:15px;line-height:1.45;border:1px solid var(--line)">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>
     ${navigator.share ? '<button class="btn" id="rfsh" style="margin-top:var(--s4)">Отправить коллеге</button>' : ''}
     <button class="btn${navigator.share ? ' line' : ''}" id="rfcp" style="margin-top:var(--s2)">Скопировать текст и ссылку</button>
@@ -81,10 +81,10 @@ export function copyRefText() {
 function toastMsg(m) { const t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
 export function slotSheet(s = slots()) {
   const d = document.createElement('div'); d.className = 'sheet';
-  d.innerHTML = `<div><h2>Все слоты заняты: ${s.used} из ${s.max}</h2>
-    <p class="sub" style="margin-top:8px">На тарифе Free ${BASE_SLOTS} клиентов навсегда и +${REF_SLOTS} за каждого коллегу, который откроет кабинет по вашей ссылке.</p>
-    <button class="btn" id="slref" style="margin-top:var(--s5)">Пригласить коллегу (+${REF_SLOTS} слота бесплатно)</button>
-    <button class="btn line" id="slpro" style="margin-top:var(--s2)">Перейти на PRO (безлимит за ${PRO_PRICE})</button>
+  d.innerHTML = `<div><h2>Вы ведете ${s.used} из ${s.max} клиентов</h2>
+    <p class="sub" style="margin-top:8px">На Free можно вести ${s.max} клиентов одновременно: повторные тесты, ссылки на ретест и тест из дома за последние 30 дней. Первые тесты новых клиентов без лимита.</p>
+    <button class="btn" id="slpro" style="margin-top:var(--s5)">PRO: ведение без лимита · 899 ₽</button>
+    <button class="btn line" id="slref" style="margin-top:var(--s2)">Пригласить коллегу: 20% его оплат вам на баланс</button>
     <button class="btn ghost" id="slx" style="margin-top:var(--s2)">Не сейчас</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'slx') d.remove(); };
   d.querySelector('#slref').onclick = () => { d.remove(); copyRefText(); };
@@ -92,23 +92,40 @@ export function slotSheet(s = slots()) {
   return d;
 }
 
-/** Пускает к функции или показывает, что нужен PRO. */
-export function gate(f) {
-  if (can(f)) return true;
-  if (f === 'clients') { slotSheet(); return false; }
-  track('gate_hit', { c: f }, false);
-  const d = document.createElement('div'); d.className = 'sheet';
-  d.innerHTML = `<div><h2>${PRO[f]}: в тарифе PRO</h2>
-    <p class="sub" style="margin-top:8px">PRO: безлимит клиентов и ваш логотип в отчетах. ${PRO_PRICE}.</p>
-    <button class="btn" id="pwgo" style="margin-top:var(--s5)">Перейти на PRO</button>
-    <button class="btn ghost" id="pwx" style="margin-top:var(--s2)">Не сейчас</button></div>`;
+// что открывает PRO: заголовок шторки по месту, где специалист уперся
+const GATE = {
+  clients: 'Ведение без лимита клиентов',
+  brand: 'Ваш логотип в отчете',
+  history: 'Вся история «было → стало»',
+  home: 'Занятия клиента дома',
+  pdf: 'Отчет в PDF',
+  weblink: 'Отчет по веб-ссылке',
+  reminders: 'Напоминания в Telegram',
+};
+// два посыла по специализации: тем, у кого поток, PRO экономит время; начинающим продает их
+const pitch = () => ['trainer', 'kinesio', 'studio'].includes(localStorage.getItem('bp_sp'))
+  ? 'Экономит время: напоминания, вся история клиента и его занятия дома в одном месте.'
+  : 'Продает вас: ваш логотип и ссылка на отчет вместо плашки BodyPassport, история прогресса клиентов.';
+/** Пускает к функции или показывает шторку PRO с тем, что именно откроется. ctx: имя клиента для заголовка. */
+export function gate(f, ctx) {
+  if (can(f) || isPro()) return true;
+  track('paywall_view', { c: f }, false);
+  const d = document.createElement('div'), t = GATE[f] || 'Эта функция'; d.className = 'sheet';
+  d.innerHTML = `<div><div class="eyebrow">PRO</div><h2 style="margin-top:6px">${t}${ctx ? ': ' + String(ctx).replace(/[<>&"]/g, '') : ''}</h2>
+    <p class="sub" style="margin-top:8px">${pitch()}</p>
+    <button class="btn" id="pwm" style="margin-top:var(--s5)">PRO на месяц · 899 ₽</button>
+    ${PAY_URL_YEAR ? '<button class="btn line" id="pwy" style="margin-top:var(--s2)">PRO на год · 6 990 ₽ (2 месяца в подарок)</button>' : ''}
+    <button class="btn ghost" id="pwr" style="margin-top:var(--s2)">Пригласить коллегу</button>
+    <button class="btn ghost" id="pwx" style="margin-top:var(--s1);border:0">Не сейчас</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'pwx') d.remove(); };
-  d.querySelector('#pwgo').onclick = () => { d.remove(); goPro(); };
+  d.querySelector('#pwm').onclick = () => { d.remove(); goPro('month'); };
+  if (d.querySelector('#pwy')) d.querySelector('#pwy').onclick = () => { d.remove(); goPro('year'); };
+  d.querySelector('#pwr').onclick = () => { d.remove(); copyRefText(); };
   return false;
 }
 /** Переход к оплате PRO. Уведомление lava.top находит аккаунт по почте покупателя, поэтому сначала спрашиваем почту для оплаты. */
-export function goPro() {
-  track('pro_click', {}, false);
+export function goPro(period = 'month') {
+  track('pro_click', { c: period }, false);
   const u = meSync(); if (!u) { location.href = '/pricing'; return; }
   const d = document.createElement('div'); d.className = 'sheet'; const e0 = u.payEmail || u.email || '';
   d.innerHTML = `<div><h2>Переход на PRO</h2><p class="sub" style="margin-top:8px">${PRO_PRICE}, безлимит клиентов и ваш логотип в отчетах. Отменить можно в любой момент.</p>
@@ -121,7 +138,7 @@ export function goPro() {
     btn.disabled = true; btn.textContent = 'Сохраняю…';
     try { if (em.toLowerCase() !== String(u.payEmail || '').toLowerCase()) { const r = await fetch('/api/auth?a=payemail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: em }) }); if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status); u.payEmail = em.toLowerCase(); } }
     catch (e) { btn.disabled = false; btn.textContent = 'К оплате'; toastMsg('Не удалось сохранить почту: ' + e.message); return; }
-    location.href = PAY_URL; };
+    location.href = period === 'year' && PAY_URL_YEAR ? PAY_URL_YEAR : PAY_URL; };
 }
 export function planLine() {
   const p = plan(), until = p.until ? new Date(p.until).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' }) : '';

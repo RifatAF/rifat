@@ -1,7 +1,7 @@
 // BodyPassport web: тот же поток, тексты и дизайн, что в Android-версии.
 import { P, F, G, Movement, sideView, levelled, analyze, fmt, standSnapshot, sideSnapshot } from './analysis.js';
 import { track, vasSave, vasLog, vasStats, vasDelta } from './track.js';
-import { rateCard, bindRate, installCard, bindInstall, feedbackSheet, shareApp, appLink, mountBugTab } from './grow.js';
+import { rateCard, bindRate, installCard, bindInstall, feedbackSheet, shareApp, appLink, mountBugTab, mountBetaBar, exitSurvey } from './grow.js';
 import { proHome, motionViewer, consumerPoses } from './pro.js';
 import { seal } from './core.js';
 import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, logout, deleteAccount, betaUsers, providers, config, setAppMode } from './auth.js';
@@ -1012,7 +1012,7 @@ async function accountBlock(el, close) {
   el.innerHTML = `<div class="group" style="margin-top:var(--s3)"><div class="row" style="min-height:64px"><span class="avatar">${esc((u.name || '?').slice(0, 1).toUpperCase())}</span><div style="flex:1;font-size:14px;line-height:1.35"><b>${esc(u.name)}</b><div style="color:var(--sub);font-size:12px">${u.provider === 'google' ? 'Google' : 'Telegram'}${u.role === 'specialist' ? ' · специалист' : ''}</div></div><button class="pill" id="lo">Выйти</button></div>
     ${u.admin ? `<button class="row-link" id="adm">${ic('settings', 's')}<span>Администрирование</span>${ic('chevron-right', 's chev')}</button>` : ''}
     <button class="row-link" id="delacc" style="color:var(--over-t)"><span>Удалить аккаунт</span></button></div>`;
-  el.querySelector('#lo').onclick = async () => { await logout(); localStorage.removeItem('bp_mode'); close(); onboarding(); };
+  el.querySelector('#lo').onclick = async () => { const out = async () => { await logout(); localStorage.removeItem('bp_mode'); onboarding(); }; close(); if (configSync().beta !== false) exitSurvey('logout', out); else out(); };
   el.querySelector('#delacc').onclick = async () => { if (!confirm('Удалить аккаунт? Результаты на этом телефоне останутся, их можно удалить отдельно.')) return; try { await deleteAccount(); localStorage.removeItem('bp_mode'); close(); onboarding(); } catch (e) { toast('Не получилось: ' + e.message); } };
   if (el.querySelector('#adm')) el.querySelector('#adm').onclick = () => { close(); adminScreen(); };
 }
@@ -1063,7 +1063,7 @@ async function exportData() {
 // ---------- воронка беты (только администратор): обезличенные шаги из js/track.js ----------
 const FUNNEL = [['client', 'Клиент', [['app_open', 'Открыли приложение'], ['onb_done', 'Прошли знакомство'], ['login_ok', 'Вошли'], ['safety_ok', 'Скрининг: можно'], ['safety_stop', 'Скрининг: к врачу'],
   ['test_start', 'Начали тест'], ['test_done', 'Закончили тест'], ['test_cancel', 'Прервали тест'], ['map_view', 'Открыли карту'], ['share_result', 'Поделились'], ['inv_open', 'Открыли ссылку специалиста'], ['result_sent', 'Отправили результат'], ['result_fail', 'Не смогли отправить'], ['fb_sent', 'Оставили оценку или отзыв'], ['ref_share', 'Поделились приложением'], ['install_shown', 'Видели «Установить»'], ['install_ok', 'Установили на экран']]],
-  ['pro', 'Специалист', [['pro_open', 'Открыли кабинет'], ['assess_start', 'Начали оценку'], ['assess_done', 'Закончили оценку'], ['report_sent', 'Отчет клиенту'], ['retest_set', 'Назначили ретест'], ['invite_sent', 'Ссылка клиенту'], ['join_sent', 'Общая ссылка'], ['result_pulled', 'Получили результат из дома'], ['retest_done', 'Сделали ретест'], ['compare_open', 'Открыли «Было → стало»'], ['report_shared', 'Отправили отчет'], ['gate_hit', 'Уперлись в тариф'], ['backup_done', 'Сделали копию'], ['db_empty', 'Пустой кабинет после входа'], ['db_other', 'Нашли базу другого входа'], ['fb_sent', 'Оценка или отзыв'], ['bug_sent', 'Сообщили о проблеме']]]];
+  ['pro', 'Специалист', [['pro_open', 'Открыли кабинет'], ['assess_start', 'Начали оценку'], ['assess_done', 'Закончили оценку'], ['report_sent', 'Отчет клиенту'], ['retest_set', 'Назначили ретест'], ['invite_sent', 'Ссылка клиенту'], ['join_sent', 'Общая ссылка'], ['result_pulled', 'Получили результат из дома'], ['retest_done', 'Сделали ретест'], ['compare_open', 'Открыли «Было → стало»'], ['report_shared', 'Отправили отчет'], ['gate_hit', 'Уперлись в тариф'], ['paywall_view', 'Видели шторку PRO'], ['limit_hit', 'Уперлись в лимит ведения'], ['pro_click', 'Нажали «PRO»'], ['trial_end', 'Пробный закончился ретестом'], ['trial_end_view', 'Видели конец пробного'], ['balance_pay', 'Оплатили PRO балансом'], ['backup_done', 'Сделали копию'], ['db_empty', 'Пустой кабинет после входа'], ['db_other', 'Нашли базу другого входа'], ['fb_sent', 'Оценка или отзыв'], ['bug_sent', 'Сообщили о проблеме']]]];
 export async function funnelScreen(days = 14) {
   go('<div class="spin"></div>');
   let d; try { const r = await fetch('/api/ev?a=stats&days=' + days, { cache: 'no-store' }); if (!r.ok) throw new Error(r.status); d = await r.json(); } catch (e) { toast('Не удалось загрузить: ' + e.message); return map(); }
@@ -1079,6 +1079,9 @@ export async function funnelScreen(days = 14) {
   const bugs = fb ? fb.items.filter(x => x.k === 'bug') : [], M = d.medians || {}, med = (k, u = '') => M[k] ? `${M[k].p50}${u} <span style="color:var(--sub)">(p90 ${M[k].p90}, n ${M[k].n})</span>` : '—';
   const det = (k, t) => { const o = Object.entries((d.detail || {})[k] || {}).sort((a, b) => b[1] - a[1]).slice(0, 8); return o.length ? `<div style="margin-top:10px;font-size:13px"><b>${t}</b>${o.map(([c, n]) => `<div class="row" style="margin-top:4px"><span style="flex:1;word-break:break-word">${esc(c)}</span><b>${n}</b></div>`).join('')}</div>` : ''; };
   const weeks = Object.entries(d.weeks || {}).sort(), us = (d.users || []).filter(u => u.r === 'pro');
+  const exitCard = fb && fb.exitN ? `<div class="card" style="padding:14px 16px"><b>Анкета беты при выходе (${fb.exitN})</b><div style="font-size:14px;margin-top:8px">Средняя оценка: <b>${String(fb.exitAvg).replace('.', ',')}</b> из 5 · получилось: да ${fb.exitGoals.yes}, частично ${fb.exitGoals.partly}, нет ${fb.exitGoals.no}</div>
+    ${Object.entries(fb.exitIssues || {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<div class="row" style="font-size:13px;margin-top:6px"><span style="flex:1">${esc(k)}</span><b>${n}</b></div>`).join('')}
+    ${fb.items.filter(x => x.k === 'exit' && x.t).slice(0, 8).map(x => `<div style="font-size:13px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line-2)"><b>${x.s}/5</b> ${esc(x.t)}</div>`).join('')}</div>` : '<div class="card" style="padding:14px 16px"><b>Анкета беты при выходе</b><div class="sub" style="font-size:13px;margin-top:6px">Пока ответов нет</div></div>';
   const bugCard = `<div class="card" style="padding:14px 16px"><b>Проблемы от участников (${bugs.length})</b>${bugs.length ? bugs.slice(0, 30).map(x => { const g = x.d || {};
       return `<details style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);font-size:14px"><summary style="cursor:pointer;line-height:1.4"><span style="color:var(--sub);font-size:12px">${new Date(x.at).toLocaleString('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · ${x.r === 'pro' ? 'специалист' : 'клиент'} · ${esc(g.os || '')} ${esc(g.br || '')}</span><br>${esc(x.t)}</summary>
         <div style="font-size:12px;color:var(--sub);margin-top:6px;line-height:1.5;word-break:break-word">${esc([g.scr, g.pwa ? 'PWA' : 'браузер', g.net, g.mem ? g.mem + ' ГБ' : '', g.cpu ? g.cpu + ' ядер' : '', g.model ? 'модель ' + g.model + ' ' + (g.deleg || '') : '', g.loadSec ? 'загрузка ' + g.loadSec + ' с' : '', g.fps ? g.fps + ' fps' : '', g.persisted === false ? 'хранилище НЕ закреплено' : g.persisted ? 'хранилище закреплено' : ''].filter(Boolean).join(' · '))}
@@ -1094,6 +1097,7 @@ export async function funnelScreen(days = 14) {
      <p class="sub" style="font-size:13px">Число вкладок, где шаг был хотя бы раз, сумма по дням. Процент от первого шага.</p>
      <div class="seg">${[7, 30, 90].map(n => `<button data-d="${n}" class="${n === days ? 'on' : ''}">${n} дней</button>`).join('')}</div>
      ${bugCard}
+     ${exitCard}
      ${FUNNEL.map(block).join('')}
      ${usersCard}
      ${techCard}
@@ -1112,7 +1116,7 @@ export async function funnelScreen(days = 14) {
   track('app_open', { r: REF });
   try { await loadContent(); } catch (e) { app.innerHTML = '<div class="scr pad" style="justify-content:center;gap:16px"><h1>Не удалось загрузить данные</h1><p class="sub">Проверь интернет и обнови страницу.</p><button class="btn" id="rl">Обновить</button></div>'; $('#rl').onclick = () => location.reload(); return; }
   mountBugTab(); await voice.init();
-  await Promise.all([getMe(), config()]); claimLegacy();
+  await Promise.all([getMe(), config()]); claimLegacy(); mountBetaBar();
   if ('serviceWorker' in navigator) {
     // когда выходит новая версия, страница один раз перезагружается сама
     let reloaded = false; const had = !!navigator.serviceWorker.controller;

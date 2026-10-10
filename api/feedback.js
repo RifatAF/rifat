@@ -4,8 +4,10 @@
 import { put, list, get } from '@vercel/blob';
 import { currentUser, isAdmin } from './_session.js';
 
-const KINDS = { result: [1, 5], nps: [0, 10], free: [0, 5], bug: [0, 0] };
-const PLACES = new Set(['map', 'result', 'home', 'menu', 'settings', 'done', 'any']);
+const KINDS = { result: [1, 5], nps: [0, 10], free: [0, 5], bug: [0, 0], exit: [1, 5] };
+const PLACES = new Set(['map', 'result', 'home', 'menu', 'settings', 'done', 'any', 'exit', 'return', 'logout', 'banner']);
+// анкета беты при выходе: удалось ли, что мешало
+const GOALS = ['yes', 'partly', 'no'];
 // диагностика к сообщению о проблеме: устройство, браузер, последние нажатия (только id кнопок) и ошибки, без имен и данных клиентов
 function diag(d) { if (!d || typeof d !== 'object') return null; const o = {};
   for (const k of ['os', 'br', 'ua', 'scr', 'net', 'role', 'path', 'model', 'deleg', 'screen', 'storage']) if (d[k] != null) o[k] = clip(String(d[k]), 200);
@@ -39,6 +41,7 @@ export default async function handler(req, res) {
       if (score == null && !text) return res.status(400).json({ error: 'empty' });
       const fb = { at: Date.now(), k: b.k, s: score, t: text, w: PLACES.has(b.w) ? b.w : 'menu', r: b.r === 'pro' ? 'pro' : 'client', v: clip(b.v, 20) };
       if (b.k === 'bug') { if (!text) return res.status(400).json({ error: 'empty' }); fb.d = diag(b.d); }
+      if (b.k === 'exit' && b.q && typeof b.q === 'object') fb.q = { goal: GOALS.includes(b.q.goal) ? b.q.goal : null, issues: Array.isArray(b.q.issues) ? b.q.issues.slice(0, 8).map(x => clip(String(x), 40)).filter(Boolean) : [], sec: Number.isFinite(+b.q.sec) ? Math.max(0, Math.min(86400, Math.round(+b.q.sec))) : null };
       if (b.contact === true) { const u = await currentUser(req).catch(() => null);
         fb.contact = { name: u ? clip(u.name, 80) : '', handle: u ? (u.username ? '@' + clip(u.username, 40) : clip(u.email, 120)) : '', note: clip(b.c, 120) }; }
       const day = new Date(fb.at).toISOString().slice(0, 10);
@@ -58,7 +61,10 @@ export default async function handler(req, res) {
       const nps = items.filter(x => x.k === 'nps' && x.s != null), res5 = items.filter(x => x.k === 'result' && x.s != null);
       const npsScore = nps.length ? Math.round((nps.filter(x => x.s >= 9).length - nps.filter(x => x.s <= 6).length) / nps.length * 100) : null;
       const avg = res5.length ? Math.round(res5.reduce((a, x) => a + x.s, 0) / res5.length * 10) / 10 : null;
-      return res.status(200).json({ items: items.slice(0, 300), nps: npsScore, npsN: nps.length, resultAvg: avg, resultN: res5.length });
+      const ex = items.filter(x => x.k === 'exit' && x.s != null), exAvg = ex.length ? Math.round(ex.reduce((a, x) => a + x.s, 0) / ex.length * 10) / 10 : null;
+      const issues = {}; for (const x of ex) for (const i of (x.q && x.q.issues) || []) issues[i] = (issues[i] || 0) + 1;
+      const goals = { yes: 0, partly: 0, no: 0 }; for (const x of ex) if (x.q && goals[x.q.goal] != null) goals[x.q.goal]++;
+      return res.status(200).json({ items: items.slice(0, 300), nps: npsScore, npsN: nps.length, resultAvg: avg, resultN: res5.length, exitAvg: exAvg, exitN: ex.length, exitIssues: issues, exitGoals: goals });
     }
     return res.status(405).json({ error: 'method' });
   } catch (e) { console.error('feedback', e); return res.status(500).json({ error: 'server' }); }

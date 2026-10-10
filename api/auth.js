@@ -1,6 +1,6 @@
 // Быстрый вход: Google (Google Identity Services) и Telegram (виджет на сайте или Mini App внутри Telegram).
 import crypto from 'node:crypto';
-import { setSession, clearSession, sessionUid, loadUser, saveUser, deleteUser, allUsers, publicUser, isAdmin, effectivePlan, CONSENT_VERSION, maxClientSlots, ensureRefIndex, loadApp, saveApp, APP, creditReferral } from './_session.js';
+import { setSession, clearSession, sessionUid, loadUser, saveUser, deleteUser, allUsers, publicUser, isAdmin, effectivePlan, CONSENT_VERSION, maxClientSlots, ensureRefIndex, loadApp, saveApp, APP, creditReferral, startTrialIfNeeded, trialActive, PRO_PRICE } from './_session.js';
 
 const GOOGLE_ID = process.env.GOOGLE_CLIENT_ID || '';
 const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
@@ -76,6 +76,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && a === 'config') return res.status(200).json({ beta: APP.beta, google: GOOGLE_ID || null, telegram: TG_TOKEN && TG_NAME ? TG_NAME : null, telegramWeb: await widgetReady(String(req.headers.host || '').split(':')[0]), telegramId: TG_TOKEN ? TG_TOKEN.split(':')[0] : null });
     if (req.method === 'GET' && a === 'me') { const uid = sessionUid(req); const u = uid && await loadUser(uid); if (!u) { if (uid) clearSession(res); return res.status(401).json({ user: null }); }
       if (!u.refCode && process.env.SESSION_SECRET) { await ensureRefIndex(u); await saveUser(u); } // код приглашения для тех, кто вошел до реферальной программы
+      if (startTrialIfNeeded(u)) await saveUser(u);
       return res.status(200).json({ user: publicUser(u) }); }
     if (req.method !== 'POST') return res.status(405).json({ error: 'method' });
     // защита от отправки формы с чужого сайта: запрос должен прийти с нашего адреса
@@ -86,7 +87,7 @@ export default async function handler(req, res) {
     if (a === 'telegram') return signIn(req, res, b.initData ? verifyTgInitData(b.initData) : verifyTgWidget(b.data));
     const uid = sessionUid(req); const u = uid && await loadUser(uid);
     if (!u) return res.status(401).json({ error: 'войдите заново' });
-    if (a === 'role') { if (!ROLES.includes(b.role)) return res.status(400).json({ error: 'role' }); u.role = b.role; await ensureRefIndex(u); await creditReferral(u, false).catch(e => console.error('ref', e)); await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
+    if (a === 'role') { if (!ROLES.includes(b.role)) return res.status(400).json({ error: 'role' }); u.role = b.role; startTrialIfNeeded(u); await ensureRefIndex(u); await creditReferral(u, false).catch(e => console.error('ref', e)); await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
     if (a === 'profile') { const sp = ['kinesio', 'trainer', 'manual', 'sport', 'studio']; if (!sp.includes(b.specialty)) return res.status(400).json({ error: 'specialty' });
       u.specialty = b.specialty; await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
     // оплата через lava.top: администратор включает Про после оплаты (вебхука пока нет)
@@ -101,6 +102,13 @@ export default async function handler(req, res) {
       u.payEmail = e; await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
     // переключатель режима: бета или полный (только администратор)
     if (a === 'appmode') { if (!isAdmin(u)) return res.status(403).json({ error: 'forbidden' }); await saveApp(b.beta !== false); return res.status(200).json({ beta: APP.beta }); }
+    // первый ретест клиента завершает пробный PRO (момент, когда специалист увидел «до/после»)
+    if (a === 'trialend') { if (trialActive(u)) { u.trialEndedBy = 'retest'; u.trialEndedAt = Date.now(); await saveUser(u); } return res.status(200).json({ user: publicUser(u) }); }
+    if (a === 'trialseen') { u.trialEndSeen = true; await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
+    // баланс за коллег тратится только на свой PRO: 899 ₽ = 31 день
+    if (a === 'paybalance') { if ((u.balance || 0) < PRO_PRICE) return res.status(400).json({ error: 'на балансе меньше ' + PRO_PRICE + ' ₽' });
+      u.balance -= PRO_PRICE; u.plan = 'pro'; u.planUntil = Math.max(Date.now(), u.planUntil || 0) + 31 * 864e5; u.paidEver = true;
+      u.balanceLog = [...(u.balanceLog || []), { t: Date.now(), a: -PRO_PRICE, k: 'pro' }].slice(-100); await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
     if (a === 'logout') { clearSession(res); return res.status(200).json({ ok: true }); }
     if (a === 'delete') { await deleteUser(u.id); clearSession(res); return res.status(200).json({ ok: true }); }
     if (a === 'users') { if (!isAdmin(u)) return res.status(403).json({ error: 'forbidden' });

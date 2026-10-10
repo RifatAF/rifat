@@ -11,10 +11,11 @@ const NAMES = new Set(['app_open', 'onb_done', 'login_ok', 'safety_ok', 'safety_
   'fb_sent', 'ref_share', 'install_shown', 'install_ok',
   'pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'db_empty', 'db_other', 'backup_done', 'restore_done',
   'gate_hit', 'compare_open', 'retest_done', 'report_shared', 'bug_sent', 'rage', 'slow',
-  'pro_click', 'vas_done', 'report_link', 'progress_sent']);
+  'pro_click', 'vas_done', 'report_link', 'progress_sent',
+  'paywall_view', 'limit_hit', 'trial_end', 'trial_end_view', 'balance_pay']);
 const KEYS = new Set(['m', 'f', 'l', 'n', 'c', 'r', 'd', 's', 'q']); // ошибка, файл, строка, число, категория, источник, секунды, оценка, качество
 // события, у которых в сводке видна разбивка по категории (c) и медиана чисел (d, n, q)
-const DETAIL = new Set(['pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'gate_hit', 'rage', 'slow', 'result_fail', 'test_done', 'assess_done', 'vas_done', 'report_link']);
+const DETAIL = new Set(['pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'gate_hit', 'rage', 'slow', 'result_fail', 'test_done', 'assess_done', 'vas_done', 'report_link', 'paywall_view', 'limit_hit', 'trial_end', 'pro_click', 'fb_sent']);
 const MAX = 8 * 1024;
 const day = t => new Date(t).toISOString().slice(0, 10);
 

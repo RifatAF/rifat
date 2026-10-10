@@ -2,16 +2,21 @@
 // Все данные в IndexedDB на телефоне специалиста; на сервер ничего не уходит.
 import { analyze, fmt, recompute } from './analysis.js';
 import { track, vasStats } from './track.js';
-import { npsCard, bindNps, installCard, bindInstall, feedbackSheet, referralSheet, myRef, bugSheet, DEV } from './grow.js';
+import { npsCard, bindNps, installCard, bindInstall, feedbackSheet, referralSheet, myRef, bugSheet, DEV, exitSurvey } from './grow.js';
 import { meSync, logout, getMe } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
-import { gate, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS } from './plans.js';
+import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS } from './plans.js';
 import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast } from './core.js';
 import { cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen } from './app.js';
 
 // активные клиенты занимают слоты; пример и закрытые (пришли сверх лимита) не считаются
-const activeCount = cs => cs.filter(c => !c.demo && !c.locked).length;
-const checkSlotsQuiet = n => { const s = slots(n); return s.pro || s.used < s.max; };
+// ведение = ретест, ссылка на ретест или занятия дома за 30 дней. Первые тесты новых клиентов лимит не трогают
+async function trackedIds() { const since = Date.now() - 30 * DAY, [cs, as] = await Promise.all([all('clients'), all('assessments')]), ids = new Set();
+  for (const a of as) if (a.prevId && a.date > since) ids.add(a.clientId);
+  for (const c of cs) if (!c.demo && ((c.retestSent || 0) > since || (c.progress && c.progress.at > since))) ids.add(c.id);
+  for (const c of cs) if (c.demo) ids.delete(c.id); return ids; }
+/** Можно ли вести этого клиента: он уже в ведении или есть свободное место. Нет: шторка «ведение без лимита». */
+async function canTrack(c) { if (isPro()) return true; const ids = await trackedIds(); if (ids.has(c.id)) return true; return checkClientSlotAvailable(ids.size); }
 const $ = s => document.querySelector(s);
 // имя специалиста для отчетов по умолчанию: из аккаунта (в бете кабинетом пользуются разные специалисты)
 const defaultAuthor = () => { const u = meSync(); return u && u.name ? u.name : 'Специалист'; };
@@ -212,12 +217,14 @@ function dictate(textarea, btn) {
 // счетчик слотов в шапке кабинета: занято из доступных и кнопка «+3 слота» (готовый текст с реферальной ссылкой)
 function slotWidget(s) {
   if (isBeta()) return '';
-  if (s.pro) return `<div class="pad" style="margin-top:var(--s3)"><div class="card row" id="slots" style="padding:10px 14px;font-size:14px"><span style="flex:1"><b>PRO</b> · клиентов без лимита</span></div></div>`;
+  const u = meSync();
+  if (u && u.trial) return `<div class="pad" style="margin-top:var(--s3)"><div class="card row" id="slots" style="padding:10px 14px;font-size:14px;background:var(--ok-s)"><span style="flex:1"><b>Пробный PRO</b> до ${new Date(u.trialUntil).toLocaleDateString('ru', { day: 'numeric', month: 'long' })} или до первого повторного теста</span></div></div>`;
+  if (s.pro) return `<div class="pad" style="margin-top:var(--s3)"><div class="card row" id="slots" style="padding:10px 14px;font-size:14px"><span style="flex:1"><b>PRO</b> · ведение без лимита</span></div></div>`;
   const full = s.used >= s.max, pct = Math.min(100, Math.round(s.used / Math.max(1, s.max) * 100));
   return `<div class="pad" style="margin-top:var(--s3)"><div class="card" id="slots" style="padding:12px 14px">
-    <div class="row" style="font-size:14px;gap:8px"><span style="flex:1">Использовано <b>${s.used} из ${s.max}</b> слотов</span><button class="pill" id="slget" style="background:var(--ink);color:#fff">Получить +${REF_SLOTS} слота</button></div>
+    <div class="row" style="font-size:14px;gap:8px"><span style="flex:1">Ведете <b>${s.used} из ${s.max}</b> клиентов<br><span class="sub" style="font-size:12px">ретесты и ссылки за 30 дней</span></span><button class="pill gopro" id="slget" style="background:var(--ink);color:#fff">Без лимита</button></div>
     <div style="height:6px;border-radius:3px;background:var(--surface);margin-top:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${full ? 'var(--over)' : 'var(--ink)'}"></div></div>
-    ${full ? `<div style="font-size:13px;margin-top:8px">Новых клиентов не добавить. Пригласите коллегу или <a href="/pricing" class="gopro">перейдите на PRO</a>.</div>` : ''}</div></div>`;
+    ${full ? '<div style="font-size:13px;margin-top:8px">Новых клиентов тестируйте свободно. Ретест еще одного клиента откроется в PRO или когда закончится 30 дней ведения у кого-то из текущих.</div>' : ''}</div></div>`;
 }
 export async function proHome(query = '', pulled = null) {
   track('pro_open');
@@ -236,6 +243,7 @@ export async function proHome(query = '', pulled = null) {
     $('#oy').onclick = async () => { $('#oy').textContent = 'Копирую…'; await copyDb(other.name); localStorage.setItem('bp_other_' + dbName, 'done'); toast('Скопировано клиентов: ' + other.n); proHome(); };
     $('#on').onclick = () => { localStorage.setItem('bp_other_' + dbName, 'no'); proHome(); }; return; }
   const sp = await meta('specialty'); if (!sp) return specialtyScreen(); localStorage.setItem('bp_sp', sp); orderTemplates(sp); getMe();
+  { const u = meSync(); if (u && !isBeta() && u.trialUntil > 1 && !u.trial && !u.trialEndSeen && !u.paidEver && tariff().plan === 'start') return trialEndScreen(); }
   // новые результаты пришли, пока специалист уже ушел в карточку: не выдергиваем его на главный экран
   if (pulled === null) pullResults().then(n => { if (n.length && document.getElementById('join') && document.getElementById('menu')) proHome(query, n); });
   prefetchPose(); const pst = await storageCheck(); syncReminders().catch(() => {});
@@ -247,7 +255,7 @@ export async function proHome(query = '', pulled = null) {
   const byId = Object.fromEntries(clients.map(c => [c.id, c]));
   const last = id => asses.filter(a => a.clientId === id).sort((x, y) => y.date - x.date)[0];
   // главный экран «Сегодня»: что посмотреть, кому ретест, последние клиенты
-  const review = asses.filter(a => a.draft && byId[a.clientId] && !byId[a.clientId].demo && !byId[a.clientId].locked).sort((x, y) => y.date - x.date).slice(0, 5);
+  const review = asses.filter(a => a.draft && byId[a.clientId] && !byId[a.clientId].demo).sort((x, y) => y.date - x.date).slice(0, 5);
   const soon = clients.map(c => ({ c, a: last(c.id) })).filter(x => x.a && x.a.nextDate && x.a.nextDate - Date.now() <= 7 * DAY).sort((x, y) => x.a.nextDate - y.a.nextDate);
   const consults = clients.filter(c => !c.demo).flatMap(c => (c.visits || []).filter(v => !v.done && v.t > Date.now() - 3600e3 && v.t - Date.now() <= 7 * DAY).map(v => ({ c, v }))).sort((x, y) => x.v.t - y.v.t);
   const q = query.trim().toLowerCase(); const sorted = clients.filter(c => !q || c.name.toLowerCase().includes(q)).sort((x, y) => (last(y.id)?.date || y.created) - (last(x.id)?.date || x.created));
@@ -268,7 +276,7 @@ export async function proHome(query = '', pulled = null) {
     sport: [['посмотреть', review.length], ['ретеста на неделе', soon.length], ['асимметрий > 12%', real.filter(c => { const a = last(c.id); if (!a) return false; const f = analyze(a, C).f; return ['sym_delt', 'sym_bend', 'sym_calf', 'sym_quad'].some(k => Array.isArray(f[k]) && Math.abs(f[k][0] - f[k][1]) / Math.max(1e-6, Math.abs(f[k][0]), Math.abs(f[k][1])) > .12); }).length]] })[sp] || [['посмотреть', review.length], ['ретеста на неделе', soon.length], ['клиентов', real.length]];
   go(`<div class="scr fade"><div style="padding-top:16px">
     <div class="pad row" style="align-items:flex-start">${myPhoto ? `<img src="${myPhoto}" alt="" width="44" height="44" style="border-radius:50%;object-fit:cover;flex:none;margin:2px 12px 0 0" id="mph">` : ''}<div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--sub)">${esc(name)}${spName ? ' · ' + esc(spName.toLowerCase()) : ''}</div><h1>Сегодня</h1><div style="font-size:14px;color:var(--sub);margin-top:2px">${today[0].toUpperCase() + today.slice(1)}</div></div><button class="round" id="hcal" aria-label="Календарь" style="margin-right:6px">${ic('calendar')}</button><button class="round" id="menu" aria-label="Меню">${ic('menu')}</button></div>
-    ${slotWidget(slots(activeCount(clients)))}
+    ${slotWidget(slots((await trackedIds()).size))}
     ${real.length ? `<div class="pad kpi" style="margin-top:var(--s4)">${kv.map(([t, v]) => `<div><b style="color:${v && v !== '—' && v !== '0%' ? 'var(--ink)' : 'var(--faint)'}">${v}</b><span>${t}</span></div>`).join('')}</div>` : ''}
     <div class="pad tools" style="margin-top:var(--s2)"><button class="tool" id="join">${ic('mail')}Тест по ссылке</button><button class="tool" id="rtq">${ic('rotate-ccw')}Ретест</button><button class="tool" id="repq">${ic('file-text')}Отчёт</button><button class="tool" id="cmpq">${ic('arrow-right-left')}Было→стало</button></div>
     ${review.length ? h3('Нужно посмотреть', review.length) + `<div class="pad"><div class="group">${review.map(a => `<div class="list-item" data-a="${a.id}" style="border-radius:0;padding:var(--s3) 0;background:transparent"><span class="dot"></span><div style="flex:1;min-width:0"><b>${esc(byId[a.clientId].name)}</b><div style="font-size:13px;color:var(--sub)">${a.source === 'home' ? 'прошёл тест по ссылке' : 'гипотеза не подтверждена'} · ${esc(a.templateName || 'оценка')} · ${fmtDate(a.date)}</div></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div></div>` : ''}
@@ -277,7 +285,7 @@ export async function proHome(query = '', pulled = null) {
     ${consults.length ? h3('Консультации', consults.length) + `<div class="pad"><div class="group">${consults.map(({ c, v }) => `<div class="row" style="min-height:60px;cursor:pointer" data-id="${c.id}"><span class="step-n" style="width:72px;color:var(--sub)">${new Date(v.t).toLocaleDateString('ru', { day: 'numeric', month: 'short' })}${new Date(v.t).getHours() ? '<br>' + new Date(v.t).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }) : ''}</span><b style="flex:1">${esc(c.name)}</b><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div></div>` : ''}
     ${h3(q ? 'Поиск' : 'Последние клиенты', clients.length > list.length && !q ? 'из ' + clients.length : '')}
     ${clients.length > 6 || q ? `<div class="pad" style="margin-bottom:var(--s2)"><input id="q" class="field" style="height:48px" value="${esc(query)}" placeholder="Найти клиента"></div>` : ''}
-    <div class="pad">${list.length ? `<div class="group">${list.map(c => { const a = last(c.id); return row(c, c.locked ? 'закрыт: нет свободного слота' : a ? fmtDate(a.date) + ' · ' + esc(a.templateName || 'оценка') : 'оценок пока нет'); }).join('')}</div>`
+    <div class="pad">${list.length ? `<div class="group">${list.map(c => { const a = last(c.id); return row(c, a ? fmtDate(a.date) + ' · ' + esc(a.templateName || 'оценка') : 'оценок пока нет'); }).join('')}</div>`
       : q ? '<p class="sub">Никого не нашлось.</p>' : `<div class="card empty">${ic('file-text')}<b>Посмотрите, что получите</b><span class="sub" style="font-size:14px">Готовая оценка клиента с болью в колене: замер, гипотеза, решение и отчет.</span><button class="btn line" id="demo" style="margin-top:4px">Открыть пример</button></div>`}</div>
     ${lost ? `<div class="pad" style="margin-top:var(--s3)"><div class="card" style="border:1px solid var(--over-t);font-size:14px;line-height:1.45"><b>Кабинет пуст, хотя здесь было ${was} ${plural(was)}</b><div style="margin-top:6px">Телефон мог очистить данные сайта. Восстановите кабинет из копии через меню «Восстановить из копии». Если копии нет, напишите нам через «Проблема?».</div></div></div>` : ''}
     ${iosRisk ? `<div class="pad" style="margin-top:var(--s3)"><div class="card" style="font-size:14px;line-height:1.45"><b>Защитите базу клиентов</b><div style="margin-top:6px">Safari на iPhone может стереть кабинет, если не открывать его неделю. Установите приложение на экран «Домой»: «Поделиться» → «На экран Домой», и раз в неделю сохраняйте копию.</div><button class="btn line" id="bk2" style="height:44px;margin-top:10px">Сохранить копию сейчас</button></div></div>` : ''}
@@ -286,12 +294,12 @@ export async function proHome(query = '', pulled = null) {
   </div><div class="dock"><button class="btn" id="new">${ic('plus', 's')}${({ trainer: 'Скрининг клиента', manual: 'До сеанса', sport: 'Спортивный тест' })[sp] || 'Новая оценка'}</button></div></div>`);
   if (pulled && pulled.length) toast('Пришли результаты по ссылке: ' + pulled.join(', '));
   if ($('#demo')) $('#demo').onclick = openDemo;
-  bindInstall(); if ($('#mph')) $('#mph').onclick = profileForm; if ($('#slget')) $('#slget').onclick = copyRefText;
+  bindInstall(); if ($('#mph')) $('#mph').onclick = profileForm; 
   $('#new').onclick = () => quickStart(); $('#join').onclick = sendJoin; $('#menu').onclick = proMenu; $('#hcal').onclick = calendarScreen; if ($('#bk')) $('#bk').onclick = backup; if ($('#bk2')) $('#bk2').onclick = backup;
   // инструменты в одно касание: клиент один — сразу действие, иначе выбор из последних
   const lastTwo = id => asses.filter(a => a.clientId === id).sort((x, y) => x.date - y.date).slice(-2);
   const tool = (title, ok, act) => () => { const cs = sorted.filter(c => ok(lastTwo(c.id))); if (!cs.length) return toast('Пока нет подходящих клиентов'); if (cs.length === 1) return act(cs[0], lastTwo(cs[0].id)); pickClient(title, cs, c => act(c, lastTwo(c.id))); };
-  $('#rtq').onclick = tool('Ретест', l => l.length >= 1, (c, l) => newAssessment(c.id, l.at(-1).id));
+  $('#rtq').onclick = tool('Ретест', l => l.length >= 1, async (c, l) => { if (await canTrack(c)) newAssessment(c.id, l.at(-1).id); });
   $('#repq').onclick = tool('Отчёт клиенту', l => l.length >= 1, (c, l) => report(l.at(-1).id));
   $('#cmpq').onclick = tool('Было → стало', l => l.length >= 2, (c, l) => compare(l[0].id, l[1].id));
   if ($('#q')) $('#q').oninput = e => { clearTimeout(window._qt); window._qt = setTimeout(() => proHome(e.target.value).then(() => { const i = $('#q'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }), 250); };
@@ -322,13 +330,14 @@ async function proMenu() {
       <div class="row-link" style="cursor:default">${ic('bell', 's')}<span>Напоминания</span><button class="pill" id="mntf">${ntf ? 'Вкл' : 'Выкл'}</button></div>
       ${r('mp', 'user-plus', 'Мой профиль и бренд')}
       ${r('msp', 'settings', 'Специализация: ' + esc(((SPECIALTIES.find(x => x[0] === localStorage.getItem('bp_sp')) || ['', 'не выбрана'])[1]).split(',')[0]))}
-      ${r('mref', 'user-plus', isBeta() ? 'Пригласить коллегу' : 'Пригласить коллегу: +3 слота')}</div>
+      ${r('mref', 'user-plus', isBeta() ? 'Пригласить коллегу' : 'Пригласить коллегу: 20% его оплат вам')}${isBeta() ? '' : r('mbal', 'download', 'Баланс: ' + ((u && u.balance) || 0).toLocaleString('ru') + ' ₽')}</div>
     ${h('Данные')}<div class="group">
       ${r('mb', 'download', 'Сохранить копию с паролем')}
       <label class="row-link">${ic('upload', 's')}<span>Восстановить из копии</span>${ic('chevron-right', 's chev')}<input type="file" id="mr" accept=".json,.bpbackup,application/json" style="display:none"></label>
       ${hasSnap ? r('mund', 'rotate-ccw', 'Отменить последнее восстановление') : ''}</div>
     ${h('Помощь')}<div class="group">
       ${r('demo2', 'file-text', 'Пример оценки')}
+      ${isBeta() ? r('mexit', 'star', 'Оценить работу с приложением') : ''}
       ${r('mbug', 'info', 'Сообщить о проблеме')}
       <a class="row-link" href="https://t.me/${DEV.tg}" target="_blank" rel="noopener"><img src="${DEV.photo}" alt="" width="22" height="22" style="border-radius:50%;object-fit:cover"><span>Написать разработчику</span>${ic('chevron-right', 's chev')}</a>
       ${r('mfb', 'message-square', 'Отзыв или идея')}
@@ -343,6 +352,7 @@ async function proMenu() {
   d.querySelector('#mb').onclick = () => { d.remove(); backup(); };
   if (d.querySelector('#mst')) d.querySelector('#mst').onclick = () => { d.remove(); adminScreen(); };
   d.querySelector('#mbug').onclick = () => { d.remove(); bugSheet(); };
+  if (d.querySelector('#mexit')) d.querySelector('#mexit').onclick = () => { d.remove(); exitSurvey('menu'); };
   if (d.querySelector('#mund')) d.querySelector('#mund').onclick = () => { d.remove(); undoRestore(); };
   d.querySelector('#mexp').onclick = () => { d.remove(); experienceScreen(); };
   d.querySelector('#demo2').onclick = () => { d.remove(); openDemo(); };
@@ -351,8 +361,9 @@ async function proMenu() {
   d.querySelector('#mr').onchange = e => { const f = e.target.files[0]; d.remove(); if (f) restore(f); };
   d.querySelector('#mp').onclick = async () => { d.remove(); profileForm(); };
   d.querySelector('#mref').onclick = () => { d.remove(); referralSheet(); };
+  if (d.querySelector('#mbal')) d.querySelector('#mbal').onclick = () => { d.remove(); balanceScreen(); };
   d.querySelector('#mc').onclick = () => { localStorage.setItem('bp_mode', 'client'); d.remove(); onboarding(); };
-  if (d.querySelector('#mo')) d.querySelector('#mo').onclick = async () => { await logout(); localStorage.removeItem('bp_mode'); d.remove(); onboarding(); };
+  if (d.querySelector('#mo')) d.querySelector('#mo').onclick = async () => { d.remove(); const out = async () => { await logout(); localStorage.removeItem('bp_mode'); onboarding(); }; if (isBeta()) exitSurvey('logout', out); else out(); };
   d.querySelector('#mx').onclick = () => d.remove();
   d.querySelector('#mcal').onclick = () => { d.remove(); calendarScreen(); };
   d.querySelector('#mntf').onclick = e => { const on = localStorage.getItem('bp_ntf') === '0'; localStorage.setItem('bp_ntf', on ? '1' : '0'); e.target.textContent = on ? 'Вкл' : 'Выкл'; syncReminders().catch(() => {}); };
@@ -360,7 +371,6 @@ async function proMenu() {
 
 // ---------- карточка клиента: создание и правка ----------
 async function clientForm(id, thenAssess) {
-  if (!id && !checkClientSlotAvailable(activeCount(await all('clients')))) return;
   const c = id ? await get('clients', id) : { id: uid(), created: Date.now(), name: '', dob: '', sex: '', height: '', leg: 'R', hand: 'R', activity: '', complaints: '', notes: '' };
   const sel = (n, opts, v) => `<select id="${n}" class="field" style="padding:0 10px">${opts.map(([k, t]) => `<option value="${k}" ${v === k ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
   const inp = (n, ph, v, type = 'text') => `<input id="${n}" type="${type}" value="${esc(v)}" placeholder="${ph}" class="field">`;
@@ -383,6 +393,11 @@ async function clientForm(id, thenAssess) {
 // карточка клиента: занятия дома по ссылке (комплаенс и боль до/после), приходят зашифрованными от клиента
 function homeBlock(c) {
   const v = c.progress && c.progress.vas; if (!v || !v.length) return '';
+  // Free: видно, что данные есть, но цифр нет даже в разметке; открываются в PRO
+  if (!isPro()) { const days = new Set(v.map(r => new Date(r.t).toDateString())).size;
+    return `<div class="pad" style="margin-top:12px"><div class="card"><div class="eyebrow">Занятия дома</div>
+      <div style="position:relative;margin-top:8px"><div aria-hidden="true" style="filter:blur(6px);pointer-events:none;user-select:none"><div class="kpi"><div><b>••%</b><span>выполнение</span></div><div><b>••%</b><span>за 30 дн.</span></div><div><b>−•,•</b><span>боль</span></div></div><div style="height:70px;margin-top:8px;background:linear-gradient(90deg,var(--surface),var(--ok-s),var(--surface));border-radius:10px"></div></div>
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center"><b style="font-size:15px">${esc(c.name.split(' ')[0])} занимался дома ${days} ${days % 10 === 1 && days % 100 !== 11 ? 'день' : [2, 3, 4].includes(days % 10) && ![12, 13, 14].includes(days % 100) ? 'дня' : 'дней'}</b><button class="pill gopro-home" style="background:var(--ink);color:#fff">Открыть в PRO</button></div></div></div></div>`; }
   const w = vasStats(v, 7), m = vasStats(v, 30), f = x => x == null ? '—' : String(x).replace('.', ','), d = x => x == null ? '—' : (x > 0 ? '−' : x < 0 ? '+' : '') + f(Math.abs(x));
   return `<div class="pad" style="margin-top:12px"><div class="card"><div class="eyebrow">Занятия дома</div>
     <div class="kpi" style="margin-top:8px"><div><b>${w.compliance}%</b><span>выполнение, 7 дн.</span></div><div><b>${m.compliance}%</b><span>выполнение, 30 дн.</span></div><div><b style="color:${w.avgDelta > 0 ? 'var(--ok-t)' : 'var(--ink)'}">${d(w.avgDelta)}</b><span>боль за занятие, неделя</span></div></div>
@@ -391,7 +406,7 @@ function homeBlock(c) {
 }
 export async function clientCard(id) {
   const c = await get('clients', id); if (!c) return proHome();
-  if (c.locked) { if (!checkClientSlotAvailable(activeCount(await all('clients')))) return; delete c.locked; await put('clients', c); }
+  if (c.locked) { delete c.locked; await put('clients', c); } // старые версии закрывали клиентов сверх лимита: теперь первые тесты без лимита
   const as = await byClient(id); const last = as.at(-1);
   const age = c.dob ? Math.floor((Date.now() - new Date(c.dob)) / (365.25 * DAY)) : null;
   const visits = (c.visits || []).slice().sort((x, y) => x.t - y.t), now = Date.now();
@@ -426,6 +441,7 @@ export async function clientCard(id) {
       : '<p class="sub">Пока пусто.</p>'}</div>
    <div class="pad" style="margin-top:28px"><button class="btn ghost" id="del" style="color:#E5484D;border-color:#F3C9C9">Удалить клиента</button></div></div>`);
   $('#back').onclick = () => proHome(); $('#edit').onclick = () => clientForm(id);
+  document.querySelectorAll('.gopro-home').forEach(b => b.onclick = () => gate('home', c.name.split(' ')[0]));
   if (last) { const sp = proSpots(last); let v3 = null;
     const show = back => { if (v3) { v3.dispose(); v3 = null; } $('#cvis').style.height = ''; $('#cvis').innerHTML = '<canvas id="cheat" style="width:150px;display:block"></canvas>'; drawHeat($('#cheat'), sp, back, null, []); ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === (back ? 'vb' : 'vf'))); };
     show(false); $('#vf').onclick = () => show(false); $('#vb').onclick = () => show(true);
@@ -433,7 +449,7 @@ export async function clientCard(id) {
       try { v3 = await body3D($('#cvis'), sp, () => {}); } catch (e) { toast('3D не загрузилось'); show(false); } };
     $('#open').onclick = () => result(last.id);
     $('#mvr').onclick = async () => { const pp = await get('poses', last.id); motionViewer(pp && pp.poses, last.setup, () => clientCard(id), `${c.name} · ${fmtDate(last.date)}`); }; }
-  $('#na').onclick = () => newAssessment(id, last ? last.id : null); if ($('#nb')) $('#nb').onclick = () => newAssessment(id);
+  $('#na').onclick = async () => { if (last && !(await canTrack(c))) return; newAssessment(id, last ? last.id : null); }; if ($('#nb')) $('#nb').onclick = async () => { if (!(await canTrack(c))) return; newAssessment(id); };
   if ($('#cmp')) $('#cmp').onclick = () => compare(as.at(-2).id, last.id);
   if ($('#rel')) $('#rel').onclick = () => repeatability(as.slice(-3), id);
   $('#inv').onclick = () => sendInvite(c);
@@ -452,7 +468,7 @@ export async function clientCard(id) {
 // все предстоящие события кабинета: ретесты (дата из последней оценки) и консультации
 async function upcoming(days = 60) {
   const [clients, asses] = await Promise.all([all('clients'), all('assessments')]), out = [], now = Date.now(), until = now + days * DAY;
-  for (const c of clients) { if (c.demo || c.locked) continue;
+  for (const c of clients) { if (c.demo) continue;
     const l = asses.filter(a => a.clientId === c.id).sort((x, y) => y.date - x.date)[0], rt = (l && l.nextDate) || c.plannedRetest;
     if (rt && rt < until) out.push({ t: rt, k: 'retest', c });
     for (const v of c.visits || []) if (!v.done && v.t < until && v.t > now - 14 * DAY) out.push({ t: v.t, k: 'consult', c, v }); }
@@ -490,6 +506,46 @@ async function syncReminders(force) {
   await fetch('/api/remind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ on, items, tz: new Date().getTimezoneOffset() }) });
 }
 
+// первый ретест завершает пробный PRO: специалист увидел «до/после», дальше решение о покупке
+async function endTrialOnRetest() { const u = meSync(); if (!u || !u.trial) return;
+  try { await fetch('/api/auth?a=trialend', { method: 'POST' }); await getMe(true); track('trial_end', { c: 'retest' }, false); } catch (e) {} }
+/** Экран конца пробного: что специалист успел за пробный, один раз. Ничего не удаляется. */
+async function trialEndScreen() {
+  const u = meSync(); track('trial_end_view', { c: u.trialEndedBy || 'date' }, false);
+  const [cs, as] = await Promise.all([all('clients'), all('assessments')]), since = u.trialUntil - 30 * DAY;
+  const real = cs.filter(c => !c.demo), mine = as.filter(a => a.date > since && real.some(c => c.id === a.clientId)), retests = mine.filter(a => a.prevId);
+  let better = 0, sum = 0; for (const a of retests) { const p = as.find(x => x.id === a.prevId); if (!p) continue; const mx = o => Math.max(0, ...Object.values(o || {}));
+    const d = mx(p.pain) - mx(a.pain); if (d > 0) { better++; sum += d; } }
+  const fixed = n => String(Math.round(n * 10) / 10).replace('.', ',');
+  go(`<div class="scr pad fade" style="justify-content:center;gap:14px"><div class="eyebrow">Пробный PRO закончился</div>
+    <h1>Вот что вы успели</h1>
+    <div class="kpi"><div><b>${new Set(mine.map(a => a.clientId)).size}</b><span>клиентов</span></div><div><b>${retests.length}</b><span>повторных тестов</span></div><div><b style="color:var(--ok-t)">${better}</b><span>с меньшей болью</span></div></div>
+    ${better ? `<p class="sub">У ${better} ${better === 1 ? 'клиента' : 'клиентов'} боль снизилась в среднем на ${fixed(sum / better)} балла. История и данные остаются у вас на любом тарифе.</p>` : '<p class="sub">История и данные остаются у вас на любом тарифе.</p>'}
+    <button class="btn" id="tem">Оставить PRO · 899 ₽ в месяц</button>
+    <button class="btn ghost" id="tef">Остаться на Free</button>
+    <p class="sub" style="font-size:12px;text-align:center">На Free: тесты новых клиентов без лимита, ведение 5 клиентов, отчет с плашкой BodyPassport.</p></div>`);
+  const seen = () => fetch('/api/auth?a=trialseen', { method: 'POST' }).then(() => getMe(true)).catch(() => {});
+  $('#tem').onclick = async () => { await seen(); goPro('month'); };
+  $('#tef').onclick = async () => { await seen(); proHome(); };
+}
+/** Баланс за коллег: начисления и оплата своего PRO. Вывода в деньги нет. */
+async function balanceScreen() {
+  const u = await getMe(true) || {}, bal = u.balance || 0, log = (u.balanceLog || []).slice().reverse();
+  go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:18px">Баланс</b></div>
+    <div class="pad" style="display:flex;flex-direction:column;gap:12px;padding-bottom:32px">
+     <div class="card"><div class="eyebrow">На балансе</div><b style="font-size:40px;display:block;margin-top:4px">${bal.toLocaleString('ru')} ₽</b>
+      <p class="sub" style="font-size:13px;margin-top:6px">Когда приглашенный вами коллега оплачивает PRO, 20% его оплаты приходят сюда в течение 24 месяцев. Баланс тратится на ваш PRO, вывести его деньгами нельзя.</p>
+      <button class="btn" id="bpay" style="margin-top:12px" ${bal < 899 ? 'disabled' : ''}>${bal < 899 ? `До месяца PRO не хватает ${(899 - bal).toLocaleString('ru')} ₽` : 'Оплатить месяц PRO балансом'}</button>
+      <button class="btn line" id="binv" style="margin-top:8px">Пригласить коллегу</button></div>
+     <h3 style="margin:8px 0 0;font-size:16px">История</h3>
+     ${log.length ? `<div class="group">${log.map(x => `<div class="row" style="min-height:52px;font-size:14px"><span style="flex:1">${x.k === 'ref' ? 'Оплата коллеги' + (x.n ? ': ' + esc(x.n) : '') : 'Оплата PRO'}<br><span class="sub" style="font-size:12px">${new Date(x.t).toLocaleDateString('ru', { day: 'numeric', month: 'long' })}</span></span><b style="color:${x.a > 0 ? 'var(--ok-t)' : 'var(--ink)'}">${x.a > 0 ? '+' : '−'}${Math.abs(x.a).toLocaleString('ru')} ₽</b></div>`).join('')}</div>` : '<p class="sub">Пока начислений нет.</p>'}
+    </div></div>`);
+  $('#back').onclick = () => proHome(); $('#binv').onclick = () => copyRefText();
+  $('#bpay').onclick = async () => { if (!(await confirm2('Списать 899 ₽ с баланса и продлить PRO на 31 день?', 'Оплатить', false))) return;
+    const r = await fetch('/api/auth?a=paybalance', { method: 'POST' }); const j = await r.json().catch(() => ({}));
+    if (r.ok) { track('balance_pay', {}, false); toast('PRO продлен'); await getMe(true); balanceScreen(); } else toast(j.error || 'Не получилось'); };
+}
+
 // выбор даты (и времени для консультации) в шторке; возвращает метку времени или null
 function datePick(title, t0, withTime) {
   return new Promise(res => { const d0 = new Date(t0), pad = n => String(n).padStart(2, '0');
@@ -504,6 +560,7 @@ function datePick(title, t0, withTime) {
 }
 // приглашение на ретест в одно касание: ссылка с тем же протоколом, что в прошлый раз, и датой ретеста
 async function retestInvite(c, last) {
+  if (!(await canTrack(c))) return;
   const tpl = TEMPLATES.find(t => t[0] === (last && last.template)) || TEMPLATES[0]; let url;
   try { url = await inviteLink(c, tpl[2], last && last.nextDate); } catch (e) { return toast('Не удалось создать ссылку: ' + e.message); }
   track('invite_sent', { c: 'retest' }, false);
@@ -515,6 +572,7 @@ async function retestInvite(c, last) {
 function remindLine() {
   const u = meSync(), on = localStorage.getItem('bp_ntf') !== '0';
   if (!on) return 'Напоминания выключены (Меню → Напоминания).';
+  if (!isPro()) return 'Напоминания видны на экране «Сегодня» и в календаре. Напоминания в Telegram за день до ретеста и консультации входят в PRO.';
   return u && /^t_/.test(u.id) ? 'За день до ретеста и консультации бот пришлет вам напоминание в Telegram. Клиент, открывший ссылку, увидит дату у себя и может добавить ее в календарь телефона.'
     : 'Напоминания видны на экране «Сегодня» и в календаре. Чтобы получать их в Telegram, войдите через Telegram. Клиент, открывший ссылку, увидит дату у себя.';
 }
@@ -563,7 +621,7 @@ async function quickStart() {
   document.querySelectorAll('[data-pzs]').forEach(b => b.onclick = () => { pzs = pzs === b.dataset.pzs ? null : b.dataset.pzs; document.querySelectorAll('[data-pzs]').forEach(x => x.classList.toggle('on', x.dataset.pzs === pzs)); });
   const painOpts = () => pz ? { pain: { [pz]: pzv }, painSide: pzs } : {};
   // клиент из поля создается один раз (gate — единственное место про тариф), потом сразу камера
-  const client = async () => { if (picked) return picked; if (!checkClientSlotAvailable(activeCount(clients))) return null; const n = nm.value.trim().slice(0, 80);
+  const client = async () => { if (picked) return picked; const n = nm.value.trim().slice(0, 80);
     const c = { id: uid(), created: Date.now(), name: n, first: n.split(' ')[0], last: n.split(' ').slice(1).join(' '), dob: '', sex: '', height: '', leg: 'R', hand: 'R', activity: '', complaints: '', notes: '' };
     await put('clients', c); picked = c.id; return c.id; };
   go2.onclick = async () => { const id = await client(); if (id) newAssessment(id, null, { tpl, autostart: true, ...painOpts() }); };
@@ -602,7 +660,7 @@ async function newAssessment(clientId, retestOf, opts = {}) {
       track('assess_start', { n: units.length }, false);
       const r = await runProtocol(units, { target: prev && prev.setup, onCancel: () => clientCard(clientId), pre }); if (!r) return;
       const a = { id: uid(), clientId, date: r.date, template: tpl[0], templateName: session ? 'После сеанса' : tpl[0] === 'posture' && !prev ? 'До сеанса' : tpl[1], protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, tech: r.tech || null, limits: r.limits || {}, pain, painSide, lumbarZone: LUMBAR[tpl[0]] || (prev && prev.lumbarZone) || null, hyp: {}, plan: null, note: '', expect: expect.trim().slice(0, 500), nextDate: r.date + 30 * DAY, prevId: prev ? prev.id : null, draft: true };
-      await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); track('assess_done', { n: units.length }, false); if (prev) track('retest_done', { n: Math.round((r.date - prev.date) / DAY) }, false); result(a.id); }; };
+      await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); track('assess_done', { n: units.length }, false); if (prev) track('retest_done', { n: Math.round((r.date - prev.date) / DAY) }, false); if (prev) endTrialOnRetest(); result(a.id); }; };
   draw(); if (opts.autostart) $('#go').click();
 }
 
@@ -987,7 +1045,10 @@ function deltas(pa, ca) {
 }
 
 export async function compare(prevId, curId) {
-  { const pa = await get('assessments', prevId), ca = await get('assessments', curId); const same = pa && ca && Math.abs(ca.date - pa.date) < 12 * 3600e3; if (!same && !gate('compare')) return; } // до/после одного сеанса доступно всем
+  { const pa = await get('assessments', prevId), ca = await get('assessments', curId); const same = pa && ca && Math.abs(ca.date - pa.date) < 12 * 3600e3;
+    // Free: «было → стало» последних двух тестов клиента и до/после одного сеанса; более ранние сравнения в PRO
+    const lastTwo = ca ? (await byClient(ca.clientId)).slice(-2).map(x => x.id) : [];
+    if (!same && !(lastTwo.includes(prevId) && lastTwo.includes(curId)) && !gate('history', (await get('clients', ca && ca.clientId) || {}).name)) return; }
   const [pa, ca, pp, cp] = await Promise.all([get('assessments', prevId), get('assessments', curId), get('poses', prevId), get('poses', curId)]);
   const c = await get('clients', ca.clientId);
   const keys = Object.keys((cp && cp.poses) || {}).filter(k => pp && pp.poses && pp.poses[k]);
@@ -1061,19 +1122,19 @@ async function report(aid) {
   d.innerHTML = `<div><h2 style="font-size:20px">Отчет клиенту</h2><p class="sub" style="font-size:13px;margin-top:4px">Так его увидит ${esc(c.name)}. PDF удобно распечатать, картинку переслать в мессенджер.</p>
     <div style="margin-top:12px;max-height:46dvh;overflow:auto;border-radius:16px;border:1px solid var(--line)"><img src="${cv.toDataURL('image/jpeg', .8)}" alt="Отчет" style="width:100%;display:block"></div>
     ${!pro ? `<p class="sub" style="font-size:13px;margin-top:8px">${myLogo ? 'Ваш логотип' : 'Логотип'} и отчет без плашки BodyPassport: <a href="/pricing" class="gopro">PRO</a></p>` : ''}${photo && (logo || !pro) ? '' : `<button class="link" id="rplg" style="font-size:13px;margin-top:8px">Добавить в отчет ${photo ? 'логотип' : 'свое фото'}</button>`}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn" id="rpdf">${ic('file-text', 's')}Скачать PDF</button><button class="btn line" id="rpng">${ic('image', 's')}Картинка</button></div>
-    <button class="btn line" id="rweb" style="margin-top:8px">${ic('mail', 's')}Поделиться веб-ссылкой</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn" id="rpdf">${ic('file-text', 's')}Скачать PDF${pro ? '' : ' · PRO'}</button><button class="btn line" id="rpng">${ic('image', 's')}Картинка</button></div>
+    <button class="btn line" id="rweb" style="margin-top:8px">${ic('mail', 's')}Поделиться веб-ссылкой${pro ? '' : ' · PRO'}</button>
     <button class="btn ghost" id="rpx" style="margin-top:8px">Закрыть</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; d.querySelector('#rpx').onclick = () => d.remove();
   if (d.querySelector('#rplg')) d.querySelector('#rplg').onclick = () => { d.remove(); profileForm(); };
   const send = async (blob, name, type, kind) => { const file = new File([blob], name, { type });
     if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: 'Паспорт движения' }); track('report_shared', { c: kind }, false); } catch (e) {} }
     else { const l = document.createElement('a'); l.href = URL.createObjectURL(blob); l.download = name; l.click(); track('report_shared', { c: kind + '_download' }, false); } };
-  d.querySelector('#rpdf').onclick = async () => { const b = d.querySelector('#rpdf'); b.disabled = true; b.textContent = 'Собираю PDF…';
+  d.querySelector('#rpdf').onclick = async () => { if (!gate('pdf')) return; const b = d.querySelector('#rpdf'); b.disabled = true; b.textContent = 'Собираю PDF…';
     try { const { canvasToPdf } = await import('./pdf.js'); await send(await canvasToPdf(cv, 'BodyPassport'), base + '.pdf', 'application/pdf', 'pdf'); } catch (e) { toast('Не удалось собрать PDF: ' + e.message); }
     b.disabled = false; b.innerHTML = ic('file-text', 's') + 'PDF'; };
   d.querySelector('#rpng').onclick = async () => send(await new Promise(r => cv.toBlob(r, 'image/png')), base + '.png', 'image/png', 'png');
-  d.querySelector('#rweb').onclick = async () => { const b = d.querySelector('#rweb'); b.disabled = true; b.textContent = 'Создаю ссылку…';
+  d.querySelector('#rweb').onclick = async () => { if (!gate('weblink')) return; const b = d.querySelector('#rweb'); b.disabled = true; b.textContent = 'Создаю ссылку…';
     try { const url = await reportLink(cv, { name: c.name, date: fmtDate(a.date), author }); track('report_link', {}, false);
       const text = `${c.name.split(' ')[0]}, здравствуйте! Ваш биомеханический паспорт по ссылке:`;
       if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url); toast('Ссылка скопирована'); } }
@@ -1120,6 +1181,7 @@ async function inviteLink(c, units, date) {
 }
 async function sendInvite(c) {
   if (!gate('invite')) return;
+  if ((await byClient(c.id)).length && !(await canTrack(c))) return; // повторный тест из дома = ведение
   const as = await byClient(c.id); const lastT = as.at(-1); let tpl = TEMPLATES.find(t => t[0] === (lastT && lastT.template)) || TEMPLATES[0];
   const d = document.createElement('div'); d.className = 'sheet';
   const draw = () => { d.innerHTML = `<div><h2>Ссылка клиенту</h2><p class="sub" style="font-size:14px;margin-top:6px">${esc(c.name)} откроет ссылку, пройдет тест дома, и результат сам появится в его карточке. Клиент тоже видит свою карту.</p>
@@ -1150,6 +1212,7 @@ async function addResult(c, r) {
   const a = { id: uid(), clientId: c.id, date: r.date || Date.now(), template: tpl ? tpl[0] : 'custom', templateName: 'По ссылке · ' + (tpl ? tpl[1] : 'свой протокол'), protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup,
     limits: r.limits || {}, pain: r.pain || {}, hyp: {}, plan: null, note: '', nextDate: (r.date || Date.now()) + 30 * DAY, prevId: prev ? prev.id : null, draft: true, source: 'home' };
   await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses || {} });
+  if (prev) endTrialOnRetest();
 }
 /** Личный «почтовый ящик» специалиста для ссылки новому клиенту. */
 async function inbox() { const b = await meta('inbox'), f = await freshBox(b); if (f !== b) await setMeta('inbox', f); return f; }
@@ -1196,8 +1259,7 @@ export async function pullResults() {
       if (typeof m.token !== 'string' || !/^[A-Za-z0-9_-]{16,64}$/.test(m.token)) m.token = null;
       // тот же человек по общей ссылке повторно — в ту же карточку
       let c = m.token && (await all('clients')).find(x => x.remoteToken && x.remoteToken === m.token);
-      // новый человек по общей ссылке сверх слотов Free: результат сохраняем, но карточка закрыта до свободного слота или PRO
-      if (!c) { c = { id: uid(), created: Date.now(), remoteToken: m.token, notes: '' }; if (!checkSlotsQuiet(activeCount(await all('clients')))) c.locked = true; }
+            if (!c) c = { id: uid(), created: Date.now(), remoteToken: m.token, notes: '' };
       Object.assign(c, { name: [pr.name, pr.surname].filter(Boolean).join(' ') || 'Без имени', dob: pr.dob || c.dob || '', sex: pr.sex || c.sex || '', height: pr.height || c.height || '', hand: pr.hand || c.hand || 'R', leg: pr.hand || c.leg || 'R', activity: pr.activity || c.activity || '', complaints: pr.complaints || c.complaints || '' });
       if (!m.result || typeof m.result !== 'object') throw new Error('no result');
       await put('clients', c); await addResult(c, m.result); got.push(c.name); done(item.p); } catch (e) { console.warn('inbox item', e); } }
