@@ -2,7 +2,7 @@
 // Все данные в IndexedDB на телефоне специалиста; на сервер ничего не уходит.
 import { analyze, fmt, recompute } from './analysis.js';
 import { track, vasStats } from './track.js';
-import { npsCard, bindNps, installCard, bindInstall, feedbackSheet, referralSheet, myRef, bugSheet, DEV, exitSurvey } from './grow.js';
+import { npsCard, bindNps, installCard, bindInstall, installNow, canInstall, feedbackSheet, referralSheet, myRef, bugSheet, DEV, exitSurvey } from './grow.js';
 import { meSync, logout, getMe } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
 import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS } from './plans.js';
@@ -336,6 +336,7 @@ async function proMenu() {
       <label class="row-link">${ic('upload', 's')}<span>Восстановить из копии</span>${ic('chevron-right', 's chev')}<input type="file" id="mr" accept=".json,.bpbackup,application/json" style="display:none"></label>
       ${hasSnap ? r('mund', 'rotate-ccw', 'Отменить последнее восстановление') : ''}</div>
     ${h('Помощь')}<div class="group">
+      ${canInstall() ? r('minst', 'download', 'Установить приложение на телефон') : ''}
       ${r('demo2', 'file-text', 'Пример оценки')}
       ${isBeta() ? r('mexit', 'star', 'Оценить работу с приложением') : ''}
       ${r('mbug', 'info', 'Сообщить о проблеме')}
@@ -356,6 +357,7 @@ async function proMenu() {
   if (d.querySelector('#mund')) d.querySelector('#mund').onclick = () => { d.remove(); undoRestore(); };
   d.querySelector('#mexp').onclick = () => { d.remove(); experienceScreen(); };
   d.querySelector('#demo2').onclick = () => { d.remove(); openDemo(); };
+  if (d.querySelector('#minst')) d.querySelector('#minst').onclick = () => { d.remove(); installNow(); };
   d.querySelector('#mfb').onclick = () => { d.remove(); feedbackSheet('menu'); };
   d.querySelector('#msp').onclick = () => { d.remove(); specialtyScreen(proHome); };
   d.querySelector('#mr').onchange = e => { const f = e.target.files[0]; d.remove(); if (f) restore(f); };
@@ -420,7 +422,7 @@ export async function clientCard(id) {
    ${last ? `<div class="pad" style="margin-top:12px"><div class="card">
      <div class="row"><b style="flex:1">Карта тела · ${fmtDate(last.date)}</b><div class="seg" style="width:auto"><button id="vf" class="on" style="min-height:32px;padding:0 10px;font-size:13px">Спереди</button><button id="vb" style="min-height:32px;padding:0 10px;font-size:13px">Сзади</button><button id="v3" style="min-height:32px;padding:0 10px;font-size:13px">3D</button></div></div>
      <div id="cvis" style="display:flex;justify-content:center;margin-top:8px"><canvas id="cheat" style="width:150px;display:block"></canvas></div>
-     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><button class="btn line" id="open" style="height:44px">Разбор</button><button class="btn line" id="mvr" style="height:44px">${ic('play', 's')}Запись</button></div>
+     <button class="btn" id="rep" style="margin-top:10px;height:48px">${ic('share', 's')}Отправить отчет клиенту</button><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px"><button class="btn line" id="open" style="height:44px">Разбор</button><button class="btn line" id="mvr" style="height:44px">${ic('play', 's')}Запись</button></div>
      ${as.length >= 2 ? '<button class="btn ghost" id="cmp" style="height:44px;margin-top:8px">Было → стало</button>' : ''}</div></div>` : ''}
    ${homeBlock(c)}
    <div class="pad" style="margin-top:12px"><div class="card"><div class="eyebrow">Следующие шаги</div>
@@ -443,11 +445,11 @@ export async function clientCard(id) {
   $('#back').onclick = () => proHome(); $('#edit').onclick = () => clientForm(id);
   document.querySelectorAll('.gopro-home').forEach(b => b.onclick = () => gate('home', c.name.split(' ')[0]));
   if (last) { const sp = proSpots(last); let v3 = null;
-    const show = back => { if (v3) { v3.dispose(); v3 = null; } $('#cvis').style.height = ''; $('#cvis').innerHTML = '<canvas id="cheat" style="width:150px;display:block"></canvas>'; drawHeat($('#cheat'), sp, back, null, []); ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === (back ? 'vb' : 'vf'))); };
+    const show = back => { if (v3) { v3.dispose(); v3 = null; } $('#cvis').style.height = ''; $('#cvis').innerHTML = '<canvas id="cheat" style="width:150px;display:block"></canvas>'; drawHeat($('#cheat'), onlyKeys(sp, mainKeys(last, sp)), back, null, []); ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === (back ? 'vb' : 'vf'))); };
     show(false); $('#vf').onclick = () => show(false); $('#vb').onclick = () => show(true);
     $('#v3').onclick = async () => { ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === 'v3')); $('#cvis').style.height = '340px'; $('#cvis').innerHTML = '';
-      try { v3 = await body3D($('#cvis'), sp, () => {}); } catch (e) { toast('3D не загрузилось'); show(false); } };
-    $('#open').onclick = () => result(last.id);
+      try { v3 = await body3D($('#cvis'), onlyKeys(sp, mainKeys(last, sp)), () => {}); } catch (e) { toast('3D не загрузилось'); show(false); } };
+    $('#open').onclick = () => result(last.id); $('#rep').onclick = () => report(last.id);
     $('#mvr').onclick = async () => { const pp = await get('poses', last.id); motionViewer(pp && pp.poses, last.setup, () => clientCard(id), `${c.name} · ${fmtDate(last.date)}`); }; }
   $('#na').onclick = async () => { if (last && !(await canTrack(c))) return; newAssessment(id, last ? last.id : null); }; if ($('#nb')) $('#nb').onclick = async () => { if (!(await canTrack(c))) return; newAssessment(id); };
   if ($('#cmp')) $('#cmp').onclick = () => compare(as.at(-2).id, last.id);
@@ -737,6 +739,13 @@ function proSpots(a) {
   const base = spots(analyze(a, C));
   return base.map(s => { const o = a.hyp && a.hyp[s.key]; if (!o) return s; const st = STATES.find(x => x[0] === o); return { ...s, k: o, tone: st[2], derived: false, edited: true }; });
 }
+// на схеме только главное: мышцы, подтвержденные специалистом, иначе самые выраженные гипотезы. Остальное серым, без шума.
+const byTone = (x, y) => Math.abs(y.tone) - Math.abs(x.tone);
+function mainKeys(a, sp, n = 3) { const conf = a.check || {};
+  const decided = sp.filter(s => s.k !== 'OK' && (conf[s.key] === 'yes' || s.edited)).sort(byTone);
+  const top = sp.filter(s => s.k !== 'OK' && conf[s.key] !== 'no' && (!s.derived || s.edited || s.byChain)).sort(byTone);
+  return new Set((decided.length ? decided : top).slice(0, n).map(x => x.key)); }
+const onlyKeys = (sp, keys) => sp.map(x => keys.has(x.key) ? x : { ...x, k: 'OK', tone: 0 });
 export async function result(aid, view = 'measured') {
   const a = await get('assessments', aid); if (!a) return proHome(); const c = await get('clients', a.clientId);
   const an = analyze(a, C); const sp = proSpots(a); const evid = (await meta('eexp')) || {}; const top = sp.filter(s => s.k !== 'OK' && (!s.derived || s.edited || s.byChain)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
@@ -803,7 +812,7 @@ export async function result(aid, view = 'measured') {
   document.querySelectorAll('[data-v]').forEach(b => b.onclick = async () => { await savePlan(a); result(aid, b.dataset.v); });
   if ($('#rc')) $('#rc').onclick = async () => { $('#rc').textContent = 'Считаю…'; await recalc(a); const y = scrollY; await result(aid, view); scrollTo(0, y); };
   if (view === 'measured') { let bk = numLabels.filter(l => sp.find(x => x.key === l.key).back).length > numLabels.length / 2, first = !REVEALED.has(aid); REVEALED.add(aid); const lab = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 3)).map(s => ({ key: s.key, title: (SHORT[s.id] || C.muscles[s.id].name) + (s.side === 'RIGHT' ? ' · П' : ' · Л'), sub: toneText(s, 0).toLowerCase(), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
-    const dh = () => drawHeat($('#heat'), sp, bk, null, numLabels, { reveal: first }); dh(); first = false; if (bk) { $('#mb2').classList.add('on'); $('#mf').classList.remove('on'); }
+    const focus = onlyKeys(sp, new Set([...mainKeys(a, sp), ...numLabels.map(l => l.key)])); const dh = () => drawHeat($('#heat'), focus, bk, null, numLabels, { reveal: first }); dh(); first = false; if (bk) { $('#mb2').classList.add('on'); $('#mf').classList.remove('on'); }
     $('#mf').onclick = () => { bk = false; $('#mf').classList.add('on'); $('#mb2').classList.remove('on'); dh(); }; $('#mb2').onclick = () => { bk = true; $('#mb2').classList.add('on'); $('#mf').classList.remove('on'); dh(); };
     if ($('#tohyp')) $('#tohyp').onclick = () => result(aid, 'hyp');
     if ($('#toplan')) $('#toplan').onclick = () => result(aid, 'plan');
@@ -824,7 +833,9 @@ export async function result(aid, view = 'measured') {
     if (btn.dataset.v === 'yes' && a.hyp && a.hyp[k] === 'OK') delete a.hyp[k];
     await put('assessments', a); const y = scrollY; await result(aid, view); scrollTo(0, y); });
   if (view === 'hyp') { let back = false; const lab = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 4)).map(s => ({ key: s.key, title: (SHORT[s.id] || C.muscles[s.id].name) + (s.side === 'RIGHT' ? ' · П' : ' · Л'), sub: toneText(s, 0).toLowerCase(), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
-    let v3 = null, mode3 = false, cur = sp;
+    // гипотеза: видны только мышцы из списка ниже (до 5) и те, что специалист отметил сам
+    const hk = () => new Set([...top.slice(0, 5).map(x => x.key), ...proSpots(a).filter(x => x.edited).map(x => x.key)]);
+    let v3 = null, mode3 = false, cur = onlyKeys(sp, hk());
     const draw2 = () => { if (mode3) { if (v3) v3.turn(back); return; } drawHeat($('#heat'), cur, back, null, lab); }; draw2();
     $('#hf').onclick = async () => { if (mode3) await $('#h3').onclick(); back = false; $('#hf').classList.add('on'); $('#hb').classList.remove('on'); draw2(); }; $('#hb').onclick = async () => { if (mode3) await $('#h3').onclick(); back = true; $('#hb').classList.add('on'); $('#hf').classList.remove('on'); draw2(); };
     // 3D-модель с той же картой (с правками специалиста); касание мышцы прокручивает к ее карточке
@@ -835,7 +846,7 @@ export async function result(aid, view = 'measured') {
       v3.turn(back); document.querySelectorAll('[data-z]').forEach(b => b.onclick = () => v3.focus(b.dataset.z)); };
     if (HYP3D && $('#h3')) { HYP3D = false; $('#h3').click(); }
     // правка на месте: перерисовываются только карточка, схема или 3D и счетчик
-    const refresh = key => { cur = proSpots(a); const s = cur.find(x => x.key === key) || cur.find(x => x.key === key);
+    const refresh = key => { const all = proSpots(a); cur = onlyKeys(all, hk()); const s = all.find(x => x.key === key);
       const el = document.querySelector(`[data-card="${key}"]`); if (el && s) { const open = el.querySelector('details') && el.querySelector('details').open; el.outerHTML = hypCard(a, an, s, open, evid); bindCard(document.querySelector(`[data-card="${key}"]`)); }
       if (mode3 && v3) v3.update(cur); else if ($('#heat')) drawHeat($('#heat'), cur, back, null, lab);
       const list = hypList(a, cur, top), testable = list.filter(x => C.muscles[x.id] && C.muscles[x.id].proTest), chk = a.check || {}; $('#hcnt').textContent = `${testable.filter(x => chk[x.key]).length} из ${testable.length}`; };
@@ -1098,7 +1109,7 @@ async function report(aid) {
   const sections = [{ h: 'Что мы заметили', rows: an.findings.slice(0, 3).map((f, i) => ({ text: `${i + 1}. ${plain(f.observed)}` })) },
     { h: 'Упражнения на дом', rows: [...exs.map((e, i) => ({ text: `${i + 1}. ${e.title.split(' (')[0]}${e.title.includes('(') ? ', ' + e.title.split('(')[1].replace(')', '').replace(' сторона', '') : ''}${e.dose ? ': ' + e.dose : ''}` })), ...(pl.text ? [{ text: pl.text }] : [])] },
     { h: 'Над чем работаем', rows: v.slice(0, 3).map(x => ({ k: x.k, small: true, text: `${x.verb} ${x.what}` })) }];
-  const mainKeys = new Set((decided.length ? decided : top).slice(0, 3).map(x => x.key)), mapSp = sp.map(x => mainKeys.has(x.key) ? x : { ...x, k: 'OK', tone: 0 });
+  const mapSp = onlyKeys(sp, mainKeys(a, sp));
   let delta = null; const after = [];
   if (prev) { const cmp = comparable(prev, a);
     // при другой постановке или плохой съемке «хуже» может быть ошибкой камеры: клиенту его не показываем, только улучшения с оговоркой

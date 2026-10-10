@@ -134,17 +134,31 @@ addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e;
 addEventListener('appinstalled', () => { track('install_ok'); LS.set('bp_inst', 'done'); });
 const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const iOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) && !/CriOS|FxiOS/.test(navigator.userAgent);
+export const canInstall = () => !standalone() && !(window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData);
+// встроенный браузер (Telegram, Instagram и т.п.) сам не ставит приложения: нужно открыть страницу в Chrome или Safari
+const inApp = () => /Telegram|Instagram|FBAN|FBAV|VKClient|wv\)/i.test(navigator.userAgent) || (!deferred && /Android/.test(navigator.userAgent) && !/Chrome\/[\d.]+ Mobile Safari/.test(navigator.userAgent));
+/** Установка из любого места: системное окно Chrome, иначе понятная инструкция под устройство. */
+export async function installNow(done) {
+  track('install_click');
+  if (deferred) { deferred.prompt(); const r = await deferred.userChoice.catch(() => null); deferred = null; if (r && r.outcome === 'accepted') { LS.set('bp_inst', 'done'); done && done(); } return; }
+  const steps = iOS()
+    ? ['Откройте эту страницу в Safari, если вы во встроенном браузере', 'Нажмите «Поделиться» внизу (квадрат со стрелкой)', 'Выберите «На экран Домой» и нажмите «Добавить»']
+    : inApp()
+      ? ['Нажмите ⋮ в правом верхнем углу', 'Выберите «Открыть в Chrome» (или «Открыть в браузере»)', 'В Chrome снова нажмите ⋮ и выберите «Установить приложение» или «Добавить на гл. экран»']
+      : ['Нажмите ⋮ в правом верхнем углу браузера', 'Выберите «Установить приложение» или «Добавить на гл. экран»', 'Подтвердите установку'];
+  sheet(`<h2 style="font-size:21px">Установить на телефон</h2><p class="sub" style="margin-top:6px">Иконка появится на главном экране, приложение откроется без браузера.</p><ol style="margin:12px 0 0 20px;line-height:1.7;font-size:15px">${steps.map(t => '<li>' + t + '</li>').join('')}</ol><button class="btn line" id="iocp" style="margin-top:16px">Скопировать ссылку</button><button class="btn" id="iox" style="margin-top:8px">Понятно</button>`);
+  const d = [...document.querySelectorAll('.sheet')].pop();
+  d.querySelector('#iocp').onclick = async e => { try { await navigator.clipboard.writeText(location.origin); e.target.textContent = 'Ссылка скопирована'; } catch (err) { e.target.textContent = location.origin; } };
+  d.querySelector('#iox').onclick = () => { d.remove(); done && done(); };
+}
 export function installCard() {
-  if (standalone() || LS.get('bp_inst') || (!deferred && !iOS()) || (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData)) return '';
-  return `<div class="pad" style="margin-top:16px"><div class="card row" id="inst" style="gap:12px"><img src="icons/icon-192.png" alt="" width="44" height="44" style="border-radius:12px;flex:none"><div style="flex:1;min-width:0"><b style="font-size:15px">Установить на экран</b><div style="font-size:13px;color:var(--sub)">Открывается как приложение, без браузера</div></div><button class="pill" id="insty" style="background:var(--ink);color:#fff;border:0">Установить</button><button id="instx" aria-label="Скрыть" style="background:none;border:0;font-size:20px;color:var(--faint);width:32px;height:44px">×</button></div></div>`;
+  if (standalone() || LS.get('bp_inst') === 'no' || (!deferred && !iOS()) || (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData)) return '';
+  return `<div class="pad" style="margin-top:16px"><div class="card row" id="inst" style="gap:12px"><img src="icons/icon-192.png" alt="" width="44" height="44" style="border-radius:12px;flex:none"><div style="flex:1;min-width:0"><b style="font-size:15px">Установить на экран</b><div style="font-size:13px;color:var(--sub)">Открывается как приложение, без браузера</div></div><button class="pill" id="insty" style="background:var(--brand);color:#fff;border:0">Установить</button><button id="instx" aria-label="Скрыть" style="background:none;border:0;font-size:20px;color:var(--faint);width:32px;height:44px">×</button></div></div>`;
 }
 export function bindInstall() {
   const box = document.getElementById('inst'); if (!box) return; track('install_shown');
   box.querySelector('#instx').onclick = () => { LS.set('bp_inst', 'no'); box.parentElement.remove(); };
-  box.querySelector('#insty').onclick = async () => {
-    if (deferred) { deferred.prompt(); const r = await deferred.userChoice.catch(() => null); deferred = null; if (r && r.outcome === 'accepted') { LS.set('bp_inst', 'done'); box.parentElement.remove(); } return; }
-    sheet('<h2 style="font-size:21px">Установить на iPhone</h2><ol style="margin:12px 0 0 20px;line-height:1.7;font-size:15px"><li>Нажмите «Поделиться» внизу Safari (квадрат со стрелкой)</li><li>Выберите «На экран Домой»</li><li>Нажмите «Добавить»</li></ol><button class="btn" id="iox" style="margin-top:16px">Понятно</button>').querySelector('#iox').onclick = e => { LS.set('bp_inst', 'ios'); e.target.closest('.sheet').remove(); box.parentElement.remove(); };
-  };
+  box.querySelector('#insty').onclick = () => installNow(() => box.parentElement.remove());
 }
 
 // ---------- бета: заметная плашка и анкета «как прошла работа» перед выходом ----------

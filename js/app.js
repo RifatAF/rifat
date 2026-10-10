@@ -1,7 +1,7 @@
 // BodyPassport web: тот же поток, тексты и дизайн, что в Android-версии.
 import { P, F, G, Movement, sideView, levelled, analyze, fmt, standSnapshot, sideSnapshot } from './analysis.js';
 import { track, vasSave, vasLog, vasStats, vasDelta } from './track.js';
-import { rateCard, bindRate, installCard, bindInstall, feedbackSheet, shareApp, appLink, mountBugTab, mountBetaBar, exitSurvey } from './grow.js';
+import { rateCard, bindRate, installCard, bindInstall, installNow, canInstall, feedbackSheet, shareApp, appLink, mountBugTab, mountBetaBar, exitSurvey } from './grow.js';
 import { proHome, motionViewer, consumerPoses } from './pro.js';
 import { seal } from './core.js';
 import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, logout, deleteAccount, betaUsers, providers, config, setAppMode } from './auth.js';
@@ -95,7 +95,9 @@ function stepBack() {
   return false;
 }
 addEventListener('popstate', () => { if (stepBack()) armBack(); else history.back(); });
-armBack();
+// Chrome пропускает при жесте «назад» записи, добавленные до первого касания страницы, и сразу закрывает вкладку.
+// Поэтому ловушку ставим только по касанию: тогда запись считается созданной пользователем.
+addEventListener('pointerdown', armBack, true);
 // Telegram Mini App: своя кнопка «Назад» в шапке Telegram
 try { const tg = window.Telegram && window.Telegram.WebApp; if (tg && tg.BackButton && tg.initData) { tg.BackButton.show(); tg.BackButton.onClick(() => { stepBack(); }); } } catch (e) {}
 
@@ -168,8 +170,8 @@ export function onboarding() {
     <div class="pad" style="margin-top:24px"><h1>Тест движения за 3 минуты</h1>
       <p class="sub" style="margin-top:12px">Встаньте перед камерой телефона и сделайте несколько простых движений. Вы увидите, какие мышцы перегружены, а какие работают слабо, и получите упражнения. Это оценка движения, а не диагноз.</p>
       ${INV() ? '' : `<div class="row" style="margin-top:20px"><img src="img/rifat.jpg" alt="Рифат Аюпов" width="44" height="44" style="border-radius:50%;object-fit:cover;flex:none"><div><b style="font-size:14px;font-weight:600;display:block">Методика Рифата Аюпова</b><span style="font-size:13px;color:var(--sub)">кинезиотерапевт, биомеханик</span></div></div>`}</div>
-    <div class="dock"><button class="btn" id="next">Начать тест <span class="meta">· бесплатно</span></button><button class="btn ghost" id="pro">Я специалист: вход в кабинет</button></div></div>`);
-  $('#next').onclick = () => { track('onb_done'); prep(); }; $('#pro').onclick = () => openPro();
+    <div class="dock"><button class="btn" id="next">Начать тест <span class="meta">· бесплатно</span></button><button class="btn ghost" id="pro">Я специалист: вход в кабинет</button>${canInstall() ? `<button class="link" id="inst1" style="display:block;margin:4px auto 0;font-size:14px;color:var(--sub)">${ic('download', 's')} Установить приложение</button>` : ''}</div></div>`);
+  $('#next').onclick = () => { track('onb_done'); prep(); }; $('#pro').onclick = () => openPro(); if ($('#inst1')) $('#inst1').onclick = () => installNow();
 }
 
 // ---------- 2. подготовка ----------
@@ -996,6 +998,7 @@ export function settings() {
     <div id="acc"></div>
     <div class="group" style="margin-top:var(--s3)">
       <button class="row-link" id="fbk">${ic('message-square', 's')}<span>Отзыв или идея</span>${ic('chevron-right', 's chev')}</button>
+      ${canInstall() ? `<button class="row-link" id="sinst">${ic('download', 's')}<span>Установить приложение</span>${ic('chevron-right', 's chev')}</button>` : ''}
       <button class="row-link" id="shapp">${ic('share', 's')}<span>Поделиться приложением</span>${ic('chevron-right', 's chev')}</button>
       <button class="row-link" id="topro">${ic('user-plus', 's')}<span>Кабинет специалиста</span>${ic('chevron-right', 's chev')}</button>
       <a class="row-link" href="/privacy" target="_blank">${ic('shield-check', 's')}<span>Конфиденциальность</span>${ic('chevron-right', 's chev')}</a>
@@ -1006,6 +1009,7 @@ export function settings() {
   document.body.appendChild(d);
   d.querySelector('#fbk').onclick = () => { d.remove(); feedbackSheet('settings'); };
   d.querySelector('#shapp').onclick = () => shareApp();
+  if (d.querySelector('#sinst')) d.querySelector('#sinst').onclick = () => { d.remove(); installNow(); };
   d.querySelector('#vm').onclick = e => { voice.muted = !voice.muted; localStorage.setItem('bp_mute', voice.muted ? '1' : '0'); e.target.textContent = voice.muted ? 'Выкл' : 'Вкл'; };
   d.querySelector('#wipe').onclick = async () => { if (!confirm('Удалить все результаты?')) return;
     for (const k of ['bp_tests', 'bp_done', 'bp_profile']) localStorage.removeItem(K(k)); localStorage.removeItem('bp_sent');
