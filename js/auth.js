@@ -68,7 +68,7 @@ export function linkConsent(cont, who) {
     <p class="sub">Аккаунт не нужен. Результат зашифруется на телефоне и уйдет только ${who ? 'специалисту: ' + esc(who) : 'вашему специалисту'}.</p>
     <label class="card row" style="align-items:flex-start;border-radius:var(--r-md)"><input type="checkbox" class="check" id="cons"><span style="font-size:14px;line-height:1.45">Мне есть 18 лет. Принимаю <a href="/terms" target="_blank">соглашение</a> и <a href="/privacy" target="_blank">политику конфиденциальности</a>. Понимаю, что это оценка движения, а не медицинское заключение.</span></label>
     <label class="card row" style="align-items:flex-start;border-radius:var(--r-md)"><input type="checkbox" class="check" id="consh"><span style="font-size:14px;line-height:1.45">Отдельно соглашаюсь на обработку данных о здоровье: боль и результат теста для моего специалиста.</span></label>
-    <span class="ondevice">${ic('cpu', 's')}Видео не записывается. Сохраняются только координаты суставов.</span>
+    
    </div><div class="pad" style="padding:14px 20px 24px"><p id="cerr" class="sub" style="font-size:13px;min-height:18px;color:var(--over-t)"></p><button class="btn" id="cgo">Продолжить</button></div></div>`);
   document.getElementById('cgo').onclick = () => { if (!['cons', 'consh'].every(id => document.getElementById(id).checked)) { document.getElementById('cerr').textContent = 'Отметьте оба пункта'; return; }
     localStorage.setItem(CONSENT_KEY, String(Date.now())); track('login_ok', { c: 'link_no_account' }, false); cont(); };
@@ -86,7 +86,7 @@ export function loginScreen(role, cont, opts = {}) {
      <span style="font-size:14px;line-height:1.45">Мне есть 18 лет. Принимаю <a href="/terms" target="_blank">соглашение</a> и <a href="/privacy" target="_blank">политику конфиденциальности</a>. Понимаю, что это оценка движения, а не диагноз.</span></label>
     <label class="card row" style="align-items:flex-start;border-radius:var(--r-md)"><input type="checkbox" class="check" id="consh" ${localStorage.getItem(CONSENT_KEY) ? 'checked' : ''}>
      <span style="font-size:14px;line-height:1.45">Отдельно соглашаюсь на обработку данных о здоровье: жалобы, боль, результаты теста${pro ? ' моих клиентов в моем кабинете' : ''}. Отозвать согласие: удалить аккаунт в настройках.</span></label>
-    <span class="ondevice">${ic('cpu', 's')}Видео не записывается. Сохраняются только координаты суставов.</span>
+    
     ${pro && configSync().beta === false ? '<a href="/pricing" target="_blank" class="link" style="text-align:center;display:block;line-height:48px">Тарифы и возможности</a>' : ''}
    </div>
    <div class="dock"><p id="lhint" style="font-size:13px;color:var(--sub);text-align:center">Отметьте оба пункта, чтобы продолжить</p>
