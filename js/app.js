@@ -164,10 +164,10 @@ async function resultLink() { return location.origin + location.pathname + '#r='
 export function onboarding() {
   go(`<div class="scr fade">
     <div class="row pad" style="padding-top:16px"><img src="icons/logo.svg" width="28" height="28" alt=""><b style="font-size:16px;font-weight:600;flex:1">BodyPassport</b>${configSync().beta !== false ? '<span class="eyebrow">бета</span>' : ''}</div>
-    <div class="pad" style="margin-top:16px"><div class="hero"><img src="img/hero_squat.webp" alt="Присед с поднятыми руками, поверх тела линии скелета"><div class="joint-tag"><small>колено П</small><b>11°</b></div><span class="ondevice">${ic('shield-check', 's')}Видео не записывается</span></div></div>
+    <div class="pad" style="margin-top:16px"><div class="hero"><img src="img/hero_squat.webp" alt="Присед с поднятыми руками, поверх тела линии скелета"><div class="joint-tag"><small>колено П</small><b>11°</b></div><span class="ondevice" title="Видео не записывается" aria-label="Видео не записывается">${ic('shield-check', 's')}</span></div></div>
     <div class="pad" style="margin-top:24px"><h1>Тест движения за 3 минуты</h1>
       <p class="sub" style="margin-top:12px">Встаньте перед камерой телефона и сделайте несколько простых движений. Вы увидите, какие мышцы перегружены, а какие работают слабо, и получите упражнения. Это оценка движения, а не диагноз.</p>
-      <div class="row" style="margin-top:20px"><img src="img/rifat.jpg" alt="Рифат Аюпов" width="44" height="44" style="border-radius:50%;object-fit:cover;flex:none"><div><b style="font-size:14px;font-weight:600;display:block">Методика Рифата Аюпова</b><span style="font-size:13px;color:var(--sub)">кинезиотерапевт, биомеханик</span></div></div></div>
+      ${INV() ? '' : `<div class="row" style="margin-top:20px"><img src="img/rifat.jpg" alt="Рифат Аюпов" width="44" height="44" style="border-radius:50%;object-fit:cover;flex:none"><div><b style="font-size:14px;font-weight:600;display:block">Методика Рифата Аюпова</b><span style="font-size:13px;color:var(--sub)">кинезиотерапевт, биомеханик</span></div></div>`}</div>
     <div class="dock"><button class="btn" id="next">Начать тест <span class="meta">· бесплатно</span></button><button class="btn ghost" id="pro">Я специалист: вход в кабинет</button></div></div>`);
   $('#next').onclick = () => { track('onb_done'); prep(); }; $('#pro').onclick = () => openPro();
 }
@@ -217,7 +217,7 @@ export async function prep() {
     <div class="group"><div class="row" style="min-height:64px"><div style="flex:1;min-width:0"><b style="font-size:15px">${FULL ? 'Точный · с поворотами' : 'Быстрый · лицом и боком'}</b><div style="font-size:13px;color:var(--sub)">${cam.back ? 'Основная камера' : 'Фронтальная камера'}${FULL && STRENGTH ? ' · сила и симметрия' : ''} · ${steps.length} ${plural3(steps.length, 'шаг', 'шага', 'шагов')}</div></div><button class="link" id="chg">Изменить</button></div></div>
     ${device.inApp ? `<div class="card row" style="align-items:flex-start">${ic('info')}<span style="font-size:14px;line-height:1.4">Ссылка открыта внутри приложения соцсети, здесь камера может не работать. Откройте ее в браузере: меню «⋯» → «Открыть в браузере».</span></div>` : ''}
    </div>
-   <div class="dock"><span class="ondevice" style="justify-content:center">${ic('shield-check', 's')}Видео не записывается и никуда не отправляется</span><button class="btn" id="start">Начать тест</button><button class="btn ghost" id="cant">Не могу выполнить некоторые движения</button></div></div>`);
+   <div class="dock"><button class="btn" id="start">${ic('shield-check', 's')}Начать тест</button><button class="btn ghost" id="cant">Не могу выполнить некоторые движения</button></div></div>`);
   $('#back').onclick = () => tests().length ? map() : onboarding();
   $('#chg').onclick = () => prepSheet(); $('#cant').onclick = () => prepSheet(true);
   if (reopen) prepSheet(false, true);
@@ -576,8 +576,8 @@ const PREI = {}, PAINI = {};
 async function inviteWelcome() {
   track('inv_open');
   // клиенту по ссылке аккаунт не нужен: пожилые бросали тест на экране входа. Только согласия и проверка безопасности
-  if (!linkConsentOk()) return linkConsent(inviteWelcome, (INV() || {}).s);
-  if (!safetyOk()) return safetyScreen(inviteWelcome, null, bot());
+  if (!linkConsentOk()) { linkConsent(inviteWelcome, (INV() || {}).s); return addSpecHint(); }
+  if (!safetyOk()) { safetyScreen(inviteWelcome, null, bot()); return addSpecHint(); }
   voice.preload(Object.values(SAY));
   const inv = INV(); const rows = rowsOf(inv.p); const pain = PAINI;
   if (inv.join && !PROFILE()) return joinForm();
@@ -592,6 +592,7 @@ async function inviteWelcome() {
      <span style="font-size:14px;line-height:1.45">Согласен передать ${inv.join ? 'анкету, ' : ''}оценку боли и результат теста специалисту: ${esc(inv.s)}. Данные шифруются на телефоне, сервер их не читает.</span></label>
    </div><div class="pad" style="padding:14px 20px 24px"><button class="btn" id="go">Начать тест</button></div></div>`);
   bindStepList(PREI, inviteWelcome);
+  addSpecHint();
   app.querySelectorAll('[data-p]').forEach(r => r.oninput = () => { pain[r.dataset.p] = +r.value; $('#pv_' + r.dataset.p).textContent = r.value; });
   if ($('#editpf')) $('#editpf').onclick = joinForm;
   $('#go').onclick = async () => { if (!$('#share_ok').checked) { $('#share_ok').parentElement.style.outline = '2px solid var(--over)'; return; } localStorage.setItem('bp_share_' + inv.i, String(Date.now())); voice.unlock(); startMotion(); $('#go').textContent = 'Загружаю модель…'; try { await initPose(); } catch (e) { toast('Не удалось запустить камеру или модель'); return inviteWelcome(); }
@@ -618,6 +619,15 @@ async function sendResult(r) {
   const box = document.getElementById('sentbox'); if (box) box.outerHTML = sentBanner();
 }
 // клиенту по ссылке специалиста: дата повторного теста и кнопка «в календарь телефона» с напоминанием за день
+// специалист открыл ссылку, присланную как клиенту (например, коллега показал приложение): объясняем и ведем в свой кабинет
+function specHint() { return '<div class="pad" style="padding-top:8px;text-align:center"><button class="link" id="iamsp" style="font-size:14px;color:var(--sub)">Вы специалист? Откройте свой кабинет</button></div>'; }
+function bindSpecHint() { const b = document.getElementById('iamsp'); if (!b) return; b.onclick = () => {
+  const d = document.createElement('div'); d.className = 'sheet'; const who = (INV() || {}).s || 'Коллега';
+  d.innerHTML = `<div><h2>Это тест для клиента</h2><p class="sub" style="margin-top:8px">${esc(who)} прислал ссылку, по которой клиент проходит тест и результат уходит специалисту. Чтобы работать со своими клиентами, откройте собственный кабинет: в нем ваши клиенты, отчеты с вашим именем и ссылки для ваших клиентов.</p>
+    <button class="btn" id="spgo" style="margin-top:var(--s4)">Открыть кабинет специалиста</button><button class="btn ghost" id="spx" style="margin-top:8px">Я клиент, продолжить</button></div>`;
+  document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'spx') d.remove(); };
+  d.querySelector('#spgo').onclick = () => { d.remove(); track('inv_open', { c: 'specialist' }, false); localStorage.removeItem('bp_inv'); localStorage.setItem('bp_mode', 'pro'); openPro(); }; }; }
+function addSpecHint() { const sc = app.querySelector('.scr'); if (sc && !document.getElementById('iamsp')) { sc.insertAdjacentHTML('beforeend', specHint()); bindSpecHint(); } }
 function retestCard() { const inv = INV(); if (!inv || !inv.d) return '';
   const days = Math.ceil((inv.d - Date.now()) / 864e5), date = new Date(inv.d).toLocaleDateString('ru', { day: 'numeric', month: 'long' });
   return `<div class="pad" style="padding-top:8px"><div class="card row" style="gap:10px;font-size:14px">${ic('calendar', 's')}<span style="flex:1">${days <= 0 ? '<b>Пора пройти повторный тест</b>' : `Повторный тест: <b>${date}</b>`}<br><span class="sub" style="font-size:13px">Назначил специалист: ${esc(inv.s)}</span></span><button class="pill" id="rtcal">${days <= 0 ? 'Пройти' : 'В календарь'}</button></div></div>`; }
@@ -666,7 +676,7 @@ export function map() {
   go(`<div class="scr fade">
    ${!SHARED && INV() ? sentBanner() + retestCard() : ''}
    ${SHARED ? `<div class="pad" style="padding-top:12px"><div class="card row" style="font-size:14px">${ic('info', 's')}<span>Это результат по ссылке. Твои данные не меняются.</span></div></div>` : ''}
-   <div class="pad row" style="padding-top:16px;align-items:flex-start"><div style="flex:1;min-width:0"><div class="eyebrow">${new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })} · ${nSteps} ${plural3(nSteps, 'шаг', 'шага', 'шагов')}${qa != null ? ' · качество ' + qa : ''}</div><h1 style="margin-top:6px">${SHARED ? 'Карта тела' : 'Твоя карта тела'}</h1></div><button class="round" id="set" aria-label="Настройки">${ic('settings')}</button></div>
+   <div class="pad row" style="padding-top:16px;align-items:flex-start"><div style="flex:1;min-width:0"><div class="eyebrow">${new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })} · ${nSteps} ${plural3(nSteps, 'шаг', 'шага', 'шагов')}${qa != null ? ' · качество ' + qa : ''}</div><h1 style="margin-top:6px">${SHARED ? 'Карта тела' : 'Ваша карта тела'}</h1></div><button class="round" id="set" aria-label="Настройки">${ic('settings')}</button></div>
    ${days >= 7 && !SHARED ? `<div class="pad"><button class="row-link" id="re" style="color:var(--focus);font-weight:600"><span>Прошла неделя: пройди быстрый тест и сравни</span>${ic('chevron-right', 's')}</button></div>` : ''}
    <div class="pad" style="margin-top:12px"><div class="card" style="border-radius:var(--r-xl);padding:12px 8px 8px">
      <div class="seg" style="margin:0 4px"><button id="vf" class="${!BACK && !MODE3D ? 'on' : ''}">Спереди</button><button id="vb" class="${BACK && !MODE3D ? 'on' : ''}">Сзади</button>${device.webgl2 ? `<button id="v3" class="${MODE3D ? 'on' : ''}">3D</button>` : ''}</div>
@@ -699,7 +709,7 @@ export function map() {
   if ($('#plan')) $('#plan').onclick = () => workout(pl, why);
   if ($('#again')) $('#again').onclick = again;
   if ($('#re')) $('#re').onclick = () => { FULL = false; prep(); };
-  if ($('#resend')) $('#resend').onclick = async () => { const p = await outbox.get().catch(() => null); if (p) sendResult(p); }; bindRetestCard();
+  if ($('#resend')) $('#resend').onclick = async () => { const p = await outbox.get().catch(() => null); if (p) sendResult(p); }; bindRetestCard(); if (!SHARED && INV()) addSpecHint();
   $('#set').onclick = settings; $('#more').onclick = () => moreSheet(cur, top, !!pl.length);
 }
 function again() { if (!SHARED && INV()) return INV().join ? joinForm() : inviteWelcome(); if (SHARED) { SHARED = null; history.replaceState(null, '', location.pathname); } FULL = false; tests().length || SHARED ? prep() : onboarding(); }
@@ -725,7 +735,7 @@ function moreSheet({ t, a }, top, hasPlan) {
       <button class="row-link" id="shareRes">${ic('share', 's')}<span>Поделиться: ссылка или картинка</span>${ic('chevron-right', 's chev')}</button>
       ${top.length && !SHARED ? `<button class="row-link" id="cal">${ic('volume-2', 's')}<span>Напоминать каждый день в 20:00</span>${ic('chevron-right', 's chev')}</button>` : ''}
       ${hasPlan ? `<button class="row-link" id="again">${ic('rotate-ccw', 's')}<span>${SHARED ? 'Пройти свой тест' : 'Пройти тест заново'}</span>${ic('chevron-right', 's chev')}</button>` : ''}
-      <a class="row-link" href="${bot()}" target="_blank">${ic('message-square', 's')}<span>Разобрать карту с автором методики<small style="display:block;font-size:13px;color:var(--sub);font-weight:400">Рифат Аюпов, кинезиотерапевт, 12 лет практики · онлайн</small></span>${ic('chevron-right', 's chev')}</a></div>
+      ${INV() ? '' : `<a class="row-link" href="${bot()}" target="_blank">${ic('message-square', 's')}<span>Разобрать карту с автором методики<small style="display:block;font-size:13px;color:var(--sub);font-weight:400">Рифат Аюпов, кинезиотерапевт, 12 лет практики · онлайн</small></span>${ic('chevron-right', 's chev')}</a>`}</div>
     ${SHARED ? '' : `<div style="margin-top:var(--s3)">${rateCard(String(t.date))}</div>${installCard()}`}
     <button class="btn" id="mx" style="margin-top:var(--s4)">Закрыть</button></div>`;
   document.body.appendChild(d); const close = () => d.remove(); d.onclick = e => { if (e.target === d) close(); };
@@ -878,7 +888,7 @@ export function muscle(key) {
       ${st[1] ? `<p class="sub" style="font-size:14px">${st[1]}</p>` : ''}
       ${st[2] ? `<div class="card"><b>Самомассаж</b>${m.tool ? ` <span class="pill" style="min-height:28px;font-size:12px">${m.tool}</span>` : ''}<p style="font-size:15px;line-height:1.45;margin-top:6px">${st[2]}</p></div>` : ''}
       ${st[3].map(id => { const e = ex(id); n++; return `<div class="list-item exr" data-id="${id}"><span class="round" style="background:var(--surface-2);flex:none">${ic('play', 's')}</span><div style="flex:1"><b style="font-size:16px">${e.title.split(' (')[0]}</b><div class="sub" style="font-size:13px">${[e.dose, e.durationSec + ' с'].filter(Boolean).join(' · ')}</div></div><span class="step-n">${n}</span></div>`; }).join('')}`).join('')}
-    <a class="row-link" href="${bot()}" target="_blank" style="color:var(--focus);font-weight:600"><span>Разобрать вместе с автором методики</span>${ic('chevron-right', 's')}</a>
+    ${INV() ? '' : `<a class="row-link" href="${bot()}" target="_blank" style="color:var(--focus);font-weight:600"><span>Разобрать вместе с автором методики</span>${ic('chevron-right', 's')}</a>`}
    </div>${all.length ? `<div class="dock"><button class="btn" id="go">${ic('play', 's')}Начать комплекс · ${totalMin(all.map(ex))} мин</button></div>` : ''}</div>`);
   const rs = Object.fromEntries(all.map(id => [id, reason]));
   $('#back').onclick = map; app.querySelectorAll('.exr').forEach(el => el.onclick = () => workout([el.dataset.id], rs)); if ($('#go')) $('#go').onclick = () => workout(all, rs);
@@ -982,7 +992,7 @@ export function settings() {
   const d = document.createElement('div'); d.className = 'sheet';
   d.innerHTML = `<div><h2>Настройки</h2>
     <div class="group" style="margin-top:var(--s4)"><div class="row" style="min-height:56px"><span style="flex:1">Голосовые подсказки</span><button class="pill" id="vm">${voice.muted ? 'Выкл' : 'Вкл'}</button></div></div>
-    <p class="ondevice" style="margin-top:var(--s3)">${ic('cpu', 's')}Видео не сохраняется. Результаты хранятся только в этом браузере.</p>
+    <p class="ondevice" style="margin-top:var(--s3)">${ic('shield-check', 's')}Результаты хранятся только в этом браузере.</p>
     <div id="acc"></div>
     <div class="group" style="margin-top:var(--s3)">
       <button class="row-link" id="fbk">${ic('message-square', 's')}<span>Отзыв или идея</span>${ic('chevron-right', 's chev')}</button>
