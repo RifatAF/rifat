@@ -213,7 +213,7 @@ export function ramp(v) { const x = Math.max(-1, Math.min(1, v)); let i = RAMP.f
   const [a, ca] = RAMP[i], [b, cb] = RAMP[i + 1], t = Math.max(0, Math.min(1, (x - a) / (b - a))); const ch = (c, s) => (c >> s) & 255; const mix = s => Math.round(ch(ca, s) + (ch(cb, s) - ch(ca, s)) * t);
   return [mix(16), mix(8), mix(0)]; }
 export const RAMP_CSS = 'linear-gradient(90deg,' + RAMP.map(([v, c]) => '#' + c.toString(16).padStart(6, '0') + ' ' + ((v + 1) * 50) + '%').join(',') + ')';
-export const MARK_HEX = { HYPER: '#D9484F', SHORT: '#E07A2E', WEAK: '#3A72D8' };
+export const MARK_HEX = { HYPER: '#C8414A', SHORT: '#A3561A', WEAK: '#2F6BD8' };
 /** Маркер состояния формой: перегрузка — круг, укорочение — ромб, слабость — кольцо. derived: пунктир без ореола. */
 export function drawMark(ctx, x, y, k, o = {}) {
   const c = MARK_HEX[k]; if (!c) return; const sc = o.scale ?? 1; ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
@@ -273,9 +273,9 @@ export function drawHeat(cv, spots0, back, selected, labels = [], opts = {}) {
     marks.forEach((s, i) => { const t = markT(i); if (t <= 0) return; const sc2 = t < .7 ? .4 + (1.15 - .4) * (t / .7) : 1.15 - .15 * ((t - .7) / .3);
       drawMark(ctx, s.x * 200, s.y * 440, s.k, { derived: s.derived && !s.edited, scale: t >= 1 ? 1 : sc2, alpha: Math.min(1, t * 2) }); });
     for (const l of shown.filter(l => l.n)) { const s = mine.find(q => q.key === l.key); ctx.globalAlpha = Math.min(1, labA * 2 + (markT(0) > 0 ? 1 : 0));
-      ctx.fillStyle = '#111418'; ctx.beginPath(); ctx.arc(s.x * 200, s.y * 440, 12, 0, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '700 14px Onest, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#13212B'; ctx.beginPath(); ctx.arc(s.x * 200, s.y * 440, 12, 0, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '700 14px Onest, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(String(l.n), s.x * 200, s.y * 440 + 1); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1; }
-    const sel = mine.find(s => s.key === selected); if (sel) { ctx.strokeStyle = '#111418'; ctx.lineWidth = 2; ctx.setLineDash([]); ctx.beginPath(); ctx.arc(sel.x * 200, sel.y * 440, 12, 0, 7); ctx.stroke(); }
+    const sel = mine.find(s => s.key === selected); if (sel) { ctx.strokeStyle = '#13212B'; ctx.lineWidth = 2; ctx.setLineDash([]); ctx.beginPath(); ctx.arc(sel.x * 200, sel.y * 440, 12, 0, 7); ctx.stroke(); }
     ctx.restore();
     if (labA > 0 && !numbered) callouts(ctx, shown.filter(l => !l.n), mine, labA);
   };
@@ -306,7 +306,7 @@ function callouts(ctx, labels, mine, alpha) {
     const tw = Math.max(ctx.measureText(v).width, (ctx.font = '400 12px Onest, sans-serif', ctx.measureText(title).width));
     const bx = left ? 4 : VW - 4 - tw, ex = left ? bx + tw + 4 : bx - 4;
     ctx.strokeStyle = l.color; ctx.globalAlpha = alpha * .6; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px, zy); ctx.lineTo(ex, py); ctx.stroke(); ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#5B6068'; ctx.font = '400 12px Onest, sans-serif'; ctx.fillText(title, bx, py - 3);
+    ctx.fillStyle = '#5A6872'; ctx.font = '400 12px Onest, sans-serif'; ctx.fillText(title, bx, py - 3);
     ctx.fillStyle = l.text || l.color; ctx.font = l.value ? '500 13px "JetBrains Mono", monospace' : '600 12px Onest, sans-serif'; ctx.fillText(v, bx, py + 12);
   }
   ctx.globalAlpha = 1;
@@ -362,7 +362,7 @@ export async function body3D(container, spots, onPick, opts = {}) {
   const W = container.clientWidth, H = container.clientHeight;
   const camera = new THREE.PerspectiveCamera(30, W / H, .1, 50); camera.position.set(0, 0, 4.2);
   const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(device.weak ? 1.25 : 1.75, devicePixelRatio)); renderer.setSize(W, H); container.innerHTML = ''; container.appendChild(renderer.domElement); if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
-  container.insertAdjacentHTML('beforeend', '<a href="/licenses" target="_blank" style="position:absolute;right:12px;bottom:6px;font-size:12px;color:#5B6068;text-decoration:none">3D: Z-Anatomy, CC BY-SA 4.0</a><div class="hint3d">Двумя пальцами: приблизить и повернуть</div>');
+  container.insertAdjacentHTML('beforeend', '<a href="/licenses" target="_blank" style="position:absolute;right:12px;bottom:6px;font-size:12px;color:#5A6872;text-decoration:none">3D: Z-Anatomy, CC BY-SA 4.0</a><div class="hint3d">Двумя пальцами: приблизить и повернуть</div>');
   setTimeout(() => { const h = container.querySelector('.hint3d'); if (h) h.style.opacity = 0; }, 3000);
   // масштаб к точке под пальцами, сдвиг двумя пальцами: можно рассмотреть шею или стопу, а не только центр
   const ctl = new OrbitControls(camera, renderer.domElement); ctl.enablePan = true; ctl.screenSpacePanning = true; ctl.zoomToCursor = true;

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>BodyPassport — карта тела по камере телефона</title>
 <meta name="description" content="Тест осанки и движения по камере телефона за 2–5 минут. Подсказывает, какие мышцы, вероятно, перегружены или недорабатывают, и дает упражнения. Бета-версия. Это оценка, не диагноз.">
-<meta name="theme-color" content="#F4F3EF">
+<meta name="theme-color" content="#F3F6F6">
 <meta property="og:title" content="BodyPassport — карта тела по камере телефона">
 <meta property="og:description" content="Короткий видеотест по камере: какие мышцы, вероятно, перегружены, какие недорабатывают, и что с этим делать. Бета.">
 <meta property="og:image" content="https://bodypassport.vercel.app/img/og.jpg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
@@ -23,21 +23,23 @@
    Сетка 8pt, 6 радиусов, 3 тени, единая шкала шрифтов. Контраст текста ≥4.5:1 на --bg и --surface. */
 :root{
   /* поверхность */
-  --bg:#F4F3EF;--surface:#FFFFFF;--surface-2:#EEEDE8;--line:#E2E0DA;--line-2:#ECEAE5;--figure:#E9E7E1;
+  --bg:#F3F6F6;--surface:#FFFFFF;--surface-2:#E9EFF0;--line:#DCE4E6;--line-2:#E6ECEE;--figure:#E3EAEC;
   /* текст */
-  --ink:#111418;--text:#16181C;--sub:#5B6068;--faint:#868B93;/* --faint только иконки и линии */
-  --focus:#2A5CB8;
+  --ink:#13212B;--text:#13212B;--sub:#5A6872;--faint:#8796A0;/* --faint только иконки и линии */
+  --focus:#0E5A6B;
+  /* бренд: петроль для кнопок и активных элементов; лайм (--signal) только на тёмном фоне камеры */
+  --brand:#0E5A6B;--brand-s:#E3EEF0;--accent:#E9A23B;
   /* источник вывода */
-  --src-measured:#111418;--src-hyp:#2A5CB8;
+  --src-measured:#13212B;--src-hyp:#2A5CB8;
   /* состояния мышц: заливка / текст / подложка */
-  --over:#D9484F;--over-t:#B3343B;--over-s:#FBE6E4;
-  --short:#E07A2E;--short-t:#9E4E0E;--short-s:#FCEBDC;
-  --weak:#3A72D8;--weak-t:#2A5CB8;--weak-s:#E3EBFA;
-  --ok:#2D9467;--ok-t:#1E7149;--ok-s:#DFF1E7;
+  --over:#C8414A;--over-t:#A8323B;--over-s:#FBE6E4;
+  --short:#A3561A;--short-t:#8A4512;--short-s:#FCEBDC;
+  --weak:#2F6BD8;--weak-t:#24539F;--weak-s:#E3EBFA;
+  --ok:#26775D;--ok-t:#1E6A51;--ok-s:#DFF1E7;
   --edge:#8A6A00;--edge-s:#F6EFD6;
   /* тёмная тема: камера, упражнения, плашки 3D */
   --cam-bg:#0A0C0F;--cam-glass:rgba(14,16,20,.74);--cam-line:rgba(255,255,255,.14);
-  --cam-text:#F5F6F7;--cam-sub:#B9BDC4;--signal:#D4F25A;--cam-warn:#FFB547;--dark:#111418;
+  --cam-text:#F5F6F7;--cam-sub:#B9BDC4;--signal:#D4F25A;--cam-warn:#FFB547;--dark:#13212B;
   /* шрифт */
   --font:Onest,system-ui,-apple-system,sans-serif;--mono:'JetBrains Mono',ui-monospace,SFMono-Regular,monospace;
   --fs-num:56px;--fs-h1:30px;--fs-h2:22px;--fs-h3:17px;--fs-body:16px;--fs-sm:14px;--fs-xs:12px;--fs-cam:44px;--fs-cam-sub:20px;
@@ -87,7 +89,7 @@ button,a,.list-item,[data-k],[data-id]{transition:transform var(--d1) var(--ease
 .ic.s{width:18px;height:18px}
 
 /* кнопки */
-.btn{display:flex;align-items:center;justify-content:center;gap:var(--s2);width:100%;height:var(--btn-h);border:0;border-radius:var(--r-md);background:var(--ink);color:#fff;font:600 17px var(--font);letter-spacing:-.01em;cursor:pointer}
+.btn{display:flex;align-items:center;justify-content:center;gap:var(--s2);width:100%;height:var(--btn-h);border:0;border-radius:var(--r-md);background:var(--brand);color:#fff;font:600 17px var(--font);letter-spacing:-.01em;cursor:pointer}
 .btn[disabled]{opacity:.4;pointer-events:none}
 .btn .meta{font:500 13px var(--mono);color:var(--cam-sub)}
 .btn.ghost{background:transparent;color:var(--sub);height:var(--tap);font:500 15px var(--font)}
@@ -193,8 +195,8 @@ details>summary{cursor:pointer;list-style:none;min-height:var(--tap);display:fle
 /* шторка */
 .sheet{position:fixed;inset:0;background:rgba(10,12,16,.4);display:flex;align-items:flex-end;z-index:20;animation:fdin var(--d3) var(--ease-out)}
 .sheet>div{background:var(--bg);width:100%;max-width:480px;max-height:92dvh;overflow:auto;margin:0 auto;border-radius:var(--r-xl) var(--r-xl) 0 0;padding:28px var(--gutter) calc(env(safe-area-inset-bottom) + 28px);position:relative;animation:up var(--d3) var(--ease-out);box-shadow:var(--sh-3)}
-#betabar{position:fixed;top:0;left:0;right:0;z-index:20;height:calc(30px + env(safe-area-inset-top));padding:env(safe-area-inset-top) 12px 0;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--signal);color:var(--ink);font:500 12px Onest,sans-serif}
-#betabar button{border:0;background:var(--ink);color:#fff;border-radius:999px;padding:4px 10px;font:600 11px Onest,sans-serif;cursor:pointer}
+#betabar{position:fixed;top:0;left:0;right:0;z-index:20;height:calc(30px + env(safe-area-inset-top));padding:env(safe-area-inset-top) 12px 0;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--brand);color:#fff;font:500 12px Onest,sans-serif}
+#betabar button{border:0;background:#fff;color:var(--brand);border-radius:999px;padding:4px 10px;font:600 11px Onest,sans-serif;cursor:pointer}
 body.beta #app{padding-top:calc(30px + env(safe-area-inset-top))}body.beta .scr{min-height:calc(100dvh - 30px - env(safe-area-inset-top))}
 body:has(.cam) #betabar{display:none}body.beta:has(.cam) #app{padding-top:0}
 #bugtab{position:fixed;right:0;top:46%;z-index:15;writing-mode:vertical-rl;transform:rotate(180deg);background:var(--ink);color:#fff;border:0;border-radius:0 10px 10px 0;padding:10px 5px;font:600 11px Onest;letter-spacing:.04em;opacity:.55;cursor:pointer}
