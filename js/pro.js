@@ -200,7 +200,7 @@ async function specialtyScreen(after) {
 const QNAMES = { stand: 'Стойка', ohs_front: 'Присед лицом', sls_r: 'Правая нога', sls_l: 'Левая нога', thold: 'Руки в стороны', t_hold: 'Руки в стороны', bends: 'Наклоны', calf_r: 'Носок, правая', calf_l: 'Носок, левая', side_stand: 'Стойка боком', ohs_side: 'Присед боком', ohs_back: 'Присед спиной' };
 const UNIT_NAMES = { profile: 'Стойка боком', stand: 'Стойка', ohs_front: 'Присед лицом', sls: 'На одной ноге', thold: 'Руки в стороны', bends: 'Наклоны', calf: 'На носок', side: 'Боком', back: 'Спиной' };
 const PAIN = [['neck', 'Шея'], ['shoulder', 'Плечо'], ['upper_back', 'Грудной отдел'], ['low_back', 'Поясница'], ['hip', 'Таз, бедро'], ['knee', 'Колено'], ['foot', 'Стопа']];
-let HYP3D = false; const REVEALED = new Set(); // «Итог» оценки анимируется при первом открытии
+let HYP3D = false, HYPOPEN = false; const REVEALED = new Set(); // «Итог» оценки анимируется при первом открытии
 const seen2 = (an, s) => [...new Set(an.findings.filter(f => f.muscles.some(m => m.id === s.id && (m.side === s.side || m.side === 'BOTH'))).map(f => f.observed))]; // специалист смотрит гипотезу в 3D: режим сохраняется при правках
 const STATES = [['OK', 'Норма', 0], ['HYPER', 'Перегрузка', .8], ['SHORT', 'Зажата', .7], ['WEAK', 'Слабость', -.8]];
 
@@ -792,11 +792,12 @@ export async function result(aid, view = 'measured') {
   if (view === 'hyp') { const chk = a.check || {}, list = hypList(a, sp, top);
     const testable = list.filter(s => C.muscles[s.id] && C.muscles[s.id].proTest);
     body = `
-    <div class="card" style="padding:12px 8px"><div class="seg" style="margin:0 4px"><button id="hf" class="on">Спереди</button><button id="hb">Сзади</button>${device.webgl2 ? '<button id="h3">3D</button>' : ''}</div>
+    <div class="card" style="padding:12px 8px"><div class="seg" style="margin:0 4px"><button id="hf" class="on">Спереди</button><button id="hb">Сзади</button>${device.webgl2 ? '<button id="h3" style="display:none">3D</button>' : ''}</div>
       <div id="hvis" style="width:100%;max-width:360px;margin:8px auto 0"><canvas id="heat" style="width:100%;display:block"></canvas></div>
       <div id="hz" class="row" style="display:none;gap:6px;flex-wrap:wrap;justify-content:center;margin:8px 8px 0">${[['all', 'Всё тело'], ['head', 'Шея'], ['shoulders', 'Плечи'], ['back', 'Спина'], ['pelvis', 'Таз'], ['knees', 'Колени'], ['feet', 'Стопы']].map(([z, n]) => `<button class="pill" data-z="${z}">${n}</button>`).join('')}</div></div>
-    <p class="sub" style="font-size:14px">Черновик по замеру и цепям. Проверьте руками: в отчёт пойдёт ваша версия. Уверенность считается по опыту, исследованиям и замеру.</p>
-    <div id="hlist" style="display:flex;flex-direction:column;gap:var(--s3)">${list.map((s, i) => hypCard(a, an, s, i === list.findIndex(x => C.muscles[x.id] && C.muscles[x.id].proTest && !chk[x.key]), evid)).join('')}</div>`;
+    <details class="card" id="hdet" style="padding:14px 16px"${HYPOPEN ? ' open' : ''}><summary style="font-weight:600;cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px"><span style="flex:1">Проверка руками · ${list.length} ${list.length % 10 === 1 && list.length % 100 !== 11 ? 'мышца' : [2, 3, 4].includes(list.length % 10) && ![12, 13, 14].includes(list.length % 100) ? 'мышцы' : 'мышц'}</span>${ic('chevron-down', 's')}</summary>
+      <p class="sub" style="font-size:13px;margin-top:6px">Черновик по замеру. В отчёт пойдёт ваша версия.</p>
+      <div id="hlist" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s3)">${list.map((s, i) => hypCard(a, an, s, i === list.findIndex(x => C.muscles[x.id] && C.muscles[x.id].proTest && !chk[x.key]), evid)).join('')}</div></details>`;
     dock = `<div class="dock bar"><div style="flex:1;font-size:14px;align-self:center">Проверено руками <b class="num" id="hcnt">${testable.filter(s => chk[s.key]).length} из ${testable.length}</b></div><button class="btn line" id="addm" style="width:auto;padding:0 18px">${ic('plus', 's')}Мышца</button></div>`; }
   if (view === 'plan') { const pl = a.plan || { ex: plan(top), text: '' }; const recs = muscleRecs(a);
     body = `<div class="card"><div class="row"><div class="eyebrow" style="flex:1">Рекомендации по мышцам</div>${recs.length ? '<button class="pill" id="addall" style="font-size:12px">Добавить все</button>' : ''}</div>
@@ -807,14 +808,14 @@ export async function result(aid, view = 'measured') {
       <div class="card row"><span style="flex:1">Повторный тест</span><input type="date" id="nd" value="${Number.isFinite(+a.nextDate) && +a.nextDate > 0 ? new Date(+a.nextDate).toISOString().slice(0, 10) : ''}" class="field" style="width:auto;height:48px;padding:0 10px;font-size:15px"></div>`; }
   go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>${esc(c.name)}</b><small>${esc(a.templateName)} · ${fmtDate(a.date)}${qa != null ? ' · качество ' + qa : ''}</small></div>
       <button class="round" id="rep" aria-label="Отчёт клиенту">${ic('file-text')}</button>${a.prevId ? `<button class="round" id="cmp" aria-label="Было → стало">${ic('arrow-right-left')}</button>` : ''}<button class="link" id="fin" style="padding:0 8px">${a.draft ? 'Сохранить' : 'Готово'}</button></div>
-    <div class="pad" style="margin-top:var(--s2)"><div class="seg">${tab('measured', 'Итог')}${tab('hyp', 'Гипотеза')}${tab('plan', 'Назначение')}</div></div>
+    <div class="pad" style="margin-top:var(--s2)"><div class="seg">${tab('measured', 'Итог')}${tab('hyp', 'Визуализация')}${tab('plan', 'Назначение')}</div></div>
     <div class="pad" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s3);padding-bottom:var(--s5)">${body}</div>${dock}</div>`);
   document.querySelectorAll('[data-v]').forEach(b => b.onclick = async () => { await savePlan(a); result(aid, b.dataset.v); });
   if ($('#rc')) $('#rc').onclick = async () => { $('#rc').textContent = 'Считаю…'; await recalc(a); const y = scrollY; await result(aid, view); scrollTo(0, y); };
   if (view === 'measured') { let bk = numLabels.filter(l => sp.find(x => x.key === l.key).back).length > numLabels.length / 2, first = !REVEALED.has(aid); REVEALED.add(aid); const lab = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 3)).map(s => ({ key: s.key, title: (SHORT[s.id] || C.muscles[s.id].name) + (s.side === 'RIGHT' ? ' · П' : ' · Л'), sub: toneText(s, 0).toLowerCase(), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
     const focus = onlyKeys(sp, new Set([...mainKeys(a, sp), ...numLabels.map(l => l.key)])); const dh = () => drawHeat($('#heat'), focus, bk, null, numLabels, { reveal: first }); dh(); first = false; if (bk) { $('#mb2').classList.add('on'); $('#mf').classList.remove('on'); }
     $('#mf').onclick = () => { bk = false; $('#mf').classList.add('on'); $('#mb2').classList.remove('on'); dh(); }; $('#mb2').onclick = () => { bk = true; $('#mb2').classList.add('on'); $('#mf').classList.remove('on'); dh(); };
-    if ($('#tohyp')) $('#tohyp').onclick = () => result(aid, 'hyp');
+    if ($('#tohyp')) $('#tohyp').onclick = () => { HYPOPEN = true; result(aid, 'hyp'); };
     if ($('#toplan')) $('#toplan').onclick = () => result(aid, 'plan');
     if ($('#mkplan')) $('#mkplan').onclick = async () => { await savePlan(a); a.plan = a.plan || { ex: [], text: '' }; a.plan.ex = [...new Set([...a.plan.ex, ...muscleRecs(a).flatMap(r => r.all)])].slice(0, 8); await put('assessments', a); result(aid, 'plan'); };
     if ($('#after')) $('#after').onclick = async () => { a.draft = false; await put('assessments', a); newAssessment(a.clientId, a.id); };
@@ -839,12 +840,16 @@ export async function result(aid, view = 'measured') {
     const draw2 = () => { if (mode3) { if (v3) v3.turn(back); return; } drawHeat($('#heat'), cur, back, null, lab); }; draw2();
     $('#hf').onclick = async () => { if (mode3) await $('#h3').onclick(); back = false; $('#hf').classList.add('on'); $('#hb').classList.remove('on'); draw2(); }; $('#hb').onclick = async () => { if (mode3) await $('#h3').onclick(); back = true; $('#hb').classList.add('on'); $('#hf').classList.remove('on'); draw2(); };
     // 3D-модель с той же картой (с правками специалиста); касание мышцы прокручивает к ее карточке
-    if ($('#h3')) $('#h3').onclick = async () => { mode3 = !mode3; HYP3D = mode3; $('#h3').classList.toggle('on', mode3); $('#hf').classList.toggle('on', !mode3 && !back); $('#hb').classList.toggle('on', !mode3 && back); $('#hz').style.display = mode3 ? 'flex' : 'none';
+    if ($('#h3')) $('#h3').onclick = async () => { mode3 = !mode3; HYP3D = mode3; $('#hf').classList.toggle('on', !back); $('#hb').classList.toggle('on', back); $('#hz').style.display = mode3 ? 'flex' : 'none';
       if (!mode3) { if (v3) v3.dispose(); v3 = null; $('#hvis').style.height = ''; $('#hvis').innerHTML = '<canvas id="heat" style="width:100%;display:block"></canvas>'; draw2(); return; }
-      $('#hvis').style.height = '380px'; try { v3 = await body3D($('#hvis'), cur, key => { const el = document.querySelector(`[data-card="${key}"]`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }); }
-      catch (e) { toast('3D не загрузилось, показываю схему'); mode3 = true; return $('#h3').onclick(); }
+      $('#hvis').style.height = '380px'; try { v3 = await body3D($('#hvis'), cur, key => { const el = document.querySelector(`[data-card="${key}"]`); if ($('#hdet')) $('#hdet').open = true; if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }); }
+      catch (e) { toast('3D не загрузилось, показываю схему'); mode3 = false; $('#hz').style.display = 'none'; $('#hvis').style.height = ''; $('#hvis').innerHTML = '<canvas id="heat" style="width:100%;display:block"></canvas>'; return draw2(); }
       v3.turn(back); document.querySelectorAll('[data-z]').forEach(b => b.onclick = () => v3.focus(b.dataset.z)); };
-    if (HYP3D && $('#h3')) { HYP3D = false; $('#h3').click(); }
+    // визуализация: реалистичная 3D-модель по умолчанию (точные границы мышц); без WebGL остается схема
+    if ($('#h3')) $('#h3').click();
+    $('#hf').onclick = () => { back = false; $('#hf').classList.add('on'); $('#hb').classList.remove('on'); if (mode3 && v3) v3.turn(false); else draw2(); };
+    $('#hb').onclick = () => { back = true; $('#hb').classList.add('on'); $('#hf').classList.remove('on'); if (mode3 && v3) v3.turn(true); else draw2(); };
+    if ($('#hdet')) $('#hdet').ontoggle = e => { HYPOPEN = e.target.open; };
     // правка на месте: перерисовываются только карточка, схема или 3D и счетчик
     const refresh = key => { const all = proSpots(a); cur = onlyKeys(all, hk()); const s = all.find(x => x.key === key);
       const el = document.querySelector(`[data-card="${key}"]`); if (el && s) { const open = el.querySelector('details') && el.querySelector('details').open; el.outerHTML = hypCard(a, an, s, open, evid); bindCard(document.querySelector(`[data-card="${key}"]`)); }
