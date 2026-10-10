@@ -254,22 +254,66 @@ export const shapeOf = s => SHAPES[s.id] ? mirrorX(SHAPES[s.id], s.side) : null;
 const ell = ([x, y, rx, ry, r]) => { const p = new Path2D(); p.ellipse(x, y, rx, ry, r * Math.PI / 180, 0, Math.PI * 2); return p; };
 // точка зоны для маркера, подписи и касания: центр первой фигуры мышцы, иначе координаты из каталога
 const anchor = s => { const sh = shapeOf(s); return sh ? { ...s, x: sh[0][0] / 200, y: sh[0][1] / 440 } : s; };
+
+// ---------- снимок 3D-модели для схемы: реалистичный силуэт и точные границы мышц вместо овалов ----------
+// Один общий невидимый WebGL-рендерер; кадр рисуется синхронно, когда модель уже загружена.
+let snap3 = null, snapFail = false;
+const SNAP_HT = 1.08, SNAP_HW = SNAP_HT * 200 / 440; // кадр 200×440, как у плоской схемы
+/** Загрузить three.js и модель заранее; без WebGL2 или при ошибке остается плоская схема. */
+export async function ready3D() {
+  if (snap3) return snap3; if (snapFail || !device.webgl2) throw new Error('no 3d');
+  try { const [THREE, m] = await Promise.all([import('three'), loadMesh()]);
+    const geo = new THREE.BufferGeometry(), p2 = new Float32Array(m.nv * 3), n2 = new Float32Array(m.nv * 3), col = new Float32Array(m.nv * 3);
+    for (let i = 0; i < m.nv; i++) { p2[i * 3] = m.pos[i * 3]; p2[i * 3 + 1] = m.pos[i * 3 + 2]; p2[i * 3 + 2] = -m.pos[i * 3 + 1];
+      n2[i * 3] = m.nrm[i * 3] / 127; n2[i * 3 + 1] = m.nrm[i * 3 + 2] / 127; n2[i * 3 + 2] = -m.nrm[i * 3 + 1] / 127; }
+    geo.setAttribute('position', new THREE.BufferAttribute(p2, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(n2, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.setIndex(new THREE.BufferAttribute(m.idx, 1));
+    const scene = new THREE.Scene(), mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .85, metalness: 0 });
+    const obj = new THREE.Mesh(geo, mat), cz = (m.meta.zmin + m.meta.zmax) / 2, k = 2 / (m.meta.zmax - m.meta.zmin); obj.position.y = -cz;
+    const root = new THREE.Group(); root.add(obj); root.scale.setScalar(k); scene.add(root);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x8a7f70, 1.1)); const dl = new THREE.DirectionalLight(0xffffff, 2.2); dl.position.set(1, 2, 3); scene.add(dl);
+    const fl = new THREE.DirectionalLight(0xffffff, .6); fl.position.set(-1, 0, 2); scene.add(fl);
+    const cam = new THREE.OrthographicCamera(-SNAP_HW, SNAP_HW, SNAP_HT, -SNAP_HT, .1, 10); cam.position.set(0, 0, 4);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }); renderer.setClearColor(0xffffff, 0);
+    snap3 = { m, geo, col, root, scene, cam, renderer, cz, k };
+    return snap3;
+  } catch (e) { snapFail = true; throw e; }
+}
+/** Нарисовать модель в canvas-контекст (в координатах 200×440) и вернуть точки мышц в долях кадра. */
+function draw3D(spots, back, wpx, hpx) {
+  const S = snap3; paintMesh(S.m, spots, S.col); S.geo.attributes.color.needsUpdate = true;
+  S.root.rotation.y = back ? Math.PI : 0;
+  if (S.renderer.domElement.width !== wpx || S.renderer.domElement.height !== hpx) S.renderer.setSize(wpx, hpx, false);
+  S.renderer.render(S.scene, S.cam);
+  const img = document.createElement('canvas'); img.width = wpx; img.height = hpx; img.getContext('2d').drawImage(S.renderer.domElement, 0, 0);
+  const order = S.m.meta.order, pos = new Map();
+  for (const s of spots) { const i = order.indexOf(s.id); if (i < 0) continue; const c = S.m.meta.blobs[1 + i * 2 + (s.side === 'RIGHT' ? 1 : 0)]; if (!c) continue;
+    const X = c[0] * S.k * (back ? -1 : 1), Y = (c[2] - S.cz) * S.k;
+    pos.set(s.key, [(X + SNAP_HW) / (2 * SNAP_HW), (SNAP_HT - Y) / (2 * SNAP_HT)]); }
+  return { img, pos };
+}
 export function drawHeat(cv, spots0, back, selected, labels = [], opts = {}) {
-  const spots = spots0.map(anchor), mine = spots.filter(s => s.back === back);
+  const use3 = !!snap3 && !opts.flat; cv._tok = (cv._tok || 0) + 1; const tok = cv._tok;
+  if (!snap3 && !snapFail && device.webgl2 && !opts.flat) ready3D().then(() => { if (cv.isConnected && cv._tok === tok) drawHeat(cv, spots0, back, selected, labels, { ...opts, reveal: false }); }).catch(() => {});
+  let spots = spots0.map(anchor), mine = spots.filter(s => s.back === back);
   const parts = bodyParts();
   // все фигуры этой стороны: тонкий контур как анатомическая подсказка, мышцы с отклонением заливаются цветом состояния
   const outline = Object.entries(SHAPES).filter(([id]) => C.muscles && C.muscles[id] && (C.muscles[id].view === 'back') === back).flatMap(([id]) => [...SHAPES[id], ...mirrorX(SHAPES[id], 'RIGHT')]).map(ell);
   const fillShapes = k => mine.filter(s => Math.abs(s.tone) > .05 && SHAPES[s.id]).sort((a, b) => Math.abs(a.tone) - Math.abs(b.tone)).flatMap(s => { const [r, g, b] = ramp(s.tone * k * (s.derived && !s.edited ? .75 : 1)); return shapeOf(s).map(e => [ell(e), `rgb(${r},${g},${b})`]); });
   const numbered = labels.length && labels.every(l => l.n), vw = numbered ? 200 : VW, ox = numbered ? 0 : OX;
   const ctx = cv.getContext('2d'); const sc = cv.clientWidth * devicePixelRatio / vw; cv.width = vw * sc; cv.height = 440 * sc;
+  // реалистичная модель: точки мышц берем из проекции модели, а не из овалов плоской схемы
+  let fig3 = null; if (use3) { try { fig3 = draw3D(spots0, back, Math.round(200 * sc), Math.round(440 * sc));
+    const at = x => { const q = fig3.pos.get(x.key); return q ? { ...x, x: q[0], y: q[1] } : x; }; spots = spots.map(at); mine = mine.map(at); } catch (e) { fig3 = null; } }
   const shown = labels.filter(l => mine.some(s => s.key === l.key));
   const marks = mine.filter(s => s.k !== 'OK' && (!s.derived || s.byChain || s.edited) && !shown.some(l => l.key === s.key && l.n)).sort((a, b) => Math.abs(b.tone) - Math.abs(a.tone)).slice(0, 8);
   const render = (figA, toneK, markT, labA) => {
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); ctx.scale(sc, sc); ctx.save(); ctx.translate(ox, 0); ctx.globalAlpha = figA;
+    if (fig3) { ctx.drawImage(fig3.img, 0, 0, 200, 440); ctx.globalAlpha = 1; } else {
     ctx.fillStyle = '#E9E7E1'; parts.forEach(pp => ctx.fill(pp));
     ctx.strokeStyle = 'rgba(17,20,24,.10)'; ctx.lineWidth = .8; for (const pp of parts) { ctx.save(); ctx.clip(pp); outline.forEach(e => ctx.stroke(e)); ctx.restore(); }
     if (toneK > 0) { const fs = fillShapes(toneK); for (const pp of parts) { ctx.save(); ctx.clip(pp); ctx.globalAlpha = figA * .88; for (const [e, c] of fs) { ctx.fillStyle = c; ctx.fill(e); } ctx.restore(); } ctx.globalAlpha = figA; }
-    ctx.strokeStyle = '#D5D2CA'; ctx.lineWidth = 1.2; parts.forEach(pp => ctx.stroke(pp)); ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#D5D2CA'; ctx.lineWidth = 1.2; parts.forEach(pp => ctx.stroke(pp)); ctx.globalAlpha = 1; }
     marks.forEach((s, i) => { const t = markT(i); if (t <= 0) return; const sc2 = t < .7 ? .4 + (1.15 - .4) * (t / .7) : 1.15 - .15 * ((t - .7) / .3);
       drawMark(ctx, s.x * 200, s.y * 440, s.k, { derived: s.derived && !s.edited, scale: t >= 1 ? 1 : sc2, alpha: Math.min(1, t * 2) }); });
     for (const l of shown.filter(l => l.n)) { const s = mine.find(q => q.key === l.key); ctx.globalAlpha = Math.min(1, labA * 2 + (markT(0) > 0 ? 1 : 0));
@@ -323,17 +367,11 @@ async function loadMesh() {
   return mesh3d;
 }
 /** Фоновая подгрузка 3D, пока человек смотрит карту: кнопка 3D потом открывается сразу. */
-export function preload3D() { const go = () => { import('three'); import('three/addons/controls/OrbitControls.js'); loadMesh(); };
+export function preload3D() { const go = () => { import('three'); import('three/addons/controls/OrbitControls.js'); ready3D().catch(() => {}); };
   if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 3000 }); else setTimeout(go, 1500); }
-export async function body3D(container, spots, onPick, opts = {}) {
-  container.style.borderRadius = '32px'; container.style.overflow = 'hidden'; container.style.background = '#fff';
-  container.innerHTML = '<div class="skel" style="height:100%"></div>';
-  const THREE = await import('three');
-  const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
-  const m = await loadMesh(); const order = m.meta.order;
-  const col = new Float32Array(m.nv * 3), lin = c => (c / 255) ** 2.2, BASE3 = ramp(0).map(lin);
-  // раскраска по тону: пересчитывается и при правке специалиста, без пересоздания сцены
-  const paint = (spots, out) => {
+// раскраска сетки по тону: и для живой 3D-модели, и для снимков схемы
+function paintMesh(m, spots, out) { const order = m.meta.order, lin = c => (c / 255) ** 2.2, BASE3 = ramp(0).map(lin);
+
     const tone = new Map(); for (const s of spots) { const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0); if (order.indexOf(s.id) >= 0) tone.set(g, s.tone); }
     const blobs = Object.entries(m.meta.blobs).map(([g, c]) => [+g, c]).filter(([g]) => Math.abs(tone.get(g) || 0) > .02);
     for (let i = 0; i < m.nv; i++) { const g = m.grp[i];
@@ -346,7 +384,15 @@ export async function body3D(container, spots, onPick, opts = {}) {
         v = Math.max(-1, Math.min(1, num / den)); }
       if (g === 0) v *= .7; const [r, gg, b] = ramp(v);
       // цвета шкалы заданы в sRGB, а рендер считает в линейном пространстве: переводим, иначе модель выглядит блеклой
-      out[i * 3] = lin(r); out[i * 3 + 1] = lin(gg); out[i * 3 + 2] = lin(b); } };
+      out[i * 3] = lin(r); out[i * 3 + 1] = lin(gg); out[i * 3 + 2] = lin(b); } }
+export async function body3D(container, spots, onPick, opts = {}) {
+  container.style.borderRadius = '32px'; container.style.overflow = 'hidden'; container.style.background = '#fff';
+  container.innerHTML = '<div class="skel" style="height:100%"></div>';
+  const THREE = await import('three');
+  const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
+  const m = await loadMesh(); const order = m.meta.order;
+  const col = new Float32Array(m.nv * 3), lin = c => (c / 255) ** 2.2, BASE3 = ramp(0).map(lin);
+  const paint = (spots, out) => paintMesh(m, spots, out);
   paint(spots, col);
   const geo = new THREE.BufferGeometry();
   // модель: x человека, z вверх, перед = −y → Three: X = x, Y = z, Z = −y

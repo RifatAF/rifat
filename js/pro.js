@@ -6,7 +6,7 @@ import { npsCard, bindNps, installCard, bindInstall, installNow, canInstall, fee
 import { meSync, logout, getMe } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
 import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS } from './plans.js';
-import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast } from './core.js';
+import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast, preload3D } from './core.js';
 import { cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen } from './app.js';
 
 // активные клиенты занимают слоты; пример и закрытые (пришли сверх лимита) не считаются
@@ -200,7 +200,7 @@ async function specialtyScreen(after) {
 const QNAMES = { stand: 'Стойка', ohs_front: 'Присед лицом', sls_r: 'Правая нога', sls_l: 'Левая нога', thold: 'Руки в стороны', t_hold: 'Руки в стороны', bends: 'Наклоны', calf_r: 'Носок, правая', calf_l: 'Носок, левая', side_stand: 'Стойка боком', ohs_side: 'Присед боком', ohs_back: 'Присед спиной' };
 const UNIT_NAMES = { profile: 'Стойка боком', stand: 'Стойка', ohs_front: 'Присед лицом', sls: 'На одной ноге', thold: 'Руки в стороны', bends: 'Наклоны', calf: 'На носок', side: 'Боком', back: 'Спиной' };
 const PAIN = [['neck', 'Шея'], ['shoulder', 'Плечо'], ['upper_back', 'Грудной отдел'], ['low_back', 'Поясница'], ['hip', 'Таз, бедро'], ['knee', 'Колено'], ['foot', 'Стопа']];
-let HYP3D = false, HYPOPEN = false; const REVEALED = new Set(); // «Итог» оценки анимируется при первом открытии
+let HYP3D = false, HYPOPEN = false, RES_A = null; const REVEALED = new Set(); // «Итог» оценки анимируется при первом открытии
 const seen2 = (an, s) => [...new Set(an.findings.filter(f => f.muscles.some(m => m.id === s.id && (m.side === s.side || m.side === 'BOTH'))).map(f => f.observed))]; // специалист смотрит гипотезу в 3D: режим сохраняется при правках
 const STATES = [['OK', 'Норма', 0], ['HYPER', 'Перегрузка', .8], ['SHORT', 'Зажата', .7], ['WEAK', 'Слабость', -.8]];
 
@@ -226,7 +226,7 @@ function slotWidget(s) {
     <div style="height:6px;border-radius:3px;background:var(--surface);margin-top:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${full ? 'var(--over)' : 'var(--ink)'}"></div></div>
     ${full ? '<div style="font-size:13px;margin-top:8px">Новых клиентов тестируйте свободно. Ретест еще одного клиента откроется в PRO или когда закончится 30 дней ведения у кого-то из текущих.</div>' : ''}</div></div>`;
 }
-export async function proHome(query = '', pulled = null) {
+export async function proHome(query = '', pulled = null) { if (device.webgl2) preload3D(); // схемы в карточках и отчетах рисуются по 3D-модели
   track('pro_open');
   localStorage.setItem('bp_mode', 'pro');
   const lc = await legacyCount().catch(() => 0);
@@ -278,7 +278,7 @@ export async function proHome(query = '', pulled = null) {
     <div class="pad row" style="align-items:flex-start">${myPhoto ? `<img src="${myPhoto}" alt="" width="44" height="44" style="border-radius:50%;object-fit:cover;flex:none;margin:2px 12px 0 0" id="mph">` : ''}<div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--sub)">${esc(name)}${spName ? ' · ' + esc(spName.toLowerCase()) : ''}</div><h1>Сегодня</h1><div style="font-size:14px;color:var(--sub);margin-top:2px">${today[0].toUpperCase() + today.slice(1)}</div></div><button class="round" id="hcal" aria-label="Календарь" style="margin-right:6px">${ic('calendar')}</button><button class="round" id="menu" aria-label="Меню">${ic('menu')}</button></div>
     ${slotWidget(slots((await trackedIds()).size))}
     ${real.length ? `<div class="pad kpi" style="margin-top:var(--s4)">${kv.map(([t, v]) => `<div><b style="color:${v && v !== '—' && v !== '0%' ? 'var(--ink)' : 'var(--faint)'}">${v}</b><span>${t}</span></div>`).join('')}</div>` : ''}
-    <div class="pad tools" style="margin-top:var(--s2)"><button class="tool" id="join">${ic('mail')}Тест по ссылке</button><button class="tool" id="rtq">${ic('rotate-ccw')}Ретест</button><button class="tool" id="repq">${ic('file-text')}Отчёт</button><button class="tool" id="cmpq">${ic('arrow-right-left')}Было→стало</button></div>
+    <div class="pad tools" id="toolsH" hidden><button class="tool" id="join">${ic('mail')}Тест по ссылке</button><button class="tool" id="rtq">${ic('rotate-ccw')}Ретест</button><button class="tool" id="repq">${ic('file-text')}Отчёт</button><button class="tool" id="cmpq">${ic('arrow-right-left')}Было→стало</button></div>
     ${review.length ? h3('Нужно посмотреть', review.length) + `<div class="pad"><div class="group">${review.map(a => `<div class="list-item" data-a="${a.id}" style="border-radius:0;padding:var(--s3) 0;background:transparent"><span class="dot"></span><div style="flex:1;min-width:0"><b>${esc(byId[a.clientId].name)}</b><div style="font-size:13px;color:var(--sub)">${a.source === 'home' ? 'прошёл тест по ссылке' : 'гипотеза не подтверждена'} · ${esc(a.templateName || 'оценка')} · ${fmtDate(a.date)}</div></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div></div>` : ''}
     ${soon.length ? h3('Ретесты', soon.length) + `<div class="pad"><div class="group">${soon.map(({ c, a }) => { const d = Math.ceil((a.nextDate - Date.now()) / DAY);
       return `<div class="row" style="min-height:64px"><span class="step-n" style="width:56px;color:${d < 0 ? 'var(--over-t)' : 'var(--sub)'}">${d < 0 ? '−' + (-d) + ' дн.' : d === 0 ? 'сегодня' : '+' + d + ' дн.'}</span><div style="flex:1;min-width:0;cursor:pointer" data-id="${c.id}"><b>${esc(c.name)}</b><div style="font-size:13px;color:var(--sub)">${fmtDate(a.nextDate)}</div></div><button class="pill" data-msg="${c.id}">Напомнить</button></div>`; }).join('')}</div></div>` : ''}
@@ -291,11 +291,21 @@ export async function proHome(query = '', pulled = null) {
     ${iosRisk ? `<div class="pad" style="margin-top:var(--s3)"><div class="card" style="font-size:14px;line-height:1.45"><b>Защитите базу клиентов</b><div style="margin-top:6px">Safari на iPhone может стереть кабинет, если не открывать его неделю. Установите приложение на экран «Домой»: «Поделиться» → «На экран Домой», и раз в неделю сохраняйте копию.</div><button class="btn line" id="bk2" style="height:44px;margin-top:10px">Сохранить копию сейчас</button></div></div>` : ''}
     ${needBackup ? `<div class="pad" style="margin-top:var(--s3)"><button class="link" id="bk" style="width:100%;color:var(--sub);font-weight:500;font-size:13px">Клиенты хранятся только на этом телефоне · <u>сохранить копию с паролем</u></button></div>` : ''}
     ${list.length ? installCard() : ''}
-  </div><div class="dock"><button class="btn" id="new">${ic('plus', 's')}${({ trainer: 'Скрининг клиента', manual: 'До сеанса', sport: 'Спортивный тест' })[sp] || 'Новая оценка'}</button></div></div>`);
+  </div><div class="dock"><button class="btn" id="new">${ic('plus', 's')}Новое</button></div></div>`);
   if (pulled && pulled.length) toast('Пришли результаты по ссылке: ' + pulled.join(', '));
   if ($('#demo')) $('#demo').onclick = openDemo;
   bindInstall(); if ($('#mph')) $('#mph').onclick = profileForm; 
-  $('#new').onclick = () => quickStart(); $('#join').onclick = sendJoin; $('#menu').onclick = proMenu; $('#hcal').onclick = calendarScreen; if ($('#bk')) $('#bk').onclick = backup; if ($('#bk2')) $('#bk2').onclick = backup;
+  // одна кнопка «+»: все действия в одном списке, главный экран без лишних кнопок
+  $('#new').onclick = () => { const d = document.createElement('div'); d.className = 'sheet';
+    const it = (id, icon, t, sub) => `<button class="row-link" data-act="${id}">${ic(icon, 's')}<span style="flex:1;text-align:left"><b style="font-weight:600">${t}</b><br><small class="sub" style="font-size:13px">${sub}</small></span>${ic('chevron-right', 's chev')}</button>`;
+    d.innerHTML = `<div><h2>Что сделать?</h2><div class="group" style="margin-top:var(--s3)">
+      ${it('qs', 'camera', ({ trainer: 'Скрининг клиента', manual: 'До сеанса', sport: 'Спортивный тест' })[sp] || 'Новая оценка', 'Клиент рядом, тест на этом телефоне')}
+      ${it('join', 'mail', 'Тест по ссылке', 'Клиент пройдет тест дома')}
+      ${it('rtq', 'rotate-ccw', 'Ретест', 'Повторный тест того же клиента')}
+      ${it('repq', 'file-text', 'Отчёт клиенту', 'PDF, картинка или ссылка')}
+      ${it('cmpq', 'arrow-right-left', 'Было → стало', 'Сравнить два теста')}</div></div>`;
+    document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
+    d.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { d.remove(); const k = b.dataset.act; if (k === 'qs') quickStart(); else $('#' + k).click(); }); }; $('#join').onclick = sendJoin; $('#menu').onclick = proMenu; $('#hcal').onclick = calendarScreen; if ($('#bk')) $('#bk').onclick = backup; if ($('#bk2')) $('#bk2').onclick = backup;
   // инструменты в одно касание: клиент один — сразу действие, иначе выбор из последних
   const lastTwo = id => asses.filter(a => a.clientId === id).sort((x, y) => x.date - y.date).slice(-2);
   const tool = (title, ok, act) => () => { const cs = sorted.filter(c => ok(lastTwo(c.id))); if (!cs.length) return toast('Пока нет подходящих клиентов'); if (cs.length === 1) return act(cs[0], lastTwo(cs[0].id)); pickClient(title, cs, c => act(c, lastTwo(c.id))); };
@@ -414,16 +424,19 @@ export async function clientCard(id) {
   const visits = (c.visits || []).slice().sort((x, y) => x.t - y.t), now = Date.now();
   const done = visits.filter(v => v.done), next = visits.find(v => !v.done && v.t > now - DAY), pending = visits.filter(v => !v.done && v.t <= now - 3600e3);
   const rd = last && last.nextDate, rdays = rd ? Math.ceil((rd - now) / DAY) : null;
-  const rem = remindLine();
+  // три главные находки рядом со схемой: те же, что в «Итоге» и в отчете
+  const cAn = last ? analyze(last, C) : null, cFacts = cAn ? cAn.findings.slice(0, 3).map(f => String(f.observed).replace(' (на границе нормы)', '').replace(/:\s*$/, '')) : [];
+  const cSp = last ? proSpots(last) : [], cNum = cAn ? cAn.findings.slice(0, 3).map((f, i) => { const sp0 = cSp.find(s => f.muscles.some(m => m.id === s.id && (m.side === s.side || m.side === 'BOTH')) && !s.derived); return sp0 ? { key: sp0.key, n: i + 1, title: '', sub: '', color: '#13212B' } : null; }).filter(Boolean) : [];
   const when = t => new Date(t).toLocaleDateString('ru', { day: 'numeric', month: 'long' }) + (new Date(t).getHours() || new Date(t).getMinutes() ? ', ' + new Date(t).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }) : '');
   go(`<div class="fade" style="padding-bottom:40px"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><span style="flex:1"></span><button class="pill" id="edit">Изменить</button></div>
    <div class="pad"><h1>${esc(c.name)}</h1><p class="sub" style="font-size:14px;margin-top:4px">${[age != null ? age + ' ' + (age % 10 === 1 && age % 100 !== 11 ? 'год' : [2, 3, 4].includes(age % 10) && ![12, 13, 14].includes(age % 100) ? 'года' : 'лет') : '', c.sex === 'M' ? 'муж' : c.sex === 'F' ? 'жен' : '', c.height ? c.height + ' см' : '', c.activity].filter(Boolean).map(esc).join(' · ')}</p>
     ${c.complaints ? `<p style="font-size:15px;line-height:1.4;margin-top:8px"><span class="sub">Жалобы:</span> ${esc(c.complaints)}</p>` : ''}</div>
    ${last ? `<div class="pad" style="margin-top:12px"><div class="card">
      <div class="row"><b style="flex:1">Карта тела · ${fmtDate(last.date)}</b><div class="seg" style="width:auto"><button id="vf" class="on" style="min-height:32px;padding:0 10px;font-size:13px">Спереди</button><button id="vb" style="min-height:32px;padding:0 10px;font-size:13px">Сзади</button><button id="v3" style="min-height:32px;padding:0 10px;font-size:13px">3D</button></div></div>
-     <div id="cvis" style="display:flex;justify-content:center;margin-top:8px"><canvas id="cheat" style="width:150px;display:block"></canvas></div>
-     <button class="btn" id="rep" style="margin-top:10px;height:48px">${ic('share', 's')}Отправить отчет клиенту</button><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px"><button class="btn line" id="open" style="height:44px">Разбор</button><button class="btn line" id="mvr" style="height:44px">${ic('play', 's')}Запись</button></div>
-     ${as.length >= 2 ? '<button class="btn ghost" id="cmp" style="height:44px;margin-top:8px">Было → стало</button>' : ''}</div></div>` : ''}
+     <div class="row" style="align-items:flex-start;gap:12px;margin-top:8px"><div id="cvis" style="flex:none;width:130px;display:flex;justify-content:center"><canvas id="cheat" style="width:130px;display:block"></canvas></div>
+       <ol id="cfind" style="list-style:none;margin:0;padding:0;flex:1;min-width:0;display:flex;flex-direction:column;gap:10px">${cFacts.length ? cFacts.map((f, i) => `<li class="row" style="gap:8px;align-items:flex-start;font-size:14px;line-height:1.35"><span class="num" style="flex:none;width:20px;height:20px;border-radius:50%;background:var(--ink);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">${i + 1}</span><span>${esc(f)}</span></li>`).join('') : '<li class="sub" style="font-size:14px">Значимых отклонений нет</li>'}</ol></div>
+     <button class="btn" id="rep" style="margin-top:12px;height:48px">${ic('share', 's')}Отправить отчет клиенту</button>
+     <div class="row" style="justify-content:center;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:14px"><button class="link" id="open">Подробный разбор</button><button class="link" id="mvr">Запись движения</button>${as.length >= 2 ? '<button class="link" id="cmp">Было → стало</button>' : ''}</div></div></div>` : ''}
    ${homeBlock(c)}
    <div class="pad" style="margin-top:12px"><div class="card"><div class="eyebrow">Следующие шаги</div>
      <div class="row" style="margin-top:10px;align-items:flex-start"><span style="color:var(--sub);padding-top:2px">${ic('rotate-ccw', 's')}</span><div style="flex:1;min-width:0"><b>Повторный тест</b><div style="font-size:14px;color:${rdays != null && rdays <= 0 ? 'var(--over-t)' : 'var(--sub)'}">${rd ? fmtDate(rd) + (rdays < 0 ? ', просрочен' : rdays === 0 ? ', сегодня' : `, через ${rdays} дн.`) : 'дата не назначена'}</div>
@@ -432,7 +445,7 @@ export async function clientCard(id) {
      <div class="row" style="margin-top:14px;align-items:flex-start;border-top:1px solid var(--line-2);padding-top:12px"><span style="color:var(--sub);padding-top:2px">${ic('calendar', 's')}</span><div style="flex:1;min-width:0"><b>Консультация</b><div style="font-size:14px;color:var(--sub)">${next ? when(next.t) : 'не запланирована'}${done.length ? ` · прошло: ${done.length}` : ''}</div></div><button class="pill" id="vadd">${next ? 'Изменить' : 'Назначить'}</button></div>
      ${pending.map(v => `<div class="row" style="margin-top:8px;font-size:14px;background:var(--surface);border-radius:12px;padding:8px 10px"><span style="flex:1">${when(v.t)}: консультация состоялась?</span><button class="pill" data-vy="${v.id}">Да</button><button class="pill" data-vn="${v.id}" style="margin-left:6px">Нет</button></div>`).join('')}
      ${next ? `<button class="btn line" id="vinv" style="margin-top:10px;height:44px">Отправить клиенту приглашение</button>` : ''}
-     <p class="sub" style="font-size:12px;margin-top:10px">${rem}</p></div></div>
+</div></div>
    <div class="pad" style="margin-top:12px;display:flex;flex-direction:column;gap:10px"><button class="btn line" id="na">${last ? 'Повторный тест здесь, на приеме' : 'Первая оценка'}</button><button class="btn ghost" id="inv" style="background:#fff">Ссылка на тест из дома</button>${last ? '<button class="btn ghost" id="nb">Оценка с другим протоколом</button>' : ''}${as.length >= 3 ? '<button class="btn ghost" id="rel">Повторяемость: 3 последних теста</button>' : ''}</div>
    ${c.notes ? `<div class="pad" style="margin-top:12px"><div class="card" style="font-size:15px;line-height:1.4"><div class="eyebrow">Заметки</div>${esc(c.notes)}</div></div>` : ''}
    <h3 class="pad" style="margin:22px 0 8px;font-size:17px">История</h3>
@@ -445,9 +458,9 @@ export async function clientCard(id) {
   $('#back').onclick = () => proHome(); $('#edit').onclick = () => clientForm(id);
   document.querySelectorAll('.gopro-home').forEach(b => b.onclick = () => gate('home', c.name.split(' ')[0]));
   if (last) { const sp = proSpots(last); let v3 = null;
-    const show = back => { if (v3) { v3.dispose(); v3 = null; } $('#cvis').style.height = ''; $('#cvis').innerHTML = '<canvas id="cheat" style="width:150px;display:block"></canvas>'; drawHeat($('#cheat'), onlyKeys(sp, mainKeys(last, sp)), back, null, []); ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === (back ? 'vb' : 'vf'))); };
-    show(false); $('#vf').onclick = () => show(false); $('#vb').onclick = () => show(true);
-    $('#v3').onclick = async () => { ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === 'v3')); $('#cvis').style.height = '340px'; $('#cvis').innerHTML = '';
+    const show = back => { if (v3) { v3.dispose(); v3 = null; } $('#cvis').style.height = ''; $('#cvis').innerHTML = '<canvas id="cheat" style="width:150px;display:block"></canvas>'; $('#cvis').style.width = '130px'; $('#cfind').style.display = ''; drawHeat($('#cheat'), onlyKeys(sp, new Set([...mainKeys(last, sp), ...cNum.map(l => l.key)])), back, null, cNum); ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === (back ? 'vb' : 'vf'))); };
+    show(cNum.filter(l => (sp.find(x => x.key === l.key) || {}).back).length > cNum.length / 2); $('#vf').onclick = () => show(false); $('#vb').onclick = () => show(true);
+    $('#v3').onclick = async () => { ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === 'v3')); $('#cvis').style.height = '340px'; $('#cvis').style.width = '100%'; $('#cfind').style.display = 'none'; $('#cvis').innerHTML = '';
       try { v3 = await body3D($('#cvis'), onlyKeys(sp, mainKeys(last, sp)), () => {}); } catch (e) { toast('3D не загрузилось'); show(false); } };
     $('#open').onclick = () => result(last.id); $('#rep').onclick = () => report(last.id);
     $('#mvr').onclick = async () => { const pp = await get('poses', last.id); motionViewer(pp && pp.poses, last.setup, () => clientCard(id), `${c.name} · ${fmtDate(last.date)}`); }; }
@@ -573,10 +586,9 @@ async function retestInvite(c, last) {
 // строка о напоминаниях под «Следующими шагами»
 function remindLine() {
   const u = meSync(), on = localStorage.getItem('bp_ntf') !== '0';
-  if (!on) return 'Напоминания выключены (Меню → Напоминания).';
-  if (!isPro()) return 'Напоминания видны на экране «Сегодня» и в календаре. Напоминания в Telegram за день до ретеста и консультации входят в PRO.';
-  return u && /^t_/.test(u.id) ? 'За день до ретеста и консультации бот пришлет вам напоминание в Telegram. Клиент, открывший ссылку, увидит дату у себя и может добавить ее в календарь телефона.'
-    : 'Напоминания видны на экране «Сегодня» и в календаре. Чтобы получать их в Telegram, войдите через Telegram. Клиент, открывший ссылку, увидит дату у себя.';
+  if (!on) return 'Напоминания выключены.';
+  if (!isPro()) return 'Напоминания в Telegram входят в PRO.';
+  return u && /^t_/.test(u.id) ? 'Бот напомнит в Telegram за день.' : 'Чтобы получать напоминания в Telegram, войдите через Telegram.';
 }
 
 // напоминание в календаре телефона: событие за 3 дня до ретеста и в день ретеста
@@ -747,7 +759,10 @@ function mainKeys(a, sp, n = 3) { const conf = a.check || {};
   return new Set((decided.length ? decided : top).slice(0, n).map(x => x.key)); }
 const onlyKeys = (sp, keys) => sp.map(x => keys.has(x.key) ? x : { ...x, k: 'OK', tone: 0 });
 export async function result(aid, view = 'measured') {
-  const a = await get('assessments', aid); if (!a) return proHome(); const c = await get('clients', a.clientId);
+  // назначение теперь внизу «Итога»: старые ссылки на вкладку ведут туда же и прокручивают к нему
+  const toPlan = view === 'plan'; if (toPlan) view = 'measured';
+  if (RES_A && RES_A.id === aid && $('#pt')) await savePlan(RES_A); // перерисовка не теряет набранный комментарий
+  const a = await get('assessments', aid); if (!a) return proHome(); RES_A = a; const c = await get('clients', a.clientId);
   const an = analyze(a, C); const sp = proSpots(a); const evid = (await meta('eexp')) || {}; const top = sp.filter(s => s.k !== 'OK' && (!s.derived || s.edited || s.byChain)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
   const q = Object.entries(a.quality || {}); const qa = q.length ? Math.round(q.reduce((x, [, v]) => x + v, 0) / q.length) : null;
   const facts = an.findings.slice(0, 3);
@@ -799,16 +814,16 @@ export async function result(aid, view = 'measured') {
       <p class="sub" style="font-size:13px;margin-top:6px">Черновик по замеру. В отчёт пойдёт ваша версия.</p>
       <div id="hlist" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s3)">${list.map((s, i) => hypCard(a, an, s, i === list.findIndex(x => C.muscles[x.id] && C.muscles[x.id].proTest && !chk[x.key]), evid)).join('')}</div></details>`;
     dock = `<div class="dock bar"><div style="flex:1;font-size:14px;align-self:center">Проверено руками <b class="num" id="hcnt">${testable.filter(s => chk[s.key]).length} из ${testable.length}</b></div><button class="btn line" id="addm" style="width:auto;padding:0 18px">${ic('plus', 's')}Мышца</button></div>`; }
-  if (view === 'plan') { const pl = a.plan || { ex: plan(top), text: '' }; const recs = muscleRecs(a);
-    body = `<div class="card"><div class="row"><div class="eyebrow" style="flex:1">Рекомендации по мышцам</div>${recs.length ? '<button class="pill" id="addall" style="font-size:12px">Добавить все</button>' : ''}</div>
+  if (view === 'measured') { const pl = a.plan || { ex: plan(top), text: '' }; const recs = muscleRecs(a);
+    body += `<h2 id="planh" style="font-size:20px;margin-top:var(--s4)">Назначение</h2><div class="card"><div class="row"><div class="eyebrow" style="flex:1">Рекомендации по мышцам</div>${recs.length ? '<button class="pill" id="addall" style="font-size:12px">Добавить все</button>' : ''}</div>
       ${recs.length ? recs.map((r, i) => `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line-2)"><div class="row"><i class="bar" style="background:${TONE_HEX[r.s.k]};height:22px"></i><b style="flex:1;font-size:15px">${r.head}</b>${r.all.length ? `<button class="pill" data-add="${i}" style="font-size:12px">Добавить</button>` : ''}</div>
         ${r.out.map(([h, t]) => `<div style="font-size:14px;margin-top:6px;line-height:1.4"><b>${h}:</b> ${t}</div>`).join('')}</div>`).join('') : '<p class="sub" style="margin-top:8px">Значимых отклонений нет.</p>'}</div>
-    <div class="card"><div class="eyebrow">Упражнения</div><input id="exq" class="field" type="search" placeholder="Найти упражнение или мышцу" style="margin-top:8px;height:44px" aria-label="Поиск упражнения">${Object.values(C.exercises).filter(e => !e.id.endsWith('_right') || pl.ex.includes(e.id)).sort((x, y) => (pl.ex.includes(y.id) - pl.ex.includes(x.id)) || x.title.localeCompare(y.title)).map(e => `<label class="row" data-exq="${esc([e.title, e.goal, e.category].filter(Boolean).join(' ').toLowerCase())}" style="margin-top:8px;font-size:15px"><input type="checkbox" data-e="${e.id}" ${pl.ex.includes(e.id) ? 'checked' : ''} style="width:20px;height:20px;accent-color:var(--ink)"><span style="flex:1">${e.title.split(' (')[0]}${e.id.endsWith('_right') ? ' (правая)' : e.id.endsWith('_left') && pl.ex.includes(e.id) ? ' (левая)' : ''}</span><span style="font-size:12px;color:var(--sub)">${e.dose || ''}</span></label>`).join('')}</div>
+    <div class="card"><div class="eyebrow">Упражнения</div><input id="exq" class="field" type="search" placeholder="Найти упражнение или мышцу" style="margin-top:8px;height:44px" aria-label="Поиск упражнения">${Object.values(C.exercises).filter(e => !e.id.endsWith('_right') || pl.ex.includes(e.id)).sort((x, y) => (pl.ex.includes(y.id) - pl.ex.includes(x.id)) || x.title.localeCompare(y.title)).map(e => `<label class="row" data-exq="${esc([e.title, e.goal, e.category].filter(Boolean).join(' ').toLowerCase())}"${pl.ex.includes(e.id) ? '' : ' hidden'} style="margin-top:8px;font-size:15px"><input type="checkbox" data-e="${e.id}" ${pl.ex.includes(e.id) ? 'checked' : ''} style="width:20px;height:20px;accent-color:var(--ink)"><span style="flex:1">${e.title.split(' (')[0]}${e.id.endsWith('_right') ? ' (правая)' : e.id.endsWith('_left') && pl.ex.includes(e.id) ? ' (левая)' : ''}</span><span style="font-size:12px;color:var(--sub)">${e.dose || ''}</span></label>`).join('')}<button class="link" id="exall" style="margin-top:10px;font-size:14px">Показать все упражнения</button></div>
       <div class="card"><div class="eyebrow">Комментарий для клиента</div><textarea id="pt" rows="4" class="field" style="margin-top:8px;height:auto;padding:12px 16px;font-size:15px">${esc(pl.text)}</textarea><button class="btn line" id="dict" style="height:48px;margin-top:8px">${ic('mic', 's')}Надиктовать</button></div>
       <div class="card row"><span style="flex:1">Повторный тест</span><input type="date" id="nd" value="${Number.isFinite(+a.nextDate) && +a.nextDate > 0 ? new Date(+a.nextDate).toISOString().slice(0, 10) : ''}" class="field" style="width:auto;height:48px;padding:0 10px;font-size:15px"></div>`; }
   go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>${esc(c.name)}</b><small>${esc(a.templateName)} · ${fmtDate(a.date)}${qa != null ? ' · качество ' + qa : ''}</small></div>
       <button class="round" id="rep" aria-label="Отчёт клиенту">${ic('file-text')}</button>${a.prevId ? `<button class="round" id="cmp" aria-label="Было → стало">${ic('arrow-right-left')}</button>` : ''}<button class="link" id="fin" style="padding:0 8px">${a.draft ? 'Сохранить' : 'Готово'}</button></div>
-    <div class="pad" style="margin-top:var(--s2)"><div class="seg">${tab('measured', 'Итог')}${tab('hyp', 'Визуализация')}${tab('plan', 'Назначение')}</div></div>
+    <div class="pad" style="margin-top:var(--s2)"><div class="seg">${tab('measured', 'Итог')}${tab('hyp', 'Визуализация')}</div></div>
     <div class="pad" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s3);padding-bottom:var(--s5)">${body}</div>${dock}</div>`);
   document.querySelectorAll('[data-v]').forEach(b => b.onclick = async () => { await savePlan(a); result(aid, b.dataset.v); });
   if ($('#rc')) $('#rc').onclick = async () => { $('#rc').textContent = 'Считаю…'; await recalc(a); const y = scrollY; await result(aid, view); scrollTo(0, y); };
@@ -816,7 +831,7 @@ export async function result(aid, view = 'measured') {
     const focus = onlyKeys(sp, new Set([...mainKeys(a, sp), ...numLabels.map(l => l.key)])); const dh = () => drawHeat($('#heat'), focus, bk, null, numLabels, { reveal: first }); dh(); first = false; if (bk) { $('#mb2').classList.add('on'); $('#mf').classList.remove('on'); }
     $('#mf').onclick = () => { bk = false; $('#mf').classList.add('on'); $('#mb2').classList.remove('on'); dh(); }; $('#mb2').onclick = () => { bk = true; $('#mb2').classList.add('on'); $('#mf').classList.remove('on'); dh(); };
     if ($('#tohyp')) $('#tohyp').onclick = () => { HYPOPEN = true; result(aid, 'hyp'); };
-    if ($('#toplan')) $('#toplan').onclick = () => result(aid, 'plan');
+    if ($('#toplan')) $('#toplan').onclick = () => $('#planh').scrollIntoView({ behavior: 'smooth', block: 'start' });
     if ($('#mkplan')) $('#mkplan').onclick = async () => { await savePlan(a); a.plan = a.plan || { ex: [], text: '' }; a.plan.ex = [...new Set([...a.plan.ex, ...muscleRecs(a).flatMap(r => r.all)])].slice(0, 8); await put('assessments', a); result(aid, 'plan'); };
     if ($('#after')) $('#after').onclick = async () => { a.draft = false; await put('assessments', a); newAssessment(a.clientId, a.id); };
     $('#send').onclick = async () => { track('report_sent'); await savePlan(a); a.draft = false; await put('assessments', a); report(aid); };
@@ -878,8 +893,11 @@ export async function result(aid, view = 'measured') {
       d.querySelectorAll('[data-ns]').forEach(b => b.onclick = () => { st = b.dataset.ns; d.querySelectorAll('[data-ns]').forEach(x => x.style.borderColor = x === b ? 'var(--ink)' : 'transparent'); });
       d.querySelector('#mx').onclick = () => d.remove();
       d.querySelector('#ma').onclick = async () => { a.hyp = a.hyp || {}; a.hyp[d.querySelector('#mm').value + ':' + side] = st; await put('assessments', a); d.remove(); result(aid, 'hyp'); }; }; }
-  if (view === 'plan') { $('#dict').onclick = () => dictate($('#pt'), $('#dict'));
-    $('#exq').oninput = e => { const q = e.target.value.trim().toLowerCase(); document.querySelectorAll('[data-exq]').forEach(l => { l.hidden = !!q && !l.dataset.exq.includes(q); }); };
+  if (toPlan && $('#planh')) $('#planh').scrollIntoView({ block: 'start' });
+  if (view === 'measured') { $('#dict').onclick = () => dictate($('#pt'), $('#dict'));
+    // в списке видны только выбранные упражнения; остальные находятся поиском или кнопкой «Показать все»
+    let exAll = false; const exShow = () => { const q = $('#exq').value.trim().toLowerCase(); document.querySelectorAll('[data-exq]').forEach(l => { const on = l.querySelector('input').checked; l.hidden = q ? !l.dataset.exq.includes(q) : !(exAll || on); }); $('#exall').textContent = exAll ? 'Только выбранные' : 'Показать все упражнения'; };
+    $('#exq').oninput = exShow; $('#exall').onclick = () => { exAll = !exAll; exShow(); };
     const recs = muscleRecs(a); const addIds = async list => { await savePlan(a); a.plan = a.plan || { ex: [], text: '' }; a.plan.ex = [...new Set([...a.plan.ex, ...list])]; await put('assessments', a); const y = scrollY; await result(aid, 'plan'); scrollTo(0, y); };
     document.querySelectorAll('[data-add]').forEach(b => b.onclick = () => addIds(recs[+b.dataset.add].all));
     if ($('#addall')) $('#addall').onclick = () => addIds(recs.flatMap(r => r.all)); }
@@ -1235,7 +1253,7 @@ async function inbox() { const b = await meta('inbox'), f = await freshBox(b); i
 async function sendJoin() {
   if (!gate('invite')) return;
   let tpl = TEMPLATES[0]; const d = document.createElement('div'); d.className = 'sheet';
-  const draw = () => { d.innerHTML = `<div><h2>Ссылка новому клиенту</h2><p class="sub" style="font-size:14px;margin-top:6px">Клиент сам заполнит имя и анкету, пройдет тест, и у тебя появится его карточка с результатом и записью движения. Одну ссылку можно отправлять разным людям.</p>
+  const draw = () => { d.innerHTML = `<div><h2>Ссылка новому клиенту</h2><p class="sub" style="font-size:14px;margin-top:6px">Клиент сам заполнит имя и анкету, пройдет тест, и у вас появится его карточка с результатом и записью движения. Одну ссылку можно отправлять разным людям.</p>
     <div class="row" style="flex-wrap:wrap;gap:8px;margin-top:12px">${TEMPLATES.map(t => `<button class="pill" data-t="${t[0]}" style="border:1.5px solid ${tpl[0] === t[0] ? 'var(--ink)' : 'transparent'}">${t[1]}</button>`).join('')}</div>
     <p class="sub" style="font-size:13px;margin-top:8px">${rowsOf(tpl[2]).length} шагов · около ${mins(SETUP_SEC + secs(rowsOf(tpl[2])))} мин + анкета</p>
     <button class="btn" id="snd" style="margin-top:14px">Отправить ссылку</button><button class="btn ghost" id="cx" style="margin-top:8px;border:0">Отмена</button></div>`;
