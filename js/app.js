@@ -5,7 +5,7 @@ import { rateCard, bindRate, installCard, bindInstall, installNow, canInstall, f
 import { proHome, motionViewer, consumerPoses } from './pro.js';
 import { seal } from './core.js';
 import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, logout, deleteAccount, betaUsers, providers, config, setAppMode } from './auth.js';
-import { C, loadContent, voice, sleep, phone, startMotion, initPose, poseInfo, prefetchPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, RAMP_CSS, body3D, preload3D, device, keepAwake, ic, toast, reduceMotion } from './core.js';
+import { ready3D, C, loadContent, voice, sleep, phone, startMotion, initPose, poseInfo, prefetchPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, RAMP_CSS, body3D, preload3D, device, keepAwake, ic, toast, reduceMotion } from './core.js';
 export { ic, toast };
 
 const $ = s => document.querySelector(s);
@@ -783,6 +783,7 @@ export function vasChart(g, list, x, y, w, h) {
   return y + h + 12;
 }
 export async function passportImage({ eyebrow, name, date, sp, sections = [], delta = null, footer, raw = false }) {
+  await ready3D().catch(() => {}); // в отчете та же реалистичная модель, что и на экране
   const W = 1080, M = 72, cv = document.createElement('canvas'); cv.width = W; cv.height = 4200; const g = cv.getContext('2d');
   await document.fonts.ready; try { await document.fonts.load('500 32px "JetBrains Mono"'); } catch (e) {}
   g.fillStyle = '#F3F6F6'; g.fillRect(0, 0, W, cv.height);
