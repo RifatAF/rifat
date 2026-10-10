@@ -59,10 +59,24 @@ export function checkClientSlotAvailable(activeClientsCount) {
 // ссылка-приглашение коллеге и готовый текст
 export const refLink = () => { const u = meSync(); return location.origin + '/' + (u && u.refCode ? '?ref=' + u.refCode : ''); };
 export const refText = () => 'Использую BodyPassport для составления 3D-отчетов биомеханики пациентов. Держи ссылку на бесплатный доступ: ' + refLink();
-export async function copyRefText() {
+/** Приглашение коллеге: шторка с готовым текстом, «Отправить» (меню телефона) и «Скопировать» с явным подтверждением. */
+export function copyRefText() {
   track('ref_share', { c: 'slots' }, false); const text = refText();
-  try { await navigator.clipboard.writeText(text); toastMsg('Текст и ссылка скопированы'); }
-  catch (e) { if (navigator.share) await navigator.share({ text }).catch(() => {}); }
+  const d = document.createElement('div'); d.className = 'sheet';
+  d.innerHTML = `<div><h2>Пригласить коллегу</h2><p class="sub" style="margin-top:6px">${isBeta() ? 'Отправьте коллеге этот текст со ссылкой.' : `Коллега откроет кабинет по ссылке, и у вас станет на ${REF_SLOTS} слота больше.`}</p>
+    <div class="card" style="margin-top:var(--s3);font-size:15px;line-height:1.45;border:1px solid var(--line)">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>
+    ${navigator.share ? '<button class="btn" id="rfsh" style="margin-top:var(--s4)">Отправить коллеге</button>' : ''}
+    <button class="btn${navigator.share ? ' line' : ''}" id="rfcp" style="margin-top:var(--s2)">Скопировать текст и ссылку</button>
+    <button class="btn ghost" id="rfx" style="margin-top:var(--s2)">Закрыть</button></div>`;
+  document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'rfx') d.remove(); };
+  if (d.querySelector('#rfsh')) d.querySelector('#rfsh').onclick = () => navigator.share({ text }).catch(() => {});
+  const b = d.querySelector('#rfcp');
+  b.onclick = async () => { let ok = false; try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {
+      try { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); ok = document.execCommand('copy'); t.remove(); } catch (e2) {} }
+    if (!ok) { b.textContent = 'Не удалось, выделите текст выше вручную'; return; }
+    b.innerHTML = '✓ Скопировано, вставьте в чат коллеге'; b.style.background = 'var(--ok-s)'; b.style.color = 'var(--ok-t)'; b.style.borderColor = 'var(--ok-t)';
+    if (navigator.vibrate) navigator.vibrate(30);
+    setTimeout(() => { if (b.isConnected) { b.textContent = 'Скопировать еще раз'; b.removeAttribute('style'); b.style.marginTop = 'var(--s2)'; } }, 3000); };
 }
 function toastMsg(m) { const t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
 export function slotSheet(s = slots()) {
@@ -73,7 +87,7 @@ export function slotSheet(s = slots()) {
     <button class="btn line" id="slpro" style="margin-top:var(--s2)">Перейти на PRO (безлимит за ${PRO_PRICE})</button>
     <button class="btn ghost" id="slx" style="margin-top:var(--s2)">Не сейчас</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'slx') d.remove(); };
-  d.querySelector('#slref').onclick = () => copyRefText();
+  d.querySelector('#slref').onclick = () => { d.remove(); copyRefText(); };
   d.querySelector('#slpro').onclick = () => { d.remove(); goPro(); };
   return d;
 }
