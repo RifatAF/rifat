@@ -5,7 +5,7 @@ import { track, vasStats } from './track.js';
 import { npsCard, bindNps, installCard, bindInstall, feedbackSheet, referralSheet, myRef, bugSheet, DEV } from './grow.js';
 import { meSync, logout, getMe } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
-import { gate, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, PAY_URL, REF_SLOTS } from './plans.js';
+import { gate, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, REF_SLOTS } from './plans.js';
 import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast } from './core.js';
 import { cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, ex, totalMin, workout, onboarding, progressChart, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen } from './app.js';
 
@@ -115,7 +115,7 @@ async function profileForm() {
       <label class="btn line" style="height:48px;flex:1;cursor:pointer">${photo ? 'Заменить' : 'Загрузить'}<input type="file" id="phf" accept="image/*" style="display:none"></label>${photo ? '<button class="btn ghost" id="phe" style="height:48px;width:auto;padding:0 14px">Настроить</button>' : ''}</div></div>
     <div><b>Логотип для отчета</b>${isPro() ? '' : ' <span class="pill" style="font-size:12px;padding:2px 8px">PRO</span>'}<div class="row" style="gap:12px;margin-top:8px"><div id="lgv" style="width:64px;height:64px;border-radius:14px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">${logo ? `<img src="${logo}" alt="" style="max-width:100%;max-height:100%">` : ic('image', 's')}</div>
       <label class="btn line" style="height:48px;flex:1;cursor:pointer">${logo ? 'Заменить' : 'Загрузить'}<input type="file" id="lgf" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none"></label>${logo ? '<button class="btn ghost" id="lgx" style="height:48px;width:auto;padding:0 14px">Убрать</button>' : ''}</div></div>
-    <p class="sub" style="font-size:13px">Имя, специализация, контакты и фото появятся в отчете клиенту: в PDF, картинке и веб-ссылке. ${isPro() ? 'На PRO отчет выходит под вашим логотипом.' : `Логотип в отчете и отчет без плашки BodyPassport доступны на <a href="${PAY_URL}" target="_blank" rel="noopener">PRO</a>.`}</p>
+    <p class="sub" style="font-size:13px">Имя, специализация, контакты и фото появятся в отчете клиенту: в PDF, картинке и веб-ссылке. ${isPro() ? 'На PRO отчет выходит под вашим логотипом.' : `Логотип в отчете и отчет без плашки BodyPassport доступны на <a href="/pricing" class="gopro">PRO</a>.`}</p>
    </div><div class="pad" style="padding:20px"><button class="btn" id="ps">Сохранить</button></div></div>`);
   $('#back').onclick = () => proHome();
   $('#ps').onclick = async () => { await setMeta('profile', $('#pn').value.trim().slice(0, 80) || defaultAuthor()); await setMeta('contact', $('#pc').value.trim().slice(0, 60)); await setMeta('title', $('#pt').value.trim().slice(0, 60)); proHome(); };
@@ -216,7 +216,7 @@ function slotWidget(s) {
   return `<div class="pad" style="margin-top:var(--s3)"><div class="card" id="slots" style="padding:12px 14px">
     <div class="row" style="font-size:14px;gap:8px"><span style="flex:1">Использовано <b>${s.used} из ${s.max}</b> слотов</span><button class="pill" id="slget" style="background:var(--ink);color:#fff">Получить +${REF_SLOTS} слота</button></div>
     <div style="height:6px;border-radius:3px;background:var(--surface);margin-top:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${full ? 'var(--over)' : 'var(--ink)'}"></div></div>
-    ${full ? `<div style="font-size:13px;margin-top:8px">Новых клиентов не добавить. Пригласите коллегу или <a href="${PAY_URL}" target="_blank" rel="noopener">перейдите на PRO</a>.</div>` : ''}</div></div>`;
+    ${full ? `<div style="font-size:13px;margin-top:8px">Новых клиентов не добавить. Пригласите коллегу или <a href="/pricing" class="gopro">перейдите на PRO</a>.</div>` : ''}</div></div>`;
 }
 export async function proHome(query = '', pulled = null) {
   track('pro_open');
@@ -943,7 +943,7 @@ async function report(aid) {
   const d = document.createElement('div'); d.className = 'sheet';
   d.innerHTML = `<div><h2 style="font-size:20px">Отчет клиенту</h2><p class="sub" style="font-size:13px;margin-top:4px">Так его увидит ${esc(c.name)}. PDF удобно распечатать, картинку переслать в мессенджер.</p>
     <div style="margin-top:12px;max-height:46dvh;overflow:auto;border-radius:16px;border:1px solid var(--line)"><img src="${cv.toDataURL('image/jpeg', .8)}" alt="Отчет" style="width:100%;display:block"></div>
-    ${!pro ? `<p class="sub" style="font-size:13px;margin-top:8px">${myLogo ? 'Ваш логотип' : 'Логотип'} и отчет без плашки BodyPassport: <a href="${PAY_URL}" target="_blank" rel="noopener">PRO</a></p>` : ''}${photo && (logo || !pro) ? '' : `<button class="link" id="rplg" style="font-size:13px;margin-top:8px">Добавить в отчет ${photo ? 'логотип' : 'свое фото'}</button>`}
+    ${!pro ? `<p class="sub" style="font-size:13px;margin-top:8px">${myLogo ? 'Ваш логотип' : 'Логотип'} и отчет без плашки BodyPassport: <a href="/pricing" class="gopro">PRO</a></p>` : ''}${photo && (logo || !pro) ? '' : `<button class="link" id="rplg" style="font-size:13px;margin-top:8px">Добавить в отчет ${photo ? 'логотип' : 'свое фото'}</button>`}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn" id="rpdf">${ic('file-text', 's')}Скачать PDF</button><button class="btn line" id="rpng">${ic('image', 's')}Картинка</button></div>
     <button class="btn line" id="rweb" style="margin-top:8px">${ic('mail', 's')}Поделиться веб-ссылкой</button>
     <button class="btn ghost" id="rpx" style="margin-top:8px">Закрыть</button></div>`;

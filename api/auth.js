@@ -94,6 +94,10 @@ export default async function handler(req, res) {
       const t = await loadUser(b.id); if (!t) return res.status(404).json({ error: 'нет такого пользователя' });
       const days = Number.isFinite(+b.days) && b.days !== '' && b.days != null ? Math.max(0, Math.min(400, +b.days)) : 30; t.plan = b.plan; t.planUntil = Math.max(Date.now(), t.planUntil || 0) + days * 864e5; if (b.plan === 'start') t.planUntil = 0;
       await saveUser(t); return res.status(200).json({ ok: true, plan: effectivePlan(t) }); }
+    // почта, с которой специалист оплатит PRO на lava.top: по ней уведомление об оплате найдет аккаунт
+    if (a === 'payemail') { const e = String(b.email || '').trim().toLowerCase().slice(0, 120);
+      if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]{2,}$/.test(e)) return res.status(400).json({ error: 'проверьте почту' });
+      u.payEmail = e; await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
     if (a === 'logout') { clearSession(res); return res.status(200).json({ ok: true }); }
     if (a === 'delete') { await deleteUser(u.id); clearSession(res); return res.status(200).json({ ok: true }); }
     if (a === 'users') { if (!isAdmin(u)) return res.status(403).json({ error: 'forbidden' });
