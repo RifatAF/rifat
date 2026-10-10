@@ -4,7 +4,7 @@ import { track, vasSave, vasLog, vasStats, vasDelta } from './track.js';
 import { rateCard, bindRate, installCard, bindInstall, feedbackSheet, shareApp, appLink, mountBugTab } from './grow.js';
 import { proHome, motionViewer, consumerPoses } from './pro.js';
 import { seal } from './core.js';
-import { ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, logout, deleteAccount, betaUsers, providers, config } from './auth.js';
+import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, logout, deleteAccount, betaUsers, providers, config, setAppMode } from './auth.js';
 import { C, loadContent, voice, sleep, phone, startMotion, initPose, poseInfo, prefetchPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, RAMP_CSS, body3D, preload3D, device, keepAwake, ic, toast, reduceMotion } from './core.js';
 export { ic, toast };
 
@@ -16,7 +16,8 @@ function cleanInv(o) { if (!o || typeof o !== 'object') throw new Error('bad inv
   const id = /^[A-Za-z0-9_-]{16,64}$/, key = /^[A-Za-z0-9_-]{43}$/;
   if (!id.test(o.i || '') || !key.test(o.k || '')) throw new Error('bad invite');
   const p = Array.isArray(o.p) ? o.p.filter(u => typeof u === 'string' && Object.prototype.hasOwnProperty.call(UNITS, u)) : [];
-  return { i: o.i, k: o.k, s: str(o.s, 80) || 'Специалист', n: str(o.n, 40), p: p.length ? p : Object.keys(UNITS) }; }
+  const d = Number.isFinite(+o.d) && +o.d > 1.7e12 && +o.d < 4e12 ? +o.d : undefined;
+  return { i: o.i, k: o.k, s: str(o.s, 80) || 'Специалист', n: str(o.n, 40), p: p.length ? p : Object.keys(UNITS), ...(d ? { d } : {}) }; }
 const app = $('#app');
 const TG = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData ? window.Telegram.WebApp : null;
 if (TG) { TG.ready(); TG.expand(); }
@@ -162,12 +163,12 @@ async function resultLink() { return location.origin + location.pathname + '#r='
 // ---------- 1. знакомство ----------
 export function onboarding() {
   go(`<div class="scr fade">
-    <div class="row pad" style="padding-top:16px"><img src="icons/logo.svg" width="28" height="28" alt=""><b style="font-size:16px;font-weight:600;flex:1">BodyPassport</b><span class="eyebrow">бета</span></div>
-    <div class="pad" style="margin-top:16px"><div class="hero"><img src="img/hero_squat.webp" alt="Присед с поднятыми руками, поверх тела линии скелета"><div class="joint-tag"><small>колено П</small><b>11°</b></div><span class="ondevice">${ic('cpu', 's')}Модель на телефоне</span></div></div>
-    <div class="pad" style="margin-top:24px"><h1>Как ты двигаешься: тест за 3 минуты</h1>
-      <p class="sub" style="margin-top:12px">Камера измерит углы плеч, таза и коленей и подскажет, что укрепить, растянуть и расслабить. Это оценка движения, а не медицинское заключение.</p>
-      <div class="row" style="margin-top:20px"><span class="avatar">РА</span><div><b style="font-size:14px;font-weight:600;display:block">Методика Рифата Аюпова</b><span style="font-size:13px;color:var(--sub)">биомеханик, кинезиотерапевт</span></div></div></div>
-    <div class="dock"><button class="btn" id="next">Начать тест <span class="meta">· бесплатно</span></button><button class="btn ghost" id="pro">Я специалист</button></div></div>`);
+    <div class="row pad" style="padding-top:16px"><img src="icons/logo.svg" width="28" height="28" alt=""><b style="font-size:16px;font-weight:600;flex:1">BodyPassport</b>${configSync().beta !== false ? '<span class="eyebrow">бета</span>' : ''}</div>
+    <div class="pad" style="margin-top:16px"><div class="hero"><img src="img/hero_squat.webp" alt="Присед с поднятыми руками, поверх тела линии скелета"><div class="joint-tag"><small>колено П</small><b>11°</b></div><span class="ondevice">${ic('shield-check', 's')}Видео не записывается</span></div></div>
+    <div class="pad" style="margin-top:24px"><h1>Тест движения за 3 минуты</h1>
+      <p class="sub" style="margin-top:12px">Встаньте перед камерой телефона и сделайте несколько простых движений. Вы увидите, какие мышцы перегружены, а какие работают слабо, и получите упражнения. Это оценка движения, а не диагноз.</p>
+      <div class="row" style="margin-top:20px"><img src="img/rifat.jpg" alt="Рифат Аюпов" width="44" height="44" style="border-radius:50%;object-fit:cover;flex:none"><div><b style="font-size:14px;font-weight:600;display:block">Методика Рифата Аюпова</b><span style="font-size:13px;color:var(--sub)">кинезиотерапевт, биомеханик</span></div></div></div>
+    <div class="dock"><button class="btn" id="next">Начать тест <span class="meta">· бесплатно</span></button><button class="btn ghost" id="pro">Я специалист: вход в кабинет</button></div></div>`);
   $('#next').onclick = () => { track('onb_done'); prep(); }; $('#pro').onclick = () => openPro();
 }
 
@@ -207,21 +208,21 @@ export async function prep() {
   const steps = stepsOf(), m = mins(SETUP_SEC + secs(steps));
   go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button></div>
    <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:var(--s4)">
-    <div><div class="eyebrow">Видеотест · ${m} мин · ${steps.length} ${plural3(steps.length, 'шаг', 'шага', 'шагов')}</div><h1 style="margin-top:8px">Поставь телефон на пол и отойди</h1></div>
+    <div><div class="eyebrow">Видеотест · ${m} мин · ${steps.length} ${plural3(steps.length, 'шаг', 'шага', 'шагов')}</div><h1 style="margin-top:8px">Подготовка к тесту</h1></div>
     <div class="card"><div class="row" style="gap:var(--s2);align-items:flex-end;justify-content:center;padding:4px 0 12px">
       <svg width="34" height="56" viewBox="0 0 34 56" aria-hidden="true"><rect x="2" y="2" width="30" height="52" rx="6" fill="none" stroke="var(--ink)" stroke-width="2.5"/><circle cx="17" cy="9" r="2.5" fill="var(--ink)"/></svg>
       <div style="flex:1;max-width:150px;text-align:center"><div class="measure sm" style="justify-content:center"><b>2–4</b><u>м</u></div><div style="border-top:2px dashed var(--line);margin-top:6px"></div></div>
       <svg width="40" height="76" viewBox="0 0 200 380" aria-hidden="true"><circle cx="100" cy="44" r="24" fill="var(--figure)" stroke="var(--faint)" stroke-width="5"/><path d="M78 72 L122 72 Q140 74 144 92 L156 176 Q158 186 150 188 Q144 188 142 180 L132 112 L128 190 L130 268 L128 352 Q128 362 118 362 Q110 362 110 352 L104 210 L96 210 L90 352 Q90 362 82 362 Q72 362 72 352 L70 268 L72 190 L68 112 L58 180 Q56 188 50 188 Q42 186 44 176 L56 92 Q60 74 78 72 Z" fill="var(--figure)" stroke="var(--faint)" stroke-width="5"/></svg></div>
-      ${[['Телефон вертикально. <b>Точнее всего на штативе</b> на уровне пояса; подойдет и пол у стены'], ['В кадре весь рост, от макушки до стоп. Свободное место около 3 × 1,5 м'], ['Шорты и майка: в широких штанах камера ошибается в коленях. Свет спереди или сбоку, не из окна за спиной'], ['Дальше ведет голос, экран можно не видеть']].map(([t], i) => `<div class="row" style="align-items:flex-start;padding:10px 0;border-top:1px solid var(--line-2)"><span class="step-n" style="width:20px;padding-top:2px">${i + 1}</span><span style="flex:1;font-size:15px;line-height:1.4">${t}</span></div>`).join('')}</div>
+      ${[['Поставьте телефон вертикально: на штатив на уровне пояса или на пол у стены'], ['Отойдите на 2–4 метра, чтобы в кадре вы были целиком, от головы до стоп'], ['Наденьте шорты и футболку. Встаньте лицом к свету, окно не должно быть за спиной'], ['Дальше подсказывает голос, смотреть в экран не обязательно']].map(([t], i) => `<div class="row" style="align-items:flex-start;padding:10px 0;border-top:1px solid var(--line-2)"><span class="step-n" style="width:20px;padding-top:2px">${i + 1}</span><span style="flex:1;font-size:15px;line-height:1.4">${t}</span></div>`).join('')}</div>
     <div class="group"><div class="row" style="min-height:64px"><div style="flex:1;min-width:0"><b style="font-size:15px">${FULL ? 'Точный · с поворотами' : 'Быстрый · лицом и боком'}</b><div style="font-size:13px;color:var(--sub)">${cam.back ? 'Основная камера' : 'Фронтальная камера'}${FULL && STRENGTH ? ' · сила и симметрия' : ''} · ${steps.length} ${plural3(steps.length, 'шаг', 'шага', 'шагов')}</div></div><button class="link" id="chg">Изменить</button></div></div>
-    ${device.inApp ? `<div class="card row" style="align-items:flex-start">${ic('info')}<span style="font-size:14px;line-height:1.4">Ты открыл ссылку внутри приложения соцсети. Камера здесь может не работать: открой через меню «⋯» → «Открыть в браузере».</span></div>` : ''}
+    ${device.inApp ? `<div class="card row" style="align-items:flex-start">${ic('info')}<span style="font-size:14px;line-height:1.4">Ссылка открыта внутри приложения соцсети, здесь камера может не работать. Откройте ее в браузере: меню «⋯» → «Открыть в браузере».</span></div>` : ''}
    </div>
-   <div class="dock"><span class="ondevice" style="justify-content:center">${ic('cpu', 's')}Модель уже на телефоне · видео не уходит</span><button class="btn" id="start">Начать тест</button><button class="btn ghost" id="cant">Какой-то шаг не смогу сделать</button></div></div>`);
+   <div class="dock"><span class="ondevice" style="justify-content:center">${ic('shield-check', 's')}Видео не записывается и никуда не отправляется</span><button class="btn" id="start">Начать тест</button><button class="btn ghost" id="cant">Не могу выполнить некоторые движения</button></div></div>`);
   $('#back').onclick = () => tests().length ? map() : onboarding();
   $('#chg').onclick = () => prepSheet(); $('#cant').onclick = () => prepSheet(true);
   if (reopen) prepSheet(false, true);
-  $('#start').onclick = async () => { voice.unlock(); startMotion(); const b = $('#start'); b.disabled = true; b.innerHTML = '<span class="spin" style="margin:0;width:20px;height:20px;border-width:2.5px;border-color:rgba(255,255,255,.3);border-top-color:#fff"></span>Загружаю модель на телефон…';
-    try { await initPose(); runTest(); } catch (e) { toast('Не удалось запустить модель: ' + e.message); b.disabled = false; b.textContent = 'Начать тест'; } };
+  $('#start').onclick = async () => { voice.unlock(); startMotion(); const b = $('#start'); b.disabled = true; b.innerHTML = '<span class="spin" style="margin:0;width:20px;height:20px;border-width:2.5px;border-color:rgba(255,255,255,.3);border-top-color:#fff"></span>Включаю камеру…';
+    try { await initPose(); runTest(); } catch (e) { toast('Не удалось включить камеру: ' + e.message); b.disabled = false; b.textContent = 'Начать тест'; } };
 }
 // шторка настроек теста: режим, камера, сила, список шагов с «Не могу». После перерисовки prep() остается открытой
 function prepSheet(toSteps, keep) {
@@ -230,7 +231,7 @@ function prepSheet(toSteps, keep) {
   d.innerHTML = `<div${keep ? ' style="animation:none"' : ''}><h2>Настройки теста</h2>
     <div class="seg" style="margin-top:var(--s4)"><button id="m0" class="${FULL ? '' : 'on'}">Быстрый · ${mins(SETUP_SEC + secs(QUICK))} мин</button><button id="m1" class="${FULL ? 'on' : ''}">Точный · ${mins(SETUP_SEC + secs(FULLS) + (STRENGTH ? secs(STR) : 0))} мин</button></div>
     <div class="eyebrow" style="margin-top:var(--s5)">Камера</div><div class="seg" style="margin-top:8px"><button id="c0" class="${cam.back ? '' : 'on'}">Фронтальная</button><button id="c1" class="${cam.back ? 'on' : ''}">Основная</button></div>
-    <p class="sub" style="font-size:13px;margin-top:6px">${cam.back ? 'Точнее картинка. Экран не видно, ведет голос.' : 'Видишь себя на экране во время теста.'}</p>
+    <p class="sub" style="font-size:13px;margin-top:6px">${cam.back ? 'Точнее картинка. Экран не видно, ведет голос.' : 'Во время теста вы видите себя на экране.'}</p>
     ${FULL ? `<label class="card row" style="margin-top:var(--s4);align-items:flex-start"><input type="checkbox" class="check" id="strc" ${STRENGTH ? 'checked' : ''}><div style="flex:1"><b style="font-size:15px">Сила и симметрия</b><div class="sub" style="font-size:13px">Сравнит левую и правую сторону: плечи, бока, икры, бедра. Добавляет ${mins(secs(STR))} мин</div></div></label>` : `<p class="sub" style="font-size:13px;margin-top:var(--s4)">Быстрый: 4 теста лицом и боком, около ${mins(SETUP_SEC + secs(QUICK))} мин. Сила и симметрия левой и правой стороны есть в точном тесте.</p>`}
     <div id="stepsat" class="eyebrow" style="margin-top:var(--s5)">Шаги</div><div style="margin-top:8px">${stepList(consumerProtocol(), PRE)}</div>
     <button class="btn" id="psx" style="margin-top:var(--s5)">Готово</button></div>`;
@@ -616,6 +617,15 @@ async function sendResult(r) {
   catch (e) { localStorage.setItem('bp_sent', 'fail'); track('result_fail', { c: String(e.message || e) }); await outbox.set(r).catch(() => {}); }
   const box = document.getElementById('sentbox'); if (box) box.outerHTML = sentBanner();
 }
+// клиенту по ссылке специалиста: дата повторного теста и кнопка «в календарь телефона» с напоминанием за день
+function retestCard() { const inv = INV(); if (!inv || !inv.d) return '';
+  const days = Math.ceil((inv.d - Date.now()) / 864e5), date = new Date(inv.d).toLocaleDateString('ru', { day: 'numeric', month: 'long' });
+  return `<div class="pad" style="padding-top:8px"><div class="card row" style="gap:10px;font-size:14px">${ic('calendar', 's')}<span style="flex:1">${days <= 0 ? '<b>Пора пройти повторный тест</b>' : `Повторный тест: <b>${date}</b>`}<br><span class="sub" style="font-size:13px">Назначил специалист: ${esc(inv.s)}</span></span><button class="pill" id="rtcal">${days <= 0 ? 'Пройти' : 'В календарь'}</button></div></div>`; }
+function bindRetestCard() { const b = document.getElementById('rtcal'); if (!b) return; const inv = INV();
+  b.onclick = () => { if (inv.d - Date.now() <= 0) return inviteWelcome();
+    const z = n => String(n).padStart(2, '0'), d = new Date(inv.d), day = `${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}`, url = location.origin + '/';
+    const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//BodyPassport//RU', 'BEGIN:VEVENT', 'UID:bp-retest-' + inv.i.slice(0, 12) + '@bodypassport', 'DTSTART;VALUE=DATE:' + day, 'SUMMARY:Повторный тест движения (BodyPassport)', 'DESCRIPTION:Откройте ' + url + ' и пройдите тест', 'BEGIN:VALARM', 'TRIGGER:-PT15H', 'ACTION:DISPLAY', 'DESCRIPTION:Завтра повторный тест движения', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' })); a.download = 'retest.ics'; a.click(); }; }
 function sentBanner() { const inv = INV(); if (!inv) return ''; const st = localStorage.getItem('bp_sent');
   return `<div class="pad" id="sentbox" style="padding-top:12px"><div class="card row" style="font-size:14px;gap:10px">${st === 'ok' ? `<span class="mark OK"></span><span style="flex:1">Результат отправлен: ${esc(inv.s)}</span>` : st === 'fail' ? `<i class="dia" style="color:var(--short)"></i><span style="flex:1">Не удалось отправить результат</span><button class="pill" id="resend">Отправить снова</button>` : '<span class="spin" style="margin:0;width:16px;height:16px;border-width:2px"></span><span>Отправляю результат специалисту…</span>'}</div></div>`; }
 
@@ -654,7 +664,7 @@ export function map() {
   const nSteps = t.protocol ? rowsOf(t.protocol).length : Object.keys(t.moves || {}).length;
   const days = Math.floor((Date.now() - t.date) / 864e5);
   go(`<div class="scr fade">
-   ${!SHARED && INV() ? sentBanner() : ''}
+   ${!SHARED && INV() ? sentBanner() + retestCard() : ''}
    ${SHARED ? `<div class="pad" style="padding-top:12px"><div class="card row" style="font-size:14px">${ic('info', 's')}<span>Это результат по ссылке. Твои данные не меняются.</span></div></div>` : ''}
    <div class="pad row" style="padding-top:16px;align-items:flex-start"><div style="flex:1;min-width:0"><div class="eyebrow">${new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })} · ${nSteps} ${plural3(nSteps, 'шаг', 'шага', 'шагов')}${qa != null ? ' · качество ' + qa : ''}</div><h1 style="margin-top:6px">${SHARED ? 'Карта тела' : 'Твоя карта тела'}</h1></div><button class="round" id="set" aria-label="Настройки">${ic('settings')}</button></div>
    ${days >= 7 && !SHARED ? `<div class="pad"><button class="row-link" id="re" style="color:var(--focus);font-weight:600"><span>Прошла неделя: пройди быстрый тест и сравни</span>${ic('chevron-right', 's')}</button></div>` : ''}
@@ -689,7 +699,7 @@ export function map() {
   if ($('#plan')) $('#plan').onclick = () => workout(pl, why);
   if ($('#again')) $('#again').onclick = again;
   if ($('#re')) $('#re').onclick = () => { FULL = false; prep(); };
-  if ($('#resend')) $('#resend').onclick = async () => { const p = await outbox.get().catch(() => null); if (p) sendResult(p); };
+  if ($('#resend')) $('#resend').onclick = async () => { const p = await outbox.get().catch(() => null); if (p) sendResult(p); }; bindRetestCard();
   $('#set').onclick = settings; $('#more').onclick = () => moreSheet(cur, top, !!pl.length);
 }
 function again() { if (!SHARED && INV()) return INV().join ? joinForm() : inviteWelcome(); if (SHARED) { SHARED = null; history.replaceState(null, '', location.pathname); } FULL = false; tests().length || SHARED ? prep() : onboarding(); }
@@ -787,7 +797,7 @@ export async function passportImage({ eyebrow, name, date, sp, sections = [], de
     if (cur) { y += size * lh; g.fillText(cur, x0, y); } };
   for (const sec of sections) { if (!sec.rows.length && !(sec.chart && sec.chart.length)) continue; breaks.push(y + 12); y += 64; g.fillStyle = '#111418'; g.font = '700 46px Onest, sans-serif'; g.fillText(sec.h, M, y); y += 8;
     if (sec.chart && sec.chart.length) { y += 24; y = vasChart(g, sec.chart, M, y, W - M * 2, 300); }
-    for (const [ri, r] of sec.rows.entries()) { if (ri) breaks.push(y + 10); y += 16; const y0 = y; if (r.k) { wrap(r.text, M + 72, 56, r.bold ? 700 : 400, '#111418', 1.2); drawMark(g, M + 26, y0 + 36, r.k, { scale: 2.2 }); }
+    for (const [ri, r] of sec.rows.entries()) { if (ri) breaks.push(y + 10); y += 16; const y0 = y; if (r.k) { const fs = r.small ? 40 : 56; wrap(r.text, M + 72, fs, r.bold ? 700 : 400, '#111418', 1.25); drawMark(g, M + 26, y0 + (r.small ? 26 : 36), r.k, { scale: r.small ? 1.7 : 2.2 }); }
       else wrap(r.text, M, 40, 400, r.col || '#16181C'); } }
   if (delta) { breaks.push(y + 16); y += 72; g.fillStyle = '#111418'; g.font = '700 46px Onest, sans-serif'; g.fillText(delta.h, M, y); y += 40;
     g.fillStyle = '#5B6068'; g.font = '400 40px Onest, sans-serif'; g.fillText(delta.name, M, y + 10); y += 150;
@@ -1000,18 +1010,54 @@ async function accountBlock(el, close) {
   const u = await getMe(true); if (!el.isConnected) return;
   if (!u) { if ((await providers()).length) { el.innerHTML = '<button class="btn line" id="login" style="margin-top:12px">Войти</button>'; el.querySelector('#login').onclick = () => { close(); const home = () => (tests().length ? map() : onboarding()); ensureLogin('client', home).then(ok => ok && home()); }; } return; }
   el.innerHTML = `<div class="group" style="margin-top:var(--s3)"><div class="row" style="min-height:64px"><span class="avatar">${esc((u.name || '?').slice(0, 1).toUpperCase())}</span><div style="flex:1;font-size:14px;line-height:1.35"><b>${esc(u.name)}</b><div style="color:var(--sub);font-size:12px">${u.provider === 'google' ? 'Google' : 'Telegram'}${u.role === 'specialist' ? ' · специалист' : ''}</div></div><button class="pill" id="lo">Выйти</button></div>
-    ${u.admin ? `<button class="row-link" id="beta"><span>Участники беты</span>${ic('chevron-right', 's chev')}</button><button class="row-link" id="funnel"><span>Статистика и отзывы</span>${ic('chevron-right', 's chev')}</button>` : ''}
+    ${u.admin ? `<button class="row-link" id="adm">${ic('settings', 's')}<span>Администрирование</span>${ic('chevron-right', 's chev')}</button>` : ''}
     <button class="row-link" id="delacc" style="color:var(--over-t)"><span>Удалить аккаунт</span></button></div>`;
   el.querySelector('#lo').onclick = async () => { await logout(); localStorage.removeItem('bp_mode'); close(); onboarding(); };
   el.querySelector('#delacc').onclick = async () => { if (!confirm('Удалить аккаунт? Результаты на этом телефоне останутся, их можно удалить отдельно.')) return; try { await deleteAccount(); localStorage.removeItem('bp_mode'); close(); onboarding(); } catch (e) { toast('Не получилось: ' + e.message); } };
-  if (el.querySelector('#funnel')) el.querySelector('#funnel').onclick = () => { close(); funnelScreen(); };
-  if (el.querySelector('#beta')) el.querySelector('#beta').onclick = async () => { try { const list = await betaUsers(); close();
-    go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:17px">Участники беты · ${list.length}</b></div>
+  if (el.querySelector('#adm')) el.querySelector('#adm').onclick = () => { close(); adminScreen(); };
+}
+/** Панель администратора: режим приложения, участники, статистика, выгрузка данных, сброс. */
+export async function adminScreen(back) {
+  back = back || (localStorage.getItem('bp_mode') === 'pro' ? () => proHome() : () => (tests().length ? map() : onboarding()));
+  const beta = configSync().beta !== false, noev = localStorage.getItem('bp_noev') === '1';
+  go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:18px">Администрирование</b></div>
+    <div class="pad" style="display:flex;flex-direction:column;gap:12px;padding-bottom:32px">
+     <div class="card"><b>Режим приложения</b><div class="seg" style="margin-top:10px"><button id="mb" class="${beta ? 'on' : ''}">Бета</button><button id="mf" class="${beta ? '' : 'on'}">Полный</button></div>
+      <p class="sub" style="font-size:13px;margin-top:8px">${beta ? 'Бета: у всех специалистов открыты все возможности, об оплате нигде не говорится, видна пометка «бета».' : 'Полный: тариф Free (5 клиентов) и PRO с оплатой через lava.top.'}</p></div>
+     <label class="card row" style="align-items:flex-start"><input type="checkbox" class="check" id="noev" ${noev ? 'checked' : ''}><div style="flex:1"><b style="font-size:15px">Не учитывать мои действия</b><div class="sub" style="font-size:13px">На этом устройстве ваши тесты и клики не попадают в статистику</div></div></label>
+     <div class="group">
+      <button class="row-link" id="ausers">${ic('user-plus', 's')}<span>Участники</span>${ic('chevron-right', 's chev')}</button>
+      <button class="row-link" id="afun">${ic('info', 's')}<span>Статистика и отзывы</span>${ic('chevron-right', 's chev')}</button>
+      <button class="row-link" id="aexp">${ic('download', 's')}<span>Выгрузить данные для анализа</span>${ic('chevron-right', 's chev')}</button></div>
+     <div class="card" style="border:1px solid var(--over-t)"><b>Сбросить статистику и отзывы</b><p class="sub" style="font-size:13px;margin-top:4px">Удаляет все события и отзывы на сервере. Аккаунты и клиенты не трогает. Перед сбросом сделайте выгрузку.</p>
+      <input id="rsw" class="field" style="margin-top:10px;height:48px" placeholder="Напишите СБРОС" autocomplete="off"><button class="btn line" id="rsb" style="margin-top:8px;height:48px;color:var(--over-t)" disabled>Сбросить</button></div>
+    </div></div>`);
+  $('#back').onclick = back;
+  const mode = async v => { try { await setAppMode(v); await getMe(true); toast(v ? 'Включена бета' : 'Включен полный режим'); adminScreen(back); } catch (e) { toast('Не получилось: ' + e.message); } };
+  $('#mb').onclick = () => { if (!beta) mode(true); }; $('#mf').onclick = () => { if (beta) mode(false); };
+  $('#noev').onchange = e => { localStorage.setItem('bp_noev', e.target.checked ? '1' : '0'); };
+  $('#afun').onclick = () => funnelScreen();
+  $('#aexp').onclick = async () => { const b = $('#aexp'); b.style.opacity = .5; try { await exportData(); } catch (e) { toast('Не удалось выгрузить: ' + e.message); } b.style.opacity = 1; };
+  $('#rsw').oninput = e => { $('#rsb').disabled = e.target.value.trim().toUpperCase() !== 'СБРОС'; };
+  $('#rsb').onclick = async () => { if (!confirm('Точно удалить всю статистику и отзывы? Это нельзя отменить.')) return;
+    const r = await fetch('/api/ev?a=reset&confirm=' + encodeURIComponent('СБРОС'), { method: 'DELETE' }); const j = await r.json().catch(() => ({}));
+    toast(r.ok ? 'Удалено записей: ' + j.deleted : 'Ошибка: ' + (j.error || r.status)); if (r.ok) adminScreen(back); };
+  $('#ausers').onclick = async () => { try { const list = await betaUsers();
+    go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:17px">Участники · ${list.length}</b></div>
       <div class="pad" style="display:flex;flex-direction:column;gap:8px;padding-bottom:30px">${list.map(x => `<div class="card" style="padding:12px 14px;font-size:14px;line-height:1.4"><b>${esc(x.name)}</b> <span style="color:var(--sub)">${x.role === 'specialist' ? 'специалист' : 'клиент'} · ${x.provider === 'google' ? esc(x.email) : '@' + esc(x.username || 'telegram')}</span><div style="font-size:12px;color:var(--sub)">с ${new Date(x.created).toLocaleDateString('ru')}${x.ref ? ' · откуда: ' + esc(x.ref) : ''}${x.specialty ? ' · ' + esc(x.specialty) : ''} · тариф ${esc(x.plan)}${x.paidUntil > Date.now() ? ' до ' + new Date(x.paidUntil).toLocaleDateString('ru') : ''}</div>${x.role === 'specialist' ? `<button class="pill" data-pro="${esc(x.id)}" style="margin-top:8px;border:1.5px solid var(--line)">Про +30 дней</button>` : ''}</div>`).join('')}</div></div>`);
-    $('#back').onclick = () => map();
+    $('#back').onclick = () => adminScreen(back);
     app.querySelectorAll('[data-pro]').forEach(btn => btn.onclick = async () => { if (!confirm('Продлить Про на 30 дней?')) return;
       const r = await fetch('/api/auth?a=setplan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: btn.dataset.pro, plan: 'pro', days: 30 }) }); btn.textContent = r.ok ? 'Продлено' : 'Ошибка'; });
   } catch (e) { toast(e.message); } };
+}
+
+/** Выгрузка для анализа: статистика за 90 дней, отзывы и участники одним файлом JSON. */
+async function exportData() {
+  const [st, fb, us] = await Promise.all([fetch('/api/ev?a=stats&days=90').then(r => r.ok ? r.json() : { error: r.status }), fetch('/api/feedback').then(r => r.ok ? r.json() : { error: r.status }), betaUsers().catch(e => ({ error: e.message }))]);
+  const data = { exported: new Date().toISOString(), app: location.host, mode: configSync().beta !== false ? 'beta' : 'full', stats: st, feedback: fb, users: us };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), name = 'bodypassport-data-' + new Date().toISOString().slice(0, 10) + '.json', file = new File([blob], name, { type: 'application/json' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: name }); return; } catch (e) {} }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); toast('Файл сохранен: ' + name);
 }
 
 // ---------- воронка беты (только администратор): обезличенные шаги из js/track.js ----------
@@ -1046,7 +1092,7 @@ export async function funnelScreen(days = 14) {
   go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:17px">Статистика · ${days} дней</b></div>
     <div class="pad" style="display:flex;flex-direction:column;gap:10px;padding-bottom:30px">
      <p class="sub" style="font-size:13px">Число вкладок, где шаг был хотя бы раз, сумма по дням. Процент от первого шага.</p>
-     <div class="seg">${[7, 14, 30].map(n => `<button data-d="${n}" class="${n === days ? 'on' : ''}">${n} дней</button>`).join('')}</div>
+     <div class="seg">${[7, 30, 90].map(n => `<button data-d="${n}" class="${n === days ? 'on' : ''}">${n} дней</button>`).join('')}</div>
      ${bugCard}
      ${FUNNEL.map(block).join('')}
      ${usersCard}
@@ -1057,7 +1103,7 @@ export async function funnelScreen(days = 14) {
      <div class="card" style="padding:14px 16px"><b>Отзывы</b>${fb && fb.items.some(x => x.k !== 'bug') ? fb.items.filter(x => x.k !== 'bug').slice(0, 40).map(x => `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);font-size:14px;line-height:1.45"><div class="row" style="gap:8px;font-size:12px;color:var(--sub)"><span>${new Date(x.at).toLocaleDateString('ru', { day: 'numeric', month: 'short' })}</span><span>${x.r === 'pro' ? 'специалист' : 'клиент'}</span><span>${kind[x.k] || ''}${x.s != null ? ': <b style="color:var(--text)">' + x.s + '</b>' : ''}</span></div>${x.t ? `<div style="margin-top:4px">${esc(x.t)}</div>` : ''}${x.contact ? `<div style="margin-top:4px;font-size:13px;color:var(--weak-t)">Можно связаться: ${esc(x.contact.name)} ${esc(x.contact.handle)}</div>` : ''}</div>`).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Отзывов пока нет</div>'}</div>
      <div class="card" style="padding:14px 16px"><b>Ошибки в браузере</b>${errs.length ? errs.map(([m, n]) => `<div style="font-size:13px;margin-top:8px;word-break:break-word"><b>${n}×</b> ${esc(m)}</div>`).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Ошибок нет</div>'}</div>
     </div></div>`);
-  $('#back').onclick = () => localStorage.getItem('bp_mode') === 'pro' ? openPro() : map();
+  $('#back').onclick = () => adminScreen();
   app.querySelectorAll('[data-d]').forEach(b => b.onclick = () => funnelScreen(+b.dataset.d));
 }
 

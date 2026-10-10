@@ -1,5 +1,7 @@
 // Тарифы и специализации. Один источник правды для кабинета и страницы /pricing.
-import { meSync } from './auth.js';
+import { meSync, configSync } from './auth.js';
+// бета: у всех специалистов PRO, об оплате нигде ни слова. Переключает администратор в настройках
+export const isBeta = () => configSync().beta !== false;
 import { track } from './track.js';
 
 // v2.0: Старт = 5 слотов клиентов навсегда, +3 слота за каждого приглашенного коллегу; Про = безлимит и свой бренд в отчетах.
@@ -40,7 +42,7 @@ export function plan() {
   if (!u) return { plan: 'start', until: null };
   return { plan: u.plan || 'start', until: u.planUntil };
 }
-export const isPro = () => plan().plan !== 'start';
+export const isPro = () => isBeta() || plan().plan !== 'start';
 /** Слоты клиентов: max с сервера (5 + 3 за коллегу), у Про без лимита. */
 export function slots(used = 0) {
   const u = meSync(), pro = isPro();
@@ -109,6 +111,7 @@ export function goPro() {
 }
 export function planLine() {
   const p = plan(), until = p.until ? new Date(p.until).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+  if (isBeta()) return 'Бета: все возможности открыты';
   return `Тариф ${PLANS[p.plan].name}${p.plan !== 'start' && until ? ', до ' + until : ''}`;
 }
 // любая ссылка с классом gopro в приложении ведет через выбор почты к оплате
