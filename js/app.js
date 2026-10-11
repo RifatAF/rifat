@@ -685,7 +685,7 @@ function bindRetestCard() { const b = document.getElementById('rtcal'); if (!b) 
     const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//BodyPassport//RU', 'BEGIN:VEVENT', 'UID:bp-retest-' + inv.i.slice(0, 12) + '@bodypassport', 'DTSTART;VALUE=DATE:' + day, 'SUMMARY:Повторный тест движения (BodyPassport)', 'DESCRIPTION:Откройте ' + url + ' и пройдите тест', 'BEGIN:VALARM', 'TRIGGER:-PT15H', 'ACTION:DISPLAY', 'DESCRIPTION:Завтра повторный тест движения', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' })); a.download = 'retest.ics'; a.click(); }; }
 function sentBanner() { const inv = INV(); if (!inv) return ''; const st = localStorage.getItem('bp_sent');
-  return `<div class="pad" id="sentbox" style="padding-top:12px"><div class="card row" style="font-size:14px;gap:10px">${st === 'ok' ? `<span class="mark OK"></span><span style="flex:1">Результат отправлен: ${esc(inv.s)}</span>` : st === 'fail' ? `<i class="dia" style="color:var(--short)"></i><span style="flex:1">Не удалось отправить результат</span><button class="pill" id="resend">Отправить снова</button>` : '<span class="spin" style="margin:0;width:16px;height:16px;border-width:2px"></span><span>Отправляю результат специалисту…</span>'}</div></div>`; }
+  return `<div class="pad" id="sentbox" style="padding-top:12px"><div class="card row" style="font-size:14px;gap:10px">${st === 'ok' ? `<span class="mark OK"></span><span style="flex:1">Результат отправлен: ${esc(inv.s)}${inv.cal ? '. Специалист сверит его со своей оценкой и отправит без вашего имени на настройку приложения' : ''}</span>` : st === 'fail' ? `<i class="dia" style="color:var(--short)"></i><span style="flex:1">Не удалось отправить результат</span><button class="pill" id="resend">Отправить снова</button>` : '<span class="spin" style="margin:0;width:16px;height:16px;border-width:2px"></span><span>Отправляю результат специалисту…</span>'}</div></div>`; }
 
 // ---------- 4. анализ: тёмный экран, фигура проявляется, три строки статуса ----------
 let REVEAL = false;
@@ -1141,6 +1141,23 @@ async function accountBlock(el, close) {
   if (el.querySelector('#adm')) el.querySelector('#adm').onclick = () => { close(); adminScreen(); };
 }
 /** Панель администратора: режим приложения, участники, статистика, выгрузка данных, сброс. */
+/** Калибровки, присланные специалистами: список, скачать один случай или все сразу одним файлом. */
+async function calibInbox(back) {
+  const j = await fetch('/api/calib', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null), items = (j && j.items) || [];
+  const kb = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' МБ' : Math.max(1, Math.round(n / 1024)) + ' КБ';
+  go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:17px">Калибровки · ${items.length}</b></div>
+    <div class="pad" style="display:flex;flex-direction:column;gap:8px;padding-bottom:30px">
+     <p class="sub" style="font-size:14px;line-height:1.4">Сюда приходят случаи, которые специалисты отправили кнопкой «Отправить на калибровку» в карточке человека. Имен нет, только номер случая.</p>
+     ${!j ? '<div class="card">Не удалось загрузить список</div>' : items.length ? `<button class="btn" id="calall" style="height:48px">Скачать все одним файлом</button>` + items.map(x => `<button class="row-link card" data-p="${esc(x.p)}" style="padding:12px 14px"><span style="flex:1;text-align:left"><b style="font-weight:600">${new Date(x.at).toLocaleString('ru')}</b><br><small class="sub">${kb(x.size)}</small></span>${ic('download', 's')}</button>`).join('') : '<div class="card">Пока ничего не прислали</div>'}
+    </div></div>`);
+  $('#back').onclick = back;
+  const load = p => fetch('/api/calib?p=' + encodeURIComponent(p), { cache: 'no-store' }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+  const save = (obj, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); };
+  app.querySelectorAll('[data-p]').forEach(b => b.onclick = async () => { try { save(await load(b.dataset.p), 'calib-' + b.dataset.p.split('/').pop()); } catch (e) { toast('Не удалось скачать: ' + e.message); } });
+  if ($('#calall')) $('#calall').onclick = async () => { const b = $('#calall'); b.disabled = true; b.textContent = 'Собираю…';
+    try { const docs = []; for (const x of items) docs.push(await load(x.p)); save({ exported: new Date().toISOString(), cases: docs }, `bodypassport-calibration-all-${new Date().toISOString().slice(0, 10)}.json`); }
+    catch (e) { toast('Не удалось скачать: ' + e.message); } b.disabled = false; b.textContent = 'Скачать все одним файлом'; };
+}
 export async function adminScreen(back) {
   back = back || (localStorage.getItem('bp_mode') === 'pro' ? () => proHome() : () => (tests().length ? map() : onboarding()));
   const beta = configSync().beta !== false, noev = localStorage.getItem('bp_noev') === '1';
@@ -1152,7 +1169,8 @@ export async function adminScreen(back) {
      <div class="group">
       <button class="row-link" id="ausers">${ic('user-plus', 's')}<span>Участники</span>${ic('chevron-right', 's chev')}</button>
       <button class="row-link" id="afun">${ic('info', 's')}<span>Статистика и отзывы</span>${ic('chevron-right', 's chev')}</button>
-      <button class="row-link" id="aexp">${ic('download', 's')}<span>Выгрузить данные для анализа</span>${ic('chevron-right', 's chev')}</button></div>
+      <button class="row-link" id="aexp">${ic('download', 's')}<span>Выгрузить данные для анализа</span>${ic('chevron-right', 's chev')}</button>
+      <button class="row-link" id="acal">${ic('star', 's')}<span>Калибровки от специалистов</span>${ic('chevron-right', 's chev')}</button></div>
      <div class="card" style="border:1px solid var(--over-t)"><b>Сбросить статистику и отзывы</b><p class="sub" style="font-size:13px;margin-top:4px">Удаляет все события и отзывы на сервере. Аккаунты и клиенты не трогает. Перед сбросом сделайте выгрузку.</p>
       <input id="rsw" class="field" style="margin-top:10px;height:48px" placeholder="Напишите СБРОС" autocomplete="off"><button class="btn line" id="rsb" style="margin-top:8px;height:48px;color:var(--over-t)" disabled>Сбросить</button></div>
     </div></div>`);
@@ -1161,6 +1179,7 @@ export async function adminScreen(back) {
   $('#mb').onclick = () => { if (!beta) mode(true); }; $('#mf').onclick = () => { if (beta) mode(false); };
   $('#noev').onchange = e => { localStorage.setItem('bp_noev', e.target.checked ? '1' : '0'); };
   $('#afun').onclick = () => funnelScreen();
+  $('#acal').onclick = () => calibInbox(() => adminScreen(back));
   $('#aexp').onclick = async () => { const b = $('#aexp'); b.style.opacity = .5; try { await exportData(); } catch (e) { toast('Не удалось выгрузить: ' + e.message); } b.style.opacity = 1; };
   $('#rsw').oninput = e => { $('#rsb').disabled = e.target.value.trim().toUpperCase() !== 'СБРОС'; };
   $('#rsb').onclick = async () => { if (!confirm('Точно удалить всю статистику и отзывы? Это нельзя отменить.')) return;
