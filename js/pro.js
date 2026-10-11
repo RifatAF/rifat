@@ -432,7 +432,9 @@ export async function clientCard(id) {
   const when = t => new Date(t).toLocaleDateString('ru', { day: 'numeric', month: 'long' }) + (new Date(t).getHours() || new Date(t).getMinutes() ? ', ' + new Date(t).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }) : '');
   go(`<div class="fade" style="padding-bottom:40px"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><span style="flex:1"></span><button class="pill" id="edit">Изменить</button></div>
    <div class="pad"><h1>${esc(c.name)}</h1><p class="sub" style="font-size:14px;margin-top:4px">${[age != null ? age + ' ' + (age % 10 === 1 && age % 100 !== 11 ? 'год' : [2, 3, 4].includes(age % 10) && ![12, 13, 14].includes(age % 100) ? 'года' : 'лет') : '', c.sex === 'M' ? 'муж' : c.sex === 'F' ? 'жен' : '', c.height ? c.height + ' см' : '', c.activity].filter(Boolean).map(esc).join(' · ')}</p>
-    ${c.complaints ? `<p style="font-size:15px;line-height:1.4;margin-top:8px"><span class="sub">Жалобы:</span> ${esc(c.complaints)}</p>` : ''}</div>
+    ${c.complaints ? `<p style="font-size:15px;line-height:1.4;margin-top:8px"><span class="sub">Жалобы:</span> ${esc(c.complaints)}</p>` : ''}
+    ${last && last.clientNote ? `<p style="font-size:15px;line-height:1.4;margin-top:8px;background:var(--surface-2);border-radius:12px;padding:10px 12px"><span class="sub">Комментарий клиента:</span> ${esc(last.clientNote)}</p>` : ''}
+    ${last && last.pain && Object.values(last.pain).some(v => v > 0) ? `<p style="font-size:15px;line-height:1.4;margin-top:8px"><span class="sub">Боль:</span> ${Object.entries(last.pain).filter(([, v]) => v > 0).map(([k, v]) => `${({ neck: 'шея', shoulder: 'плечо', upper_back: 'грудной отдел', low_back: 'поясница', hip: 'таз, бедро', knee: 'колено', foot: 'стопа' })[k] || k} ${v}/10`).join(', ')}</p>` : ''}</div>
    ${c.calib ? `<div class="pad" style="margin-top:12px"><div class="card" style="border:1.5px dashed var(--accent)"><div class="eyebrow" style="color:var(--short-t)">Калибровка · ваша оценка</div>
      ${c.calib.labels.length ? `<div class="row" style="flex-wrap:wrap;gap:6px;margin-top:8px">${c.calib.labels.map(l => `<span class="pill" style="font-size:13px">${esc((C.muscles[l.id] || { name: l.id }).name)} · ${l.side === 'LEFT' ? 'Л' : l.side === 'RIGHT' ? 'П' : 'обе'} · ${({ HYPER: 'перегружена', SHORT: 'укорочена', WEAK: 'слабая' })[l.k]}</span>`).join('')}</div>` : ''}
      ${c.calib.note ? `<p style="font-size:14px;line-height:1.4;margin-top:8px">${esc(c.calib.note)}</p>` : ''}
@@ -1253,12 +1255,12 @@ function cleanRemote(r) {
   const limits = pick(r.limits, l => l && typeof l === 'object' ? { reasons: Array.isArray(l.reasons) ? l.reasons.slice(0, 8).map(x => str(x, 60)).filter(Boolean) : [], level: str(l.level, 80) || null, side: ['LEFT', 'RIGHT', 'BOTH'].includes(l.side) ? l.side : null, ...(l.alt ? { alt: 'support' } : {}) } : undefined);
   const poses = pick(r.poses, p => p && typeof p === 'object' && Number.isInteger(p.n) && p.n > 0 && p.n < 20000 && typeof p.t === 'string' && typeof p.d === 'string' ? { n: p.n, t: p.t, d: p.d, w: typeof p.w === 'string' ? p.w : null } : undefined);
   const setup = r.setup && typeof r.setup === 'object' ? { bodyFrac: n(r.setup.bodyFrac), w: n(r.setup.w), h: n(r.setup.h), back: !!r.setup.back } : {};
-  return { ...base, protocol, quality: pick(r.quality, v => n(v) !== undefined ? Math.max(0, Math.min(100, Math.round(v))) : undefined), limits, pain: pick(r.pain, v => n(v) !== undefined ? Math.max(0, Math.min(10, Math.round(v))) : undefined), poses, setup };
+  return { ...base, protocol, comment: str(r.comment, 1000), quality: pick(r.quality, v => n(v) !== undefined ? Math.max(0, Math.min(100, Math.round(v))) : undefined), limits, pain: pick(r.pain, v => n(v) !== undefined ? Math.max(0, Math.min(10, Math.round(v))) : undefined), poses, setup };
 }
 async function addResult(c, r) {
   r = cleanRemote(r); const prev = (await byClient(c.id)).at(-1); const tpl = TEMPLATES.find(t => t[2].join() === (r.protocol || []).join());
   const a = { id: uid(), clientId: c.id, date: r.date || Date.now(), template: tpl ? tpl[0] : 'custom', templateName: 'По ссылке · ' + (tpl ? tpl[1] : 'свой протокол'), protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup,
-    limits: r.limits || {}, pain: r.pain || {}, hyp: {}, plan: null, note: '', nextDate: (r.date || Date.now()) + 30 * DAY, prevId: prev ? prev.id : null, draft: true, source: 'home' };
+    limits: r.limits || {}, pain: r.pain || {}, clientNote: r.comment || '', hyp: {}, plan: null, note: '', nextDate: (r.date || Date.now()) + 30 * DAY, prevId: prev ? prev.id : null, draft: true, source: 'home' };
   await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses || {} });
   if (prev) endTrialOnRetest();
 }
@@ -1301,7 +1303,7 @@ async function calibExport() {
   const cases = [];
   for (const c of cs) { const as = await byClient(c.id), out = [];
     for (const a of as) { const pp = await get('poses', a.id), sp = proSpots(a).filter(s => s.k !== 'OK' && (!s.derived || s.byChain || s.edited)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
-      out.push({ date: new Date(a.date).toISOString(), protocol: a.protocol, pain: a.pain, quality: a.quality, limits: a.limits, snapshot: a.snapshot, side: a.side, moves: a.moves,
+      out.push({ date: new Date(a.date).toISOString(), protocol: a.protocol, pain: a.pain, clientNote: a.clientNote || '', quality: a.quality, limits: a.limits, snapshot: a.snapshot, side: a.side, moves: a.moves,
         findings: analyze(a, C).findings.map(f => f.observed), appHypotheses: sp.slice(0, 10).map(s => ({ muscle: s.id, name: C.muscles[s.id].name, side: s.side, state: s.k, tone: Math.round(s.tone * 100) / 100 })), poses: pp && pp.poses || {} }); }
     cases.push({ name: c.name, created: new Date(c.created).toISOString(), expert: { labels: c.calib.labels.map(l => ({ muscle: l.id, name: C.muscles[l.id] ? C.muscles[l.id].name : l.id, side: l.side, state: l.k })), note: c.calib.note },
       selfReport: c.selfReport || null, assessments: out }); }

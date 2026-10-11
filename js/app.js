@@ -617,8 +617,11 @@ async function inviteWelcome() {
   go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button></div><div class="pad" style="padding-top:4px"><div class="eyebrow">Тест от специалиста</div>
      <h1 style="margin-top:8px">${(inv.n || (PROFILE() || {}).name) ? esc(inv.n || PROFILE().name) + ', ' : ''}здравствуйте!</h1>${inv.join ? '<button class="pill" id="editpf" style="margin-top:8px">Изменить анкету</button>' : ''}<p class="sub" style="margin-top:8px">${esc(inv.s)} подготовил для вас тест движения. Результат сразу придет специалисту, а вы увидите свою карту тела.</p></div>
    <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:14px;margin-top:16px">
+    <div class="card" style="display:flex;flex-direction:column;gap:10px"><b style="font-size:17px">Где болит или беспокоит?</b><span class="sub" style="font-size:13px;margin-top:-6px">Отметьте зоны, если болит. Можно ничего не отмечать.</span>
+      <div class="row" style="flex-wrap:wrap;gap:8px">${PAINZ.map(([k, n]) => `<button class="pill" data-pz2="${k}" style="border:1.5px solid ${pain[k] > 0 ? 'var(--brand)' : 'transparent'};${pain[k] > 0 ? 'background:var(--brand-s)' : ''}">${n}</button>`).join('')}</div>
+      <div id="painsl" style="display:flex;flex-direction:column;gap:6px"></div>
+      <textarea id="ccom" rows="3" maxlength="1000" class="field" placeholder="Комментарий для специалиста: что беспокоит, когда болит, что пробовали" style="height:auto;padding:12px 14px;font-size:15px">${esc(localStorage.getItem('bp_ccom_' + inv.i) || (inv.join && PROFILE() && PROFILE().complaints) || '')}</textarea></div>
     ${stepList(inv.p, PREI)}
-    <div><b>Где болит сейчас, 0–10</b>${PAINZ.map(([k, n]) => `<div class="row" style="background:var(--surface);border-radius:var(--r-md);padding:6px 16px;margin-top:6px;min-height:52px"><span style="width:110px;font-size:14px">${n}</span><input type="range" min="0" max="10" value="${pain[k] || 0}" data-p="${k}" style="flex:1;accent-color:var(--ink)"><b style="width:22px;text-align:right" id="pv_${k}">${pain[k] || 0}</b></div>`).join('')}</div>
     <p class="sub" style="font-size:13px">Поставьте телефон, отойдите на 2–4 метра, в кадре весь рост. Шорты лучше широких штанов, свет не за спиной. Около ${mins(SETUP_SEC + secs(rows))} мин.</p>
     <label class="card row" style="padding:12px 14px;align-items:flex-start"><input type="checkbox" id="share_ok" ${localStorage.getItem('bp_share_' + inv.i) ? 'checked' : ''} class="check" style="margin-top:2px">
      <span style="font-size:14px;line-height:1.45">Согласен передать ${inv.join ? 'анкету, ' : ''}оценку боли и результат теста специалисту: ${esc(inv.s)}. Данные шифруются на телефоне, сервер их не читает.</span></label>
@@ -628,13 +631,19 @@ async function inviteWelcome() {
   addSpecHint();
   if ($('#skipTest')) $('#skipTest').onclick = () => { if (!$('#share_ok').checked) { $('#share_ok').parentElement.style.outline = '2px solid var(--over)'; return; }
     track('beta_skip_test'); const r = { ...fakeResult(inv.p), poses: {} }, { poses, ...light } = r; saveTest({ ...light, pain, inv: inv.i });
-    try { sendResult({ ...r, pain, profile: inv.join ? PROFILE() : undefined }); } catch (e) {} analysisScreen(); };
-  app.querySelectorAll('[data-p]').forEach(r => r.oninput = () => { pain[r.dataset.p] = +r.value; $('#pv_' + r.dataset.p).textContent = r.value; });
+    try { sendResult({ ...r, pain, comment: comment(), profile: inv.join ? PROFILE() : undefined }); } catch (e) {} analysisScreen(); };
+  const drawPain = () => { $('#painsl').innerHTML = PAINZ.filter(([k]) => pain[k] > 0).map(([k, n]) => `<div class="row" style="background:var(--surface-2);border-radius:var(--r-md);padding:6px 14px;min-height:48px"><span style="width:110px;font-size:14px">${n}</span><input type="range" min="1" max="10" value="${pain[k]}" data-p="${k}" style="flex:1;accent-color:var(--brand)" aria-label="${n}, боль от 1 до 10"><b class="num" id="pv_${k}" style="width:28px;text-align:right">${pain[k]}</b></div>`).join('');
+    app.querySelectorAll('[data-p]').forEach(r => r.oninput = () => { pain[r.dataset.p] = +r.value; $('#pv_' + r.dataset.p).textContent = r.value; }); };
+  drawPain();
+  app.querySelectorAll('[data-pz2]').forEach(b => b.onclick = () => { const k = b.dataset.pz2; pain[k] = pain[k] > 0 ? 0 : 3; b.style.borderColor = pain[k] > 0 ? 'var(--brand)' : 'transparent'; b.style.background = pain[k] > 0 ? 'var(--brand-s)' : ''; drawPain(); });
+  $('#ccom').oninput = e => { try { localStorage.setItem('bp_ccom_' + inv.i, e.target.value); } catch (er) {} };
+  // после теста экрана с полем уже нет: берем сохраненный текст
+  const comment = () => String(($('#ccom') ? $('#ccom').value : (() => { try { return localStorage.getItem('bp_ccom_' + inv.i); } catch (e) { return ''; } })()) || '').trim().slice(0, 1000);
   if ($('#editpf')) $('#editpf').onclick = joinForm;
   $('#go').onclick = async () => { if (!$('#share_ok').checked) { $('#share_ok').parentElement.style.outline = '2px solid var(--over)'; return; } localStorage.setItem('bp_share_' + inv.i, String(Date.now())); voice.unlock(); startMotion(); $('#go').textContent = 'Загружаю модель…'; try { await initPose(); } catch (e) { inviteWelcome(); return startError(e, () => $('#go') && $('#go').click()); }
     const r = await runProtocol(inv.p, { onCancel: inviteWelcome, pre: PREI }); if (!r) return;
     const { poses, ...light } = r; saveTest({ ...light, pain, inv: inv.i }); consumerPoses.save(poses).catch(() => {});
-    savePosesLocal(r); sendResult({ ...r, pain, profile: inv.join ? PROFILE() : undefined }); analysisScreen(); };
+    savePosesLocal(r); const cm = comment(); sendResult({ ...r, pain, comment: cm, profile: inv.join ? PROFILE() : undefined }); analysisScreen(); };
 }
 // запись скелета остается и у клиента (IndexedDB на его телефоне)
 function savePosesLocal(r) { try { const q = indexedDB.open('bodypassport-client', 1); q.onupgradeneeded = () => q.result.createObjectStore('poses', { keyPath: 'date' });
@@ -928,7 +937,7 @@ export function muscle(key) {
     ${stages.map((st, i) => `<div class="row" style="margin-top:8px"><span class="step-n" style="font-size:14px">${String(i + 1).padStart(2, '0')}</span><b style="font-size:18px">${st[0]}</b></div>
       ${st[1] ? `<p class="sub" style="font-size:14px">${st[1]}</p>` : ''}
       ${st[2] ? `<div class="card"><b>Самомассаж</b>${m.tool ? ` <span class="pill" style="min-height:28px;font-size:12px">${m.tool}</span>` : ''}<p style="font-size:15px;line-height:1.45;margin-top:6px">${st[2]}</p></div>` : ''}
-      ${st[3].map(id => { const e = ex(id); n++; return `<div class="list-item exr" data-id="${id}">${hasFigure(id) ? `<span style="width:76px;flex:none;background:var(--surface-2);border-radius:12px;padding:2px">${exFigure(id, { animate: false })}</span>` : `<span class="round" style="background:var(--surface-2);flex:none">${ic('play', 's')}</span>`}<div style="flex:1"><b style="font-size:16px">${e.title.split(' (')[0]}</b><div class="sub" style="font-size:13px">${[e.dose, e.durationSec + ' с'].filter(Boolean).join(' · ')}</div></div><span class="step-n">${n}</span></div>`; }).join('')}`).join('')}
+      ${st[3].map(id => { const e = ex(id); n++; return `<div class="list-item exr" data-id="${id}">${hasFigure(id) ? `<span style="width:76px;flex:none;background:var(--surface-2);border-radius:12px;padding:2px">${exFigure(id)}</span>` : `<span class="round" style="background:var(--surface-2);flex:none">${ic('play', 's')}</span>`}<div style="flex:1"><b style="font-size:16px">${e.title.split(' (')[0]}</b><div class="sub" style="font-size:13px">${[e.dose, e.durationSec + ' с'].filter(Boolean).join(' · ')}</div></div><span class="step-n">${n}</span></div>`; }).join('')}`).join('')}
     ${INV() ? '' : `<a class="row-link" href="${bot()}" target="_blank" style="color:var(--focus);font-weight:600"><span>Разобрать вместе с автором методики</span>${ic('chevron-right', 's')}</a>`}
    </div>${all.length ? `<div class="dock"><button class="btn" id="go">${ic('play', 's')}Начать комплекс · ${totalMin(all.map(ex))} мин</button></div>` : ''}</div>`);
   const rs = Object.fromEntries(all.map(id => [id, reason]));
@@ -959,19 +968,22 @@ export async function workout(ids, reasons = {}) {
       ${rs ? `<div class="row" style="gap:8px;margin-top:6px;font-size:14px;color:var(--cam-sub)"><span class="mark sm ${rs.k}"></span><span>${esc(rs.t)}</span></div>` : ''}
       <h1 style="color:#fff;margin-top:8px">${e.title.split(' (')[0]}</h1>
       <div class="row" style="gap:6px;margin-top:12px;flex-wrap:wrap">${[e.dose, e.feel].filter(Boolean).map(x => `<span class="pill" style="background:rgba(255,255,255,.12);color:#fff">${x}</span>`).join('')}</div>
-      ${hasFigure(e.id) ? `<div style="margin-top:16px;background:rgba(255,255,255,.06);border-radius:var(--r-lg);padding:8px 12px">${exFigure(e.id, { dark: true })}</div>` : ''}
+      ${hasFigure(e.id) ? `<div style="margin-top:16px;background:#F4F7F8;border-radius:var(--r-lg);padding:10px 12px 8px">${exFigure(e.id)}<div style="text-align:center;font-size:13px;color:#4A5A63;margin-top:2px">Повторяйте за фигурой · <span style="color:#C77D12">светится</span> рабочая зона</div></div>` : ''}
       <div class="row" style="gap:14px;margin-top:14px;align-items:center"><div style="position:relative;width:${hasFigure(e.id) ? 72 : 200}px;height:${hasFigure(e.id) ? 72 : 200}px;flex:none;margin:${hasFigure(e.id) ? '0' : '8px auto 0'}"><svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg)"><circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="6"/><circle id="arc" cx="50" cy="50" r="45" fill="none" stroke="#D4F25A" stroke-width="6" stroke-linecap="round" stroke-dasharray="283" stroke-dashoffset="283"/></svg>
         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><b id="tm" class="num" style="font-size:${hasFigure(e.id) ? 20 : 56}px;font-weight:600;letter-spacing:-.02em;opacity:.45">${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}</b></div></div><span id="tml" style="font-size:14px;color:var(--cam-sub)">старт после подсказки</span></div>
       <div style="flex:1;margin-top:20px;display:flex;flex-direction:column;gap:12px">${e.steps.slice(0, 3).map((s, k) => `<div class="row st" style="opacity:.45;align-items:flex-start"><span class="step-n" style="color:var(--signal);width:22px;padding-top:2px">${String(k + 1).padStart(2, '0')}</span><span style="font-size:16px;line-height:1.35;flex:1">${s}</span></div>`).join('')}
         ${e.check ? `<div class="row" style="background:rgba(255,255,255,.08);border-radius:var(--r-md);padding:12px;align-items:flex-start;gap:10px"><span style="color:var(--signal)">${ic('info', 's')}</span><span style="font-size:14px;line-height:1.4">${e.check}</span></div>` : ''}</div>
       <div class="row" style="justify-content:center;gap:28px;margin-top:16px"><button class="round" id="pv" aria-label="Назад" style="width:56px;height:56px;background:rgba(255,255,255,.1);color:#fff">${ic('skip-back')}</button><button class="round" id="pp" aria-label="Пауза" style="width:80px;height:80px;background:var(--signal);color:var(--cam-bg)">${ic('pause')}</button><button class="round" id="nx" aria-label="Дальше" style="width:56px;height:56px;background:rgba(255,255,255,.1);color:#fff">${ic('skip-forward')}</button></div></div>`);
     let token = {}; const myTok = token;
-    $('#x').onclick = () => { closed = true; voice.say(''); keepAwake(false); if (doneN) finish(); else map(); };
-    $('#pv').onclick = () => { token.dead = true; i = Math.max(0, i - 1); run(); };
-    $('#nx').onclick = () => { token.dead = true; mark(e); doneN++; i++; run(); };
+    const hush = () => { voice.say(''); try { speechSynthesis.cancel(); } catch (er) {} };
+    $('#x').onclick = () => { closed = true; hush(); keepAwake(false); if (doneN) finish(); else map(); };
+    $('#pv').onclick = () => { token.dead = true; hush(); i = Math.max(0, i - 1); run(); };
+    $('#nx').onclick = () => { token.dead = true; hush(); mark(e); doneN++; i++; run(); };
     $('#pp').onclick = () => { playing = !playing; $('#pp').innerHTML = ic(playing ? 'pause' : 'play'); $('#pp').setAttribute('aria-label', playing ? 'Пауза' : 'Продолжить'); };
-    const full = e.title.split(' (')[0] + '. ' + e.steps.join(' ') + (e.check ? ' ' + e.check : '');
-    voice.say(full); await voice.waitDone(); if (myTok.dead || closed) return; playing = true; $('#tm').style.opacity = 1; $('#tml').textContent = 'осталось';
+    // читаем название и шаги по очереди, подсвечивая текущий шаг; без записи звучит системный голос
+    const lit = k => app.querySelectorAll('.st').forEach((el, n) => el.style.opacity = n <= k ? 1 : .45);
+    await voice.speak(e.title.split(' (')[0]); for (let k = 0; k < Math.min(3, e.steps.length); k++) { if (myTok.dead || closed) return; lit(k); await voice.speak(e.steps[k]); }
+    if (e.check && !myTok.dead && !closed) await voice.speak(e.check); if (myTok.dead || closed) return; lit(-1); playing = true; $('#tm').style.opacity = 1; $('#tml').textContent = 'осталось';
     while (left > 0) { await sleep(1000); if (myTok.dead || closed) return; if (!playing) continue; left--;
       $('#tm').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`; $('#arc').style.strokeDashoffset = 283 * (left / total);
       const cur = Math.min(e.steps.length - 1, Math.floor((total - left) * Math.min(3, e.steps.length) / total)); app.querySelectorAll('.st').forEach((el, k) => el.style.opacity = k <= cur ? 1 : .45);
@@ -1060,7 +1072,7 @@ export function clientHome() {
       ${next ? `<div class="row" style="gap:10px;font-size:15px">${ic('calendar', 's')}<span style="flex:1">Повторный тест</span><b>${fmtD(next)}</b></div>` : ''}
       ${rep && rep.focus.length ? `<div style="font-size:15px;line-height:1.45"><div class="sub" style="font-size:13px;margin-bottom:4px">Над чем работаем</div>${rep.focus.map(x => `<div>• ${esc(x)}</div>`).join('')}</div>` : ''}
       ${rep && rep.note ? `<p style="font-size:15px;line-height:1.45;background:var(--surface-2);border-radius:12px;padding:10px 12px">${esc(rep.note)}</p>` : ''}`) : ''}
-    ${exIds.length ? card(assigned ? 'Упражнения от специалиста' : 'Упражнения по вашему тесту', `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${exIds.slice(0, 6).map(id => `<button class="cex" data-id="${id}" style="border:0;background:var(--surface-2);border-radius:14px;padding:4px 4px 8px;text-align:center;cursor:pointer;font:inherit;color:inherit">${exFigure(id, { animate: false })}<span style="display:block;font-size:12px;line-height:1.25;margin-top:2px">${esc(ex(id).title.split(' (')[0])}</span></button>`).join('')}</div>
+    ${exIds.length ? card(assigned ? 'Упражнения от специалиста' : 'Упражнения по вашему тесту', `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${exIds.slice(0, 6).map(id => `<button class="cex" data-id="${id}" style="border:0;background:var(--surface-2);border-radius:14px;padding:4px 4px 8px;text-align:center;cursor:pointer;font:inherit;color:inherit">${exFigure(id)}<span style="display:block;font-size:12px;line-height:1.25;margin-top:2px">${esc(ex(id).title.split(' (')[0])}</span></button>`).join('')}</div>
       <button class="btn" id="cgo">${ic('play', 's')}Начать комплекс · ${totalMin(exIds.map(ex))} мин</button>`) : ''}
     ${card('Занятия за 2 недели', `<div style="display:grid;grid-template-columns:repeat(14,1fr);gap:4px">${days14.map(d => `<i style="display:block;aspect-ratio:1;border-radius:6px;background:${d.on ? 'var(--brand)' : 'var(--surface-2)'};${d.today ? 'outline:2px solid var(--accent);outline-offset:1px' : ''}"></i>`).join('')}</div>
       <div class="row" style="font-size:15px;gap:16px;flex-wrap:wrap"><span><b class="num">${st.activeDays || 0}</b> <span class="sub">дн. из 30</span></span>${st.avgPre != null && st.avgPost != null ? `<span><span class="sub">боль</span> <b class="num">${(+st.avgPre).toFixed(1)} → ${(+st.avgPost).toFixed(1)}</b></span>` : ''}</div>`)}
