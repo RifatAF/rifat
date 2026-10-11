@@ -249,3 +249,16 @@ test('анкета беты при выходе: оценка, цель, тру�
   assert.equal((await call(fb, { method: 'POST', body: JSON.stringify({ k: 'exit', s: 4, w: 'exit', q: { goal: 'partly', issues: ['Камера', 'Долго'], sec: 300 } }) })).code, 200);
   const l = await call(fb, { headers: { cookie: cookie('t_1') } }); assert.equal(l.j.exitN, 1); assert.equal(l.j.exitGoals.partly, 1); assert.equal(l.j.exitIssues['Камера'], 1);
 });
+
+test('калибровка: отправляет только вошедший, без имени в пути, список и файлы только админу', async () => {
+  const calib = (await import(R + 'calib.js')).default; user('t_1', 'specialist'); user('t_5', 'specialist');
+  const body = JSON.stringify({ app: 'x.app', case: { caseId: 'abc', expert: { labels: [{ muscle: 'calf', side: 'LEFT', state: 'WEAK' }] }, assessments: [{ protocol: 'full' }] } });
+  assert.equal((await call(calib, { method: 'POST', body })).code, 401, 'без входа нельзя');
+  assert.equal((await call(calib, { method: 'POST', body: '{"case":{}}', headers: { cookie: cookie('t_5') } })).code, 400, 'нужна оценка и тесты');
+  assert.equal((await call(calib, { method: 'POST', body, headers: { cookie: cookie('t_5') } })).code, 200);
+  assert.equal((await call(calib, { headers: { cookie: cookie('t_5') } })).code, 403, 'не админ не видит');
+  const ls = await call(calib, { headers: { cookie: cookie('t_1') } }); assert.equal(ls.code, 200); assert.equal(ls.j.items.length, 1);
+  const one = await call(calib, { query: { p: ls.j.items[0].p }, headers: { cookie: cookie('t_1') } });
+  assert.equal(one.j.case.caseId, 'abc'); assert.equal(one.j.from.id, 't_5');
+  assert.equal((await call(calib, { query: { p: '../users/t_1.json' }, headers: { cookie: cookie('t_1') } })).code, 400, 'чужие пути нельзя');
+});

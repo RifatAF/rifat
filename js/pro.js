@@ -303,7 +303,7 @@ export async function proHome(query = '', pulled = null) { if (device.webgl2) pr
       ${it('join', 'mail', 'Тест по ссылке', 'Клиент пройдет тест дома')}
       ${it('rtq', 'rotate-ccw', 'Ретест', 'Повторный тест того же клиента')}
       ${it('repq', 'file-text', 'Отчёт клиенту', 'PDF, картинка или ссылка')}
-      ${it('cmpq', 'arrow-right-left', 'Было → стало', 'Сравнить два теста')}${isBeta() && (meSync() || {}).admin ? it('calq', 'star', 'Калибровка (бета)', 'Вы знаете проблему, человек проходит анкету и полный тест') : ''}</div></div>`;
+      ${it('cmpq', 'arrow-right-left', 'Было → стало', 'Сравнить два теста')}${isBeta() ? it('calq', 'star', 'Калибровка (бета)', 'Вы знаете проблему человека, он проходит тест, данные уходят на настройку') : ''}</div></div>`;
     document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
     d.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { d.remove(); const k = b.dataset.act; if (k === 'qs') quickStart(); else if (k === 'calq') calibSheet(); else $('#' + k).click(); }); }; $('#join').onclick = sendJoin; $('#menu').onclick = proMenu; $('#hcal').onclick = calendarScreen; if ($('#bk')) $('#bk').onclick = backup; if ($('#bk2')) $('#bk2').onclick = backup;
   // инструменты в одно касание: клиент один — сразу действие, иначе выбор из последних
@@ -356,7 +356,7 @@ async function proMenu() {
       <a class="row-link" href="/privacy" target="_blank">${ic('shield-check', 's')}<span>Конфиденциальность</span>${ic('chevron-right', 's chev')}</a></div>
     ${h('Аккаунт')}<div class="group">
       ${u && u.admin ? r('mst', 'settings', 'Администрирование') : ''}
-      ${u && u.admin && isBeta() ? r('mcal2', 'download', 'Калибровка: выгрузить данные') : ''}
+      ${isBeta() ? r('mcal2', 'download', 'Калибровка: сохранить файл себе') : ''}
       ${r('mc', 'rotate-ccw', 'Перейти в режим клиента')}
       ${u ? `<button class="row-link" id="mo">${ic('log-out', 's')}<span>Выйти: ${esc(u.name)}</span></button>` : ''}</div>
     <button class="btn" id="mx" style="margin-top:var(--s4)">Закрыть</button></div>`;
@@ -438,7 +438,9 @@ export async function clientCard(id) {
    ${c.calib ? `<div class="pad" style="margin-top:12px"><div class="card" style="border:1.5px dashed var(--accent)"><div class="eyebrow" style="color:var(--short-t)">Калибровка · ваша оценка</div>
      ${c.calib.labels.length ? `<div class="row" style="flex-wrap:wrap;gap:6px;margin-top:8px">${c.calib.labels.map(l => `<span class="pill" style="font-size:13px">${esc((C.muscles[l.id] || { name: l.id }).name)} · ${l.side === 'LEFT' ? 'Л' : l.side === 'RIGHT' ? 'П' : 'обе'} · ${({ HYPER: 'перегружена', SHORT: 'укорочена', WEAK: 'слабая' })[l.k]}</span>`).join('')}</div>` : ''}
      ${c.calib.note ? `<p style="font-size:14px;line-height:1.4;margin-top:8px">${esc(c.calib.note)}</p>` : ''}
-     ${c.selfReport ? `<p style="font-size:14px;line-height:1.4;margin-top:8px"><span class="sub">Сам человек:</span> ${esc(c.selfReport.complaints || 'жалобы не написал')}${c.selfReport.activity ? ' · ' + esc(c.selfReport.activity) : ''}</p>` : `<p class="sub" style="font-size:14px;margin-top:8px">Ждем анкету и тест по ссылке.</p>`}</div></div>` : ''}
+     ${c.selfReport ? `<p style="font-size:14px;line-height:1.4;margin-top:8px"><span class="sub">Сам человек:</span> ${esc(c.selfReport.complaints || 'жалобы не написал')}${c.selfReport.activity ? ' · ' + esc(c.selfReport.activity) : ''}</p>` : ''}
+     <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;font-size:14px">${[['Ваша оценка', true], ['Человек прошел тест по ссылке', as.length > 0], ['Данные отправлены на калибровку', !!c.calib.sentAt]].map(([t, ok], i) => `<div class="row" style="gap:8px"><span class="step-n" style="width:20px;color:${ok ? 'var(--ok-t,#2E7D5B)' : 'var(--sub)'}">${ok ? '✓' : i + 1}</span><span style="flex:1;${ok ? '' : 'color:var(--sub)'}">${t}${i === 2 && c.calib.sentAt ? ', ' + new Date(c.calib.sentAt).toLocaleDateString('ru') : ''}</span></div>`).join('')}</div>
+     ${as.length ? `<button class="btn" id="calsend" style="margin-top:12px;height:48px">${c.calib.sentAt ? 'Отправить еще раз' : 'Отправить на калибровку'}</button><p class="sub" style="font-size:12px;margin-top:6px">Уйдут ваша оценка, анкета, замеры и запись движения. Имени человека в данных нет.</p>` : `<p class="sub" style="font-size:13px;margin-top:10px">Ждем, пока человек пройдет тест по ссылке. Результат придет сюда сам, когда вы откроете приложение.</p>`}</div></div>` : ''}
    ${last ? `<div class="pad" style="margin-top:12px"><div class="card">
      <div class="row"><b style="flex:1">Карта тела · ${fmtDate(last.date)}</b><div class="seg" style="width:auto"><button id="vf" class="on" style="min-height:32px;padding:0 10px;font-size:13px">Спереди</button><button id="vb" style="min-height:32px;padding:0 10px;font-size:13px">Сзади</button><button id="v3" style="min-height:32px;padding:0 10px;font-size:13px">3D</button></div></div>
      <div class="row" style="align-items:flex-start;gap:12px;margin-top:8px"><div id="cvis" style="flex:none;width:130px;display:flex;justify-content:center"><canvas id="cheat" style="width:130px;display:block"></canvas></div>
@@ -464,6 +466,7 @@ export async function clientCard(id) {
       const pain = Object.values(a.pain || {}).filter(x => x > 0); return `<div class="list-item" data-a="${a.id}" style="background:#fff"><div style="flex:1"><b>${fmtDate(a.date)}</b><div style="font-size:13px;color:var(--sub)">Тест: ${esc(a.templateName || 'оценка')}${qa != null ? ' · качество ' + qa : ''}${pain.length ? ' · боль до ' + Math.max(...pain) : ''}${a.draft ? ' · не разобран' : ''}</div></div><span class="chev">›</span></div>`; }).join('')
       : '<p class="sub">Пока пусто.</p>'}</div>
    <div class="pad" style="margin-top:28px"><button class="btn ghost" id="del" style="color:#E5484D;border-color:#F3C9C9">Удалить клиента</button></div></div>`);
+  if ($('#calsend')) $('#calsend').onclick = () => calibSend(c, $('#calsend'));
   $('#back').onclick = () => proHome(); $('#edit').onclick = () => clientForm(id);
   document.querySelectorAll('.gopro-home').forEach(b => b.onclick = () => gate('home', c.name.split(' ')[0]));
   if (last) { const sp = proSpots(last); let v3 = null;
@@ -1276,7 +1279,7 @@ async function calibSheet() {
     d.querySelector('#cl_list').innerHTML = list.map(m => `<div class="row" style="gap:6px;padding:8px 0;border-top:1px solid var(--line-2)"><span style="flex:1;font-size:14px;min-width:0">${esc(m.name)}</span>${CAL_STATES.map(([k, t]) => `<button class="pill" data-add="${m.id}|${k}" style="font-size:12px;min-height:30px;padding:0 8px">${t}</button>`).join('')}</div>`).join('');
     d.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { labels.splice(+b.dataset.rm, 1); draw(); });
     d.querySelectorAll('[data-add]').forEach(b => b.onclick = () => { const [id, k] = b.dataset.add.split('|'); if (!labels.some(l => l.id === id && l.side === side)) labels.push({ id, side, k }); draw(); }); };
-  d.innerHTML = `<div><h2>Калибровка</h2><p class="sub" style="font-size:14px;margin-top:6px">Отметьте, что вы уже знаете о проблеме человека. Он пройдет анкету и полный видеотест, все данные придут сюда.</p>
+  d.innerHTML = `<div><h2>Калибровка</h2><p class="sub" style="font-size:14px;margin-top:6px">Как это работает: 1) отметьте, что вы уже знаете о проблеме человека; 2) отправьте ему ссылку, он пройдет анкету и полный видеотест, результат придет в его карточку здесь; 3) в карточке нажмите «Отправить на калибровку», данные без имени уйдут разработчику.</p>
     <input class="field" id="cl_name" placeholder="Имя, например Илья" style="margin-top:12px;height:48px">
     <div class="eyebrow" style="margin-top:14px">Ваша оценка</div><div class="row" id="cl_sel" style="flex-wrap:wrap;gap:6px;margin-top:8px"></div>
     <div class="row" style="gap:6px;margin-top:10px"><span class="sub" style="font-size:13px">Сторона:</span>${CAL_SIDES.map(([k, t]) => `<button class="pill" data-side="${k}" style="font-size:13px;min-height:30px;border:1.5px solid ${k === side ? 'var(--ink)' : 'transparent'}">${t}</button>`).join('')}</div>
@@ -1292,21 +1295,32 @@ async function calibSheet() {
       c.invite = await freshBox(null); await put('clients', c); track('calib_link', { n: labels.length }, false);
       const author = (await meta('profile')) || defaultAuthor();
       const url = location.origin + '/#join=' + seal.pack({ i: c.invite.id, k: c.invite.key, s: author, p: Object.keys(UNITS), cal: 1 });
-      const text = `${name.split(' ')[0]}, здравствуйте! Помогите настроить тест движения: короткая анкета (где болит, что беспокоит) и полный тест перед камерой, около 7 минут. Результат придет мне.`;
+      const text = `${name.split(' ')[0]}, здравствуйте! Помогите настроить тест движения: короткая анкета (где болит, что беспокоит) и полный тест перед камерой, около 7 минут. Результат придет мне, а без имени уйдет разработчику для настройки приложения.`;
       d.remove(); if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url).catch(() => {}); toast('Ссылка скопирована'); }
       clientCard(c.id); }
     catch (e) { b.disabled = false; b.textContent = 'Создать ссылку'; toast('Не удалось создать ссылку: ' + e.message); } };
 }
-/** Файл для разбора: экспертная оценка, ответы человека, замеры, гипотезы приложения и запись движения. */
+/** Один случай калибровки: оценка специалиста, анкета, замеры, гипотезы приложения, запись движения. anon: без имени (для отправки разработчику). */
+async function calibCase(c, anon) { const as = await byClient(c.id), out = [];
+  for (const a of as) { const pp = await get('poses', a.id), sp = proSpots(a).filter(s => s.k !== 'OK' && (!s.derived || s.byChain || s.edited)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
+    out.push({ date: new Date(a.date).toISOString(), protocol: a.protocol, pain: a.pain, clientNote: a.clientNote || '', quality: a.quality, limits: a.limits, snapshot: a.snapshot, side: a.side, moves: a.moves,
+      findings: analyze(a, C).findings.map(f => f.observed), appHypotheses: sp.slice(0, 10).map(s => ({ muscle: s.id, name: C.muscles[s.id].name, side: s.side, state: s.k, tone: Math.round(s.tone * 100) / 100 })), poses: pp && pp.poses || {} }); }
+  const sr = c.selfReport ? { ...c.selfReport } : null; if (sr && anon) { if (sr.dob) sr.age = Math.floor((Date.now() - Date.parse(sr.dob)) / 31557600000); delete sr.dob; delete sr.name; delete sr.contact; delete sr.phone; }
+  return { ...(anon ? { caseId: c.id.slice(0, 8) } : { name: c.name }), created: new Date(c.created).toISOString(), expert: { labels: c.calib.labels.map(l => ({ muscle: l.id, name: C.muscles[l.id] ? C.muscles[l.id].name : l.id, side: l.side, state: l.k })), note: c.calib.note },
+    selfReport: sr, assessments: out }; }
+/** Отправить случай разработчику: сервер сохраняет его и пишет администратору. Большие записи уходят по одному тесту. */
+async function calibSend(c, btn) { if (!meSync()) return toast('Войдите в аккаунт, чтобы отправить');
+  const t0 = btn && btn.textContent; if (btn) { btn.disabled = true; btn.textContent = 'Отправляю…'; }
+  try { const cs = await calibCase(c, true), post = body => fetch('/api/calib', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).then(async r => { if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status); });
+    const whole = JSON.stringify({ app: location.host, case: cs });
+    if (whole.length < 3.8e6) await post(whole); else for (const [k, a] of cs.assessments.entries()) await post(JSON.stringify({ app: location.host, case: { ...cs, part: k + 1, parts: cs.assessments.length, assessments: [a] } }));
+    c.calib.sentAt = Date.now(); await put('clients', c); track('calib_sent', { n: cs.assessments.length }, false); toast('Отправлено на калибровку. Спасибо!'); clientCard(c.id); }
+  catch (e) { if (btn) { btn.disabled = false; btn.textContent = t0; } toast('Не удалось отправить: ' + e.message); } }
+/** Файл для себя: те же данные, что уходят на калибровку, но с именами. */
 async function calibExport() {
   const cs = (await all('clients')).filter(c => c.calib); if (!cs.length) return toast('Калибровочных карточек пока нет');
   const cases = [];
-  for (const c of cs) { const as = await byClient(c.id), out = [];
-    for (const a of as) { const pp = await get('poses', a.id), sp = proSpots(a).filter(s => s.k !== 'OK' && (!s.derived || s.byChain || s.edited)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
-      out.push({ date: new Date(a.date).toISOString(), protocol: a.protocol, pain: a.pain, clientNote: a.clientNote || '', quality: a.quality, limits: a.limits, snapshot: a.snapshot, side: a.side, moves: a.moves,
-        findings: analyze(a, C).findings.map(f => f.observed), appHypotheses: sp.slice(0, 10).map(s => ({ muscle: s.id, name: C.muscles[s.id].name, side: s.side, state: s.k, tone: Math.round(s.tone * 100) / 100 })), poses: pp && pp.poses || {} }); }
-    cases.push({ name: c.name, created: new Date(c.created).toISOString(), expert: { labels: c.calib.labels.map(l => ({ muscle: l.id, name: C.muscles[l.id] ? C.muscles[l.id].name : l.id, side: l.side, state: l.k })), note: c.calib.note },
-      selfReport: c.selfReport || null, assessments: out }); }
+  for (const c of cs) cases.push(await calibCase(c, false));
   const blob = new Blob([JSON.stringify({ exported: new Date().toISOString(), app: location.host, cases }, null, 1)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `bodypassport-calibration-${new Date().toISOString().slice(0, 10)}.json`; document.body.appendChild(a); a.click(); a.remove();
   toast(`Выгружено: ${cases.length} ${cases.length === 1 ? 'человек' : 'человек'}`);
