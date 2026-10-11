@@ -142,7 +142,19 @@ export const Movement = {
       f.ohs_lean_excess = median(trunk) - median(shin);
       f.ohs_arms_fwd = median(bf.map(x => { const p = x.p, r = near(p); const s = p[r ? P.R_SHOULDER : P.L_SHOULDER], h = p[r ? P.R_HIP : P.L_HIP], w = p[r ? P.R_WRIST : P.L_WRIST]; return (ang(h, s) - ang(s, w)) * fwd(p); }));
       const lift = p => { const r = near(p), heel = p[r ? P.R_HEEL : P.L_HEEL], toe = p[r ? P.R_FOOT : P.L_FOOT]; return (toe.y - heel.y) / Math.max(1, Math.hypot(heel.x - toe.x, heel.y - toe.y)); };
-      f.ohs_heel_lift = median(bf.map(x => lift(x.p))) - median(fr.slice(0, 6).map(x => lift(x.p)));
+      // отрыв пятки считаем, только если стопа хорошо видна и пятка реально поднялась над исходным положением:
+      // один угол стопы дрожит от кадра к кадру и давал ложный «отрыв» при пятках на полу
+      const footVis = p => { const r = near(p); return (p[r ? P.R_HEEL : P.L_HEEL].visibility ?? 1) > .6 && (p[r ? P.R_FOOT : P.L_FOOT].visibility ?? 1) > .6; };
+      const st = fr.slice(0, 8).filter(x => footVis(x.p)), bv = bf.filter(x => footVis(x.p));
+      if (st.length >= 3 && bv.length >= 3) {
+        const r0 = near(st[0].p), HL = r0 ? P.R_HEEL : P.L_HEEL, TO = r0 ? P.R_FOOT : P.L_FOOT, HP = r0 ? P.R_HIP : P.L_HIP, AN = r0 ? P.R_ANKLE : P.L_ANKLE;
+        const leg = median(st.map(x => Math.hypot(x.p[HP].x - x.p[AN].x, x.p[HP].y - x.p[AN].y))) || 1;
+        const h0 = median(st.map(x => x.p[HL].y)), t0 = median(st.map(x => x.p[TO].y));
+        // насколько сама пятка поднялась над полом, в долях длины ноги (0,025 ≈ 2 см); носок, «уехавший» вниз, отрывом не считаем
+        const rise = median(bv.map(x => ((h0 - x.p[HL].y) - Math.max(0, t0 - x.p[TO].y)) / leg));
+        const tilt = median(bv.map(x => lift(x.p))) - median(st.map(x => lift(x.p)));
+        f.ohs_heel_lift = rise > .025 ? tilt : Math.min(tilt, 0);
+      }
     }
     Object.assign(f, overheadReach(fr));
     return res(f, b.length, vis(fr, [P.R_HIP, P.R_KNEE, P.R_ANKLE, P.R_SHOULDER]));
@@ -270,13 +282,15 @@ export function features(t) {
   // икры: меньше подъемов или ниже пятка; плюс = правая слабее
   if (Number.isFinite(cr.calf_reps_r) && Number.isFinite(cl.calf_reps_l)) { const sr2 = cr.calf_reps_r * (1 + cr.calf_h_r * 10), sl2 = cl.calf_reps_l * (1 + cl.calf_h_l * 10);
     put('asym_calf', (sl2 - sr2) / Math.max(1, Math.max(sl2, sr2)) * 100); f.sym_calf = [cl.calf_reps_l, cr.calf_reps_r]; }
+  // сколько подъемов на носок за 15 секунд на каждой ноге: прямой тест силы икры
+  put('calf_reps_l', cl.calf_reps_l); put('calf_reps_r', cr.calf_reps_r);
   // передняя поверхность бедра: на одной ноге приседаешь мельче той ногой, что слабее; плюс = правая мельче
   if (Number.isFinite(sr.sls_depth_r) && Number.isFinite(sl.sls_depth_l)) { put('asym_quad', sl.sls_depth_l - sr.sls_depth_r); f.sym_quad = [sl.sls_depth_l, sr.sls_depth_r]; }
   // признаки из шагов с плохой съемкой (качество ниже 60 или один повтор): слабые находки по ним не показываем, см. findings()
   const Q = t.quality || {}, low = k => (Q[k] != null && Q[k] < 60) || (t.moves && t.moves[k] && t.moves[k].quality === 'DOUBTFUL');
   const LQ = { stand: ['shoulder_tilt', 'pelvic_tilt', 'head_tilt', 'trunk_lateral', 'hand_rot'], side_stand: ['head_forward', 'knee_hyper', 'shoulder_shift', 'hip_shift'],
     ohs_front: ['valgus_max', 'sq_shift', 'foot_out_max', 'sq_depth', 'oh_reach'], ohs_back: ['valgus_max', 'sq_shift', 'sq_pelvis'], ohs_side: ['sq_lean', 'sq_arms', 'sq_heel'],
-    sls_r: ['sls_valgus_r', 'sls_drop_r', 'sls_trunk_r', 'asym_quad'], sls_l: ['sls_valgus_l', 'sls_drop_l', 'sls_trunk_l', 'asym_quad'], t_hold: ['asym_delt'], bends: ['asym_bend', 'bend_sum'], calf_r: ['asym_calf'], calf_l: ['asym_calf'] };
+    sls_r: ['sls_valgus_r', 'sls_drop_r', 'sls_trunk_r', 'asym_quad'], sls_l: ['sls_valgus_l', 'sls_drop_l', 'sls_trunk_l', 'asym_quad'], t_hold: ['asym_delt'], bends: ['asym_bend', 'bend_sum'], calf_r: ['asym_calf', 'calf_reps_r'], calf_l: ['asym_calf', 'calf_reps_l'] };
   const lowq = {}; for (const [k, fs] of Object.entries(LQ)) if (low(k)) for (const x of fs) lowq[x] = true;
   if (Object.keys(lowq).length) f.lowq = lowq;
   return f;
@@ -321,12 +335,17 @@ function strength(fd) { const r = fd.rule, v = Math.abs(fd.value);
   return Math.max(.45, Math.min(1, .45 + .55 * (ratio - 1))); }
 export function tones(fds, catalog, antagonists) {
   const pos = new Map(), neg = new Map(), src = new Map(), key = (id, s) => id + ':' + s;
+  // прямой тест мышцы (подъемы на носок для икры) важнее косвенных признаков из приседа: они не могут перевернуть его вывод
+  const dPos = new Set(), dNeg = new Set();
   // ослабление слабых и пограничных признаков было слишком сильным (×0,6 и ×0,5, вместе ×0,3): одиночный признак пропадал с карты
   for (const fd of fds) { const s = strength(fd) * (fd.rule.weak ? .75 : 1) * (fd.borderline ? .7 : 1);
     for (const m of fd.muscles) for (const sd of (m.side === 'BOTH' ? ['LEFT', 'RIGHT'] : [m.side])) { const k = key(m.id, sd), sm = s * (m.w ?? 1);
       // источник: какие независимые признаки (правила) указали на мышцу; пограничные в доказательства цепей не идут
       if (!fd.borderline) { if (!src.has(k)) src.set(k, new Set()); src.get(k).add(fd.rule.id + (fd.rule.feature || '')); }
+      if (fd.rule.direct && !fd.borderline) (m.state === 'WEAK' ? dNeg : dPos).add(k);
       if (m.state === 'WEAK') neg.set(k, Math.min(1, (neg.get(k) || 0) + sm)); else pos.set(k, Math.min(1, (pos.get(k) || 0) + sm)); } }
+  for (const k of dNeg) if (!dPos.has(k)) pos.delete(k);
+  for (const k of dPos) if (!dNeg.has(k)) neg.delete(k);
   const t = new Map(), ambiguous = new Set();
   for (const k of new Set([...pos.keys(), ...neg.keys()])) { const p = pos.get(k) || 0, n = neg.get(k) || 0;
     if (p > .3 && n > .3) { ambiguous.add(k); t.set(k, 0); } else t.set(k, p - n); }

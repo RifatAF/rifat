@@ -19,6 +19,8 @@ export const voice = {
   async init() { voiceIdx = await fetch('voice/index.json', { cache: 'no-store' }).then(r => r.json()).catch(() => voiceIdx || {}); },
   /** Проверка перед тестом: все фразы есть в списке записей; если нет — перечитать список. */
   async ensure(texts) { if (texts.some(t => !voiceIdx[t.trim()])) await this.init(); return texts.filter(t => !voiceIdx[t.trim()]); },
+  /** Есть ли запись этой фразы (тем же голосом, что в тесте). */
+  has(text) { return !!voiceIdx[String(text || '').trim()]; },
   unlock() { try { this._ac = this._ac || new (window.AudioContext || window.webkitAudioContext)(); this._ac.resume(); } catch (e) {} if (unlocked) return; unlocked = true; const a = new Audio(); a.muted = true; a.play().catch(() => {}); },
   muted: localStorage.getItem('bp_mute') === '1',
   // занят, пока звучит фраза; ограничено оценкой длины фразы, чтобы сбой или медленная загрузка звука не «вешали» тест
@@ -136,6 +138,20 @@ export async function startCamera(video) {
 }
 export function stopCamera() { keepAwake(false); cam.running = false; if (cam.stream) cam.stream.getTracks().forEach(t => t.stop()); cam.stream = null; }
 let lastTs = -1, fpsT = performance.now(), fpsN = 0, loopGen = 0;
+// Фильтр One Euro (Casiez и др., CHI 2012): на медленных движениях сильно гасит дрожание точек, на быстрых почти не запаздывает.
+// Сырые точки модели «дрожат» на 1–2 % кадра даже у неподвижного человека: скелет трясся, а углы и отрыв пятки шумели.
+const OE = { minCut: 1.2, beta: 4, dCut: 1 }, oeA = (cut, dt) => { const r = 2 * Math.PI * cut * dt; return r / (r + 1); };
+let oeS = null, oeT = 0;
+function oneEuro(pts, t) {
+  const dt = t - oeT; if (!oeS || dt <= 0 || dt > .5 || oeS.length !== pts.length) { oeS = pts.map(l => ({ x: l.x, y: l.y, z: l.z, dx: 0, dy: 0 })); oeT = t; return pts; }
+  oeT = t; const ad = oeA(OE.dCut, dt);
+  return pts.map((l, i) => { const s = oeS[i];
+    s.dx += ad * ((l.x - s.x) / dt - s.dx); s.dy += ad * ((l.y - s.y) / dt - s.dy);
+    // точку с низкой видимостью сглаживаем сильнее: ее координаты модель угадывает
+    const sp = Math.hypot(s.dx, s.dy), a = oeA(OE.minCut * ((l.visibility ?? 1) < .5 ? .5 : 1) + OE.beta * sp, dt);
+    s.x += a * (l.x - s.x); s.y += a * (l.y - s.y); s.z += a * (l.z - s.z);
+    return { ...l, x: s.x, y: s.y, z: s.z }; });
+}
 function loop(gen = ++loopGen) {
   // после перезапуска камеры старый цикл завершается: два цикла вызывали бы детектор дважды на кадр
   if (!cam.running || gen !== loopGen) return;
@@ -143,7 +159,8 @@ function loop(gen = ++loopGen) {
   if (landmarker && v.readyState >= 2) {
     const ts = performance.now(); if (ts - lastTs >= 30) { lastTs = ts;
       const r = landmarker.detectForVideo(v, ts); const w = v.videoWidth, h = v.videoHeight;
-      const pose = r.landmarks && r.landmarks[0] ? r.landmarks[0].map(l => ({ x: l.x * w, y: l.y * h, z: l.z * w, visibility: l.visibility ?? 1 })) : null;
+      const raw = r.landmarks && r.landmarks[0] ? oneEuro(r.landmarks[0], ts / 1000) : (oeS = null);
+      const pose = raw ? raw.map(l => ({ x: l.x * w, y: l.y * h, z: l.z * w, visibility: l.visibility ?? 1 })) : null;
       const world = r.worldLandmarks && r.worldLandmarks[0] ? r.worldLandmarks[0].map(l => ({ x: l.x, y: l.y, z: l.z })) : null;
       fpsN++; if (ts - fpsT > 1000) { cam.fps = fpsN * 1000 / (ts - fpsT); fpsN = 0; fpsT = ts; }
       cam.frame = { t: ts / 1000, w, h, pose, world };
@@ -169,7 +186,7 @@ export function drawSkeleton(cv, frame, opts = {}) {
   const ctx = cv.getContext('2d'), dpr = devicePixelRatio; const W = cv.width = cv.clientWidth * dpr, H = cv.height = cv.clientHeight * dpr;
   ctx.clearRect(0, 0, W, H); if (!frame || !frame.pose) { trail.length = 0; return {}; }
   const s = Math.min(W / frame.w, H / frame.h), ox = (W - frame.w * s) / 2, oy = (H - frame.h * s) / 2, mir = !cam.back;
-  const a = .35; const p = frame.pose.map((l, i) => { const o = sm[i] || l; const n = { x: o.x + (l.x - o.x) * a, y: o.y + (l.y - o.y) * a, visibility: l.visibility }; sm[i] = n; return n; });
+  const a = .7; const p = frame.pose.map((l, i) => { const o = sm[i] || l; const n = { x: o.x + (l.x - o.x) * a, y: o.y + (l.y - o.y) * a, visibility: l.visibility }; sm[i] = n; return n; });
   const m = l => [ox + (mir ? frame.w - l.x : l.x) * s, oy + l.y * s];
   const warn = opts.warn || !fullyVisible(frame.pose), bone = warn ? '#FFB547' : '#D4F25A';
   const bones = (q, w) => { for (const [i, j] of BONES) if (q[i].visibility > .4 && q[j].visibility > .4) { ctx.beginPath(); ctx.moveTo(...m(q[i])); ctx.lineTo(...m(q[j])); ctx.stroke(); } };
