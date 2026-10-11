@@ -5,6 +5,7 @@ import { rateCard, bindRate, installCard, bindInstall, installNow, canInstall, f
 import { proHome, motionViewer, consumerPoses } from './pro.js';
 import { seal } from './core.js';
 import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, logout, deleteAccount, betaUsers, providers, config, setAppMode } from './auth.js';
+import { exFigure, hasFigure } from './exfig.js';
 import { ready3D, C, loadContent, voice, sleep, phone, startMotion, initPose, poseInfo, prefetchPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, RAMP_CSS, body3D, preload3D, device, keepAwake, ic, toast, reduceMotion } from './core.js';
 export { ic, toast };
 
@@ -224,7 +225,7 @@ export async function prep() {
   $('#chg').onclick = () => prepSheet(); $('#cant').onclick = () => prepSheet(true);
   if (reopen) prepSheet(false, true);
   $('#start').onclick = async () => { voice.unlock(); startMotion(); const b = $('#start'); b.disabled = true; b.innerHTML = '<span class="spin" style="margin:0;width:20px;height:20px;border-width:2.5px;border-color:rgba(255,255,255,.3);border-top-color:#fff"></span>Включаю камеру…';
-    try { await initPose(); runTest(); } catch (e) { toast('Не удалось включить камеру: ' + e.message); b.disabled = false; b.textContent = 'Начать тест'; } };
+    try { await initPose(); runTest(); } catch (e) { b.disabled = false; b.textContent = 'Начать тест'; startError(e, () => b.click()); } };
 }
 // шторка настроек теста: режим, камера, сила, список шагов с «Не могу». После перерисовки prep() остается открытой
 function prepSheet(toSteps, keep) {
@@ -560,7 +561,7 @@ function joinForm() {
   const inv = INV(), acc = meSync(), pr = PROFILE() || (acc ? { name: (acc.name || '').split(' ')[0], surname: (acc.name || '').split(' ').slice(1).join(' ') } : {});
   const inp = (n, ph, v, type = 'text') => `<input id="${n}" type="${type}" value="${esc(v)}" placeholder="${ph}" class="field">`;
   const sel = (n, opts, v) => `<select id="${n}" class="field" style="padding:0 10px">${opts.map(([k, t]) => `<option value="${k}" ${v === k ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
-  go(`<div class="scr fade"><div class="pad" style="padding-top:20px"><div class="eyebrow">Тест от специалиста</div><h1 style="margin-top:8px">Расскажите о себе</h1>
+  go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button></div><div class="pad" style="padding-top:4px"><div class="eyebrow">Тест от специалиста</div><h1 style="margin-top:8px">Расскажите о себе</h1>
      <p class="sub" style="margin-top:8px">${esc(inv.s)} получит анкету вместе с результатом теста. Это займет минуту.</p></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:12px;margin-top:16px;padding-bottom:12px">
     ${inp('fn', 'Имя *', pr.name)}${inp('ln', 'Фамилия (по желанию)', pr.surname)}
@@ -569,22 +570,35 @@ function joinForm() {
     ${inp('act', 'Спорт или работа', pr.activity)}
     <textarea id="cmp" rows="3" placeholder="Что беспокоит" class="field" style="height:auto;padding:12px 16px">${esc(pr.complaints)}</textarea>
    </div><div class="pad" style="padding:8px 20px 24px"><button class="btn" id="nx">Дальше</button></div></div>`);
+  $('#back').onclick = () => safetyScreen(inviteWelcome, () => linkConsent(inviteWelcome, (INV() || {}).s), bot());
   $('#nx').onclick = () => { const v = n => $('#' + n).value.trim(); if (!v('fn')) { $('#fn').style.borderColor = 'var(--over)'; $('#fn').focus(); return; }
     const token = pr.token || seal.rid();
     localStorage.setItem(K('bp_profile'), JSON.stringify({ token, name: v('fn'), surname: v('ln'), dob: v('dob'), sex: v('sex'), height: v('ht'), hand: v('hand'), activity: v('act'), complaints: v('cmp') }));
     inviteWelcome(); };
 }
 const PREI = {}, PAINI = {};
+
+/** Понятная причина, если тест не запустился, и кнопка «Повторить» вместо сырого текста ошибки. */
+export function startError(e, retry) {
+  const n = (e && e.name) || '', m = String((e && e.message) || '');
+  const [h, t] = /NotAllowed|Permission|denied/i.test(n + m) ? ['Нет доступа к камере', 'Разрешите камеру для этого сайта: значок замка или «Aa» в адресной строке → Камера → Разрешить. Видео не записывается.']
+    : /NotFound|NotReadable|Overconstrained/i.test(n + m) ? ['Камера недоступна', 'Закройте другие приложения, которые используют камеру, и попробуйте снова.']
+    : ['Не загрузилось распознавание движения', 'Нужен интернет при первом запуске: проверьте связь и нажмите «Повторить».'];
+  track('start_error', { c: (n || m).slice(0, 40) }, false);
+  const d = document.createElement('div'); d.className = 'sheet';
+  d.innerHTML = `<div><h2 style="font-size:21px">${h}</h2><p class="sub" style="margin-top:8px;font-size:15px;line-height:1.45">${t}</p><button class="btn" id="err_r" style="margin-top:16px">Повторить</button><button class="btn ghost" id="err_x" style="margin-top:8px">Закрыть</button></div>`;
+  document.body.appendChild(d); d.querySelector('#err_x').onclick = () => d.remove(); d.querySelector('#err_r').onclick = () => { d.remove(); retry && retry(); };
+}
 async function inviteWelcome() {
   track('inv_open');
   // клиенту по ссылке аккаунт не нужен: пожилые бросали тест на экране входа. Только согласия и проверка безопасности
   if (!linkConsentOk()) { linkConsent(inviteWelcome, (INV() || {}).s); return addSpecHint(); }
-  if (!safetyOk()) { safetyScreen(inviteWelcome, null, bot()); return addSpecHint(); }
+  if (!safetyOk()) { safetyScreen(inviteWelcome, () => linkConsent(inviteWelcome, (INV() || {}).s), bot()); return addSpecHint(); }
   voice.preload(Object.values(SAY));
   const inv = INV(); const rows = rowsOf(inv.p); const pain = PAINI;
   if (inv.join && !PROFILE()) return joinForm();
   if (inv.join) inv.n = PROFILE().name;
-  go(`<div class="scr fade"><div class="pad" style="padding-top:20px"><div class="eyebrow">Тест от специалиста</div>
+  go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button></div><div class="pad" style="padding-top:4px"><div class="eyebrow">Тест от специалиста</div>
      <h1 style="margin-top:8px">${(inv.n || (PROFILE() || {}).name) ? esc(inv.n || PROFILE().name) + ', ' : ''}здравствуйте!</h1>${inv.join ? '<button class="pill" id="editpf" style="margin-top:8px">Изменить анкету</button>' : ''}<p class="sub" style="margin-top:8px">${esc(inv.s)} подготовил для вас тест движения. Результат сразу придет специалисту, а вы увидите свою карту тела.</p></div>
    <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:14px;margin-top:16px">
     ${stepList(inv.p, PREI)}
@@ -594,10 +608,11 @@ async function inviteWelcome() {
      <span style="font-size:14px;line-height:1.45">Согласен передать ${inv.join ? 'анкету, ' : ''}оценку боли и результат теста специалисту: ${esc(inv.s)}. Данные шифруются на телефоне, сервер их не читает.</span></label>
    </div><div class="pad" style="padding:14px 20px 24px"><button class="btn" id="go">Начать тест</button></div></div>`);
   bindStepList(PREI, inviteWelcome);
+  $('#back').onclick = inv.join ? joinForm : () => safetyScreen(inviteWelcome, () => linkConsent(inviteWelcome, (INV() || {}).s), bot());
   addSpecHint();
   app.querySelectorAll('[data-p]').forEach(r => r.oninput = () => { pain[r.dataset.p] = +r.value; $('#pv_' + r.dataset.p).textContent = r.value; });
   if ($('#editpf')) $('#editpf').onclick = joinForm;
-  $('#go').onclick = async () => { if (!$('#share_ok').checked) { $('#share_ok').parentElement.style.outline = '2px solid var(--over)'; return; } localStorage.setItem('bp_share_' + inv.i, String(Date.now())); voice.unlock(); startMotion(); $('#go').textContent = 'Загружаю модель…'; try { await initPose(); } catch (e) { toast('Не удалось запустить камеру или модель'); return inviteWelcome(); }
+  $('#go').onclick = async () => { if (!$('#share_ok').checked) { $('#share_ok').parentElement.style.outline = '2px solid var(--over)'; return; } localStorage.setItem('bp_share_' + inv.i, String(Date.now())); voice.unlock(); startMotion(); $('#go').textContent = 'Загружаю модель…'; try { await initPose(); } catch (e) { inviteWelcome(); return startError(e, () => $('#go') && $('#go').click()); }
     const r = await runProtocol(inv.p, { onCancel: inviteWelcome, pre: PREI }); if (!r) return;
     const { poses, ...light } = r; saveTest({ ...light, pain, inv: inv.i }); consumerPoses.save(poses).catch(() => {});
     savePosesLocal(r); sendResult({ ...r, pain, profile: inv.join ? PROFILE() : undefined }); analysisScreen(); };
@@ -677,14 +692,15 @@ export function map() {
   const days = Math.floor((Date.now() - t.date) / 864e5);
   go(`<div class="scr fade">
    ${!SHARED && INV() ? sentBanner() + retestCard() : ''}
-   ${SHARED ? `<div class="pad" style="padding-top:12px"><div class="card row" style="font-size:14px">${ic('info', 's')}<span>Это результат по ссылке. Твои данные не меняются.</span></div></div>` : ''}
+   ${SHARED ? `<div class="pad" style="padding-top:12px"><div class="card row" style="font-size:14px">${ic('info', 's')}<span>Это результат по ссылке. Ваши данные не меняются.</span></div></div>` : ''}
    <div class="pad row" style="padding-top:16px;align-items:flex-start"><div style="flex:1;min-width:0"><div class="eyebrow">${new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })} · ${nSteps} ${plural3(nSteps, 'шаг', 'шага', 'шагов')}${qa != null ? ' · качество ' + qa : ''}</div><h1 style="margin-top:6px">${SHARED ? 'Карта тела' : 'Ваша карта тела'}</h1></div><button class="round" id="set" aria-label="Настройки">${ic('settings')}</button></div>
-   ${days >= 7 && !SHARED ? `<div class="pad"><button class="row-link" id="re" style="color:var(--focus);font-weight:600"><span>Прошла неделя: пройди быстрый тест и сравни</span>${ic('chevron-right', 's')}</button></div>` : ''}
+   ${days >= 7 && !SHARED ? `<div class="pad"><button class="row-link" id="re" style="color:var(--focus);font-weight:600"><span>Прошла неделя: пройдите быстрый тест и сравните</span>${ic('chevron-right', 's')}</button></div>` : ''}
    <div class="pad" style="margin-top:12px"><div class="card" style="border-radius:var(--r-xl);padding:12px 8px 8px">
      <div class="seg" style="margin:0 4px"><button id="vf" class="${!BACK && !MODE3D ? 'on' : ''}">Спереди</button><button id="vb" class="${BACK && !MODE3D ? 'on' : ''}">Сзади</button>${device.webgl2 ? `<button id="v3" class="${MODE3D ? 'on' : ''}">3D</button>` : ''}</div>
      <div id="vis" style="position:relative;margin:8px auto 0;width:min(100%,360px);${MODE3D ? 'height:400px' : ''}">${MODE3D ? '' : '<canvas id="heat" style="width:100%;display:block;cursor:pointer"></canvas>'}</div>
      ${MODE3D ? `<div class="row" style="gap:6px;flex-wrap:wrap;justify-content:center;margin:8px 4px 0">${[['all', 'Всё тело'], ['head', 'Шея'], ['shoulders', 'Плечи'], ['back', 'Спина'], ['pelvis', 'Таз'], ['knees', 'Колени'], ['feet', 'Стопы']].map(([z, n]) => `<button class="pill" data-z="${z}">${n}</button>`).join('')}</div>
        <div style="padding:12px 12px 4px"><div style="height:8px;border-radius:4px;background:${RAMP_CSS}"></div><div class="row" style="justify-content:space-between;font-size:12px;margin-top:6px"><span style="color:var(--weak-t)">Слабость</span><span style="color:var(--sub)">Норма</span><span style="color:var(--over-t)">Перегрузка</span></div></div>` : ''}
+     ${MODE3D ? '' : `<div class="row" style="justify-content:center;gap:14px;flex-wrap:wrap;margin:6px 4px 0;font-size:13px;color:var(--sub)">${[['HYPER', 'перегружена'], ['SHORT', 'укорочена'], ['WEAK', 'слабая']].filter(([k]) => top.some(x => x.k === k)).map(([k, t]) => `<span class="row" style="gap:6px"><span class="mark sm ${k}"></span>${t}</span>`).join('')}</div>`}
      <div id="selbox" style="margin:8px 4px 0"></div></div>
      <div class="row" style="justify-content:space-between;margin:8px 4px 0;gap:8px;flex-wrap:wrap"><span class="ondevice">${ic('cpu', 's')}Посчитано на телефоне</span><span style="font-size:12px;color:var(--sub)">Оценка движения, не медицинское заключение</span></div></div>
    <div class="pad" style="margin-top:16px">${verdictCard(top, a.findings, 'Сильных перекосов не видно')}</div>
@@ -693,7 +709,9 @@ export function map() {
   // подписи: зона и короткий замер цветом состояния
   const labels = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 4)).map(s => ({ key: s.key, title: C.muscles[s.id].zone + (s.side === 'RIGHT' ? ' · П' : ' · Л'), sub: toneText(s, 3).replace('похоже, ', ''), value: shortVal(seen(a, s)[0]), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
   let h2d = null, first = reveal;
-  const draw2d = () => { if (!MODE3D) { h2d = drawHeat($('#heat'), all, BACK, SEL, labels, { reveal: first }); first = false; } };
+  // на схеме только главное: до четырех зон из итога и выбранная; остальное серым
+  const focusK = new Set([...top.slice(0, 4).map(x => x.key), SEL].filter(Boolean)), focus = () => all.map(x => focusK.has(x.key) || x.key === SEL ? x : { ...x, k: 'OK', tone: 0 });
+  const draw2d = () => { if (!MODE3D) { h2d = drawHeat($('#heat'), focus(), BACK, SEL, labels, { reveal: first }); first = false; } };
   const renderSel = () => { const x = all.find(q => q.key === SEL); const box = $('#selbox'); if (!box) return;
     box.innerHTML = x ? `<div class="group fade" style="padding:var(--s4);background:var(--surface-2)"><div class="row" style="gap:8px"><span class="mark ${x.k}"></span><span style="font-size:13px;font-weight:600;color:${TONE[x.k][5]}">${x.ambiguous ? 'Неоднозначно' : TONE[x.k][0]}</span></div>
         <div style="font-size:17px;font-weight:700;margin-top:6px;line-height:1.25">${title(x)}</div><div style="font-size:13px;color:var(--sub);margin-top:2px">${tech(x)}</div>
@@ -729,7 +747,7 @@ function moreSheet({ t, a }, top, hasPlan) {
   const ba = all_t.length >= 2 && t.snapshot && first !== t ? sec('Было → стало', [['Наклон плеч', first.snapshot.shoulderTilt, t.snapshot.shoulderTilt], ['Наклон таза', first.snapshot.pelvicTilt, t.snapshot.pelvicTilt]].map(([n, x, y]) => `<div style="margin-top:12px"><div style="font-size:14px;color:var(--sub)">${n}</div><div class="delta"><s>${fmt(x)}°</s>${ic('chevron-right', 's')}<b style="font-size:32px">${fmt(y)}°</b></div></div>`).join('')) : '';
   const lim = t.limits && Object.keys(t.limits).length ? sec('Не получилось выполнить', Object.entries(t.limits).map(([u, l]) => `<div style="margin-top:8px;font-size:14px"><b>${esc(LIMIT_NAMES[u] || u)}</b>: ${esc([l.level, ...(l.reasons || [])].filter(Boolean).join(', '))}${l.alt ? ' · сделан облегченный вариант' : ''}${l.side && l.side !== 'BOTH' ? (l.side === 'LEFT' ? ', слева' : ', справа') : ''}</div>`).join('') + '<p style="font-size:12px;color:var(--sub);margin-top:8px">Это важно для специалиста: такие ограничения разбираются на консультации.</p>') : '';
   const zones = top.length ? sec(`Все зоны · ${Math.min(5, top.length)}`, `<div class="stack" style="margin-top:8px">${top.slice(0, 5).map(s => `<div class="list-item" data-k="${s.key}" style="background:var(--bg);min-height:56px"><span class="mark ${s.k}"></span><div style="flex:1;min-width:0"><b style="font-size:15px">${title(s)}</b><div style="font-size:12px;color:var(--sub)">${tech(s)}</div></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div>`) : '';
-  const goal = benefits.length ? sec('К чему стремимся', benefits.map(b => `<div class="row" style="margin-top:10px;align-items:flex-start"><span class="mark OK" style="margin-top:3px"></span><span style="font-size:15px;line-height:1.4">${b}</span></div>`).join('') + '<p class="sub" style="font-size:14px;margin-top:12px">Делай комплекс 2 недели и пройди тест снова. Сравнишь карты до и после.</p>') : '';
+  const goal = benefits.length ? sec('К чему стремимся', benefits.map(b => `<div class="row" style="margin-top:10px;align-items:flex-start"><span class="mark OK" style="margin-top:3px"></span><span style="font-size:15px;line-height:1.4">${b}</span></div>`).join('') + '<p class="sub" style="font-size:14px;margin-top:12px">Делай комплекс 2 недели и пройди тест снова. Сравните карты до и после.</p>') : '';
   const d = document.createElement('div'); d.className = 'sheet';
   d.innerHTML = `<div><h2>Подробнее</h2>${lr}${ba}${lim}${zones}${goal}
     <div class="group" style="margin-top:var(--s3)">
@@ -885,12 +903,12 @@ export function muscle(key) {
       ${finds.map(f => `<div style="margin-top:10px"><div class="row" style="gap:6px;align-items:flex-start"><span class="src" style="margin-top:2px">ЗАМЕР</span><b style="font-size:15px;flex:1">${f.observed}</b></div><div style="font-size:13px;color:var(--sub);margin-top:2px">${f.rule.basis || ''}${f.rule.weak ? ' · слабый признак' : ''}</div></div>`).join('')
         || `<div class="row" style="gap:6px;align-items:flex-start;margin-top:10px"><span class="src hyp" style="margin-top:2px">ЦЕПЬ</span><p style="font-size:15px;line-height:1.4;flex:1">${s.byChain ? `Напрямую не измерено. Предположение по цепи «${s.byChain}».` : s.derived ? 'Напрямую не измерено. Предположение: мышца-антагонист перегружена.' : 'Признак из теста.'}</p></div>`}
       ${s.derived || finds.every(f => f.rule.weak) ? '<p style="font-size:13px;color:var(--short-t);margin-top:10px">Уверенность низкая. Проверь самопроверкой ниже или на консультации.</p>' : ''}</div>
-    ${m.selfTest ? `<div class="card"><div class="eyebrow" style="color:var(--weak-t)">Проверь себя за минуту</div><p style="font-size:15px;line-height:1.45;margin-top:8px">${m.selfTest}</p></div>` : ''}
+    ${m.selfTest ? `<div class="card"><div class="eyebrow" style="color:var(--weak-t)">Проверьте себя за минуту</div><p style="font-size:15px;line-height:1.45;margin-top:8px">${m.selfTest}</p></div>` : ''}
     ${m.benefit ? `<div class="card row" style="align-items:flex-start"><span class="mark OK" style="margin-top:4px"></span><div><b>Что изменится</b><p style="font-size:15px;margin-top:4px;line-height:1.4">${m.benefit}</p></div></div>` : ''}
     ${stages.map((st, i) => `<div class="row" style="margin-top:8px"><span class="step-n" style="font-size:14px">${String(i + 1).padStart(2, '0')}</span><b style="font-size:18px">${st[0]}</b></div>
       ${st[1] ? `<p class="sub" style="font-size:14px">${st[1]}</p>` : ''}
       ${st[2] ? `<div class="card"><b>Самомассаж</b>${m.tool ? ` <span class="pill" style="min-height:28px;font-size:12px">${m.tool}</span>` : ''}<p style="font-size:15px;line-height:1.45;margin-top:6px">${st[2]}</p></div>` : ''}
-      ${st[3].map(id => { const e = ex(id); n++; return `<div class="list-item exr" data-id="${id}"><span class="round" style="background:var(--surface-2);flex:none">${ic('play', 's')}</span><div style="flex:1"><b style="font-size:16px">${e.title.split(' (')[0]}</b><div class="sub" style="font-size:13px">${[e.dose, e.durationSec + ' с'].filter(Boolean).join(' · ')}</div></div><span class="step-n">${n}</span></div>`; }).join('')}`).join('')}
+      ${st[3].map(id => { const e = ex(id); n++; return `<div class="list-item exr" data-id="${id}">${hasFigure(id) ? `<span style="width:76px;flex:none;background:var(--surface-2);border-radius:12px;padding:2px">${exFigure(id, { animate: false })}</span>` : `<span class="round" style="background:var(--surface-2);flex:none">${ic('play', 's')}</span>`}<div style="flex:1"><b style="font-size:16px">${e.title.split(' (')[0]}</b><div class="sub" style="font-size:13px">${[e.dose, e.durationSec + ' с'].filter(Boolean).join(' · ')}</div></div><span class="step-n">${n}</span></div>`; }).join('')}`).join('')}
     ${INV() ? '' : `<a class="row-link" href="${bot()}" target="_blank" style="color:var(--focus);font-weight:600"><span>Разобрать вместе с автором методики</span>${ic('chevron-right', 's')}</a>`}
    </div>${all.length ? `<div class="dock"><button class="btn" id="go">${ic('play', 's')}Начать комплекс · ${totalMin(all.map(ex))} мин</button></div>` : ''}</div>`);
   const rs = Object.fromEntries(all.map(id => [id, reason]));
@@ -921,8 +939,9 @@ export async function workout(ids, reasons = {}) {
       ${rs ? `<div class="row" style="gap:8px;margin-top:6px;font-size:14px;color:var(--cam-sub)"><span class="mark sm ${rs.k}"></span><span>${esc(rs.t)}</span></div>` : ''}
       <h1 style="color:#fff;margin-top:8px">${e.title.split(' (')[0]}</h1>
       <div class="row" style="gap:6px;margin-top:12px;flex-wrap:wrap">${[e.dose, e.feel].filter(Boolean).map(x => `<span class="pill" style="background:rgba(255,255,255,.12);color:#fff">${x}</span>`).join('')}</div>
-      <div style="display:flex;justify-content:center;margin-top:24px"><div style="position:relative;width:200px;height:200px"><svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg)"><circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="5"/><circle id="arc" cx="50" cy="50" r="45" fill="none" stroke="#D4F25A" stroke-width="5" stroke-linecap="round" stroke-dasharray="283" stroke-dashoffset="283"/></svg>
-        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><b id="tm" class="num" style="font-size:56px;font-weight:600;letter-spacing:-.04em;opacity:.45">${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}</b><span id="tml" style="font-size:13px;color:var(--cam-sub);margin-top:4px">старт после подсказки</span></div></div></div>
+      ${hasFigure(e.id) ? `<div style="margin-top:16px;background:rgba(255,255,255,.06);border-radius:var(--r-lg);padding:8px 12px">${exFigure(e.id, { dark: true })}</div>` : ''}
+      <div class="row" style="gap:14px;margin-top:14px;align-items:center"><div style="position:relative;width:${hasFigure(e.id) ? 72 : 200}px;height:${hasFigure(e.id) ? 72 : 200}px;flex:none;margin:${hasFigure(e.id) ? '0' : '8px auto 0'}"><svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg)"><circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="6"/><circle id="arc" cx="50" cy="50" r="45" fill="none" stroke="#D4F25A" stroke-width="6" stroke-linecap="round" stroke-dasharray="283" stroke-dashoffset="283"/></svg>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><b id="tm" class="num" style="font-size:${hasFigure(e.id) ? 20 : 56}px;font-weight:600;letter-spacing:-.02em;opacity:.45">${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}</b></div></div><span id="tml" style="font-size:14px;color:var(--cam-sub)">старт после подсказки</span></div>
       <div style="flex:1;margin-top:20px;display:flex;flex-direction:column;gap:12px">${e.steps.slice(0, 3).map((s, k) => `<div class="row st" style="opacity:.45;align-items:flex-start"><span class="step-n" style="color:var(--signal);width:22px;padding-top:2px">${String(k + 1).padStart(2, '0')}</span><span style="font-size:16px;line-height:1.35;flex:1">${s}</span></div>`).join('')}
         ${e.check ? `<div class="row" style="background:rgba(255,255,255,.08);border-radius:var(--r-md);padding:12px;align-items:flex-start;gap:10px"><span style="color:var(--signal)">${ic('info', 's')}</span><span style="font-size:14px;line-height:1.4">${e.check}</span></div>` : ''}</div>
       <div class="row" style="justify-content:center;gap:28px;margin-top:16px"><button class="round" id="pv" aria-label="Назад" style="width:56px;height:56px;background:rgba(255,255,255,.1);color:#fff">${ic('skip-back')}</button><button class="round" id="pp" aria-label="Пауза" style="width:80px;height:80px;background:var(--signal);color:var(--cam-bg)">${ic('pause')}</button><button class="round" id="nx" aria-label="Дальше" style="width:56px;height:56px;background:rgba(255,255,255,.1);color:#fff">${ic('skip-forward')}</button></div></div>`);

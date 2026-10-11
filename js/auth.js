@@ -62,7 +62,7 @@ export async function ensureLogin(role, cont, opts = {}) {
 /** Клиент по ссылке специалиста: без аккаунта, только согласия (18+, условия, данные о здоровье). Результат уходит специалисту зашифрованным. */
 export const linkConsentOk = () => !!localStorage.getItem(CONSENT_KEY);
 export function linkConsent(cont, who) {
-  show(`<div class="scr fade"><div class="top-bar"><div style="height:48px"></div><span style="flex:1"></span><span class="step-n" style="padding-right:8px">шаг 1 из 2</span></div>
+  show(`<div class="scr fade"><div class="top-bar"><div style="height:48px"></div><span style="flex:1"></span></div>
    <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:var(--s3)">
     <div class="eyebrow">Тест от специалиста</div><h1>Без регистрации</h1>
     <p class="sub">Аккаунт не нужен. Результат зашифруется на телефоне и уйдет только ${who ? 'специалисту: ' + esc(who) : 'вашему специалисту'}.</p>
@@ -77,7 +77,7 @@ export function linkConsent(cont, who) {
 export function loginScreen(role, cont, opts = {}) {
   const pro = role === 'specialist';
   const consented = () => ['cons', 'consh'].every(id => document.getElementById(id) && document.getElementById(id).checked);
-  show(`<div class="scr fade"><div class="top-bar">${opts.back ? `<button class="round" id="lback" aria-label="Назад">${ic('chevron-left')}</button>` : '<div style="height:48px"></div>'}<span style="flex:1"></span>${pro ? '' : '<span class="step-n" style="padding-right:8px">шаг 1 из 2</span>'}</div>
+  show(`<div class="scr fade"><div class="top-bar">${opts.back ? `<button class="round" id="lback" aria-label="Назад">${ic('chevron-left')}</button>` : '<div style="height:48px"></div>'}<span style="flex:1"></span>${pro ? '' : ''}</div>
    <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:var(--s3)">
     <div class="eyebrow">${pro ? 'Кабинет специалиста' : 'Вход'}${configSync().beta !== false ? ' · бета' : ''}</div>
     <h1>${pro ? 'Вход в кабинет' : 'Вход в BodyPassport'}</h1>
@@ -138,9 +138,9 @@ const RF_DAYS = 30;
 export const safetyOk = () => { const t = +localStorage.getItem('bp_rf') || 0; return Date.now() - t < RF_DAYS * 864e5; };
 export function safetyScreen(cont, back, booking) {
   const sel = new Set();
-  show(`<div class="scr fade"><div class="top-bar">${back ? `<button class="round" id="sback" aria-label="Назад">${ic('chevron-left')}</button>` : '<div style="height:48px"></div>'}<span style="flex:1"></span><span class="step-n" style="padding-right:8px">шаг 2 из 2</span></div>
+  show(`<div class="scr fade"><div class="top-bar">${back ? `<button class="round" id="sback" aria-label="Назад">${ic('chevron-left')}</button>` : '<div style="height:48px"></div>'}<span style="flex:1"></span></div>
    <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:var(--s3)">
-    <div class="eyebrow">Перед тестом</div><h1 style="font-size:26px">Есть ли у тебя сейчас что-то из этого?</h1>
+    <div class="eyebrow">Перед тестом</div><h1 style="font-size:26px">Есть ли у вас сейчас что-то из этого?</h1>
     <p class="sub" style="font-size:14px">В тесте приседания и стойка на одной ноге. Если что-то из списка есть, сначала нужен врач.</p>
     <div class="group">${FLAGS.map(([k, t]) => `<label class="chk-row" data-k="${k}"><input type="checkbox" class="check"><span>${t}</span></label>`).join('')}</div>
    </div><div class="dock"><p style="font-size:13px;color:var(--sub);text-align:center">Спросим снова через ${RF_DAYS} дней</p><button class="btn" id="sok">Ничего из этого нет</button></div></div>`);
