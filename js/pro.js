@@ -1281,7 +1281,7 @@ async function calibSheet() {
     try { const c = { id: uid(), created: Date.now(), name, notes: '', calib: { labels: labels.slice(), note: d.querySelector('#cl_note').value.trim().slice(0, 2000), at: Date.now() } };
       c.invite = await freshBox(null); await put('clients', c); track('calib_link', { n: labels.length }, false);
       const author = (await meta('profile')) || defaultAuthor();
-      const url = location.origin + '/#join=' + seal.pack({ i: c.invite.id, k: c.invite.key, s: author, p: Object.keys(UNITS) });
+      const url = location.origin + '/#join=' + seal.pack({ i: c.invite.id, k: c.invite.key, s: author, p: Object.keys(UNITS), cal: 1 });
       const text = `${name.split(' ')[0]}, здравствуйте! Помогите настроить тест движения: короткая анкета (где болит, что беспокоит) и полный тест перед камерой, около 7 минут. Результат придет мне.`;
       d.remove(); if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url).catch(() => {}); toast('Ссылка скопирована'); }
       clientCard(c.id); }

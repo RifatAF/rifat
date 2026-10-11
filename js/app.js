@@ -18,7 +18,7 @@ function cleanInv(o) { if (!o || typeof o !== 'object') throw new Error('bad inv
   if (!id.test(o.i || '') || !key.test(o.k || '')) throw new Error('bad invite');
   const p = Array.isArray(o.p) ? o.p.filter(u => typeof u === 'string' && Object.prototype.hasOwnProperty.call(UNITS, u)) : [];
   const d = Number.isFinite(+o.d) && +o.d > 1.7e12 && +o.d < 4e12 ? +o.d : undefined;
-  return { i: o.i, k: o.k, s: str(o.s, 80) || 'Специалист', n: str(o.n, 40), p: p.length ? p : Object.keys(UNITS), ...(d ? { d } : {}) }; }
+  return { i: o.i, k: o.k, s: str(o.s, 80) || 'Специалист', n: str(o.n, 40), p: p.length ? p : Object.keys(UNITS), ...(d ? { d } : {}), ...(o.cal === 1 ? { cal: 1 } : {}) }; }
 const app = $('#app');
 const TG = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData ? window.Telegram.WebApp : null;
 if (TG) { TG.ready(); TG.expand(); }
@@ -542,7 +542,7 @@ export async function runProtocol(protocol, opts = {}) {
 // ---------- бета: пропустить видеотест ----------
 // Только в бета-режиме: правдоподобный результат без камеры, чтобы тестировщики могли смотреть карту, кабинет и отчеты сколько угодно раз.
 const isBetaMode = () => configSync().beta !== false;
-const skipBtn = () => isBetaMode() ? '<button class="link" id="skipTest" style="display:block;margin:10px auto 0;font-size:14px;color:var(--sub)">Бета: пропустить видеотест</button>' : '';
+const skipBtn = () => isBetaMode() && !(INV() || {}).cal ? '<button class="link" id="skipTest" style="display:block;margin:10px auto 0;font-size:14px;color:var(--sub)">Бета: пропустить видеотест</button>' : '';
 function fakeResult(protocol) {
   const j = (v, k = 1) => Math.round((v + (Math.random() - .5) * 2 * k) * 10) / 10, p = Array.isArray(protocol) && protocol.length ? protocol : ['stand', 'ohs_front', 'sls', 'side'];
   return { date: Date.now(), protocol: p, full: true, quality: {}, limits: {}, setup: {}, beta: true,
