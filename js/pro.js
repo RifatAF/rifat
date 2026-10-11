@@ -303,9 +303,9 @@ export async function proHome(query = '', pulled = null) { if (device.webgl2) pr
       ${it('join', 'mail', 'Тест по ссылке', 'Клиент пройдет тест дома')}
       ${it('rtq', 'rotate-ccw', 'Ретест', 'Повторный тест того же клиента')}
       ${it('repq', 'file-text', 'Отчёт клиенту', 'PDF, картинка или ссылка')}
-      ${it('cmpq', 'arrow-right-left', 'Было → стало', 'Сравнить два теста')}</div></div>`;
+      ${it('cmpq', 'arrow-right-left', 'Было → стало', 'Сравнить два теста')}${isBeta() && (meSync() || {}).admin ? it('calq', 'star', 'Калибровка (бета)', 'Вы знаете проблему, человек проходит анкету и полный тест') : ''}</div></div>`;
     document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
-    d.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { d.remove(); const k = b.dataset.act; if (k === 'qs') quickStart(); else $('#' + k).click(); }); }; $('#join').onclick = sendJoin; $('#menu').onclick = proMenu; $('#hcal').onclick = calendarScreen; if ($('#bk')) $('#bk').onclick = backup; if ($('#bk2')) $('#bk2').onclick = backup;
+    d.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { d.remove(); const k = b.dataset.act; if (k === 'qs') quickStart(); else if (k === 'calq') calibSheet(); else $('#' + k).click(); }); }; $('#join').onclick = sendJoin; $('#menu').onclick = proMenu; $('#hcal').onclick = calendarScreen; if ($('#bk')) $('#bk').onclick = backup; if ($('#bk2')) $('#bk2').onclick = backup;
   // инструменты в одно касание: клиент один — сразу действие, иначе выбор из последних
   const lastTwo = id => asses.filter(a => a.clientId === id).sort((x, y) => x.date - y.date).slice(-2);
   const tool = (title, ok, act) => () => { const cs = sorted.filter(c => ok(lastTwo(c.id))); if (!cs.length) return toast('Пока нет подходящих клиентов'); if (cs.length === 1) return act(cs[0], lastTwo(cs[0].id)); pickClient(title, cs, c => act(c, lastTwo(c.id))); };
@@ -356,12 +356,14 @@ async function proMenu() {
       <a class="row-link" href="/privacy" target="_blank">${ic('shield-check', 's')}<span>Конфиденциальность</span>${ic('chevron-right', 's chev')}</a></div>
     ${h('Аккаунт')}<div class="group">
       ${u && u.admin ? r('mst', 'settings', 'Администрирование') : ''}
+      ${u && u.admin && isBeta() ? r('mcal2', 'download', 'Калибровка: выгрузить данные') : ''}
       ${r('mc', 'rotate-ccw', 'Перейти в режим клиента')}
       ${u ? `<button class="row-link" id="mo">${ic('log-out', 's')}<span>Выйти: ${esc(u.name)}</span></button>` : ''}</div>
     <button class="btn" id="mx" style="margin-top:var(--s4)">Закрыть</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
   d.querySelector('#mb').onclick = () => { d.remove(); backup(); };
   if (d.querySelector('#mst')) d.querySelector('#mst').onclick = () => { d.remove(); adminScreen(); };
+  if (d.querySelector('#mcal2')) d.querySelector('#mcal2').onclick = () => { d.remove(); calibExport(); };
   d.querySelector('#mbug').onclick = () => { d.remove(); bugSheet(); };
   if (d.querySelector('#mexit')) d.querySelector('#mexit').onclick = () => { d.remove(); exitSurvey('menu'); };
   if (d.querySelector('#mund')) d.querySelector('#mund').onclick = () => { d.remove(); undoRestore(); };
@@ -431,6 +433,10 @@ export async function clientCard(id) {
   go(`<div class="fade" style="padding-bottom:40px"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><span style="flex:1"></span><button class="pill" id="edit">Изменить</button></div>
    <div class="pad"><h1>${esc(c.name)}</h1><p class="sub" style="font-size:14px;margin-top:4px">${[age != null ? age + ' ' + (age % 10 === 1 && age % 100 !== 11 ? 'год' : [2, 3, 4].includes(age % 10) && ![12, 13, 14].includes(age % 100) ? 'года' : 'лет') : '', c.sex === 'M' ? 'муж' : c.sex === 'F' ? 'жен' : '', c.height ? c.height + ' см' : '', c.activity].filter(Boolean).map(esc).join(' · ')}</p>
     ${c.complaints ? `<p style="font-size:15px;line-height:1.4;margin-top:8px"><span class="sub">Жалобы:</span> ${esc(c.complaints)}</p>` : ''}</div>
+   ${c.calib ? `<div class="pad" style="margin-top:12px"><div class="card" style="border:1.5px dashed var(--accent)"><div class="eyebrow" style="color:var(--short-t)">Калибровка · ваша оценка</div>
+     ${c.calib.labels.length ? `<div class="row" style="flex-wrap:wrap;gap:6px;margin-top:8px">${c.calib.labels.map(l => `<span class="pill" style="font-size:13px">${esc((C.muscles[l.id] || { name: l.id }).name)} · ${l.side === 'LEFT' ? 'Л' : l.side === 'RIGHT' ? 'П' : 'обе'} · ${({ HYPER: 'перегружена', SHORT: 'укорочена', WEAK: 'слабая' })[l.k]}</span>`).join('')}</div>` : ''}
+     ${c.calib.note ? `<p style="font-size:14px;line-height:1.4;margin-top:8px">${esc(c.calib.note)}</p>` : ''}
+     ${c.selfReport ? `<p style="font-size:14px;line-height:1.4;margin-top:8px"><span class="sub">Сам человек:</span> ${esc(c.selfReport.complaints || 'жалобы не написал')}${c.selfReport.activity ? ' · ' + esc(c.selfReport.activity) : ''}</p>` : `<p class="sub" style="font-size:14px;margin-top:8px">Ждем анкету и тест по ссылке.</p>`}</div></div>` : ''}
    ${last ? `<div class="pad" style="margin-top:12px"><div class="card">
      <div class="row"><b style="flex:1">Карта тела · ${fmtDate(last.date)}</b><div class="seg" style="width:auto"><button id="vf" class="on" style="min-height:32px;padding:0 10px;font-size:13px">Спереди</button><button id="vb" style="min-height:32px;padding:0 10px;font-size:13px">Сзади</button><button id="v3" style="min-height:32px;padding:0 10px;font-size:13px">3D</button></div></div>
      <div class="row" style="align-items:flex-start;gap:12px;margin-top:8px"><div id="cvis" style="flex:none;width:130px;display:flex;justify-content:center"><canvas id="cheat" style="width:130px;display:block"></canvas></div>
@@ -1248,6 +1254,53 @@ async function addResult(c, r) {
   await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses || {} });
   if (prev) endTrialOnRetest();
 }
+// =================== Калибровка (бета, только администратор) ===================
+// Автор методики заранее знает проблему человека: отмечает ее здесь, человек проходит анкету (где болит, что беспокоит)
+// и полный видеотест, результат с записью движения приходит в кабинет. Выгрузка сводит экспертную оценку, ответы и замеры в один файл.
+const CAL_STATES = [['HYPER', 'перегружена'], ['SHORT', 'укорочена'], ['WEAK', 'слабая']], CAL_SIDES = [['LEFT', 'Л'], ['RIGHT', 'П'], ['BOTH', 'обе']];
+async function calibSheet() {
+  const d = document.createElement('div'); d.className = 'sheet'; const labels = []; let side = 'BOTH', q = '';
+  const ms = Object.entries(C.muscles).map(([id, m]) => ({ id, name: m.name, zone: m.zone || '' }));
+  const draw = () => { const list = ms.filter(m => !q || (m.name + ' ' + m.zone).toLowerCase().includes(q.toLowerCase())).slice(0, q ? 12 : 8);
+    d.querySelector('#cl_sel').innerHTML = labels.length ? labels.map((l, i) => `<button class="pill" data-rm="${i}" style="font-size:13px">${esc(C.muscles[l.id].name)} · ${CAL_SIDES.find(x => x[0] === l.side)[1]} · ${CAL_STATES.find(x => x[0] === l.k)[1]} ×</button>`).join('') : '<span class="sub" style="font-size:13px">Пока ничего не отмечено</span>';
+    d.querySelector('#cl_list').innerHTML = list.map(m => `<div class="row" style="gap:6px;padding:8px 0;border-top:1px solid var(--line-2)"><span style="flex:1;font-size:14px;min-width:0">${esc(m.name)}</span>${CAL_STATES.map(([k, t]) => `<button class="pill" data-add="${m.id}|${k}" style="font-size:12px;min-height:30px;padding:0 8px">${t}</button>`).join('')}</div>`).join('');
+    d.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { labels.splice(+b.dataset.rm, 1); draw(); });
+    d.querySelectorAll('[data-add]').forEach(b => b.onclick = () => { const [id, k] = b.dataset.add.split('|'); if (!labels.some(l => l.id === id && l.side === side)) labels.push({ id, side, k }); draw(); }); };
+  d.innerHTML = `<div><h2>Калибровка</h2><p class="sub" style="font-size:14px;margin-top:6px">Отметьте, что вы уже знаете о проблеме человека. Он пройдет анкету и полный видеотест, все данные придут сюда.</p>
+    <input class="field" id="cl_name" placeholder="Имя, например Илья" style="margin-top:12px;height:48px">
+    <div class="eyebrow" style="margin-top:14px">Ваша оценка</div><div class="row" id="cl_sel" style="flex-wrap:wrap;gap:6px;margin-top:8px"></div>
+    <div class="row" style="gap:6px;margin-top:10px"><span class="sub" style="font-size:13px">Сторона:</span>${CAL_SIDES.map(([k, t]) => `<button class="pill" data-side="${k}" style="font-size:13px;min-height:30px;border:1.5px solid ${k === side ? 'var(--ink)' : 'transparent'}">${t}</button>`).join('')}</div>
+    <input class="field" id="cl_q" type="search" placeholder="Найти мышцу" style="margin-top:8px;height:44px"><div id="cl_list" style="margin-top:6px;max-height:260px;overflow:auto"></div>
+    <textarea class="field" id="cl_note" rows="3" placeholder="Что еще знаете: поза, история, жалобы, что делали" style="margin-top:12px;height:auto;padding:12px 16px;font-size:15px"></textarea>
+    <button class="btn" id="cl_go" style="margin-top:14px">Создать ссылку</button><button class="btn ghost" id="cl_x" style="margin-top:8px;border:0">Отмена</button></div>`;
+  document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; draw();
+  d.querySelectorAll('[data-side]').forEach(b => b.onclick = () => { side = b.dataset.side; d.querySelectorAll('[data-side]').forEach(x => x.style.borderColor = x.dataset.side === side ? 'var(--ink)' : 'transparent'); });
+  d.querySelector('#cl_q').oninput = e => { q = e.target.value.trim(); draw(); }; d.querySelector('#cl_x').onclick = () => d.remove();
+  d.querySelector('#cl_go').onclick = async () => { const name = d.querySelector('#cl_name').value.trim(); if (!name) { d.querySelector('#cl_name').focus(); toast('Введите имя'); return; }
+    const b = d.querySelector('#cl_go'); b.disabled = true; b.textContent = 'Создаю ссылку…';
+    try { const c = { id: uid(), created: Date.now(), name, notes: '', calib: { labels: labels.slice(), note: d.querySelector('#cl_note').value.trim().slice(0, 2000), at: Date.now() } };
+      c.invite = await freshBox(null); await put('clients', c); track('calib_link', { n: labels.length }, false);
+      const author = (await meta('profile')) || defaultAuthor();
+      const url = location.origin + '/#join=' + seal.pack({ i: c.invite.id, k: c.invite.key, s: author, p: Object.keys(UNITS) });
+      const text = `${name.split(' ')[0]}, здравствуйте! Помогите настроить тест движения: короткая анкета (где болит, что беспокоит) и полный тест перед камерой, около 7 минут. Результат придет мне.`;
+      d.remove(); if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url).catch(() => {}); toast('Ссылка скопирована'); }
+      clientCard(c.id); }
+    catch (e) { b.disabled = false; b.textContent = 'Создать ссылку'; toast('Не удалось создать ссылку: ' + e.message); } };
+}
+/** Файл для разбора: экспертная оценка, ответы человека, замеры, гипотезы приложения и запись движения. */
+async function calibExport() {
+  const cs = (await all('clients')).filter(c => c.calib); if (!cs.length) return toast('Калибровочных карточек пока нет');
+  const cases = [];
+  for (const c of cs) { const as = await byClient(c.id), out = [];
+    for (const a of as) { const pp = await get('poses', a.id), sp = proSpots(a).filter(s => s.k !== 'OK' && (!s.derived || s.byChain || s.edited)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
+      out.push({ date: new Date(a.date).toISOString(), protocol: a.protocol, pain: a.pain, quality: a.quality, limits: a.limits, snapshot: a.snapshot, side: a.side, moves: a.moves,
+        findings: analyze(a, C).findings.map(f => f.observed), appHypotheses: sp.slice(0, 10).map(s => ({ muscle: s.id, name: C.muscles[s.id].name, side: s.side, state: s.k, tone: Math.round(s.tone * 100) / 100 })), poses: pp && pp.poses || {} }); }
+    cases.push({ name: c.name, created: new Date(c.created).toISOString(), expert: { labels: c.calib.labels.map(l => ({ muscle: l.id, name: C.muscles[l.id] ? C.muscles[l.id].name : l.id, side: l.side, state: l.k })), note: c.calib.note },
+      selfReport: c.selfReport || null, assessments: out }); }
+  const blob = new Blob([JSON.stringify({ exported: new Date().toISOString(), app: location.host, cases }, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `bodypassport-calibration-${new Date().toISOString().slice(0, 10)}.json`; document.body.appendChild(a); a.click(); a.remove();
+  toast(`Выгружено: ${cases.length} ${cases.length === 1 ? 'человек' : 'человек'}`);
+}
 /** Личный «почтовый ящик» специалиста для ссылки новому клиенту. */
 async function inbox() { const b = await meta('inbox'), f = await freshBox(b); if (f !== b) await setMeta('inbox', f); return f; }
 async function sendJoin() {
@@ -1285,6 +1338,9 @@ export async function pullResults() {
   for (const c of clients) for (const item of boxes(c.invite).flatMap(id => data[id] || [])) {
     let r; try { r = await seal.decrypt(c.invite.key, item.data); } catch (e) { done(item.p); continue; } // не расшифровывается этим ключом: мусор, иначе он занимает лимит ссылки
     if (r && r.type === 'progress') { await saveProgress(c, r.vas); done(item.p); continue; }
+    if (r && r.type === 'join') { const p0 = r.profile && typeof r.profile === 'object' ? r.profile : {};
+      c.selfReport = { complaints: str(p0.complaints, 600), activity: str(p0.activity, 120), dob: /^\d{4}-\d{2}-\d{2}$/.test(p0.dob) ? p0.dob : '', sex: ['M', 'F'].includes(p0.sex) ? p0.sex : '', height: /^\d{2,3}$/.test(p0.height) ? p0.height : '', name: [str(p0.name, 40), str(p0.surname, 60)].filter(Boolean).join(' ') };
+      await put('clients', c); r = r.result; if (!r || typeof r !== 'object') { done(item.p); continue; } }
     try { await addResult(c, r); got.push(c.name); done(item.p); } catch (e) { console.warn('relay item', e); } }
   if (bx) for (const item of boxes(bx).flatMap(id => data[id] || [])) {
     let m; try { m = await seal.decrypt(bx.key, item.data); } catch (e) { done(item.p); continue; }
