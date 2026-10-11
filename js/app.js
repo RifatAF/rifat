@@ -221,9 +221,10 @@ export async function prep() {
     <div class="group"><div class="row" style="min-height:64px"><div style="flex:1;min-width:0"><b style="font-size:15px">${FULL ? 'Точный · с поворотами' : 'Быстрый · лицом и боком'}</b><div style="font-size:13px;color:var(--sub)">${cam.back ? 'Основная камера' : 'Фронтальная камера'}${FULL && STRENGTH ? ' · сила и симметрия' : ''} · ${steps.length} ${plural3(steps.length, 'шаг', 'шага', 'шагов')}</div></div><button class="link" id="chg">Изменить</button></div></div>
     ${device.inApp ? `<div class="card row" style="align-items:flex-start">${ic('info')}<span style="font-size:14px;line-height:1.4">Ссылка открыта внутри приложения соцсети, здесь камера может не работать. Откройте ее в браузере: меню «⋯» → «Открыть в браузере».</span></div>` : ''}
    </div>
-   <div class="dock"><button class="btn" id="start">${ic('shield-check', 's')}Начать тест</button><button class="btn ghost" id="cant">Не могу выполнить некоторые движения</button></div></div>`);
+   <div class="dock"><button class="btn" id="start">${ic('shield-check', 's')}Начать тест</button><button class="btn ghost" id="cant">Не могу выполнить некоторые движения</button>${skipBtn()}</div></div>`);
   $('#back').onclick = () => tests().length ? map() : onboarding();
   $('#chg').onclick = () => prepSheet(); $('#cant').onclick = () => prepSheet(true);
+  if ($('#skipTest')) $('#skipTest').onclick = () => { track('beta_skip_test'); saveTest(fakeResult(consumerProtocol())); analysisScreen(); };
   if (reopen) prepSheet(false, true);
   $('#start').onclick = async () => { voice.unlock(); startMotion(); const b = $('#start'); b.disabled = true; b.innerHTML = '<span class="spin" style="margin:0;width:20px;height:20px;border-width:2.5px;border-color:rgba(255,255,255,.3);border-top-color:#fff"></span>Включаю камеру…';
     try { await initPose(); runTest(); } catch (e) { b.disabled = false; b.textContent = 'Начать тест'; startError(e, () => b.click()); } };
@@ -537,6 +538,17 @@ export async function runProtocol(protocol, opts = {}) {
   return { date: Date.now(), protocol: units, full: units.includes('side') || units.includes('profile'), snapshot, side, moves, poses, quality, limits, setup, tech };
 }
 
+
+// ---------- бета: пропустить видеотест ----------
+// Только в бета-режиме: правдоподобный результат без камеры, чтобы тестировщики могли смотреть карту, кабинет и отчеты сколько угодно раз.
+const isBetaMode = () => configSync().beta !== false;
+const skipBtn = () => isBetaMode() ? '<button class="link" id="skipTest" style="display:block;margin:10px auto 0;font-size:14px;color:var(--sub)">Бета: пропустить видеотест</button>' : '';
+function fakeResult(protocol) {
+  const j = (v, k = 1) => Math.round((v + (Math.random() - .5) * 2 * k) * 10) / 10, p = Array.isArray(protocol) && protocol.length ? protocol : ['stand', 'ohs_front', 'sls', 'side'];
+  return { date: Date.now(), protocol: p, full: true, quality: {}, limits: {}, setup: {}, beta: true,
+    snapshot: { shoulderTilt: j(4, 2), pelvicTilt: j(-3.5, 2), headTilt: j(1, .5), trunkLateral: j(1.2, .6) }, side: { headForwardDeg: j(16, 6), kneeHyperDeg: j(2, 1), shoulderShift: .01, hipShift: 0 },
+    moves: { ohs_front: { quality: 'GOOD', f: { ohs_valgus_r: j(12, 4), ohs_valgus_l: j(5, 2) } }, sls_r: { quality: 'GOOD', f: { sls_drop_r: j(5, 2), sls_valgus_r: j(11, 4), sls_trunk_r: j(3, 1) } }, sls_l: { quality: 'GOOD', f: { sls_drop_l: j(1.5, 1), sls_valgus_l: j(4, 2), sls_trunk_l: j(1, .5) } } } };
+}
 async function runTest() {
   const r = await runProtocol(consumerProtocol(), { pre: PRE }); if (!r) return;
   const { poses, ...light } = r; saveTest(light); try { await consumerPoses.save(poses); } catch (e) {} analysisScreen();
@@ -607,10 +619,13 @@ async function inviteWelcome() {
     <p class="sub" style="font-size:13px">Поставьте телефон, отойдите на 2–4 метра, в кадре весь рост. Шорты лучше широких штанов, свет не за спиной. Около ${mins(SETUP_SEC + secs(rows))} мин.</p>
     <label class="card row" style="padding:12px 14px;align-items:flex-start"><input type="checkbox" id="share_ok" ${localStorage.getItem('bp_share_' + inv.i) ? 'checked' : ''} class="check" style="margin-top:2px">
      <span style="font-size:14px;line-height:1.45">Согласен передать ${inv.join ? 'анкету, ' : ''}оценку боли и результат теста специалисту: ${esc(inv.s)}. Данные шифруются на телефоне, сервер их не читает.</span></label>
-   </div><div class="pad" style="padding:14px 20px 24px"><button class="btn" id="go">Начать тест</button></div></div>`);
+   </div><div class="pad" style="padding:14px 20px 24px"><button class="btn" id="go">Начать тест</button>${skipBtn()}</div></div>`);
   bindStepList(PREI, inviteWelcome);
   $('#back').onclick = inv.join ? joinForm : () => safetyScreen(inviteWelcome, () => linkConsent(inviteWelcome, (INV() || {}).s), bot());
   addSpecHint();
+  if ($('#skipTest')) $('#skipTest').onclick = () => { if (!$('#share_ok').checked) { $('#share_ok').parentElement.style.outline = '2px solid var(--over)'; return; }
+    track('beta_skip_test'); const r = { ...fakeResult(inv.p), poses: {} }, { poses, ...light } = r; saveTest({ ...light, pain, inv: inv.i });
+    try { sendResult({ ...r, pain, profile: inv.join ? PROFILE() : undefined }); } catch (e) {} analysisScreen(); };
   app.querySelectorAll('[data-p]').forEach(r => r.oninput = () => { pain[r.dataset.p] = +r.value; $('#pv_' + r.dataset.p).textContent = r.value; });
   if ($('#editpf')) $('#editpf').onclick = joinForm;
   $('#go').onclick = async () => { if (!$('#share_ok').checked) { $('#share_ok').parentElement.style.outline = '2px solid var(--over)'; return; } localStorage.setItem('bp_share_' + inv.i, String(Date.now())); voice.unlock(); startMotion(); $('#go').textContent = 'Загружаю модель…'; try { await initPose(); } catch (e) { inviteWelcome(); return startError(e, () => $('#go') && $('#go').click()); }
