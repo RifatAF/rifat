@@ -209,6 +209,10 @@ function bodyParts() { const e = (x, y, rx, ry) => { const p = new Path2D(); p.e
   return [...BODY.map(d => new Path2D(d)), e(100, 34, 20, 24), neck, e(72, 428, 14, 6), e(128, 428, 14, 6)]; }
 // пять опорных точек: норма нейтральная (цвет фигуры), карта показывает только отклонения
 const RAMP = [[-1, 0x2A5CB8], [-.45, 0x7FA6EE], [0, 0xE9E7E1], [.45, 0xF0A36A], [1, 0xD9484F]];
+// цвет мышцы по состоянию, а не по знаку: перегружена красная, укорочена коричневая, слабая синяя; сила отклонения дает насыщенность
+const STATE_RGB = { HYPER: [200, 65, 74], SHORT: [163, 86, 26], WEAK: [47, 107, 216] }, BASE_RGB = [233, 231, 225];
+export function stateRGB(k, tone) { const c = STATE_RGB[k] || (tone < 0 ? STATE_RGB.WEAK : STATE_RGB.HYPER); const t = k === 'OK' ? 0 : Math.max(.55, Math.min(1, Math.abs(tone) * 1.3));
+  return BASE_RGB.map((b, i) => Math.round(b + (c[i] - b) * t)); }
 export function ramp(v) { const x = Math.max(-1, Math.min(1, v)); let i = RAMP.findLastIndex(r => r[0] <= x); i = Math.max(0, Math.min(RAMP.length - 2, i));
   const [a, ca] = RAMP[i], [b, cb] = RAMP[i + 1], t = Math.max(0, Math.min(1, (x - a) / (b - a))); const ch = (c, s) => (c >> s) & 255; const mix = s => Math.round(ch(ca, s) + (ch(cb, s) - ch(ca, s)) * t);
   return [mix(16), mix(8), mix(0)]; }
@@ -299,7 +303,7 @@ export function drawHeat(cv, spots0, back, selected, labels = [], opts = {}) {
   const parts = bodyParts();
   // все фигуры этой стороны: тонкий контур как анатомическая подсказка, мышцы с отклонением заливаются цветом состояния
   const outline = Object.entries(SHAPES).filter(([id]) => C.muscles && C.muscles[id] && (C.muscles[id].view === 'back') === back).flatMap(([id]) => [...SHAPES[id], ...mirrorX(SHAPES[id], 'RIGHT')]).map(ell);
-  const fillShapes = k => mine.filter(s => Math.abs(s.tone) > .05 && SHAPES[s.id]).sort((a, b) => Math.abs(a.tone) - Math.abs(b.tone)).flatMap(s => { const [r, g, b] = ramp(s.tone * k * (s.derived && !s.edited ? .75 : 1)); return shapeOf(s).map(e => [ell(e), `rgb(${r},${g},${b})`]); });
+  const fillShapes = k => mine.filter(s => Math.abs(s.tone) > .05 && SHAPES[s.id]).sort((a, b) => Math.abs(a.tone) - Math.abs(b.tone)).flatMap(s => { const [r, g, b] = stateRGB(s.k, s.tone * k * (s.derived && !s.edited ? .75 : 1)); return shapeOf(s).map(e => [ell(e), `rgb(${r},${g},${b})`]); });
   const numbered = labels.length && labels.every(l => l.n), vw = numbered ? 200 : VW, ox = numbered ? 0 : OX;
   const ctx = cv.getContext('2d'); const sc = cv.clientWidth * devicePixelRatio / vw; cv.width = vw * sc; cv.height = 440 * sc;
   // реалистичная модель: точки мышц берем из проекции модели, а не из овалов плоской схемы
@@ -370,21 +374,19 @@ async function loadMesh() {
 export function preload3D() { const go = () => { import('three'); import('three/addons/controls/OrbitControls.js'); ready3D().catch(() => {}); };
   if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 3000 }); else setTimeout(go, 1500); }
 // раскраска сетки по тону: и для живой 3D-модели, и для снимков схемы
-function paintMesh(m, spots, out) { const order = m.meta.order, lin = c => (c / 255) ** 2.2, BASE3 = ramp(0).map(lin);
-
-    const tone = new Map(); for (const s of spots) { const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0); if (order.indexOf(s.id) >= 0) tone.set(g, s.tone); }
-    const blobs = Object.entries(m.meta.blobs).map(([g, c]) => [+g, c]).filter(([g]) => Math.abs(tone.get(g) || 0) > .02);
-    for (let i = 0; i < m.nv; i++) { const g = m.grp[i];
-      if (g === 255) { out.set(BASE3, i * 3); continue; }
-      // мышца красится своим цветом целиком и только она; соседям достается слабый край, чтобы граница читалась, но цвет не «растекался»
-      let v;
-      if (tone.has(g)) v = Math.max(-1, Math.min(1, tone.get(g) * 1.15));
-      else { const x = m.pos[i * 3], y = m.pos[i * 3 + 1], z = m.pos[i * 3 + 2]; let num = 0, den = 1;
-        for (const [bg, c] of blobs) { const t = tone.get(bg), sg = 22; const d2 = (x - c[0]) ** 2 + (y - c[1]) ** 2 + (z - c[2]) ** 2; if (d2 > 9 * sg * sg) continue; const w = .35 * Math.exp(-d2 / (2 * sg * sg)); num += w * t; den += w; }
-        v = Math.max(-1, Math.min(1, num / den)); }
-      if (g === 0) v *= .7; const [r, gg, b] = ramp(v);
-      // цвета шкалы заданы в sRGB, а рендер считает в линейном пространстве: переводим, иначе модель выглядит блеклой
-      out[i * 3] = lin(r); out[i * 3 + 1] = lin(gg); out[i * 3 + 2] = lin(b); } }
+function paintMesh(m, spots, out) { const order = m.meta.order, lin = c => (c / 255) ** 2.2, BASE3 = BASE_RGB.map(lin);
+  // группа сетки → цвет мышцы по состоянию; соседям достается слабый край того же цвета, чтобы граница читалась
+  const col = new Map(); for (const s of spots) { const o = order.indexOf(s.id); if (o < 0 || s.k === 'OK' || Math.abs(s.tone) < .02) continue; col.set(1 + o * 2 + (s.side === 'RIGHT' ? 1 : 0), stateRGB(s.k, s.tone).map(lin)); }
+  const blobs = Object.entries(m.meta.blobs).map(([g, c]) => [+g, c]).filter(([g]) => col.has(+g));
+  for (let i = 0; i < m.nv; i++) { const g = m.grp[i];
+    if (g === 255) { out.set(BASE3, i * 3); continue; }
+    let c = col.get(g);
+    if (!c) { const x = m.pos[i * 3], y = m.pos[i * 3 + 1], z = m.pos[i * 3 + 2]; let w0 = 1, acc = BASE3.slice();
+      for (const [bg, ctr] of blobs) { const sg = 22, d2 = (x - ctr[0]) ** 2 + (y - ctr[1]) ** 2 + (z - ctr[2]) ** 2; if (d2 > 9 * sg * sg) continue; const w = .3 * Math.exp(-d2 / (2 * sg * sg)), bc = col.get(bg);
+        for (let q = 0; q < 3; q++) acc[q] += w * bc[q]; w0 += w; }
+      c = acc.map(v => v / w0); }
+    if (g === 0 && c !== BASE3) c = c.map((v, q) => BASE3[q] + (v - BASE3[q]) * .7);
+    out[i * 3] = c[0]; out[i * 3 + 1] = c[1]; out[i * 3 + 2] = c[2]; } }
 export async function body3D(container, spots, onPick, opts = {}) {
   container.style.borderRadius = '32px'; container.style.overflow = 'hidden'; container.style.background = '#fff';
   container.innerHTML = '<div class="skel" style="height:100%"></div>';

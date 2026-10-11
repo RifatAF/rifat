@@ -441,6 +441,7 @@ export async function clientCard(id) {
      <div class="row"><b style="flex:1">Карта тела · ${fmtDate(last.date)}</b><div class="seg" style="width:auto"><button id="vf" class="on" style="min-height:32px;padding:0 10px;font-size:13px">Спереди</button><button id="vb" style="min-height:32px;padding:0 10px;font-size:13px">Сзади</button><button id="v3" style="min-height:32px;padding:0 10px;font-size:13px">3D</button></div></div>
      <div class="row" style="align-items:flex-start;gap:12px;margin-top:8px"><div id="cvis" style="flex:none;width:130px;display:flex;justify-content:center"><canvas id="cheat" style="width:130px;display:block"></canvas></div>
        <ol id="cfind" style="list-style:none;margin:0;padding:0;flex:1;min-width:0;display:flex;flex-direction:column;gap:10px">${cFacts.length ? cFacts.map((f, i) => `<li class="row" style="gap:8px;align-items:flex-start;font-size:14px;line-height:1.35"><span class="num" style="flex:none;width:20px;height:20px;border-radius:50%;background:var(--ink);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">${i + 1}</span><span>${esc(f)}</span></li>`).join('') : '<li class="sub" style="font-size:14px">Значимых отклонений нет</li>'}</ol></div>
+     ${LEGEND}
      <button class="btn" id="rep" style="margin-top:12px;height:48px">${ic('share', 's')}Отправить отчет клиенту</button>
      <div class="row" style="justify-content:center;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:14px"><button class="link" id="open">Подробный разбор</button><button class="link" id="mvr">Запись движения</button>${as.length >= 2 ? '<button class="link" id="cmp">Было → стало</button>' : ''}</div></div></div>` : ''}
    ${homeBlock(c)}
@@ -759,6 +760,7 @@ function proSpots(a) {
 }
 // на схеме только главное: мышцы, подтвержденные специалистом, иначе самые выраженные гипотезы. Остальное серым, без шума.
 const byTone = (x, y) => Math.abs(y.tone) - Math.abs(x.tone);
+const LEGEND = `<div class="row" style="justify-content:center;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--sub)">${[['HYPER', 'перегружена'], ['SHORT', 'укорочена'], ['WEAK', 'слабая']].map(([k, t]) => `<span class="row" style="gap:6px"><span class="mark sm ${k}"></span>${t}</span>`).join('')}</div>`;
 // Единый источник «над чем работаем»: одно и то же в решении, на всех схемах (карточка, итог, 3D), в отчете и в упражнениях.
 // По каждому состоянию (укрепить, растянуть, расслабить) до двух мышц, как в строках решения.
 function focusOf(a, sp = proSpots(a)) { const conf = a.check || {};
@@ -821,7 +823,7 @@ export async function result(aid, view = 'measured') {
     body = `
     <div class="card" style="padding:12px 8px"><div class="seg" style="margin:0 4px"><button id="hf" class="on">Спереди</button><button id="hb">Сзади</button>${device.webgl2 ? '<button id="h3" style="display:none">3D</button>' : ''}</div>
       <div id="hvis" style="width:100%;max-width:360px;margin:8px auto 0"><canvas id="heat" style="width:100%;display:block"></canvas></div>
-      <div id="hz" class="row" style="display:none;gap:6px;flex-wrap:wrap;justify-content:center;margin:8px 8px 0">${[['all', 'Всё тело'], ['head', 'Шея'], ['shoulders', 'Плечи'], ['back', 'Спина'], ['pelvis', 'Таз'], ['knees', 'Колени'], ['feet', 'Стопы']].map(([z, n]) => `<button class="pill" data-z="${z}">${n}</button>`).join('')}</div></div>
+      <div id="hz" class="row" style="display:none;gap:6px;flex-wrap:wrap;justify-content:center;margin:8px 8px 0">${[['all', 'Всё тело'], ['head', 'Шея'], ['shoulders', 'Плечи'], ['back', 'Спина'], ['pelvis', 'Таз'], ['knees', 'Колени'], ['feet', 'Стопы']].map(([z, n]) => `<button class="pill" data-z="${z}">${n}</button>`).join('')}</div>${LEGEND}</div>
     <details class="card" id="hdet" style="padding:14px 16px"${HYPOPEN ? ' open' : ''}><summary style="font-weight:600;cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px"><span style="flex:1">Проверка руками · ${list.length} ${list.length % 10 === 1 && list.length % 100 !== 11 ? 'мышца' : [2, 3, 4].includes(list.length % 10) && ![12, 13, 14].includes(list.length % 100) ? 'мышцы' : 'мышц'}</span>${ic('chevron-down', 's')}</summary>
       <p class="sub" style="font-size:13px;margin-top:6px">Черновик по замеру. В отчёт пойдёт ваша версия.</p>
       <div id="hlist" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s3)">${list.map((s, i) => hypCard(a, an, s, i === list.findIndex(x => C.muscles[x.id] && C.muscles[x.id].proTest && !chk[x.key]), evid)).join('')}</div></details>`;

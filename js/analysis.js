@@ -308,7 +308,8 @@ export function findings(rules, f) {
     if (f.lowq && f.lowq[r.feature] && (borderline || at <= 5)) continue;
     let side = 'BOTH';
     if (r.sideFrom) { const sv = f[r.sideFrom]; if (sv === undefined) continue; const sg = Math.sign(sv) * (r.sideNegate ? -1 : 1); side = sg > 0 ? 'RIGHT' : sg < 0 ? 'LEFT' : 'BOTH'; }
-    const muscles = r.muscles.map(m => ({ id: m.id, state: m.state, side: m.side === 'same' ? side : m.side === 'opposite' ? opp(side) : 'BOTH' }));
+    // w: вклад мышцы в признак по данным литературы (1 — основная причина, меньше — второстепенная)
+    const muscles = r.muscles.map(m => ({ id: m.id, state: m.state, w: Number.isFinite(m.w) ? m.w : 1, side: m.side === 'same' ? side : m.side === 'opposite' ? opp(side) : 'BOTH' }));
     const ex = r.exercises.map(e => e.split('{side}').join(side === 'BOTH' ? 'left' : sideWord(side, 'key')).split('{opp}').join(side === 'BOTH' ? 'right' : sideWord(opp(side), 'key')));
     out.push({ rule: r, value: v, side, borderline, observed: render(r.observed, side, v) + (borderline ? ' (на границе нормы)' : ''), meaning: render(r.meaning, side, v), muscles, exercises: ex });
   }
@@ -322,10 +323,10 @@ export function tones(fds, catalog, antagonists) {
   const pos = new Map(), neg = new Map(), src = new Map(), key = (id, s) => id + ':' + s;
   // ослабление слабых и пограничных признаков было слишком сильным (×0,6 и ×0,5, вместе ×0,3): одиночный признак пропадал с карты
   for (const fd of fds) { const s = strength(fd) * (fd.rule.weak ? .75 : 1) * (fd.borderline ? .7 : 1);
-    for (const m of fd.muscles) for (const sd of (m.side === 'BOTH' ? ['LEFT', 'RIGHT'] : [m.side])) { const k = key(m.id, sd);
+    for (const m of fd.muscles) for (const sd of (m.side === 'BOTH' ? ['LEFT', 'RIGHT'] : [m.side])) { const k = key(m.id, sd), sm = s * (m.w ?? 1);
       // источник: какие независимые признаки (правила) указали на мышцу; пограничные в доказательства цепей не идут
       if (!fd.borderline) { if (!src.has(k)) src.set(k, new Set()); src.get(k).add(fd.rule.id + (fd.rule.feature || '')); }
-      if (m.state === 'WEAK') neg.set(k, Math.min(1, (neg.get(k) || 0) + s)); else pos.set(k, Math.min(1, (pos.get(k) || 0) + s)); } }
+      if (m.state === 'WEAK') neg.set(k, Math.min(1, (neg.get(k) || 0) + sm)); else pos.set(k, Math.min(1, (pos.get(k) || 0) + sm)); } }
   const t = new Map(), ambiguous = new Set();
   for (const k of new Set([...pos.keys(), ...neg.keys()])) { const p = pos.get(k) || 0, n = neg.get(k) || 0;
     if (p > .3 && n > .3) { ambiguous.add(k); t.set(k, 0); } else t.set(k, p - n); }
