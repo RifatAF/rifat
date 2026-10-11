@@ -58,7 +58,7 @@ export const voice = {
   /** Звуковой сигнал: старт — один высокий, стоп — два коротких. Слышно, даже если человек стоит спиной. */
   beep(kind = 'start') { try { const ac = this._ac || (this._ac = new (window.AudioContext || window.webkitAudioContext)()); const t = ac.currentTime;
     const one = (at, f, d) => { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = f; g.gain.setValueAtTime(.0001, t + at); g.gain.exponentialRampToValueAtTime(.35, t + at + .02); g.gain.exponentialRampToValueAtTime(.0001, t + at + d); o.connect(g).connect(ac.destination); o.start(t + at); o.stop(t + at + d + .05); };
-    if (kind === 'start') one(0, 880, .25); else { one(0, 660, .12); one(.18, 660, .12); } } catch (e) {} },
+    if (kind === 'start') one(0, 880, .25); else if (kind === 'tick') one(0, 1175, .09); else { one(0, 660, .12); one(.18, 660, .12); } } catch (e) {} },
   async waitDone() { await sleep(200); while (this.busy()) await sleep(100); },
 };
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
