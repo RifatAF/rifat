@@ -1169,7 +1169,7 @@ async function report(aid) {
     b.disabled = false; b.innerHTML = ic('file-text', 's') + 'PDF'; };
   d.querySelector('#rpng').onclick = async () => send(await new Promise(r => cv.toBlob(r, 'image/png')), base + '.png', 'image/png', 'png');
   d.querySelector('#rweb').onclick = async () => { if (!gate('weblink')) return; const b = d.querySelector('#rweb'); b.disabled = true; b.textContent = 'Создаю ссылку…';
-    try { const url = await reportLink(cv, { name: c.name, date: fmtDate(a.date), author }); track('report_link', {}, false);
+    try { const url = await reportLink(cv, { name: c.name, date: fmtDate(a.date), author, contact: contact || '', at: a.date, ex: (pl.ex || []).slice(0, 8), next: Number.isFinite(+a.nextDate) ? +a.nextDate : 0, note: String(pl.text || '').slice(0, 600), focus: v.slice(0, 3).map(x => `${x.verb} ${x.what}`) }); track('report_link', {}, false);
       const text = `${c.name.split(' ')[0]}, здравствуйте! Ваш биомеханический паспорт по ссылке:`;
       if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url); toast('Ссылка скопирована'); } }
     catch (e) { toast('Не удалось создать ссылку: ' + e.message); }
