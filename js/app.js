@@ -133,7 +133,8 @@ export function plan(top) { const ids = []; for (const s of top.slice(0, 3)) { c
 // кабинет специалиста только после входа
 export async function openPro() { if (await ensureLogin('specialist', openPro, { back: onboarding })) proHome(); }
 let SHARED = null; // результат, открытый по чужой ссылке
-function currentAnalysis() { const t = SHARED || tests().at(-1); return t ? { t, a: analyze(t, C) } : null; }
+let SHOW_T = null; // тест из истории, открытый в кабинете
+function currentAnalysis() { const all = tests(), t = SHARED || (SHOW_T && all.find(x => x.date === SHOW_T)) || all.at(-1); return t ? { t, a: analyze(t, C) } : null; }
 
 // ---------- результат в ссылке: данные теста сжаты в адрес, сервер не нужен ----------
 const r1 = o => JSON.parse(JSON.stringify(o, (k, v) => typeof v === 'number' ? Math.round(v * 10) / 10 : v));
@@ -171,8 +172,8 @@ export function onboarding() {
     <div class="pad" style="margin-top:24px"><h1>Тест движения за 3 минуты</h1>
       <p class="sub" style="margin-top:12px">Встаньте перед камерой телефона и сделайте несколько простых движений. Вы увидите, какие мышцы перегружены, а какие работают слабо, и получите упражнения. Это оценка движения, а не диагноз.</p>
       ${INV() ? '' : `<div class="row" style="margin-top:20px"><img src="img/rifat.jpg" alt="Рифат Аюпов" width="44" height="44" style="border-radius:50%;object-fit:cover;flex:none"><div><b style="font-size:14px;font-weight:600;display:block">Методика Рифата Аюпова</b><span style="font-size:13px;color:var(--sub)">кинезиотерапевт, биомеханик</span></div></div>`}</div>
-    <div class="dock"><button class="btn" id="next">Начать тест <span class="meta">· бесплатно</span></button><button class="btn ghost" id="pro">Я специалист: вход в кабинет</button>${canInstall() ? `<button class="link" id="inst1" style="display:block;margin:4px auto 0;font-size:14px;color:var(--sub)">${ic('download', 's')} Установить приложение</button>` : ''}</div></div>`);
-  $('#next').onclick = () => { track('onb_done'); prep(); }; $('#pro').onclick = () => openPro(); if ($('#inst1')) $('#inst1').onclick = () => installNow();
+    <div class="dock"><button class="btn" id="next">Начать тест <span class="meta">· бесплатно</span></button>${myReports().length || tests().length ? '<button class="btn line" id="mycab">Мой кабинет</button>' : ''}<button class="btn ghost" id="pro">Я специалист: вход в кабинет</button>${canInstall() ? `<button class="link" id="inst1" style="display:block;margin:4px auto 0;font-size:14px;color:var(--sub)">${ic('download', 's')} Установить приложение</button>` : ''}</div></div>`);
+  $('#next').onclick = () => { track('onb_done'); prep(); }; $('#pro').onclick = () => openPro(); if ($('#mycab')) $('#mycab').onclick = clientHome; if ($('#inst1')) $('#inst1').onclick = () => installNow();
 }
 
 // ---------- 2. подготовка ----------
@@ -659,7 +660,7 @@ function sentBanner() { const inv = INV(); if (!inv) return ''; const st = local
 // ---------- 4. анализ: тёмный экран, фигура проявляется, три строки статуса ----------
 let REVEAL = false;
 async function analysisScreen() {
-  SEL = null; MODE3D = false; REVEAL = true;
+  SEL = null; MODE3D = false; REVEAL = true; SHOW_T = null;
   if (reduceMotion()) return map();
   const cur = currentAnalysis(); const all = cur ? spots(cur.a) : [];
   go(`<div class="scr dark fade" style="align-items:center;justify-content:center;padding:0 var(--gutter)">
@@ -692,8 +693,9 @@ export function map() {
   const days = Math.floor((Date.now() - t.date) / 864e5);
   go(`<div class="scr fade">
    ${!SHARED && INV() ? sentBanner() + retestCard() : ''}
+   ${!SHARED && SHOW_T && tests().length && SHOW_T !== tests().at(-1).date ? `<div class="pad" style="padding-top:12px"><button class="card row" id="toLast" style="width:100%;border:0;font:inherit;font-size:14px;cursor:pointer;color:inherit">${ic('info', 's')}<span style="flex:1;text-align:left">Это тест из истории</span><b style="color:var(--brand)">К последнему</b></button></div>` : ''}
    ${SHARED ? `<div class="pad" style="padding-top:12px"><div class="card row" style="font-size:14px">${ic('info', 's')}<span>Это результат по ссылке. Ваши данные не меняются.</span></div></div>` : ''}
-   <div class="pad row" style="padding-top:16px;align-items:flex-start"><div style="flex:1;min-width:0"><div class="eyebrow">${new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })} · ${nSteps} ${plural3(nSteps, 'шаг', 'шага', 'шагов')}${qa != null ? ' · качество ' + qa : ''}</div><h1 style="margin-top:6px">${SHARED ? 'Карта тела' : 'Ваша карта тела'}</h1></div><button class="round" id="set" aria-label="Настройки">${ic('settings')}</button></div>
+   <div class="pad row" style="padding-top:16px;align-items:flex-start"><div style="flex:1;min-width:0"><div class="eyebrow">${new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })} · ${nSteps} ${plural3(nSteps, 'шаг', 'шага', 'шагов')}${qa != null ? ' · качество ' + qa : ''}</div><h1 style="margin-top:6px">${SHARED ? 'Карта тела' : 'Ваша карта тела'}</h1></div>${SHARED ? '' : '<button class="pill" id="cab" style="margin-right:8px">Мой кабинет</button>'}<button class="round" id="set" aria-label="Настройки">${ic('settings')}</button></div>
    ${days >= 7 && !SHARED ? `<div class="pad"><button class="row-link" id="re" style="color:var(--focus);font-weight:600"><span>Прошла неделя: пройдите быстрый тест и сравните</span>${ic('chevron-right', 's')}</button></div>` : ''}
    <div class="pad" style="margin-top:12px"><div class="card" style="border-radius:var(--r-xl);padding:12px 8px 8px">
      <div class="seg" style="margin:0 4px"><button id="vf" class="${!BACK && !MODE3D ? 'on' : ''}">Спереди</button><button id="vb" class="${BACK && !MODE3D ? 'on' : ''}">Сзади</button>${device.webgl2 ? `<button id="v3" class="${MODE3D ? 'on' : ''}">3D</button>` : ''}</div>
@@ -730,7 +732,7 @@ export function map() {
   if ($('#again')) $('#again').onclick = again;
   if ($('#re')) $('#re').onclick = () => { FULL = false; prep(); };
   if ($('#resend')) $('#resend').onclick = async () => { const p = await outbox.get().catch(() => null); if (p) sendResult(p); }; bindRetestCard(); if (!SHARED && INV()) addSpecHint();
-  $('#set').onclick = settings; $('#more').onclick = () => moreSheet(cur, top, !!pl.length);
+  $('#set').onclick = settings; $('#more').onclick = () => moreSheet(cur, top, !!pl.length); if ($('#cab')) $('#cab').onclick = () => { SHOW_T = null; clientHome(); }; if ($('#toLast')) $('#toLast').onclick = () => { SHOW_T = null; map(); };
 }
 function again() { if (!SHARED && INV()) return INV().join ? joinForm() : inviteWelcome(); if (SHARED) { SHARED = null; history.replaceState(null, '', location.pathname); } FULL = false; tests().length || SHARED ? prep() : onboarding(); }
 // всё, что не нужно для решения «что делать сегодня», живет в шторке «Подробнее»
@@ -1002,11 +1004,59 @@ async function reportView(code) {
     const res = await fetch('/api/share?id=' + id, { cache: 'no-store' }); if (!res.ok) throw new Error(res.status);
     r = await seal.decrypt(k, await res.text()); if (typeof r.img !== 'string' || !r.img.startsWith('data:image/jpeg;base64,')) throw new Error('bad'); } catch (e) { r = null; }
   if (!r) { go(`<div class="scr pad fade" style="justify-content:center;gap:14px"><h1>Отчет не открылся</h1><p class="sub">Ссылка устарела (отчет хранится 90 дней) или скопирована не целиком. Попросите специалиста прислать ее снова.</p><button class="btn" id="tst">Пройти свой тест движения</button></div>`); $('#tst').onclick = () => { history.replaceState(null, '', location.pathname); onboarding(); }; return; }
-  const str = (v, n) => esc(String(v || '').slice(0, n));
-  go(`<div class="fade" style="padding-bottom:32px"><div class="pad" style="padding-top:16px"><div class="eyebrow">Биомеханический паспорт</div><h1 style="margin-top:6px">${str(r.name, 80)}</h1><p class="sub" style="font-size:14px">${str(r.date, 40)}${r.author ? ' · ' + str(r.author, 80) : ''}</p></div>
+  const str = (v, n) => esc(String(v || '').slice(0, n)); saveReport(code, r); const exIds = (Array.isArray(r.ex) ? r.ex : []).filter(id => ex(id));
+  go(`<div class="fade" style="padding-bottom:32px"><div class="pad row" style="padding-top:12px"><span style="flex:1"></span><button class="pill" id="rcab">Мой кабинет</button></div><div class="pad" style="padding-top:4px"><div class="eyebrow">Биомеханический паспорт</div><h1 style="margin-top:6px">${str(r.name, 80)}</h1><p class="sub" style="font-size:14px">${str(r.date, 40)}${r.author ? ' · ' + str(r.author, 80) : ''}</p></div>
     <div class="pad" style="margin-top:12px"><img src="${r.img}" alt="Отчет" style="width:100%;display:block;border-radius:16px"></div>
-    <div class="pad" style="margin-top:14px;display:flex;flex-direction:column;gap:8px"><a class="btn" id="rdl" href="${r.img}" download="bodypassport-report.jpg" style="text-decoration:none">${ic('download', 's')}Сохранить картинку</a>
-    <p class="sub" style="font-size:12px;text-align:center">Только просмотр. Отчет зашифрован, ключ есть только в этой ссылке.</p></div></div>`);
+    <div class="pad" style="margin-top:14px;display:flex;flex-direction:column;gap:8px">${exIds.length ? `<button class="btn" id="rex">${ic('play', 's')}Начать упражнения · ${totalMin(exIds.map(ex))} мин</button>` : ''}<a class="btn${exIds.length ? ' line' : ''}" id="rdl" href="${r.img}" download="bodypassport-report.jpg" style="text-decoration:none">${ic('download', 's')}Сохранить картинку</a>
+    <p class="sub" style="font-size:12px;text-align:center">Отчет сохранен в вашем кабинете на этом телефоне. Он зашифрован, ключ есть только в ссылке.</p></div></div>`);
+  history.replaceState(null, '', location.pathname);
+  $('#rcab').onclick = clientHome; if ($('#rex')) $('#rex').onclick = () => workout(exIds);
+}
+
+// ---------- кабинет клиента: мои изменения, занятия и работа специалиста ----------
+// Все хранится на этом телефоне: тесты, дневник занятий и отчеты, которые прислал специалист.
+const REPS_KEY = 'bp_reports';
+const myReports = () => { try { const l = JSON.parse(localStorage.getItem(REPS_KEY) || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; } };
+function saveReport(code, r) {
+  const s = (v, n) => String(v || '').slice(0, n), rec = { code: s(code, 80), name: s(r.name, 80), date: s(r.date, 40), author: s(r.author, 80), contact: s(r.contact, 120), at: +r.at || Date.now(),
+    ex: (Array.isArray(r.ex) ? r.ex : []).filter(id => typeof id === 'string' && ex(id)).slice(0, 8), next: +r.next || 0, note: s(r.note, 600), focus: (Array.isArray(r.focus) ? r.focus : []).map(x => s(x, 120)).slice(0, 3), saved: Date.now() };
+  try { localStorage.setItem(REPS_KEY, JSON.stringify([...myReports().filter(x => x.code !== rec.code), rec].sort((a, b) => a.at - b.at).slice(-30))); } catch (e) {}
+}
+export function clientHome() {
+  track('client_home'); const all = tests(), last = all.at(-1), reps = myReports(), rep = reps.at(-1), inv = INV();
+  const fmtD = t => new Date(t).toLocaleDateString('ru', { day: 'numeric', month: 'long' });
+  const spec = (rep && rep.author) || (inv && inv.s) || '', next = (rep && rep.next > Date.now() - 864e5 && rep.next) || (inv && inv.d) || 0;
+  // упражнения: назначенные специалистом, иначе подобранные по последнему тесту
+  const own = last ? plan(topOf(spots(analyze(last, C)))) : [], repEx = rep && Array.isArray(rep.ex) ? rep.ex.filter(id => ex(id)) : [], exIds = (repEx.length ? repEx : own).filter(id => ex(id)), assigned = repEx.length > 0;
+  const vl = vasLog(K('bp_vas')), st = vasStats(vl, 30), dayKey = t => new Date(t).toDateString(), doneDays = new Set(vl.filter(r => (r.n || 0) > 0).map(r => dayKey(r.t || 0)));
+  const days14 = Array.from({ length: 14 }, (_, i) => { const d = new Date(Date.now() - (13 - i) * 864e5); return { on: doneDays.has(d.toDateString()), today: i === 13 }; });
+  const zonesOf = t => topOf(spots(analyze(t, C))).filter(x => x.k !== 'OK').length;
+  const card = (h, body, extra = '') => `<div class="card" style="display:flex;flex-direction:column;gap:12px"${extra}><div class="eyebrow">${h}</div>${body}</div>`;
+  const delta = all.length >= 2 && all[0].snapshot && last.snapshot ? [['Наклон плеч', all[0].snapshot.shoulderTilt, last.snapshot.shoulderTilt], ['Наклон таза', all[0].snapshot.pelvicTilt, last.snapshot.pelvicTilt]]
+    .filter(([, a, b]) => Number.isFinite(a) && Number.isFinite(b)).map(([n, a, b]) => { const better = Math.abs(b) < Math.abs(a) - .5, worse = Math.abs(b) > Math.abs(a) + .5;
+      return `<div class="row" style="font-size:15px"><span style="flex:1">${n}</span><span class="num" style="color:var(--sub)">${Math.abs(a).toFixed(1)}°</span><span style="margin:0 8px;color:var(--faint)">→</span><b class="num" style="color:${better ? 'var(--ok-t)' : worse ? 'var(--over-t)' : 'var(--text)'}">${Math.abs(b).toFixed(1)}°</b></div>`; }).join('') : '';
+  go(`<div class="scr fade" style="padding-bottom:110px"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><span style="flex:1"></span><button class="round" id="cset" aria-label="Настройки">${ic('settings')}</button></div>
+   <div class="pad" style="padding-top:4px">${PROFILE() && PROFILE().name ? `<div class="eyebrow">${esc(PROFILE().name)}</div>` : ''}<h1 style="margin-top:6px">Мой кабинет</h1><p class="sub" style="font-size:14px;margin-top:4px">Ваши тесты, занятия и рекомендации специалиста</p></div>
+   <div class="pad" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s3)">
+    ${spec || next ? card('Мой специалист', `${spec ? `<div class="row" style="gap:12px"><span class="avatar">${esc(spec.slice(0, 1).toUpperCase())}</span><div style="flex:1;min-width:0"><b style="font-size:17px">${esc(spec)}</b>${rep && rep.contact ? `<div class="sub" style="font-size:14px;user-select:text">${esc(rep.contact)}</div>` : ''}</div></div>` : ''}
+      ${next ? `<div class="row" style="gap:10px;font-size:15px">${ic('calendar', 's')}<span style="flex:1">Повторный тест</span><b>${fmtD(next)}</b></div>` : ''}
+      ${rep && rep.focus.length ? `<div style="font-size:15px;line-height:1.45"><div class="sub" style="font-size:13px;margin-bottom:4px">Над чем работаем</div>${rep.focus.map(x => `<div>• ${esc(x)}</div>`).join('')}</div>` : ''}
+      ${rep && rep.note ? `<p style="font-size:15px;line-height:1.45;background:var(--surface-2);border-radius:12px;padding:10px 12px">${esc(rep.note)}</p>` : ''}`) : ''}
+    ${exIds.length ? card(assigned ? 'Упражнения от специалиста' : 'Упражнения по вашему тесту', `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${exIds.slice(0, 6).map(id => `<button class="cex" data-id="${id}" style="border:0;background:var(--surface-2);border-radius:14px;padding:4px 4px 8px;text-align:center;cursor:pointer;font:inherit;color:inherit">${exFigure(id, { animate: false })}<span style="display:block;font-size:12px;line-height:1.25;margin-top:2px">${esc(ex(id).title.split(' (')[0])}</span></button>`).join('')}</div>
+      <button class="btn" id="cgo">${ic('play', 's')}Начать комплекс · ${totalMin(exIds.map(ex))} мин</button>`) : ''}
+    ${card('Занятия за 2 недели', `<div style="display:grid;grid-template-columns:repeat(14,1fr);gap:4px">${days14.map(d => `<i style="display:block;aspect-ratio:1;border-radius:6px;background:${d.on ? 'var(--brand)' : 'var(--surface-2)'};${d.today ? 'outline:2px solid var(--accent);outline-offset:1px' : ''}"></i>`).join('')}</div>
+      <div class="row" style="font-size:15px;gap:16px;flex-wrap:wrap"><span><b class="num">${st.activeDays || 0}</b> <span class="sub">дн. из 30</span></span>${st.avgPre != null && st.avgPost != null ? `<span><span class="sub">боль</span> <b class="num">${(+st.avgPre).toFixed(1)} → ${(+st.avgPost).toFixed(1)}</b></span>` : ''}</div>`)}
+    ${card('Мои изменения', `${delta ? `<div style="display:flex;flex-direction:column;gap:8px"><div class="sub" style="font-size:13px">Первый тест → последний</div>${delta}</div>` : ''}
+      ${all.length ? `<div class="group">${all.slice().reverse().slice(0, 8).map(t => `<button class="row-link ctest" data-d="${t.date}"><span style="flex:1;text-align:left"><b style="font-weight:600">${fmtD(t.date)}</b><small class="sub" style="display:block;font-size:13px">${zonesOf(t) ? zonesOf(t) + ' ' + plural3(zonesOf(t), 'зона требует', 'зоны требуют', 'зон требуют') + ' внимания' : 'без выраженных перекосов'}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>` : '<p class="sub">Тестов пока нет.</p>'}
+      ${all.length === 1 ? '<p class="sub" style="font-size:14px">Пройдите тест еще раз через 3–4 недели, и здесь появится сравнение.</p>' : ''}`)}
+    ${reps.length ? card('Отчеты специалиста', `<div class="group">${reps.slice().reverse().map(r => `<button class="row-link crep" data-c="${esc(r.code)}">${ic('file-text', 's')}<span style="flex:1;text-align:left">${esc(r.date || fmtD(r.at))}<small class="sub" style="display:block;font-size:13px">${esc(r.author)}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>`) : ''}
+   </div><div class="dock"><button class="btn${exIds.length ? ' line' : ''}" id="ctest">${ic('rotate-ccw', 's')}Пройти тест${all.length ? ' снова' : ''}</button></div></div>`);
+  $('#back').onclick = () => (all.length ? map() : onboarding()); $('#cset').onclick = settings;
+  if ($('#cgo')) $('#cgo').onclick = () => workout(exIds);
+  app.querySelectorAll('.cex').forEach(b => b.onclick = () => workout([b.dataset.id]));
+  app.querySelectorAll('.ctest').forEach(b => b.onclick = () => { SHOW_T = +b.dataset.d; map(); });
+  app.querySelectorAll('.crep').forEach(b => b.onclick = () => reportView(b.dataset.c));
+  $('#ctest').onclick = () => { SHOW_T = null; again(); };
 }
 
 // ---------- настройки ----------

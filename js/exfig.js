@@ -9,7 +9,7 @@ const add = (p, a, l) => { const [x, y] = dir(a); return [p[0] + x * l, p[1] + y
 // исходные позы; упражнения меняют только нужные поля
 const STAND = { v: 'side', hx: 100, hy: 79, t: -90, hd: -90, aN1: 92, aN2: 92, aF1: 88, aF2: 88, lN1: 90, lN2: 90, lN3: 0, lF1: 90, lF2: 90, lF3: 0 };
 // спереди: N — рука и нога слева на экране, F — справа
-const FRONT = { ...STAND, v: 'front', aN1: 100, aN2: 95, aF1: 80, aF2: 85, lN1: 94, lN2: 90, lN3: 160, lF1: 86, lF2: 90, lF3: 20 };
+const FRONT = { ...STAND, v: 'front', aN1: 100, aN2: 95, aF1: 80, aF2: 85, lN1: 94, lN2: 90, lN3: 120, lF1: 86, lF2: 90, lF3: 60 };
 const SUPINE = { v: 'side', hx: 115, hy: 144, t: 180, hd: 180, aN1: 2, aN2: 0, aF1: 4, aF2: 2, lN1: -60, lN2: 70, lN3: 0, lF1: -56, lF2: 72, lF3: 0 };
 const PRONE = { v: 'side', face: 90, hx: 115, hy: 144, t: 180, hd: 182, aN1: 2, aN2: 0, aF1: 4, aF2: 2, lN1: 0, lN2: 0, lN3: 80, lF1: 2, lF2: 0, lF3: 80 };
 const SIDE = { v: 'side', hx: 120, hy: 146, t: 180, hd: 178, aN1: 60, aN2: 100, aF1: 182, aF2: 182, lN1: 0, lN2: 0, lN3: -90, lF1: 2, lF2: 0, lF3: -90 };
@@ -76,11 +76,24 @@ const lerp = (a, b, k) => a + (b - a) * k;
 function mix(a, b, k) { const o = { ...a }; for (const key in b) if (typeof b[key] === 'number' && typeof a[key] === 'number') o[key] = lerp(a[key], b[key], k); else o[key] = b[key]; return o; }
 
 const f1 = n => n.toFixed(1);
-const poly = pts => 'M' + pts.map(p => f1(p[0]) + ' ' + f1(p[1])).join(' L');
-function trunkPath(j) { const [hx, hy] = j.H, [sx, sy] = j.S, mx = (hx + sx) / 2, my = (hy + sy) / 2, len = Math.hypot(sx - hx, sy - hy) || 1;
-  const nx = -(sy - hy) / len, ny = (sx - hx) / len; return `M${f1(hx)} ${f1(hy)} Q${f1(mx + nx * j.c * 2)} ${f1(my + ny * j.c * 2)} ${f1(sx)} ${f1(sy)}`; }
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1]], len = v => Math.hypot(v[0], v[1]) || 1, nrm = v => { const l = len(v); return [v[0] / l, v[1] / l]; };
+// дуга вокруг точки: фиксированное число вершин, чтобы кадры анимации имели одинаковую структуру пути
+const arc = (c, r, a0, a1, n = 5) => Array.from({ length: n }, (_, i) => { const a = a0 + (a1 - a0) * i / (n - 1); return [c[0] + Math.cos(a) * r, c[1] + Math.sin(a) * r]; });
+/** «Трубка» вдоль точек с переменной толщиной: конечности и туловище с формой, а не палочки. */
+function tube(pts, radii) {
+  const n = pts.length, L = [], R = [];
+  for (let i = 0; i < n; i++) { const d = nrm(sub(pts[Math.min(i + 1, n - 1)], pts[Math.max(i - 1, 0)])), no = [-d[1], d[0]], r = radii[i];
+    L.push([pts[i][0] + no[0] * r, pts[i][1] + no[1] * r]); R.push([pts[i][0] - no[0] * r, pts[i][1] - no[1] * r]); }
+  const dE = nrm(sub(pts[n - 1], pts[n - 2])), aE = Math.atan2(dE[1], dE[0]), dS = nrm(sub(pts[1], pts[0])), aS = Math.atan2(dS[1], dS[0]);
+  const all = [...L, ...arc(pts[n - 1], radii[n - 1], aE - Math.PI / 2, aE + Math.PI / 2), ...R.reverse(), ...arc(pts[0], radii[0], aS + Math.PI / 2, aS + 3 * Math.PI / 2)];
+  return 'M' + all.map(p => f1(p[0]) + ' ' + f1(p[1])).join('L') + 'Z';
+}
+const seg = (a, b, ra, rb) => tube([a, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], b], [ra, (ra + rb) / 2, rb]);
+function spine(j, n = 6) { const [hx, hy] = j.H, [sx, sy] = j.S, mx = (hx + sx) / 2, my = (hy + sy) / 2, l = Math.hypot(sx - hx, sy - hy) || 1, nx = -(sy - hy) / l, ny = (sx - hx) / l;
+  const cx = mx + nx * j.c * 2, cy = my + ny * j.c * 2;
+  return Array.from({ length: n }, (_, i) => { const t = i / (n - 1), u = 1 - t; return [u * u * hx + 2 * u * t * cx + t * t * sx, u * u * hy + 2 * u * t * cy + t * t * sy]; }); }
 function hlPoint(j, hl) {
-  const mid = (a, b, k = .5) => [lerp(a[0], b[0], k), lerp(a[1], b[1], k)];
+  const mid = (a, b, k = .5) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
   return ({ hip: mid(j.H, j.lN[1], .2), hipfront: mid(j.H, j.lF[1], .25), chest: mid(j.H, j.S, .78), side: mid(j.H, j.S, .45), core: mid(j.H, j.S, .3),
     upperback: mid(j.H, j.S, .8), lats: mid(j.H, j.S, .65), neck: mid(j.S, j.hc, .45), thighback: mid(j.lN[0], j.lN[1], .55), ankle: j.lN[2], arm: mid(j.aN[0], j.aN[1], .6) })[hl] || j.H;
 }
@@ -103,35 +116,54 @@ const PROPS = {
   towel: () => '', towelh: () => '',
 };
 
+let UID = 0;
+// палитра персонажа: футболка в цвет бренда, темные леггинсы, теплая кожа; дальние конечности темнее
+const PAL = { skin: '#EDC3A2', skinF: '#D9A887', shirt: '#0E5A6B', shirtF: '#0A4453', pants: '#25343E', pantsF: '#1A252D', shoe: '#E9A23B', shoeF: '#C9862A', hair: '#2B211C' };
+
 /** SVG-схема упражнения. animate: анимация движения; иначе статичный кадр (конечная поза поверх бледной исходной). */
 export function exFigure(id, { dark = false, animate = true, size = '100%' } = {}) {
   const key = String(id).replace(/_(left|right)$/, ''), spec = EX[key]; if (!spec) return '';
-  const mirror = /_right$/.test(id), fr = frames(spec);
-  const c = dark ? { ink: '#FFFFFF', far: 'rgba(255,255,255,.45)', floor: 'rgba(255,255,255,.18)', prop: 'rgba(255,255,255,.28)', hl: '#E9A23B' }
-    : { ink: '#13212B', far: '#9AA7AF', floor: '#DCE4E6', prop: '#C9D3D6', hl: '#E9A23B' };
-  const props = (spec.a.props || []).map(p => PROPS[p] ? PROPS[p](c) : '').join('');
+  const mirror = /_right$/.test(id), fr = frames(spec), uid = 'xf' + (++UID), front = spec.a.v === 'front', top = spec.a.view === 'top';
   const seq = [...fr, fr[fr.length - 1], ...fr.slice(0, -1).reverse(), fr[0]]; // туда, пауза, обратно, пауза
-  const dur = spec.pulse ? '2.4s' : '3.6s';
-  const anim = (attr, vals) => animate ? `<animate attributeName="${attr}" dur="${dur}" repeatCount="indefinite" values="${vals.join(';')}"/>` : '';
-  const pathOf = (fn, last) => { const v = seq.map(fn); return `d="${animate ? v[0] : last}"` + (animate ? '>' + anim('d', v) + '</path>' : '/>'); };
-  const end = fr[fr.length - 1], start = fr[0];
-  const limb = (sel, col, w) => `<path fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" ${pathOf(j => poly(sel(j)), poly(sel(end)))}`;
-  const circ = (sel, r, fill, extra = '') => { const v = seq.map(sel); const p = animate ? v[0] : sel(end);
-    return `<circle r="${r}" fill="${fill}" ${extra} cx="${f1(p[0])}" cy="${f1(p[1])}">${anim('cx', v.map(q => f1(q[0])))}${anim('cy', v.map(q => f1(q[1])))}</circle>`; };
-  // нос показывает, куда смотрит лицо: спереди смещается при повороте головы, сбоку стоит на стороне лица
-  const nose = j => j.front ? [j.hc[0] + j.nose * 6, j.hc[1] + 1] : add(j.hc, j.face, 7);
+  const dur = spec.pulse ? '2.4s' : '3.6s', end = fr[fr.length - 1], start = fr[0];
+  const anim = (attr, vals) => animate ? `<animate attributeName="${attr}" dur="${dur}" repeatCount="indefinite" calcMode="linear" values="${vals.join(';')}"/>` : '';
+  const P = (fn, fill, extra = '') => { const v = seq.map(fn); return `<path fill="${fill}" ${extra} d="${animate ? v[0] : fn(end)}">${anim('d', v)}</path>`; };
+  const C = (fn, r, fill, extra = '') => { const v = seq.map(fn), p = animate ? v[0] : fn(end); return `<circle r="${r}" fill="${fill}" ${extra} cx="${f1(p[0])}" cy="${f1(p[1])}">${anim('cx', v.map(q => f1(q[0])))}${anim('cy', v.map(q => f1(q[1])))}</circle>`; };
+  const tw = front ? [15, 18] : [10.5, 11.5];
+  // части тела
+  // туловище короче на скругления: плечи и таз на месте суставов, а не выпирают за них
+  const trim = j => { const d = nrm(sub(j.S, j.H)); return { ...j, H: [j.H[0] + d[0] * tw[0] * .45, j.H[1] + d[1] * tw[0] * .45], S: [j.S[0] - d[0] * tw[1] * .55, j.S[1] - d[1] * tw[1] * .55] }; };
+  const torso = j => { const t = trim(j), pts = spine(t); return tube(pts, pts.map((_, i, a) => tw[0] + (tw[1] - tw[0]) * i / (a.length - 1))); };
+  const neck = j => { const b = trim(j).S; return seg(b, [b[0] + (j.hc[0] - b[0]) * .55, b[1] + (j.hc[1] - b[1]) * .55], 4.2, 3.8); };
+  const ua = a => j => seg(j[a][0], j[a][1], 4.8, 4), fa = a => j => seg(j[a][1], j[a][2], 3.8, 3.1);
+  const th = l => j => seg(j[l][0], j[l][1], 7.2, 5.4), sh = l => j => seg(j[l][1], j[l][2], 5.2, 3.6), ft = l => j => seg(j[l][2], j[l][3], 3.6, 2.8);
+  const hand = a => j => j[a][2];
+  const limbArm = (a, far) => P(ua(a), far ? PAL.shirtF : PAL.shirt) + P(fa(a), far ? PAL.skinF : PAL.skin) + C(hand(a), 3.3, far ? PAL.skinF : PAL.skin);
+  const limbLeg = (l, far) => P(th(l), far ? PAL.pantsF : PAL.pants) + P(sh(l), far ? PAL.pantsF : PAL.pants) + P(ft(l), far ? PAL.shoeF : PAL.shoe);
+  // голова: волосы на затылке, лицо к направлению взгляда, глаз
+  const faceDir = j => j.front ? [0, 0] : [Math.cos(j.face * Math.PI / 180), Math.sin(j.face * Math.PI / 180)];
+  const head = C(j => j.front ? [j.hc[0], j.hc[1] - 1.6] : [j.hc[0] - faceDir(j)[0] * 1.6, j.hc[1] - faceDir(j)[1] * 1.6], 10.6, PAL.hair)
+    + C(j => j.front ? [j.hc[0], j.hc[1] + 1.2] : [j.hc[0] + faceDir(j)[0] * 1.4, j.hc[1] + faceDir(j)[1] * 1.4], 9.4, PAL.skin)
+    + (front ? C(j => [j.hc[0] - 3.4 + j.nose * 5, j.hc[1] + 1.5], 1.2, '#2B211C') + C(j => [j.hc[0] + 3.4 + j.nose * 5, j.hc[1] + 1.5], 1.2, '#2B211C')
+      : C(j => { const d = faceDir(j), up = [d[1], -d[0]]; const s = Math.sign(up[1]) > 0 ? -1 : 1; return [j.hc[0] + d[0] * 6 + up[0] * 2 * s, j.hc[1] + d[1] * 6 + up[1] * 2 * s]; }, 1.2, '#2B211C'));
+  // подсветка рабочей зоны: мягкое теплое свечение поверх тела
+  const glow = C(j => hlPoint(j, spec.hl), 15, `url(#${uid}g)`, spec.pulse ? 'opacity=".9"' : '');
+  // тень на полу и коврик для упражнений лежа
+  const lying = !front && !top && spec.a.hy >= 125;
+  const floor = top ? '' : `<path d="M10 ${G + 3} H190" stroke="${dark ? 'rgba(255,255,255,.16)' : '#DCE4E6'}" stroke-width="2" stroke-linecap="round"/>`;
+  const mat = lying ? `<rect x="22" y="${G - 1}" width="164" height="6" rx="3" fill="${dark ? 'rgba(126,209,199,.28)' : '#CFE4E7'}"/>` : '';
+  const shadow = top ? '' : `<ellipse cy="${G + 2}" rx="${lying ? 60 : 26}" ry="3.2" fill="${dark ? 'rgba(0,0,0,.35)' : 'rgba(19,33,43,.10)'}" cx="${f1(end.H[0])}">${anim('cx', seq.map(j => f1(j.H[0])))}</ellipse>`;
+  const c = { prop: dark ? 'rgba(255,255,255,.28)' : '#C9D3D6' };
+  const props = (spec.a.props || []).map(p => PROPS[p] ? PROPS[p](c) : '').join('');
   // тень исходной позы в статичном кадре: видно, откуда и куда движение
-  const ghost = animate ? '' : `<g opacity=".22">${[start.aF, start.lF, start.lN, start.aN].map(p => `<path d="${poly(p)}" fill="none" stroke="${c.ink}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`).join('')}<path d="${trunkPath(start)}" fill="none" stroke="${c.ink}" stroke-width="13" stroke-linecap="round"/><circle cx="${f1(start.hc[0])}" cy="${f1(start.hc[1])}" r="${L.head}" fill="${c.ink}"/></g>`;
-  const hl = circ(j => hlPoint(j, spec.hl), 13, c.hl, `opacity="${spec.pulse ? '.55' : '.4'}"`);
-  return `<svg viewBox="0 0 200 160" width="${size}" style="display:block;max-width:100%" role="img" aria-label="Схема упражнения"><g${mirror ? ' transform="translate(200 0) scale(-1 1)"' : ''}>
-    ${spec.a.view === 'top' ? '' : `<path d="M8 ${G + 3} H192" stroke="${c.floor}" stroke-width="3" stroke-linecap="round"/>`}${props}${ghost}
-    ${hl}
-    ${limb(j => j.aF, spec.a.v === 'front' ? c.ink : c.far, 8)}${limb(j => j.lF, spec.a.v === 'front' ? c.ink : c.far, 10)}
-    <path fill="none" stroke="${c.ink}" stroke-width="${spec.a.v === 'front' ? 24 : 17}" stroke-linecap="round" ${pathOf(trunkPath, trunkPath(end))}
-    ${limb(j => j.lN, c.ink, 10)}${limb(j => j.aN, c.ink, 8)}
-    ${circ(j => j.hc, L.head + 1, c.ink)}${circ(nose, 2.4, dark ? '#13212B' : '#fff')}
-    ${(spec.a.props || []).includes('towel') ? `<path fill="none" stroke="${c.hl}" stroke-width="2.5" stroke-dasharray="4 3" ${pathOf(j => poly([j.aN[2], j.lN[3]]), poly([end.aN[2], end.lN[3]]))}` : ''}
-    ${(spec.a.props || []).includes('towelh') ? `<path fill="none" stroke="${c.hl}" stroke-width="3" ${pathOf(j => poly([j.aN[2], j.aF[2]]), poly([end.aN[2], end.aF[2]]))}` : ''}
-  </g></svg>`;
+  const gh = dark ? 'rgba(255,255,255,.14)' : '#E3EAEC';
+  const ghost = animate ? '' : `<g fill="${gh}">${[ua('aF'), fa('aF'), th('lF'), sh('lF'), th('lN'), sh('lN'), torso, ua('aN'), fa('aN')].map(f => `<path d="${f(start)}"/>`).join('')}<circle cx="${f1(start.hc[0])}" cy="${f1(start.hc[1])}" r="10.4"/></g>`;
+  const towel = (spec.a.props || []).includes('towel') ? P(j => seg(j.aN[2], j.lN[3], 1.3, 1.3), PAL.shoe) : (spec.a.props || []).includes('towelh') ? P(j => seg(j.aN[2], j.aF[2], 1.8, 1.8), PAL.shoe) : '';
+  const figure = front
+    ? limbLeg('lN') + limbLeg('lF') + P(neck, PAL.skin) + P(torso, PAL.shirt) + limbArm('aN') + limbArm('aF') + head
+    : limbArm('aF', 1) + limbLeg('lF', 1) + P(neck, PAL.skin) + P(torso, PAL.shirt) + limbLeg('lN') + head + limbArm('aN');
+  return `<svg viewBox="0 0 200 160" width="${size}" style="display:block;max-width:100%" role="img" aria-label="Схема упражнения">
+    <defs><radialGradient id="${uid}g"><stop offset="0" stop-color="#FFB547" stop-opacity=".75"/><stop offset=".55" stop-color="#E9A23B" stop-opacity=".35"/><stop offset="1" stop-color="#E9A23B" stop-opacity="0"/></radialGradient></defs>
+    <g${mirror ? ' transform="translate(200 0) scale(-1 1)"' : ''}>${floor}${mat}${shadow}${props}${ghost}${figure}${towel}${glow}</g></svg>`;
 }
 export const hasFigure = id => !!EX[String(id).replace(/_(left|right)$/, '')];
