@@ -45,6 +45,8 @@ const EX = {
   ex_glute_set: { a: { ...PRONE }, b: { hy: 142 }, hl: 'hip', pulse: 1 },
   ex_glute_prone_lift: { a: { ...PRONE }, b: { lN1: -16, lN2: -16, lN3: 70 }, hl: 'hip' },
   ex_glute_med_wall: { a: { ...FRONT, hx: 92, props: ['wallL'] }, b: { lN1: 110, kT: .5, lN2: 92, hx: 88 }, hl: 'hip' },
+  // подъем на носок одной ноги у стены: опорная нога ближняя, дальняя согнута назад, кисти на стене
+  ex_calf_raise: { a: { ...STAND, hx: 112, hy: 82, lF1: 92, lF2: 140, lF3: 165, handAt: [152, 62], props: ['wallR'] }, b: { hy: 75, lN3: 34 }, hl: 'calf' },
   ex_deep_neck_nod: { a: { ...SUPINE }, b: { hd: 196 }, hl: 'neck' },
   ex_triceps_wall_push: { a: { ...STAND, hx: 96, hy: 82, t: -70, lN1: 105, lN2: 105, lF1: 103, lF2: 103, lN3: -20, lF3: -20, handAt: [150, 52], props: ['wallR'] }, b: { hx: 106, hy: 86, t: -60 }, hl: 'arm' },
 };
@@ -95,7 +97,7 @@ function spine(j, n = 6) { const [hx, hy] = j.H, [sx, sy] = j.S, mx = (hx + sx) 
 function hlPoint(j, hl) {
   const mid = (a, b, k = .5) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
   return ({ hip: mid(j.H, j.lN[1], .2), hipfront: mid(j.H, j.lF[1], .25), chest: mid(j.H, j.S, .78), side: mid(j.H, j.S, .45), core: mid(j.H, j.S, .3),
-    upperback: mid(j.H, j.S, .8), lats: mid(j.H, j.S, .65), neck: mid(j.S, j.hc, .45), thighback: mid(j.lN[0], j.lN[1], .55), ankle: j.lN[2], arm: mid(j.aN[0], j.aN[1], .6) })[hl] || j.H;
+    upperback: mid(j.H, j.S, .8), lats: mid(j.H, j.S, .65), neck: mid(j.S, j.hc, .45), thighback: mid(j.lN[0], j.lN[1], .55), ankle: j.lN[2], calf: mid(j.lN[1], j.lN[2], .4), arm: mid(j.aN[0], j.aN[1], .6) })[hl] || j.H;
 }
 // кадры анимации: углы интерполируются по дуге, поэтому конечности не «сжимаются» на полпути
 function frames(spec, n = 6) {
