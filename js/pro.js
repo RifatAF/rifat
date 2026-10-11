@@ -438,6 +438,7 @@ export async function clientCard(id) {
    ${c.calib ? `<div class="pad" style="margin-top:12px"><div class="card" style="border:1.5px dashed var(--accent)"><div class="eyebrow" style="color:var(--short-t)">Калибровка · ваша оценка</div>
      ${c.calib.labels.length ? `<div class="row" style="flex-wrap:wrap;gap:6px;margin-top:8px">${c.calib.labels.map(l => `<span class="pill" style="font-size:13px">${esc((C.muscles[l.id] || { name: l.id }).name)} · ${l.side === 'LEFT' ? 'Л' : l.side === 'RIGHT' ? 'П' : 'обе'} · ${({ HYPER: 'перегружена', SHORT: 'укорочена', WEAK: 'слабая' })[l.k]}</span>`).join('')}</div>` : ''}
      ${c.calib.note ? `<p style="font-size:14px;line-height:1.4;margin-top:8px">${esc(c.calib.note)}</p>` : ''}
+     <button class="pill" id="caledit" style="margin-top:8px">Изменить оценку</button>
      ${c.selfReport ? `<p style="font-size:14px;line-height:1.4;margin-top:8px"><span class="sub">Сам человек:</span> ${esc(c.selfReport.complaints || 'жалобы не написал')}${c.selfReport.activity ? ' · ' + esc(c.selfReport.activity) : ''}</p>` : ''}
      <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;font-size:14px">${[['Ваша оценка', true], ['Человек прошел тест по ссылке', as.length > 0], ['Данные отправлены на калибровку', !!c.calib.sentAt]].map(([t, ok], i) => `<div class="row" style="gap:8px"><span class="step-n" style="width:20px;color:${ok ? 'var(--ok-t,#2E7D5B)' : 'var(--sub)'}">${ok ? '✓' : i + 1}</span><span style="flex:1;${ok ? '' : 'color:var(--sub)'}">${t}${i === 2 && c.calib.sentAt ? ', ' + new Date(c.calib.sentAt).toLocaleDateString('ru') : ''}</span></div>`).join('')}</div>
      ${as.length ? `<button class="btn" id="calsend" style="margin-top:12px;height:48px">${c.calib.sentAt ? 'Отправить еще раз' : 'Отправить на калибровку'}</button><p class="sub" style="font-size:12px;margin-top:6px">Уйдут ваша оценка, анкета, замеры и запись движения. Имени человека в данных нет.</p>` : `<p class="sub" style="font-size:13px;margin-top:10px">Ждем, пока человек пройдет тест по ссылке. Результат придет сюда сам, когда вы откроете приложение.</p>`}</div></div>` : ''}
@@ -467,6 +468,7 @@ export async function clientCard(id) {
       : '<p class="sub">Пока пусто.</p>'}</div>
    <div class="pad" style="margin-top:28px"><button class="btn ghost" id="del" style="color:#E5484D;border-color:#F3C9C9">Удалить клиента</button></div></div>`);
   if ($('#calsend')) $('#calsend').onclick = () => calibSend(c, $('#calsend'));
+  if ($('#caledit')) $('#caledit').onclick = () => calibSheet(c);
   $('#back').onclick = () => proHome(); $('#edit').onclick = () => clientForm(id);
   document.querySelectorAll('.gopro-home').forEach(b => b.onclick = () => gate('home', c.name.split(' ')[0]));
   if (last) { const sp = proSpots(last); let v3 = null;
@@ -1271,24 +1273,28 @@ async function addResult(c, r) {
 // Автор методики заранее знает проблему человека: отмечает ее здесь, человек проходит анкету (где болит, что беспокоит)
 // и полный видеотест, результат с записью движения приходит в кабинет. Выгрузка сводит экспертную оценку, ответы и замеры в один файл.
 const CAL_STATES = [['HYPER', 'перегружена'], ['SHORT', 'укорочена'], ['WEAK', 'слабая']], CAL_SIDES = [['LEFT', 'Л'], ['RIGHT', 'П'], ['BOTH', 'обе']];
-async function calibSheet() {
-  const d = document.createElement('div'); d.className = 'sheet'; const labels = []; let side = 'BOTH', q = '';
+async function calibSheet(edit) {
+  const d = document.createElement('div'); d.className = 'sheet'; const labels = edit ? edit.calib.labels.slice() : []; let side = 'BOTH', q = '';
   const ms = Object.entries(C.muscles).map(([id, m]) => ({ id, name: m.name, zone: m.zone || '' }));
-  const draw = () => { const list = ms.filter(m => !q || (m.name + ' ' + m.zone).toLowerCase().includes(q.toLowerCase())).slice(0, q ? 12 : 8);
+  const draw = () => { const list = ms.filter(m => !q || (m.name + ' ' + m.zone).toLowerCase().includes(q.toLowerCase())).slice(0, q ? 12 : 60);
     d.querySelector('#cl_sel').innerHTML = labels.length ? labels.map((l, i) => `<button class="pill" data-rm="${i}" style="font-size:13px">${esc(C.muscles[l.id].name)} · ${CAL_SIDES.find(x => x[0] === l.side)[1]} · ${CAL_STATES.find(x => x[0] === l.k)[1]} ×</button>`).join('') : '<span class="sub" style="font-size:13px">Пока ничего не отмечено</span>';
     d.querySelector('#cl_list').innerHTML = list.map(m => `<div class="row" style="gap:6px;padding:8px 0;border-top:1px solid var(--line-2)"><span style="flex:1;font-size:14px;min-width:0">${esc(m.name)}</span>${CAL_STATES.map(([k, t]) => `<button class="pill" data-add="${m.id}|${k}" style="font-size:12px;min-height:30px;padding:0 8px">${t}</button>`).join('')}</div>`).join('');
     d.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { labels.splice(+b.dataset.rm, 1); draw(); });
     d.querySelectorAll('[data-add]').forEach(b => b.onclick = () => { const [id, k] = b.dataset.add.split('|'); if (!labels.some(l => l.id === id && l.side === side)) labels.push({ id, side, k }); draw(); }); };
   d.innerHTML = `<div><h2>Калибровка</h2><p class="sub" style="font-size:14px;margin-top:6px">Как это работает: 1) отметьте, что вы уже знаете о проблеме человека; 2) отправьте ему ссылку, он пройдет анкету и полный видеотест, результат придет в его карточку здесь; 3) в карточке нажмите «Отправить на калибровку», данные без имени уйдут разработчику.</p>
-    <input class="field" id="cl_name" placeholder="Имя, например Илья" style="margin-top:12px;height:48px">
+    ${edit ? '' : '<input class="field" id="cl_name" placeholder="Имя, например Илья" style="margin-top:12px;height:48px">'}
+    <p style="font-size:13px;line-height:1.4;margin-top:10px;background:var(--surface-2);border-radius:12px;padding:8px 12px">Каждую мышцу отмечайте кнопкой: сначала сторона, потом состояние. Только отмеченное кнопками сравнивается с приложением автоматически, заметка нет.</p>
     <div class="eyebrow" style="margin-top:14px">Ваша оценка</div><div class="row" id="cl_sel" style="flex-wrap:wrap;gap:6px;margin-top:8px"></div>
-    <div class="row" style="gap:6px;margin-top:10px"><span class="sub" style="font-size:13px">Сторона:</span>${CAL_SIDES.map(([k, t]) => `<button class="pill" data-side="${k}" style="font-size:13px;min-height:30px;border:1.5px solid ${k === side ? 'var(--ink)' : 'transparent'}">${t}</button>`).join('')}</div>
+    <div class="row" style="gap:6px;margin-top:10px"><span class="sub" style="font-size:13px">Сторона следующей отметки:</span>${CAL_SIDES.map(([k, t]) => `<button class="pill" data-side="${k}" style="font-size:13px;min-height:30px;border:1.5px solid ${k === side ? 'var(--ink)' : 'transparent'}">${t}</button>`).join('')}</div>
     <input class="field" id="cl_q" type="search" placeholder="Найти мышцу" style="margin-top:8px;height:44px"><div id="cl_list" style="margin-top:6px;max-height:260px;overflow:auto"></div>
-    <textarea class="field" id="cl_note" rows="3" placeholder="Что еще знаете: поза, история, жалобы, что делали" style="margin-top:12px;height:auto;padding:12px 16px;font-size:15px"></textarea>
-    <button class="btn" id="cl_go" style="margin-top:14px">Создать ссылку</button><button class="btn ghost" id="cl_x" style="margin-top:8px;border:0">Отмена</button></div>`;
+    <textarea class="field" id="cl_note" rows="3" placeholder="Что еще знаете: история травм, жалобы, что делали" style="margin-top:12px;height:auto;padding:12px 16px;font-size:15px"></textarea>
+    <button class="btn" id="cl_go" style="margin-top:14px">${edit ? 'Сохранить оценку' : 'Создать ссылку'}</button><button class="btn ghost" id="cl_x" style="margin-top:8px;border:0">Отмена</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; draw();
   d.querySelectorAll('[data-side]').forEach(b => b.onclick = () => { side = b.dataset.side; d.querySelectorAll('[data-side]').forEach(x => x.style.borderColor = x.dataset.side === side ? 'var(--ink)' : 'transparent'); });
   d.querySelector('#cl_q').oninput = e => { q = e.target.value.trim(); draw(); }; d.querySelector('#cl_x').onclick = () => d.remove();
+  if (edit) d.querySelector('#cl_note').value = edit.calib.note || '';
+  if (edit) { d.querySelector('#cl_go').onclick = async () => { edit.calib = { ...edit.calib, labels: labels.slice(), note: d.querySelector('#cl_note').value.trim().slice(0, 2000), editedAt: Date.now() };
+    await put('clients', edit); d.remove(); toast('Оценка сохранена'); clientCard(edit.id); }; return; }
   d.querySelector('#cl_go').onclick = async () => { const name = d.querySelector('#cl_name').value.trim(); if (!name) { d.querySelector('#cl_name').focus(); toast('Введите имя'); return; }
     const b = d.querySelector('#cl_go'); b.disabled = true; b.textContent = 'Создаю ссылку…';
     try { const c = { id: uid(), created: Date.now(), name, notes: '', calib: { labels: labels.slice(), note: d.querySelector('#cl_note').value.trim().slice(0, 2000), at: Date.now() } };
@@ -1302,9 +1308,11 @@ async function calibSheet() {
 }
 /** Один случай калибровки: оценка специалиста, анкета, замеры, гипотезы приложения, запись движения. anon: без имени (для отправки разработчику). */
 async function calibCase(c, anon) { const as = await byClient(c.id), out = [];
-  for (const a of as) { const pp = await get('poses', a.id), sp = proSpots(a).filter(s => s.k !== 'OK' && (!s.derived || s.byChain || s.edited)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
+  for (const a of as) { const pp = await get('poses', a.id), sp = spots(analyze(a, C)).filter(s => s.k !== 'OK' && (!s.derived || s.byChain)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
     out.push({ date: new Date(a.date).toISOString(), protocol: a.protocol, pain: a.pain, clientNote: a.clientNote || '', quality: a.quality, limits: a.limits, snapshot: a.snapshot, side: a.side, moves: a.moves,
-      findings: analyze(a, C).findings.map(f => f.observed), appHypotheses: sp.slice(0, 10).map(s => ({ muscle: s.id, name: C.muscles[s.id].name, side: s.side, state: s.k, tone: Math.round(s.tone * 100) / 100 })), poses: pp && pp.poses || {} }); }
+      findings: analyze(a, C).findings.map(f => f.observed), appHypotheses: sp.slice(0, 10).map(s => ({ muscle: s.id, name: C.muscles[s.id].name, side: s.side, state: s.k, tone: Math.round(s.tone * 100) / 100 })),
+      // правки специалиста в карточке («Норма», «Слабость» и т.д.) отдельно: в гипотезы приложения они больше не подмешиваются
+      specialistEdits: a.hyp ? Object.entries(a.hyp).map(([k, v]) => { const [id, side] = k.split(':'); return { muscle: id, side, state: v, why: (a.hypWhy || {})[k] || '' }; }) : [], poses: pp && pp.poses || {} }); }
   const sr = c.selfReport ? { ...c.selfReport } : null; if (sr && anon) { if (sr.dob) sr.age = Math.floor((Date.now() - Date.parse(sr.dob)) / 31557600000); delete sr.dob; delete sr.name; delete sr.contact; delete sr.phone; }
   return { ...(anon ? { caseId: c.id.slice(0, 8) } : { name: c.name }), created: new Date(c.created).toISOString(), expert: { labels: c.calib.labels.map(l => ({ muscle: l.id, name: C.muscles[l.id] ? C.muscles[l.id].name : l.id, side: l.side, state: l.k })), note: c.calib.note },
     selfReport: sr, assessments: out }; }

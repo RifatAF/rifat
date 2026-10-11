@@ -397,3 +397,22 @@ export function analyze(test, C) {
   const act = chains(C.chains, base, triggers);
   return { f, findings: fds, chains: act, tones: applyInferred(base, act) };
 }
+
+// ---------- калибровка: сверка оценки специалиста с ответом приложения ----------
+/** labels: [{muscle|id, side: LEFT|RIGHT|BOTH, state|k: HYPER|SHORT|WEAK}], tones: из analyze(), rules: правила базы.
+ *  Направление: HYPER и SHORT — «повышен тонус» (+1), WEAK — «слабая» (−1). Учитываем только измеренные гипотезы приложения, без выведенных.
+ *  Итог по каждой отметке специалиста: match — совпало, side — та же мышца и направление, но другая сторона, opposite — противоположное направление,
+ *  missed — приложение не увидело, хотя тест это измеряет, notMeasured — ни одно правило теста эту мышцу не затрагивает.
+ *  extra — гипотезы приложения по мышцам, которых специалист не отмечал вовсе. */
+export function calibCompare(labels, tones, rules) {
+  const measurable = new Set(rules.flatMap(r => r.muscles.map(m => m.id)));
+  const app = tones.filter(t => Math.abs(t.tone) > .25 && !t.derived).map(t => ({ id: t.id, side: t.side, dir: t.tone > 0 ? 1 : -1, tone: Math.round(t.tone * 100) / 100 }));
+  const exp = labels.flatMap(l => (l.side === 'BOTH' ? ['LEFT', 'RIGHT'] : [l.side]).map(s => ({ id: l.muscle || l.id, side: s, dir: (l.state || l.k) === 'WEAK' ? -1 : 1 })));
+  const rows = exp.map(e => { const a = app.find(x => x.id === e.id && x.side === e.side);
+    const res = a ? (a.dir === e.dir ? 'match' : 'opposite') : app.some(x => x.id === e.id && x.dir === e.dir) ? 'side' : measurable.has(e.id) ? 'missed' : 'notMeasured';
+    return { ...e, res, app: a ? a.tone : null }; });
+  const extra = app.filter(a => !exp.some(e => e.id === a.id));
+  const counts = { expert: rows.length, app: app.length, extra: extra.length };
+  for (const r of rows) counts[r.res] = (counts[r.res] || 0) + 1;
+  return { rows, extra, counts };
+}
