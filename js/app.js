@@ -184,7 +184,7 @@ let FULL = false, STRENGTH = localStorage.getItem('bp_str') !== '0';
 export const UNITS = {
   stand: [['Стой ровно', 'Руки вдоль тела', 17]],
   ohs_front: [['Присед с руками вверх', '5 раз', 33]],
-  sls: [['Стоя на правой ноге', '3 неглубоких приседа', 26], ['Стоя на левой ноге', '3 неглубоких приседа', 24]],
+  sls: [['Стоя на правой ноге', 'Чуть согнуть колено 3 раза, глубоко не нужно', 26], ['Стоя на левой ноге', 'Чуть согнуть колено 3 раза, глубоко не нужно', 24]],
   thold: [['Руки в стороны', 'Держать 20 секунд', 26]],
   bends: [['Наклоны в стороны', 'Вправо и влево', 27]],
   calf: [['На носок правой ноги', '15 секунд', 27], ['На носок левой ноги', '15 секунд', 24]],
@@ -262,8 +262,8 @@ const S = {
   side: ['Повернись правым боком', 'Правое плечо к камере', 'Повернись правым боком к камере, правое плечо к телефону'],
   back: ['Повернись спиной', 'Спиной к камере', 'Повернись спиной к камере'],
   front: ['Повернись лицом', 'Лицом к камере', 'Повернись лицом к камере'],
-  slsR: ['Стоя на правой ноге', '3 неглубоких приседа, можно держаться за стену', 'Встань на правую ногу, левую согни и подними. Можно держаться рукой за стену. Медленно присядь неглубоко три раза. Начинай, я буду считать'],
-  slsL: ['Стоя на левой ноге', '3 неглубоких приседа, можно держаться за стену', 'Теперь встань на левую ногу, правую согни и подними. Медленно присядь неглубоко три раза. Начинай'],
+  slsR: ['Стоя на правой ноге', 'Чуть согнуть колено 3 раза, на 10–15 см, можно держаться за стену', 'Встань на правую ногу, левую согни и подними. Можно держаться рукой за стену. Медленно присядь неглубоко три раза. Начинай, я буду считать'],
+  slsL: ['Стоя на левой ноге', 'Чуть согнуть колено 3 раза, на 10–15 см, можно держаться за стену', 'Теперь встань на левую ногу, правую согни и подними. Медленно присядь неглубоко три раза. Начинай'],
   done: ['Готово', 'Считаю результат', 'Готово. Считаю результат'],
   thold: ['Руки в стороны', 'На уровне плеч, держи 20 секунд', 'Подними прямые руки в стороны до уровня плеч, ладони вниз, и держи двадцать секунд'],
   bendR: ['Наклон вправо', 'Рука скользит по бедру, потом вернись', 'Медленно наклонись вправо, правая рука скользит по бедру вниз. Не поворачивайся и не наклоняйся вперед. Потом вернись'],
@@ -430,13 +430,16 @@ export async function runProtocol(protocol, opts = {}) {
     bar(1, ''); voice.beep('stop'); if (key) keep(key, fr, rolls); return fr; };
   // повторы: считаем по движению таза; полоса = сделанные повторы из трех
   const reps = async (key, an, deep = .12, N = 3) => { voice.beep('start'); const fr = [], rolls = []; if (skip) return { f: {}, reps: 0, quality: 'RETAKE' };
-    let n = 0, down = false, base = null, leg = null, maxFlex = 0; const t0 = Date.now(); let lastMove = Date.now(); bar(0, `Повторы: 0 из ${N}`); $('#reps').hidden = false; $('#ring').textContent = 0; $('#repn').textContent = `из ${N}`;
+    let n = 0, down = false, base = null, leg = null, maxFlex = 0, downAt = 0, countAt = 0; const hys = []; const t0 = Date.now(); let lastMove = Date.now(); bar(0, `Повторы: 0 из ${N}`); $('#reps').hidden = false; $('#ring').textContent = 0; $('#repn').textContent = `из ${N}`;
     while (!stop && !skip && n < N && Date.now() - t0 < 60000) { grab(fr, rolls); const p = fr.length && fr.at(-1).p;
-      if (p) { const hy = (p[P.L_HIP].y + p[P.R_HIP].y) / 2; if (leg == null) leg = Math.max(1, Math.abs(((p[P.L_ANKLE].y + p[P.R_ANKLE].y) / 2) - hy));
+      // высота таза по медиане последних кадров: дрожание точек не считается повтором
+      if (p) { hys.push((p[P.L_HIP].y + p[P.R_HIP].y) / 2); if (hys.length > 5) hys.shift(); const hy = hys.slice().sort((x, y) => x - y)[hys.length >> 1]; if (leg == null) leg = Math.max(1, Math.abs(((p[P.L_ANKLE].y + p[P.R_ANKLE].y) / 2) - hy));
         base = base == null ? hy : Math.min(base, hy * .02 + base * .98, base); const dy = (hy - base) / leg;
         const fl = Math.max(F.kneeFlexion(p, true), F.kneeFlexion(p, false)); if (fl > maxFlex) maxFlex = fl;
-        if (!down && dy > deep) { down = true; lastMove = Date.now(); }
-        if (down && dy < deep * .35) { down = false; n++; lastMove = Date.now(); $('#ring').textContent = n; bar(n / N, `Повторы: ${n} из ${N}`); voice.say(['Раз', 'Два', 'Три', 'Четыре', 'Пять'][n - 1]); } }
+        if (!down && dy > deep) { down = true; downAt = Date.now(); lastMove = Date.now(); }
+        // повтор засчитывается, если внизу были не меньше четверти секунды и с прошлого прошло больше полсекунды;
+        // вместо слова короткий сигнал: слова запаздывали и обрывали друг друга
+        if (down && dy < deep * .35) { down = false; if (Date.now() - downAt >= 250 && Date.now() - countAt >= 500) { n++; countAt = Date.now(); lastMove = Date.now(); $('#ring').textContent = n; bar(n / N, `Повторы: ${n} из ${N}`); voice.beep('tick'); } } }
       if (!down && Date.now() - lastMove > 6000) { lastMove = Date.now(); hint(SAY.repWait, 0); }
       await sleep(30); }
     const r = fr.length > 10 ? an(fr) : { f: {}, reps: 0, quality: 'RETAKE' }; if (r.f) r.f.max_knee_flex = maxFlex; keep(key, fr, rolls, r.visibility);
@@ -481,9 +484,9 @@ export async function runProtocol(protocol, opts = {}) {
     if (u === 'ohs_front') { await face('front'); step(k, 'Присед с руками вверх', 'Руки вверх, пятки на полу, 5 раз', FOC.squat); await say(SAY.ohsIntro); if (skipped()) return; await say(SAY.ohsGo);
       moves.ohs_front = await reps('ohs_front', fr => Movement.front(fr), .12, 5); if (skipped()) return; await say(SAY.stop); k++; }
     if (u === 'sls') { await face('front');
-      step(k, 'Стоя на правой ноге', 'Левую ногу подними, 3 неглубоких приседа', FOC.kneeR); await say(SAY.slsRIntro); if (skipped()) return; await say(SAY.slsRGo);
+      step(k, 'Стоя на правой ноге', 'Чуть согните колено, на 10–15 см, и выпрямитесь. Глубоко не нужно, можно держаться за стену. 3 раза', FOC.kneeR); await say(SAY.slsRIntro); if (skipped()) return; await say(SAY.slsRGo);
       moves.sls_r = await reps('sls_r', fr => Movement.singleLeg(fr, true), .06); if (skipped()) return; await say(SAY.footDown); k++;
-      step(k, 'Стоя на левой ноге', 'Правую ногу подними, 3 неглубоких приседа', FOC.kneeL); await say(SAY.slsLIntro); if (skipped()) return; await say(SAY.slsLGo);
+      step(k, 'Стоя на левой ноге', 'Чуть согните колено, на 10–15 см, и выпрямитесь. Глубоко не нужно, можно держаться за стену. 3 раза', FOC.kneeL); await say(SAY.slsLIntro); if (skipped()) return; await say(SAY.slsLGo);
       moves.sls_l = await reps('sls_l', fr => Movement.singleLeg(fr, false), .06); if (skipped()) return; await say(SAY.footDown); k++; }
     if (u === 'thold') { await face('front'); step(k, 'Руки в стороны', 'На уровне плеч, держи 20 секунд', FOC.arms); await say(SAY.tholdIntro); if (skipped()) return; await say(SAY.tholdGo);
       const fr = await hold('t_hold', 20, 'Держи', (fr, left) => { const p = fr.at(-1).p; if (left === 15) hint(SAY.keep, 0);

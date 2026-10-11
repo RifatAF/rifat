@@ -464,7 +464,7 @@ export async function clientCard(id) {
   $('#back').onclick = () => proHome(); $('#edit').onclick = () => clientForm(id);
   document.querySelectorAll('.gopro-home').forEach(b => b.onclick = () => gate('home', c.name.split(' ')[0]));
   if (last) { const sp = proSpots(last); let v3 = null;
-    const show = back => { if (v3) { v3.dispose(); v3 = null; } $('#cvis').style.height = ''; $('#cvis').innerHTML = '<canvas id="cheat" style="width:150px;display:block"></canvas>'; $('#cvis').style.width = '130px'; $('#cfind').style.display = ''; drawHeat($('#cheat'), onlyKeys(sp, new Set([...mainKeys(last, sp), ...cNum.map(l => l.key)])), back, null, cNum); ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === (back ? 'vb' : 'vf'))); };
+    const show = back => { if (v3) { v3.dispose(); v3 = null; } $('#cvis').style.height = ''; $('#cvis').innerHTML = '<canvas id="cheat" style="width:150px;display:block"></canvas>'; $('#cvis').style.width = '130px'; $('#cfind').style.display = ''; drawHeat($('#cheat'), onlyKeys(sp, mainKeys(last, sp)), back, null, cNum); ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === (back ? 'vb' : 'vf'))); };
     show(cNum.filter(l => (sp.find(x => x.key === l.key) || {}).back).length > cNum.length / 2); $('#vf').onclick = () => show(false); $('#vb').onclick = () => show(true);
     $('#v3').onclick = async () => { ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === 'v3')); $('#cvis').style.height = '340px'; $('#cvis').style.width = '100%'; $('#cfind').style.display = 'none'; $('#cvis').innerHTML = '';
       try { v3 = await body3D($('#cvis'), onlyKeys(sp, mainKeys(last, sp)), () => {}); } catch (e) { toast('3D не загрузилось'); show(false); } };
@@ -759,10 +759,16 @@ function proSpots(a) {
 }
 // на схеме только главное: мышцы, подтвержденные специалистом, иначе самые выраженные гипотезы. Остальное серым, без шума.
 const byTone = (x, y) => Math.abs(y.tone) - Math.abs(x.tone);
-function mainKeys(a, sp, n = 3) { const conf = a.check || {};
+// Единый источник «над чем работаем»: одно и то же в решении, на всех схемах (карточка, итог, 3D), в отчете и в упражнениях.
+// По каждому состоянию (укрепить, растянуть, расслабить) до двух мышц, как в строках решения.
+function focusOf(a, sp = proSpots(a)) { const conf = a.check || {};
   const decided = sp.filter(s => s.k !== 'OK' && (conf[s.key] === 'yes' || s.edited)).sort(byTone);
   const top = sp.filter(s => s.k !== 'OK' && conf[s.key] !== 'no' && (!s.derived || s.edited || s.byChain)).sort(byTone);
-  return new Set((decided.length ? decided : top).slice(0, n).map(x => x.key)); }
+  const base = decided.length ? decided : top, items = ['WEAK', 'SHORT', 'HYPER'].flatMap(k => base.filter(s => s.k === k && !s.ambiguous).slice(0, 2));
+  // упражнения: сначала по одному на каждую строку решения, потом остальные
+  const lead = ['WEAK', 'SHORT', 'HYPER'].map(k => items.find(s => s.k === k)).filter(Boolean);
+  return { base, decided, items, keys: new Set(items.map(s => s.key)), planSpots: [...lead, ...items.filter(s => !lead.includes(s))] }; }
+const mainKeys = (a, sp) => focusOf(a, sp).keys;
 const onlyKeys = (sp, keys) => sp.map(x => keys.has(x.key) ? x : { ...x, k: 'OK', tone: 0 });
 export async function result(aid, view = 'measured') {
   // назначение теперь внизу «Итога»: старые ссылки на вкладку ведут туда же и прокручивают к нему
@@ -797,7 +803,7 @@ export async function result(aid, view = 'measured') {
       ${sideClash(a, s) ? '<div style="font-size:13px;color:var(--short-t);margin-top:8px">Боль с другой стороны: проверьте обе стороны руками</div>' : ''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s2);margin-top:var(--s3)"><button class="btn${conf[s.key] === 'yes' ? '' : ' line'}" data-chk="${s.key}" data-v="yes" style="height:48px;border-radius:var(--r-sm);font-size:15px">${conf[s.key] === 'yes' ? ic('check', 's') + 'Подтверждено' : 'Подтверждаю'}</button><button class="btn line" data-chk="${s.key}" data-v="no" style="height:48px;border-radius:var(--r-sm);font-size:15px">${conf[s.key] === 'no' ? 'Убрано' : 'Убрать'}</button></div>
       <button class="link" id="tohyp">${hypMore > 0 && hypMore < 10 ? `Проверка руками и ещё ${hypMore} ${hypMore === 1 ? 'гипотеза' : hypMore < 5 ? 'гипотезы' : 'гипотез'}` : 'Проверка руками и все гипотезы'}</button></div>`; }).join('')}
-    <div><div class="eyebrow" style="color:${decided.length ? 'var(--ink)' : 'var(--short-t)'}">${decided.length ? 'Решение специалиста' : 'Решение · черновик'}</div><div style="margin-top:8px">${verdictCard(decided.length ? decided : top, an.findings, undefined, facts.map(f => f.observed.replace(' (на границе нормы)', '')))}</div>${(a.plan && a.plan.ex && a.plan.ex.length) ? `<button class="link" id="toplan">Назначение: ${a.plan.ex.length} упр.</button>` : '<button class="link" id="mkplan">Собрать упражнения по решению</button>'}</div>
+    <div><div class="eyebrow" style="color:${decided.length ? 'var(--ink)' : 'var(--short-t)'}">${decided.length ? 'Решение специалиста' : 'Решение · черновик'}</div><div style="margin-top:8px">${verdictCard(focusOf(a, sp).base, an.findings, undefined, facts.map(f => f.observed.replace(' (на границе нормы)', '')))}</div>${(a.plan && a.plan.ex && a.plan.ex.length) ? `<button class="link" id="toplan">Назначение: ${a.plan.ex.length} упр.</button>` : '<button class="link" id="mkplan">Собрать упражнения по решению</button>'}</div>
     <div class="card" style="padding:12px 14px"><div class="eyebrow">Заметка к визиту</div><textarea id="vnote" rows="2" maxlength="1000" placeholder="Что нашли руками, что сказал клиент. Видите только вы" style="width:100%;margin-top:8px;border:0;background:transparent;font:15px Onest;resize:vertical;color:var(--text)">${esc(a.note || '')}</textarea></div>
     ${isBefore ? `<button class="btn line" id="after">${ic('camera', 's')}После сеанса: снять снова</button>` : ''}
     <details class="card"><summary style="font-weight:600">Подробнее: запись, качество, все показатели</summary><div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
@@ -820,7 +826,7 @@ export async function result(aid, view = 'measured') {
       <p class="sub" style="font-size:13px;margin-top:6px">Черновик по замеру. В отчёт пойдёт ваша версия.</p>
       <div id="hlist" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s3)">${list.map((s, i) => hypCard(a, an, s, i === list.findIndex(x => C.muscles[x.id] && C.muscles[x.id].proTest && !chk[x.key]), evid)).join('')}</div></details>`;
     dock = `<div class="dock bar"><div style="flex:1;font-size:14px;align-self:center">Проверено руками <b class="num" id="hcnt">${testable.filter(s => chk[s.key]).length} из ${testable.length}</b></div><button class="btn line" id="addm" style="width:auto;padding:0 18px">${ic('plus', 's')}Мышца</button></div>`; }
-  if (view === 'measured') { const pl = a.plan || { ex: plan(top), text: '' }; const recs = muscleRecs(a);
+  if (view === 'measured') { const pl = a.plan || { ex: plan(focusOf(a, sp).planSpots), text: '' }; const recs = muscleRecs(a);
     body += `<h2 id="planh" style="font-size:20px;margin-top:var(--s4)">Назначение</h2><div class="card"><div class="row"><div class="eyebrow" style="flex:1">Рекомендации по мышцам</div>${recs.length ? '<button class="pill" id="addall" style="font-size:12px">Добавить все</button>' : ''}</div>
       ${recs.length ? recs.map((r, i) => `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line-2)"><div class="row"><i class="bar" style="background:${TONE_HEX[r.s.k]};height:22px"></i><b style="flex:1;font-size:15px">${r.head}</b>${r.all.length ? `<button class="pill" data-add="${i}" style="font-size:12px">Добавить</button>` : ''}</div>
         ${r.out.map(([h, t]) => `<div style="font-size:14px;margin-top:6px;line-height:1.4"><b>${h}:</b> ${t}</div>`).join('')}</div>`).join('') : '<p class="sub" style="margin-top:8px">Значимых отклонений нет.</p>'}</div>
@@ -834,7 +840,7 @@ export async function result(aid, view = 'measured') {
   document.querySelectorAll('[data-v]').forEach(b => b.onclick = async () => { await savePlan(a); result(aid, b.dataset.v); });
   if ($('#rc')) $('#rc').onclick = async () => { $('#rc').textContent = 'Считаю…'; await recalc(a); const y = scrollY; await result(aid, view); scrollTo(0, y); };
   if (view === 'measured') { let bk = numLabels.filter(l => sp.find(x => x.key === l.key).back).length > numLabels.length / 2, first = !REVEALED.has(aid); REVEALED.add(aid); const lab = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 3)).map(s => ({ key: s.key, title: (SHORT[s.id] || C.muscles[s.id].name) + (s.side === 'RIGHT' ? ' · П' : ' · Л'), sub: toneText(s, 0).toLowerCase(), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
-    const focus = onlyKeys(sp, new Set([...mainKeys(a, sp), ...numLabels.map(l => l.key)])); const dh = () => drawHeat($('#heat'), focus, bk, null, numLabels, { reveal: first }); dh(); first = false; if (bk) { $('#mb2').classList.add('on'); $('#mf').classList.remove('on'); }
+    const focus = onlyKeys(sp, mainKeys(a, sp)); const dh = () => drawHeat($('#heat'), focus, bk, null, numLabels, { reveal: first }); dh(); first = false; if (bk) { $('#mb2').classList.add('on'); $('#mf').classList.remove('on'); }
     $('#mf').onclick = () => { bk = false; $('#mf').classList.add('on'); $('#mb2').classList.remove('on'); dh(); }; $('#mb2').onclick = () => { bk = true; $('#mb2').classList.add('on'); $('#mf').classList.remove('on'); dh(); };
     if ($('#tohyp')) $('#tohyp').onclick = () => { HYPOPEN = true; result(aid, 'hyp'); };
     if ($('#toplan')) $('#toplan').onclick = () => $('#planh').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1132,7 +1138,7 @@ async function report(aid) {
   const plain = t => t.replace(/ \(на границе нормы\)/, '').replace(/\s*на\s*[\d,.]+\s*°.*$/, '').replace(/:\s*$/, '');
   const same = prev && Math.abs(a.date - prev.date) < 12 * 3600e3;
   const conf = a.check || {}, decided = sp.filter(s => s.k !== 'OK' && (conf[s.key] === 'yes' || s.edited)).sort((x, y2) => Math.abs(y2.tone) - Math.abs(x.tone));
-  const v = verdict(decided.length ? decided : top, an.findings), pl = a.plan || { ex: [], text: '' };
+  const fo = focusOf(a, sp), v = verdict(fo.base, an.findings), pl = a.plan || { ex: plan(fo.planSpots), text: '' };
   // отчет для клиента: три наблюдения, упражнения на дом, над чем работаем; на схеме только главное
   const exs = pl.ex.slice(0, 4).map(id => C.exercises[id]).filter(Boolean);
   const sections = [{ h: 'Что мы заметили', rows: an.findings.slice(0, 3).map((f, i) => ({ text: `${i + 1}. ${plain(f.observed)}` })) },
