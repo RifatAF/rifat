@@ -121,7 +121,7 @@ let UID = 0;
 const PAL = { skin: '#EDC3A2', skinF: '#D9A887', shirt: '#0E5A6B', shirtF: '#0A4453', pants: '#25343E', pantsF: '#1A252D', shoe: '#E9A23B', shoeF: '#C9862A', hair: '#2B211C' };
 
 /** SVG-схема упражнения. animate: анимация движения; иначе статичный кадр (конечная поза поверх бледной исходной). */
-export function exFigure(id, { dark = false, animate = true, size = '100%' } = {}) {
+export function exFigure(id, { dark = false, animate = true, size = '100%', ghost: withGhost = true } = {}) {
   const key = String(id).replace(/_(left|right)$/, ''), spec = EX[key]; if (!spec) return '';
   const mirror = /_right$/.test(id), fr = frames(spec), uid = 'xf' + (++UID), front = spec.a.v === 'front', top = spec.a.view === 'top';
   const seq = [...fr, fr[fr.length - 1], ...fr.slice(0, -1).reverse(), fr[0]]; // туда, пауза, обратно, пауза
@@ -157,7 +157,7 @@ export function exFigure(id, { dark = false, animate = true, size = '100%' } = {
   const props = (spec.a.props || []).map(p => PROPS[p] ? PROPS[p](c) : '').join('');
   // тень исходной позы в статичном кадре: видно, откуда и куда движение
   const gh = dark ? 'rgba(255,255,255,.14)' : '#E3EAEC';
-  const ghost = animate ? '' : `<g fill="${gh}">${[ua('aF'), fa('aF'), th('lF'), sh('lF'), th('lN'), sh('lN'), torso, ua('aN'), fa('aN')].map(f => `<path d="${f(start)}"/>`).join('')}<circle cx="${f1(start.hc[0])}" cy="${f1(start.hc[1])}" r="10.4"/></g>`;
+  const ghost = animate || !withGhost ? '' : `<g fill="${gh}">${[ua('aF'), fa('aF'), th('lF'), sh('lF'), th('lN'), sh('lN'), torso, ua('aN'), fa('aN')].map(f => `<path d="${f(start)}"/>`).join('')}<circle cx="${f1(start.hc[0])}" cy="${f1(start.hc[1])}" r="10.4"/></g>`;
   const towel = (spec.a.props || []).includes('towel') ? P(j => seg(j.aN[2], j.lN[3], 1.3, 1.3), PAL.shoe) : (spec.a.props || []).includes('towelh') ? P(j => seg(j.aN[2], j.aF[2], 1.8, 1.8), PAL.shoe) : '';
   const figure = front
     ? limbLeg('lN') + limbLeg('lF') + P(neck, PAL.skin) + P(torso, PAL.shirt) + limbArm('aN') + limbArm('aF') + head
