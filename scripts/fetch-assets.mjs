@@ -38,13 +38,13 @@ const { readdir } = await import('node:fs/promises');
 for (const e of await readdir('.')) if (!SKIP.has(e) && !e.endsWith('.md')) await cp(e, OUT + '/' + e, { recursive: true });
 
 const idx = JSON.parse((await get('voice/index.json')).toString('utf8'));
-const files = ['models/pose_landmarker_full.task', 'models/pose_landmarker_lite.task', 'data/body3d.bin', ...Object.keys(VENDOR), ...new Set(Object.values(idx).map(f => 'voice/' + f))];
+// модели позы, MediaPipe и three.js в сборку не кладем: vercel.json проксирует их с Google и jsDelivr через наш домен
+// (каждая сборка хранила свою копию на ~60 МБ и съедала лимит Deployment Storage)
+const files = ['data/body3d.bin', ...new Set(Object.values(idx).map(f => 'voice/' + f))];
 await save(OUT + '/voice/index.json', JSON.stringify(idx));
 let n = 0;
 for (let i = 0; i < files.length; i += 10) await Promise.all(files.slice(i, i + 10).map(async f => { if (await exists(OUT + '/' + f)) return; await save(OUT + '/' + f, await get(f)); n++; }));
 console.log(`assets: ${n} файлов скопировано, всего ${files.length + 1}`);
-// точная модель для сильных телефонов: без нее приложение просто остается на full
-try { if (!(await exists(OUT + '/models/pose_landmarker_heavy.task'))) await save(OUT + '/models/pose_landmarker_heavy.task', await get('models/pose_landmarker_heavy.task')); } catch (e) { console.warn('heavy: ' + e.message); }
 
 // Озвучка фраз, для которых еще нет записи (упражнения на «вы», новые подсказки): нейроголос ru-RU-DmitryNeural при сборке.
 // Новые записи попадают в voice/index.json на сайте, и следующая сборка просто копирует их. VOICE_REGEN_ALL=1 переозвучивает все фразы одним голосом.
