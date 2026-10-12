@@ -418,13 +418,16 @@ function callouts(ctx, labels, mine, alpha) {
 
 // ---------- 3D-модель мышц (Z-Anatomy на основе BodyParts3D, CC BY-SA) ----------
 let mesh3d = null;
+// Ромбовидные идут от остистых отростков C7–T5 косо вниз и наружу к медиальному краю лопатки: чем ниже, тем дальше от позвоночника.
+// В группе сетки была и горизонтальная полоса до плеча (поперечные волокна трапециевидной): все, что шире этой косой границы, не ромбовидные.
+const rhMaxX = z => 20 + Math.max(0, 1470 - z) * .41;
 const TRAP_MID = 254; // средние (поперечные) волокна трапециевидной: своей мышцы в списке нет, красятся нейтрально
 /** Индексы треугольников: если отмечены ромбовидные, трапециевидная над ними не рисуется (окно), видна сама глубокая мышца. */
 function meshIndex(m, spots) {
   const sides = [...new Set((spots || []).filter(s => s.id === 'rhomboid' && s.k !== 'OK').flatMap(s => s.side === 'BOTH' ? ['LEFT', 'RIGHT'] : [s.side]))].sort();
   if (!sides.length || m.rh < 0) return m.idx; const key = sides.join(); if (m.idxCache.has(key)) return m.idxCache.get(key);
   const inWin = v => { const x = m.pos[v * 3], y = m.pos[v * 3 + 1], z = m.pos[v * 3 + 2];
-    return m.trapG.has(m.grp[v]) && y > 50 && z > 1280 && z < 1475 && Math.abs(x) < 95 && sides.includes(x > 0 ? 'LEFT' : 'RIGHT'); };
+    return m.trapG.has(m.grp[v]) && y > 50 && z > 1240 && z < 1480 && Math.abs(x) < rhMaxX(z) + 12 && sides.includes(x > 0 ? 'LEFT' : 'RIGHT'); };
   const keep = []; for (let t = 0; t < m.idx.length; t += 3) { const a = m.idx[t], b = m.idx[t + 1], c = m.idx[t + 2]; if (inWin(a) || inWin(b) || inWin(c)) continue; keep.push(a, b, c); }
   const out = new Uint32Array(keep); m.idxCache.set(key, out); return out; }
 async function loadMesh() {
@@ -446,7 +449,7 @@ async function loadMesh() {
   let ra = -1; const blobs = { ...meta.blobs }, acc = { L: [0, 0, 0, 0], R: [0, 0, 0, 0] };
   if (!ord.includes('rectus_abd') && 1 + ord.length * 2 + 1 < 255) { ord.push('rectus_abd'); ra = ord.length - 1; }
   for (let i = 0; i < nv; i++) { const g = grp[i], x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
-    if (isG(g, rh) && Math.abs(x) > 85) grp[i] = TRAP_MID;
+    if (isG(g, rh) && Math.abs(x) > rhMaxX(z)) grp[i] = TRAP_MID;
     else if (isG(g, lt) && z > 1360) grp[i] = TRAP_MID;
     else if (ra >= 0 && (isG(g, ob) || isG(g, ab)) && Math.abs(x) < 55 && y < -80 && z > 880 && z < 1260) { const s = x > 0 ? 'L' : 'R'; grp[i] = 1 + ra * 2 + (s === 'R' ? 1 : 0); const a = acc[s]; a[0] += x; a[1] += y; a[2] += z; a[3]++; } }
   if (ra >= 0) for (const [s, a] of Object.entries(acc)) if (a[3]) blobs[1 + ra * 2 + (s === 'R' ? 1 : 0)] = [a[0] / a[3], a[1] / a[3], a[2] / a[3]];
@@ -469,7 +472,7 @@ function paintMesh(m, spots, out) { const order = m.meta.order, lin = c => (c / 
   const DEEP = new Set(['levator', 'suboccipital', 'pec_minor', 'deep_neck_flex', 'iliopsoas'].map(id => m.meta.order.indexOf(id)).filter(i => i >= 0));
   const blobs = Object.entries(m.meta.blobs).map(([g, c]) => [+g, c, DEEP.has((+g - 1) >> 1)]).filter(([g]) => col.has(+g));
   for (let i = 0; i < m.nv; i++) { const g = m.grp[i];
-    if (g === 255) { out.set(BASE3, i * 3); continue; }
+    if (g === 255 || g === TRAP_MID) { out.set(BASE3, i * 3); continue; }
     let c = col.get(g);
     if (!c) { const x = m.pos[i * 3], y = m.pos[i * 3 + 1], z = m.pos[i * 3 + 2]; let w0 = 1, acc = BASE3.slice();
       for (const [bg, ctr, deep] of blobs) { const sg = deep ? 30 : 22, d2 = (x - ctr[0]) ** 2 + (y - ctr[1]) ** 2 + (z - ctr[2]) ** 2; if (d2 > 9 * sg * sg) continue; const w = (deep ? 1.6 : .3) * Math.exp(-d2 / (2 * sg * sg)), bc = col.get(bg);
