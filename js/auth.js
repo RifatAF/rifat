@@ -24,6 +24,14 @@ export async function providers() {
   if (c.email) out.push('email'); // запасной вход для всех: iPhone без Google, встроенные браузеры
   return out;
 }
+/** Вход по кнопке из письма: ?ml=<почта base64url>.<код>. Возвращает пользователя или null. */
+export async function mailLinkLogin() {
+  const m = /[?&]ml=([A-Za-z0-9_-]+)\.(\d{6})/.exec(location.search); if (!m) return null;
+  history.replaceState(null, '', location.pathname + location.hash);
+  let email = ''; try { email = new TextDecoder().decode(Uint8Array.from(atob(m[1].replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))); } catch (e) { return null; }
+  try { me = (await post('mail', { email, code: m[2], ref: localStorage.getItem('bp_ref') })).user; localStorage.setItem('bp_mail', email); localStorage.setItem(CONSENT_KEY, String(Date.now()));
+    track('login_ok', { c: 'mail_link' }, false); window.dispatchEvent(new Event('bp-login')); return me; }
+  catch (e) { return { error: e.message }; } }
 export async function getMe(force) {
   if (me !== undefined && !force) return me;
   try { const r = await fetch('/api/auth?a=me', { cache: 'no-store' }); me = r.ok ? (await r.json()).user : null; } catch (e) { me = null; }
@@ -120,19 +128,26 @@ export function loginScreen(role, cont, opts = {}) {
       box.insertAdjacentHTML('beforeend', `${list.includes('google') ? '<p class="sub" style="font-size:13px;text-align:center;margin:2px 0">или</p>' : ''}<a class="btn${list.includes('google') ? ' line' : ''}" id="tgweb" href="${u}" style="text-decoration:none"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="${list.includes('google') ? '#229ED9' : '#fff'}" d="M9.8 15.2 9.6 19c.4 0 .6-.2.8-.4l2-1.9 4.1 3c.8.4 1.3.2 1.5-.7l2.7-12.6c.3-1.1-.4-1.6-1.2-1.3L3.7 11.3c-1.1.4-1.1 1-.2 1.3l4.1 1.3 9.6-6c.5-.3.9-.1.5.2"/></svg>Войти через Telegram</a>${pro && list.includes('google') ? '<p class="sub" style="font-size:12px;text-align:center">Через Telegram бот сразу пишет, когда клиент прошел тест по ссылке</p>' : ''}`);
     }
     if (list.includes('email')) {
-      box.insertAdjacentHTML('beforeend', `${list.length > 1 ? '<p class="sub" style="font-size:13px;text-align:center;margin:2px 0">или по почте</p>' : ''}<div id="mailbox" style="display:flex;flex-direction:column;gap:8px">
-        <input id="mail" class="field" type="email" inputmode="email" autocomplete="email" autocapitalize="off" placeholder="Электронная почта" style="height:48px">
-        <button class="btn line" id="mailgo">Получить код на почту</button></div>`);
+      // самый простой путь: почта и одна кнопка; в письме кнопка «Войти», код нужен, только если письмо открыто на другом устройстве
+      box.insertAdjacentHTML('beforeend', `${list.length > 1 ? '<p class="sub" style="font-size:13px;text-align:center;margin:2px 0">или по почте, без пароля</p>' : ''}<form id="mailbox" style="display:flex;flex-direction:column;gap:8px" novalidate>
+        <input id="mail" class="field" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="Ваша почта" value="${(localStorage.getItem('bp_mail') || '').replace(/[<>&"]/g, '')}" style="height:52px">
+        <button class="btn${list.length > 1 ? ' line' : ''}" id="mailgo" type="submit">Войти по почте</button></form>`);
       const mb = document.getElementById('mailbox'), mail = () => document.getElementById('mail').value.trim();
-      const ask = async () => { if (!consented()) { err.textContent = 'Отметьте оба пункта выше'; return; } err.textContent = 'Отправляю код…';
-        try { await post('mailcode', { email: mail() }); err.textContent = ''; track('mail_code'); } catch (e) { err.textContent = e.message; return; }
-        const em = mail(); mb.innerHTML = `<p style="font-size:14px;text-align:center">Код отправлен на <b>${em.replace(/[<>&"]/g, '')}</b>. Проверьте и папку «Спам».</p>
-          <input id="mcode" class="field" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Код из письма" style="height:48px;text-align:center;font-size:20px;letter-spacing:.3em">
-          <button class="btn" id="mcgo">Войти</button><button class="link" id="mcre" style="font-size:14px">Отправить код еще раз</button>`;
-        const c = document.getElementById('mcode'); c.focus();
-        const go = () => done('mail', { email: em, code: c.value.trim() }); document.getElementById('mcgo').onclick = go; c.oninput = () => { if (/^\d{6}$/.test(c.value.trim())) go(); };
-        document.getElementById('mcre').onclick = async () => { try { await post('mailcode', { email: em }); err.textContent = 'Код отправлен еще раз'; } catch (e) { err.textContent = e.message; } }; };
-      document.getElementById('mailgo').onclick = ask; document.getElementById('mail').onkeydown = e => { if (e.key === 'Enter') ask(); };
+      const ask = async e => { e && e.preventDefault(); if (!consented()) { err.textContent = 'Отметьте оба пункта выше'; return; }
+        const em = mail(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)) { err.textContent = 'Проверьте адрес почты'; return; }
+        err.textContent = 'Отправляю письмо…'; document.getElementById('mailgo').disabled = true;
+        try { await post('mailcode', { email: em, role, consent: true, health: true }); err.textContent = ''; localStorage.setItem('bp_mail', em); track('mail_code'); }
+        catch (x) { err.textContent = x.message; document.getElementById('mailgo').disabled = false; return; }
+        mb.outerHTML = `<div id="mailbox" style="display:flex;flex-direction:column;gap:10px;text-align:center"><div style="font-size:40px">✉️</div>
+          <b style="font-size:17px">Письмо отправлено на ${em.replace(/[<>&"]/g, '')}</b>
+          <p class="sub" style="font-size:14px">Откройте его и нажмите «Войти». Письма нет? Проверьте «Спам».</p>
+          <input id="mcode" class="field" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="или введите код из письма" style="height:52px;text-align:center;font-size:18px">
+          <button class="link" id="mcre" style="font-size:14px">Отправить еще раз</button><button class="link" id="mchg" style="font-size:14px">Другая почта</button></div>`;
+        const c = document.getElementById('mcode');
+        c.oninput = () => { const v = c.value.replace(/\D/g, ''); if (v.length === 6) done('mail', { email: em, code: v }); };
+        document.getElementById('mcre').onclick = async () => { try { await post('mailcode', { email: em, role, consent: true, health: true }); err.textContent = 'Письмо отправлено еще раз'; } catch (x) { err.textContent = x.message; } };
+        document.getElementById('mchg').onclick = () => loginScreen(role, cont, opts); };
+      mb.onsubmit = ask;
     }
   });
 }

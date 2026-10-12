@@ -61,24 +61,33 @@ async function readJson(p) { try { const { get } = await import('@vercel/blob');
   const ch = []; for await (const c of r.stream) ch.push(Buffer.from(c)); return JSON.parse(Buffer.concat(ch).toString('utf8')); } catch (e) { return null; } }
 async function writeJson(p, o) { const { put } = await import('@vercel/blob'); await put(p, JSON.stringify(o), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true }); }
 /** Код на почту: 6 цифр, 10 минут, 5 попыток; не чаще раза в минуту и не больше 5 писем в час на адрес. */
-async function sendMailCode(email) {
+async function sendMailCode(email, origin, extra = {}) {
   const e = String(email || '').trim().toLowerCase().slice(0, 120); if (!EMAIL.test(e)) return { status: 400, error: 'проверьте адрес почты' };
   if (!MAIL_KEY) return { status: 503, error: 'вход по почте пока не подключен' };
   const now = Date.now(), old = await readJson(codePath(e)), sent = ((old && old.sent) || []).filter(t => now - t < 3600e3);
-  if (sent.length && now - sent.at(-1) < 60e3) return { status: 429, error: 'код уже отправлен, подождите минуту' };
+  if (sent.length && now - sent.at(-1) < 60e3) return { status: 429, error: 'письмо уже отправлено, подождите минуту' };
   if (sent.length >= 5) return { status: 429, error: 'слишком много попыток, попробуйте через час' };
   const code = String(crypto.randomInt(0, 1e6)).padStart(6, '0');
+  // в письме кнопка «Войти»: ссылка открывает приложение и входит сама, вводить код не нужно
+  const link = `${origin}/?ml=${Buffer.from(e).toString('base64url')}.${code}`;
+  const html = `<div style="font-family:Arial,sans-serif;font-size:16px;color:#13212B;max-width:480px">
+    <p>Здравствуйте! Чтобы войти в BodyPassport, нажмите кнопку:</p>
+    <p style="margin:24px 0"><a href="${link}" style="background:#0E5A6B;color:#fff;text-decoration:none;padding:14px 28px;border-radius:12px;font-weight:bold;display:inline-block">Войти в BodyPassport</a></p>
+    <p style="color:#5A6872">Или введите код в приложении: <b style="font-size:20px;letter-spacing:3px;color:#13212B">${code}</b></p>
+    <p style="color:#5A6872;font-size:13px">Кнопка и код действуют 10 минут. Если вы не входили, просто удалите это письмо.</p></div>`;
   const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + MAIL_KEY, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8000),
-    body: JSON.stringify({ from: MAIL_FROM, to: [e], subject: `Код входа BodyPassport: ${code}`, text: `Ваш код для входа в BodyPassport: ${code}\n\nКод действует 10 минут. Если вы не входили, просто удалите это письмо.` }) }).catch(() => null);
+    body: JSON.stringify({ from: MAIL_FROM, to: [e], subject: `Вход в BodyPassport: код ${code}`, html, text: `Войти в BodyPassport: ${link}\n\nИли введите код: ${code}\nДействует 10 минут.` }) }).catch(() => null);
   if (!r || !r.ok) return { status: 502, error: 'не удалось отправить письмо, попробуйте позже' };
-  await writeJson(codePath(e), { h: sha(process.env.SESSION_SECRET + ':' + e + ':' + code), exp: now + 600e3, tries: 0, sent: [...sent, now] });
+  // согласия и роль запоминаем вместе с кодом: человек может открыть письмо в другом браузере
+  await writeJson(codePath(e), { h: sha(process.env.SESSION_SECRET + ':' + e + ':' + code), exp: now + 600e3, tries: 0, sent: [...sent, now],
+    consent: extra.consent === true && extra.health === true, role: ROLES.includes(extra.role) ? extra.role : null });
   return { status: 200 }; }
 async function verifyMailCode(email, code) {
   const e = String(email || '').trim().toLowerCase().slice(0, 120); if (!EMAIL.test(e) || !/^\d{6}$/.test(String(code || ''))) return null;
   const rec = await readJson(codePath(e)); if (!rec || !rec.h || rec.exp < Date.now() || rec.tries >= 5) return null;
   if (rec.h !== sha(process.env.SESSION_SECRET + ':' + e + ':' + code)) { rec.tries++; await writeJson(codePath(e), rec); return null; }
   await writeJson(codePath(e), { sent: rec.sent || [] }); // код одноразовый
-  return { id: 'e_' + sha('uid:' + e).slice(0, 24), provider: 'email', name: clip(e.split('@')[0], 80), email: clip(e, 120) }; }
+  return { ident: { id: 'e_' + sha('uid:' + e).slice(0, 24), provider: 'email', name: clip(e.split('@')[0], 80), email: clip(e, 120) }, consent: !!rec.consent, role: rec.role }; }
 
 async function signIn(req, res, ident) {
   if (!ident) return res.status(401).json({ error: 'не удалось подтвердить вход' });
@@ -113,8 +122,9 @@ export default async function handler(req, res) {
     const b = req.body || {};
     if (a === 'google') return signIn(req, res, await verifyGoogle(b.credential));
     if (a === 'telegram') return signIn(req, res, b.initData ? verifyTgInitData(b.initData) : verifyTgWidget(b.data));
-    if (a === 'mailcode') { const r = await sendMailCode(b.email); return res.status(r.status).json(r.status === 200 ? { ok: true } : { error: r.error }); }
-    if (a === 'mail') { const id = await verifyMailCode(b.email, b.code); if (!id) return res.status(401).json({ error: 'неверный или просроченный код' }); return signIn(req, res, id); }
+    if (a === 'mailcode') { const r = await sendMailCode(b.email, 'https://' + String(req.headers.host || 'bodypassport.vercel.app'), b); return res.status(r.status).json(r.status === 200 ? { ok: true } : { error: r.error }); }
+    if (a === 'mail') { const v = await verifyMailCode(b.email, b.code); if (!v) return res.status(401).json({ error: 'неверный или просроченный код' });
+      req.body = { ...b, ...(v.consent ? { consent: true, health: true } : {}), role: b.role || v.role }; return signIn(req, res, v.ident); }
     const uid = sessionUid(req); const u = uid && await loadUser(uid);
     if (!u) return res.status(401).json({ error: 'войдите заново' });
     if (a === 'role') { if (!ROLES.includes(b.role)) return res.status(400).json({ error: 'role' }); u.role = b.role; startTrialIfNeeded(u); await ensureRefIndex(u); await creditReferral(u, false).catch(e => console.error('ref', e)); await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }

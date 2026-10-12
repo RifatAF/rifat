@@ -422,13 +422,28 @@ let mesh3d = null;
 // В группе сетки была и горизонтальная полоса до плеча (поперечные волокна трапециевидной): все, что шире этой косой границы, не ромбовидные.
 const rhMaxX = z => 20 + Math.max(0, 1470 - z) * .41;
 const TRAP_MID = 254; // средние (поперечные) волокна трапециевидной: своей мышцы в списке нет, красятся нейтрально
-/** Индексы треугольников: если отмечены ромбовидные, трапециевидная над ними не рисуется (окно), видна сама глубокая мышца. */
+// Глубокие мышцы закрыты другими: когда такая мышца отмечена, все, что лежит над ней (снаружи по нормали, до 5 см), не рисуется.
+// Так видна форма самой мышцы, а не пятно на поверхностной.
+export const DEEP_IDS = ['rhomboid', 'levator', 'suboccipital', 'deep_neck_flex', 'scalene', 'pec_minor', 'serratus', 'iliopsoas', 'abdominals', 'ql', 'thoracic_ext', 'erector', 'glute_med'];
+/** Индексы треугольников без слоев, закрывающих отмеченные глубокие мышцы. */
 function meshIndex(m, spots) {
-  const sides = [...new Set((spots || []).filter(s => s.id === 'rhomboid' && s.k !== 'OK').flatMap(s => s.side === 'BOTH' ? ['LEFT', 'RIGHT'] : [s.side]))].sort();
-  if (!sides.length || m.rh < 0) return m.idx; const key = sides.join(); if (m.idxCache.has(key)) return m.idxCache.get(key);
-  const inWin = v => { const x = m.pos[v * 3], y = m.pos[v * 3 + 1], z = m.pos[v * 3 + 2];
-    return m.trapG.has(m.grp[v]) && y > 50 && z > 1240 && z < 1480 && Math.abs(x) < rhMaxX(z) + 12 && sides.includes(x > 0 ? 'LEFT' : 'RIGHT'); };
-  const keep = []; for (let t = 0; t < m.idx.length; t += 3) { const a = m.idx[t], b = m.idx[t + 1], c = m.idx[t + 2]; if (inWin(a) || inWin(b) || inWin(c)) continue; keep.push(a, b, c); }
+  const gs = [...new Set((spots || []).filter(s => s.k !== 'OK' && DEEP_IDS.includes(s.id)).flatMap(s => { const o = m.meta.order.indexOf(s.id); if (o < 0) return [];
+    return (s.side === 'BOTH' ? ['LEFT', 'RIGHT'] : [s.side]).map(sd => 1 + o * 2 + (sd === 'RIGHT' ? 1 : 0)); }))].sort((a, b) => a - b);
+  if (!gs.length) return m.idx; const key = gs.join(); if (m.idxCache.has(key)) return m.idxCache.get(key);
+  const G = new Set(gs), C = 20, key3 = (a, b, c) => ((a + 200) * 512 + (b + 200)) * 512 + (c + 200), cell = (x, y, z) => key3(Math.floor(x / C), Math.floor(y / C), Math.floor(z / C)), grid = new Map(), bb = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
+  for (let v = 0; v < m.nv; v++) { if (!G.has(m.grp[v])) continue; const x = m.pos[v * 3], y = m.pos[v * 3 + 1], z = m.pos[v * 3 + 2];
+    // только наружная сторона мышцы: нормаль смотрит от оси тела
+    if (m.nrm[v * 3] * x + m.nrm[v * 3 + 1] * y <= 0) continue; const k = cell(x, y, z); (grid.get(k) || grid.set(k, []).get(k)).push(v);
+    bb[0] = Math.min(bb[0], x); bb[1] = Math.min(bb[1], y); bb[2] = Math.min(bb[2], z); bb[3] = Math.max(bb[3], x); bb[4] = Math.max(bb[4], y); bb[5] = Math.max(bb[5], z); }
+  const hide = new Uint8Array(m.nv);
+  for (let q = 0; q < m.nv; q++) { if (G.has(m.grp[q])) continue; const x = m.pos[q * 3], y = m.pos[q * 3 + 1], z = m.pos[q * 3 + 2];
+    if (x < bb[0] - 60 || x > bb[3] + 60 || y < bb[1] - 60 || y > bb[4] + 60 || z < bb[2] - 60 || z > bb[5] + 60) continue;
+    const cx = Math.floor(x / C), cy = Math.floor(y / C), cz = Math.floor(z / C); let h = false;
+    for (let a = -2; a <= 2 && !h; a++) for (let b = -2; b <= 2 && !h; b++) for (let c = -2; c <= 2 && !h; c++) { const L = grid.get(key3(cx + a, cy + b, cz + c)); if (!L) continue;
+      for (const p of L) { const dx = x - m.pos[p * 3], dy = y - m.pos[p * 3 + 1], dz = z - m.pos[p * 3 + 2], nx = m.nrm[p * 3] / 127, ny = m.nrm[p * 3 + 1] / 127, nz = m.nrm[p * 3 + 2] / 127;
+        const al = dx * nx + dy * ny + dz * nz; if (al > 1 && al < 50 && dx * dx + dy * dy + dz * dz - al * al < 324) { h = true; break; } } }
+    if (h) hide[q] = 1; }
+  const keep = []; for (let t = 0; t < m.idx.length; t += 3) { const a = m.idx[t], b = m.idx[t + 1], c = m.idx[t + 2]; if (hide[a] || hide[b] || hide[c]) continue; keep.push(a, b, c); }
   const out = new Uint32Array(keep); m.idxCache.set(key, out); return out; }
 async function loadMesh() {
   if (mesh3d) return mesh3d;
@@ -456,9 +471,7 @@ async function loadMesh() {
   // центры поправленных групп пересчитываем, чтобы маркеры и подсветка глубоких мышц стояли на месте
   for (const o of [rh, lt]) if (o >= 0) for (const d of [0, 1]) { const g = 1 + o * 2 + d; let n = 0, c = [0, 0, 0];
     for (let i = 0; i < nv; i++) if (grp[i] === g) { c[0] += pos[i * 3]; c[1] += pos[i * 3 + 1]; c[2] += pos[i * 3 + 2]; n++; } if (n) blobs[g] = c.map(v => v / n); }
-  // группы трапециевидной: над ромбовидными в них вырезается окно, когда ромбовидные отмечены
-  const trapG = new Set([TRAP_MID, ...[lt, gOf('upper_trap')].filter(o => o >= 0).flatMap(o => [1 + o * 2, 2 + o * 2])]);
-  mesh3d = { pos, nrm, grp, idx, trapG, rh, idxCache: new Map(), meta: { ...meta, order: ord, blobs }, nv };
+  mesh3d = { pos, nrm, grp, idx, idxCache: new Map(), meta: { ...meta, order: ord, blobs }, nv };
   return mesh3d;
 }
 /** Фоновая подгрузка 3D, пока человек смотрит карту: кнопка 3D потом открывается сразу. */
@@ -469,7 +482,7 @@ function paintMesh(m, spots, out) { const order = m.meta.order, lin = c => (c / 
   // группа сетки → цвет мышцы по состоянию; соседям достается слабый край того же цвета, чтобы граница читалась
   const col = new Map(); for (const s of spots) { const o = order.indexOf(s.id); if (o < 0 || s.k === 'OK' || Math.abs(s.tone) < .02) continue; col.set(1 + o * 2 + (s.side === 'RIGHT' ? 1 : 0), stateRGB(s.k, s.tone).map(lin)); }
   // глубокие мышцы закрыты поверхностными (ромбовидные под трапецией, малая грудная под большой): их цвет просвечивает четким пятном над ними
-  const DEEP = new Set(['levator', 'suboccipital', 'pec_minor', 'deep_neck_flex', 'iliopsoas'].map(id => m.meta.order.indexOf(id)).filter(i => i >= 0));
+  const DEEP = new Set([]); // глубокие мышцы теперь видны через окно в верхних слоях (meshIndex), свечение сквозь поверхность не нужно
   const blobs = Object.entries(m.meta.blobs).map(([g, c]) => [+g, c, DEEP.has((+g - 1) >> 1)]).filter(([g]) => col.has(+g));
   for (let i = 0; i < m.nv; i++) { const g = m.grp[i];
     if (g === 255 || g === TRAP_MID) { out.set(BASE3, i * 3); continue; }

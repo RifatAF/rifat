@@ -7,7 +7,7 @@ import { seal } from './core.js';
 import { calibReport, reportCSV, caseLines, RES_NAMES, learnWeights } from './calibreport.js';
 import { RULE_NAMES } from './evidence.js';
 import { applyRuleWeights } from './core.js';
-import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, logout, deleteAccount, betaUsers, providers, config, setAppMode } from './auth.js';
+import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, mailLinkLogin, logout, deleteAccount, betaUsers, providers, config, setAppMode } from './auth.js';
 import { exFigure, hasFigure } from './exfig.js';
 import { recordTest, saveBlob } from './core.js';
 import { sayText } from './saytext.js';
@@ -1460,6 +1460,8 @@ async function checkInvAlive() { const inv = INV(); if (!inv || !inv.i) return;
   deviceInfo().then(d => track('device', { c: d.os + ' · ' + d.br, m: d.model || d.cls, n: d.mem || 0, r: d.pwa ? 'pwa' : 'web' })).catch(() => {});
   try { await loadContent(); } catch (e) { app.innerHTML = '<div class="scr pad" style="justify-content:center;gap:16px"><h1>Не удалось загрузить данные</h1><p class="sub">Проверь интернет и обнови страницу.</p><button class="btn" id="rl">Обновить</button></div>'; $('#rl').onclick = () => location.reload(); return; }
   mountBugTab(); await voice.init();
+  // кнопка «Войти» из письма: входим и открываем свой режим (кабинет специалиста или карту клиента)
+  { const ml = await mailLinkLogin(); if (ml && ml.error) toast('Ссылка для входа устарела: запросите новое письмо'); else if (ml && ml.role === 'specialist') localStorage.setItem('bp_mode', 'pro'); }
   await Promise.all([getMe(), config()]); claimLegacy(); mountBetaBar(); if (localStorage.getItem('bp_mode') !== 'pro') checkInvAlive();
   if ('serviceWorker' in navigator) {
     // когда выходит новая версия, страница один раз перезагружается сама

@@ -344,3 +344,15 @@ test('вход по коду на почту: код, неверный код, �
     assert.equal((await call(h, { method: 'POST', query: { a: 'mail' }, body: { email: 'anna@mail.ru', code, consent: true, health: true } })).code, 401, 'код одноразовый');
   } finally { globalThis.fetch = f0; delete process.env.RESEND_API_KEY; void fresh; }
 });
+
+test('вход по ссылке из письма: согласие и роль сохранены с кодом', async () => {
+  const mails = []; const f0 = globalThis.fetch; globalThis.fetch = async (u, o) => { if (String(u).includes('api.resend.com')) { mails.push(JSON.parse(o.body)); return { ok: true }; } return f0(u, o); };
+  process.env.RESEND_API_KEY = 'k'; const h = (await import(R + 'auth.js?mail=3')).default;
+  try {
+    assert.equal((await call(h, { method: 'POST', query: { a: 'mailcode' }, body: { email: 'spec@mail.ru', role: 'specialist', consent: true, health: true } })).code, 200);
+    const m = /\?ml=([A-Za-z0-9_-]+)\.(\d{6})/.exec(mails.at(-1).html); assert.ok(m, 'в письме кнопка со ссылкой');
+    assert.equal(Buffer.from(m[1], 'base64url').toString(), 'spec@mail.ru');
+    const ok = await call(h, { method: 'POST', query: { a: 'mail' }, body: { email: 'spec@mail.ru', code: m[2] } }); // другой браузер: без согласий в запросе
+    assert.equal(ok.code, 200); assert.equal(ok.j.user.role, 'specialist');
+  } finally { globalThis.fetch = f0; delete process.env.RESEND_API_KEY; }
+});
