@@ -99,5 +99,12 @@
    "source": "/vendor/three/addons/:path*",
    "destination": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/:path*"
   }
- ]
+ ],
+ "git": {
+  "deploymentEnabled": {
+   "main": true,
+   "ccr-*": false,
+   "claude/*": false
+  }
+ }
 }
