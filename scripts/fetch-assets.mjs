@@ -68,3 +68,18 @@ try {
     await save(OUT + '/voice/index.json', JSON.stringify(idx)); console.log(`voice: озвучено ${made} из ${need.length} (${voiceName})`);
   }
 } catch (e) { console.log('voice: озвучка пропущена:', e.message); }
+
+// Сводка по группам 3D-сетки (границы, центры, срезы по высоте): по ней проверяется разметка мышц без скачивания сетки
+try {
+  const { readFile } = await import('node:fs/promises');
+  const buf = await readFile(OUT + '/data/body3d.bin'), ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length), dv = new DataView(ab);
+  const nv = dv.getInt32(4, true), pos = new Float32Array(ab, 12, nv * 3), grp = new Uint8Array(ab, 12 + nv * 15, nv), st = {}, slab = {};
+  for (let i = 0; i < nv; i++) { const g = grp[i], x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2]; const s = st[g] ||= { n: 0, min: [1e9, 1e9, 1e9], max: [-1e9, -1e9, -1e9], c: [0, 0, 0] };
+    s.n++; [x, y, z].forEach((v, k) => { s.min[k] = Math.min(s.min[k], v); s.max[k] = Math.max(s.max[k], v); s.c[k] += v; });
+    // срезы: группа → высота (шаг 50 мм) → [|x| мин, |x| макс, y мин, y макс] для спины, шеи и живота
+    if (z > 850 && z < 1600) { const zk = Math.round(z / 50) * 50, t = ((slab[g] ||= {})[zk] ||= [1e9, -1e9, 1e9, -1e9, 0]); const ax = Math.abs(x);
+      t[0] = Math.min(t[0], ax); t[1] = Math.max(t[1], ax); t[2] = Math.min(t[2], y); t[3] = Math.max(t[3], y); t[4]++; } }
+  for (const s of Object.values(st)) { s.c = s.c.map(v => Math.round(v / s.n)); s.min = s.min.map(Math.round); s.max = s.max.map(Math.round); }
+  for (const g of Object.values(slab)) for (const k in g) g[k] = g[k].map(Math.round);
+  await save(OUT + '/data/body3d-stats.json', JSON.stringify({ nv, groups: st, slab }));
+} catch (e) { console.warn('mesh stats: ' + e.message); }
