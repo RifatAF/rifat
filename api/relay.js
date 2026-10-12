@@ -33,6 +33,13 @@ const owns = (u, id) => { const p = parse(id); return p ? p.tag === ownerTag(u.i
 // уведомление владельцу ящика: метка владельца → id аккаунта хранится отдельно (сам id ящика его не раскрывает).
 // Telegram-аккаунтам бот пишет сразу; сообщение без имени клиента и без данных теста, они зашифрованы.
 const ownerPath = tag => `relayowner/${tag}.json`;
+/** Удаление аккаунта: все ящики владельца закрываются и очищаются, связь метки с аккаунтом стирается. */
+export async function purgeOwner(uid) { const tag = ownerTag(uid); let cursor, n = 0; const ids = new Set();
+  do { const r = await list({ prefix: 'relay/', limit: 1000, cursor }); cursor = r.hasMore ? r.cursor : undefined;
+    const mine = r.blobs.filter(b => { const id = b.pathname.split('/')[1] || ''; const p = parse(id); if (p && p.tag === tag) { ids.add(id); return true; } return false; });
+    if (mine.length) { await del(mine.map(b => b.url)); n += mine.length; } } while (cursor);
+  for (const id of ids) await put(`relayrevoked/${id}.json`, JSON.stringify({ at: Date.now(), by: 'account_deleted' }), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true });
+  await del(ownerPath(tag)).catch(() => {}); return n; }
 async function rememberOwner(u) { if (u.relayTag === ownerTag(u.id)) return;
   await put(ownerPath(ownerTag(u.id)), JSON.stringify({ uid: u.id }), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true });
   u.relayTag = ownerTag(u.id); await saveUser(u); }

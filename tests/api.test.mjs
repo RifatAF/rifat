@@ -314,3 +314,16 @@ test('remind: клиент подключает бота, напоминание
     assert.ok(!store.has(`remindc/${r.j.code}.json`), '/stop удаляет запись');
   } finally { globalThis.fetch = f0; delete process.env.TELEGRAM_BOT_TOKEN; delete process.env.TELEGRAM_BOT_USERNAME; delete process.env.TG_WEBHOOK_SECRET; }
 });
+
+test('удаление аккаунта: ящики клиентов, напоминания и учетная запись стираются', async () => {
+  user('t_900', 'specialist'); user('t_901', 'specialist');
+  const mine = (await call(relay, { method: 'POST', query: { a: 'new' }, headers: { cookie: cookie('t_900') } })).j.id;
+  const other = (await call(relay, { method: 'POST', query: { a: 'new' }, headers: { cookie: cookie('t_901') } })).j.id;
+  await call(relay, { method: 'POST', query: { id: mine }, body: env }); await call(relay, { method: 'POST', query: { id: other }, body: env });
+  store.set('remind/t_900.json', { body: '{"items":[]}', uploadedAt: new Date().toISOString() });
+  const r = await call(auth, { method: 'POST', query: { a: 'delete' }, headers: { cookie: cookie('t_900') } }); assert.equal(r.code, 200);
+  assert.ok(![...store.keys()].some(k => k.startsWith(`relay/${mine}/`)), 'результаты клиентов удалены');
+  assert.ok(store.has(`relayrevoked/${mine}.json`), 'ссылка закрыта');
+  assert.ok([...store.keys()].some(k => k.startsWith(`relay/${other}/`)), 'чужие ящики целы');
+  assert.ok(!store.has('remind/t_900.json') && !store.has('users/t_900.json'), 'напоминания и аккаунт удалены');
+});

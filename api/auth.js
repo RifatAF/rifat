@@ -110,7 +110,10 @@ export default async function handler(req, res) {
       u.balance -= PRO_PRICE; u.plan = 'pro'; u.planUntil = Math.max(Date.now(), u.planUntil || 0) + 31 * 864e5; u.paidEver = true;
       u.balanceLog = [...(u.balanceLog || []), { t: Date.now(), a: -PRO_PRICE, k: 'pro' }].slice(-100); await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
     if (a === 'logout') { clearSession(res); return res.status(200).json({ ok: true }); }
-    if (a === 'delete') { await deleteUser(u.id); clearSession(res); return res.status(200).json({ ok: true }); }
+    if (a === 'delete') { // аккаунт, расписание напоминаний и ящики с результатами клиентов
+      const { purgeOwner } = await import('./relay.js'); const { del } = await import('@vercel/blob');
+      await purgeOwner(u.id).catch(e => console.error('purge', e)); await del(`remind/${u.id}.json`).catch(() => {});
+      await deleteUser(u.id); clearSession(res); return res.status(200).json({ ok: true }); }
     if (a === 'users') { if (!isAdmin(u)) return res.status(403).json({ error: 'forbidden' });
       const all = (await allUsers()).sort((x, y) => (y.created || 0) - (x.created || 0));
       return res.status(200).json({ users: all.map(x => ({ id: x.id, plan: effectivePlan(x).plan, paidUntil: x.planUntil || 0, name: x.name, provider: x.provider, email: x.email || null, username: x.username || null, role: x.role, specialty: x.specialty || null, created: x.created, lastLogin: x.lastLogin, ref: x.ref, invited: x.invited || 0, invitedPro: x.invitedPro || 0, slots: maxClientSlots(x) })) }); }
