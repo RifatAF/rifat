@@ -285,3 +285,13 @@ test('нормы: только числа признаков, сводка то�
   const r = await call(norms, { headers: { cookie: cookie('t_1') } });
   assert.equal(r.j.tests, 5, 'съемка 30 из 100 отброшена'); assert.equal(r.j.features.pelvic_tilt.p50, 6); assert.equal(r.j.features.name, undefined); assert.equal(r.j.features.const_r, undefined);
 });
+
+test('статистика: устройства, каналы и экраны в сводке', async () => {
+  user('t_1', 'specialist');
+  const evs = [{ e: 'app_open', t: 1, p: { r: 'direct', c: 'calib' } }, { e: 'device', t: 2, p: { c: 'Android 14 · Chrome', m: 'SM-A525F', n: 4, r: 'web' } },
+    { e: 'test_start', t: 3 }, { e: 'cam_q', t: 4, p: { n: 24, q: 90, c: 'GPU full' } }, { e: 'test_done', t: 5, p: { n: 4, d: 200 } }, { e: 'screen', t: 6, p: { c: 'prep', d: 40, n: 3, q: 2 } }];
+  assert.equal((await call(ev, { method: 'POST', body: JSON.stringify({ s: 'abcd1234', r: 'client', ev: evs }) })).code, 204);
+  const r = await call(ev, { query: { a: 'stats', days: 1 }, headers: { cookie: cookie('t_1') } });
+  const D = r.j.devices['Android 14 · Chrome']; assert.equal(D.test_done, 1); assert.equal(D.fps, 24); assert.equal(r.j.models['SM-A525F'], 1);
+  assert.equal(r.j.channels.calib.test_done, 1); assert.equal(r.j.screens.prep.miss, 2);
+});
