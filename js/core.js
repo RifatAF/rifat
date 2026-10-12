@@ -7,14 +7,17 @@ const MP_LOCAL = new URL('../vendor/mediapipe', import.meta.url).href, MP_CDN = 
 // ---------- контент ----------
 export const C = {};
 /** Выученные веса поверх исходных; исходный вес хранится в w0, повторное применение не накапливается. */
-export function applyRuleWeights(rules, w) { for (const r of rules) for (const m of r.muscles) { if (m.w0 === undefined) m.w0 = m.w ?? 1; const v = w && w[r.id + '|' + m.id]; m.w = Number.isFinite(v) ? v : m.w0; } }
+export function applyRuleWeights(rules, w, t) { for (const r of rules) { for (const m of r.muscles) { if (m.w0 === undefined) m.w0 = m.w ?? 1; const v = w && w[r.id + '|' + m.id]; m.w = Number.isFinite(v) ? v : m.w0; }
+  // порог правила по нормам базы: меняем тот вид порога, что задан в правиле (absGreater, greater или less)
+  const key = r.absGreater != null ? 'absGreater' : r.greater != null ? 'greater' : r.less != null ? 'less' : null; if (!key) continue;
+  if (r.t0 === undefined) r.t0 = r[key]; const tv = t && t[r.id]; r[key] = Number.isFinite(tv) ? tv : r.t0; } }
 export async function loadContent() {
   const get = n => fetch('data/' + n + '.json').then(r => r.json());
   const [mus, bm, ch, ex] = await Promise.all([get('muscles'), get('bodymap'), get('chains'), get('exercises')]);
   C.muscles = mus.muscles; C.bodymap = bm; C.chains = ch.chains; C.exercises = Object.fromEntries(ex.exercises.map(e => [e.id, e])); C.booking = 'https://t.me/BodyPassport_bot';
   // веса «правило → мышца», выученные по калибровкам специалистов (Администрирование → Калибровки): без сети остаются исходные из базы
   // не ждем ответа: запуск не замедляется, веса подхватятся к первому разбору
-  fetch('/api/calib?a=weights', { signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : null).then(j => { if (j && j.w) { applyRuleWeights(bm.rules, j.w); C.weightsAt = j.at || 0; } }).catch(() => {});
+  fetch('/api/calib?a=weights', { signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : null).then(j => { if (j && (j.w || j.t)) { applyRuleWeights(bm.rules, j.w, j.t); C.weightsAt = j.at || 0; C.thresholds = j.t || {}; } }).catch(() => {});
   return C;
 }
 

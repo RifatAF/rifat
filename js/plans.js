@@ -57,7 +57,7 @@ export function checkClientSlotAvailable(activeClientsCount) {
   track('limit_hit', { c: 'clients' }, false); slotSheet(s); return false;
 }
 // ссылка-приглашение коллеге и готовый текст
-export const refLink = () => { const u = meSync(); return location.origin + '/' + (u && u.refCode ? '?ref=' + u.refCode : ''); };
+export const refLink = () => { const u = meSync(); return location.origin + '/?src=pro' + (u && u.refCode ? '&ref=' + u.refCode : ''); };
 export const refText = () => 'Использую BodyPassport для составления 3D-отчетов биомеханики пациентов. Держи ссылку на бесплатный доступ: ' + refLink();
 /** Приглашение коллеге: шторка с готовым текстом, «Отправить» (меню телефона) и «Скопировать» с явным подтверждением. */
 export function copyRefText() {

@@ -8,7 +8,9 @@ const EVENTS = new Set(['app_open', 'onb_done', 'login_ok', 'safety_ok', 'safety
   'pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'db_empty', 'db_other', 'backup_done', 'restore_done',
   'gate_hit', 'compare_open', 'retest_done', 'report_shared', 'bug_sent', 'rage', 'slow',
   'pro_click', 'vas_done', 'report_link', 'progress_sent',
-  'paywall_view', 'limit_hit', 'trial_end', 'trial_end_view', 'balance_pay']);
+  'paywall_view', 'limit_hit', 'trial_end', 'trial_end_view', 'balance_pay',
+  // поведение: экран (сколько секунд, сколько нажатий, нажатия мимо кнопок), жест «назад»
+  'screen', 'back']);
 let sid; try { sid = sessionStorage.getItem('bp_sid'); if (!sid) { sid = Math.random().toString(36).slice(2, 12); sessionStorage.setItem('bp_sid', sid); } } catch (e) { sid = Math.random().toString(36).slice(2, 12); }
 const t0 = Date.now(), q = [], seen = new Set(); let errs = 0;
 const role = () => { try { return localStorage.getItem('bp_mode') === 'pro' ? 'pro' : 'client'; } catch (e) { return 'client'; } };
@@ -36,6 +38,19 @@ export function track(e, p, once = true) {
   q.push(ev); if (q.length >= 15) flush();
 }
 
+// откуда пришел человек: канал первого касания (ссылка калибровки, тест по ссылке, приглашение специалиста, ссылка на приложение)
+export function channel() {
+  let ch = ''; try { const q = new URLSearchParams(location.search), h = location.hash;
+    ch = (q.get('src') || '').replace(/[^\w-]/g, '').slice(0, 20) || (/^#join=/.test(h) ? 'join' : /^#inv=/.test(h) ? 'inv' : /^#(r|rep|share)=/.test(h) ? 'report' : q.get('ref') ? 'ref' : '');
+    if (ch && !localStorage.getItem('bp_src')) localStorage.setItem('bp_src', ch); return ch || localStorage.getItem('bp_src') || 'direct'; } catch (e) { return ch || 'direct'; } }
+// экраны: сколько секунд человек провел, сколько раз нажал и сколько раз мимо кнопок (признак «не понял, куда жать»)
+let scr = null;
+export function screenView(name) { const now = Date.now();
+  if (scr && scr.name !== name) track('screen', { c: scr.name, d: Math.min(1800, (now - scr.t) / 1000), n: scr.taps, q: scr.miss }, false);
+  if (!scr || scr.name !== name) scr = { name, t: now, taps: 0, miss: 0 }; }
+addEventListener('popstate', () => { if (scr) track('back', { c: scr.name }, false); });
+export const currentScreen = () => scr ? scr.name : '';
+addEventListener('pagehide', () => { if (scr) { track('screen', { c: scr.name, d: Math.min(1800, (Date.now() - scr.t) / 1000), n: scr.taps, q: scr.miss }, false); scr = null; flush(); } });
 /** Сведения об устройстве и последних действиях для отчета о проблеме. Без имен и данных клиентов. */
 export function diagnostics(extra = {}) {
   const n = navigator, sc = screen || {};
@@ -53,7 +68,7 @@ setInterval(flush, 30000);
 // нажатия: в след пишем только id кнопки (подписи могут содержать имя клиента); 4 нажатия по одному месту за 1,5 с = «злой тап»
 let taps = [];
 addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,a,label,[role=button],input,select'); const id = el ? (el.id || el.className && String(el.className).split(' ')[0] || el.tagName.toLowerCase()) : '-';
-  remember('tap ' + id); const now = Date.now(); taps = taps.filter(x => now - x.t < 1500 && x.id === id); taps.push({ t: now, id });
+  remember('tap ' + id); if (scr) { scr.taps++; if (id === '-') scr.miss++; } const now = Date.now(); taps = taps.filter(x => now - x.t < 1500 && x.id === id); taps.push({ t: now, id });
   if (taps.length === 4 && id !== '-') track('rage', { c: id }, false); }, { capture: true, passive: true });
 
 // долгие подвисания интерфейса (больше 1 с) на слабых телефонах

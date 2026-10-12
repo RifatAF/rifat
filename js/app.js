@@ -1,7 +1,7 @@
 // BodyPassport web: тот же поток, тексты и дизайн, что в Android-версии.
-import { P, F, G, Movement, sideView, levelled, analyze, fmt, standSnapshot, sideSnapshot } from './analysis.js';
-import { track, vasSave, vasLog, vasStats, vasDelta } from './track.js';
-import { rateCard, bindRate, installCard, bindInstall, installNow, canInstall, feedbackSheet, shareApp, appLink, mountBugTab, mountBetaBar, exitSurvey } from './grow.js';
+import { P, F, G, Movement, sideView, levelled, analyze, fmt, standSnapshot, sideSnapshot, features } from './analysis.js';
+import { track, vasSave, vasLog, vasStats, vasDelta, channel, screenView } from './track.js';
+import { rateCard, bindRate, installCard, bindInstall, installNow, canInstall, feedbackSheet, shareApp, appLink, mountBugTab, mountBetaBar, exitSurvey, testSurvey } from './grow.js';
 import { proHome, motionViewer, consumerPoses } from './pro.js';
 import { seal } from './core.js';
 import { calibReport, reportCSV, caseLines, RES_NAMES, learnWeights } from './calibreport.js';
@@ -84,7 +84,9 @@ export const totalMin = list => Math.max(1, Math.round(list.reduce((x, e) => x +
 let view3d = null;
 // тот же экран заново (правка, переключение вкладки): без анимации появления, иначе экран мигает
 let lastHead = '';
-export function go(html) { if (view3d) { view3d.dispose(); view3d = null; } backFn = null; const head = html.slice(0, 260); if (head === lastHead) html = html.replace(' fade', ''); lastHead = head; app.innerHTML = html; window.scrollTo(0, 0);
+const callerName = () => { try { const l = (new Error().stack || '').split('\n').map(x => x.trim()).filter(x => x.startsWith('at '));
+  for (const x of l.slice(2)) { const m = /^at (?:async )?([\w$.]+)/.exec(x); if (m && !/^(go|Object\.go|HTMLButtonElement|HTMLDivElement|Promise|new Promise)/.test(m[1])) return m[1].replace(/^Object\./, '').slice(0, 40); } } catch (e) {} return 'screen'; };
+export function go(html) { try { screenView(callerName()); } catch (e) {} if (view3d) { view3d.dispose(); view3d = null; } backFn = null; const head = html.slice(0, 260); if (head === lastHead) html = html.replace(' fade', ''); lastHead = head; app.innerHTML = html; window.scrollTo(0, 0);
   const tc = document.querySelector('meta[name=theme-color]'); if (tc) tc.content = html.includes('class="cam"') ? '#0A0C0F' : / dark[ "]/.test(html.slice(0, 200)) ? '#13212B' : '#F3F6F6'; }
 
 // ---------- «назад»: жест и системная кнопка ведут на шаг назад в приложении, а не закрывают его ----------
@@ -357,7 +359,7 @@ const SAY = {
   repWait: 'Приседай. Я жду.', stop: 'Стоп. Хорошо.',
   slsRIntro: 'Встань на правую ногу, левую подними. Можно держаться за стену.', slsRGo: 'Приседай на правой ноге. Три раза, неглубоко.',
   slsLIntro: 'Теперь встань на левую ногу, правую подними.', slsLGo: 'Приседай на левой ноге. Три раза, неглубоко.',
-  footDown: 'Стоп. Опусти ногу.',
+  footDown: 'Стоп. Опусти ногу.', cant: 'Начинай, я жду движение. Если не получается, нажми «Не могу»',
   tholdIntro: 'Подними руки в стороны до уровня плеч.', tholdGo: 'Держи двадцать секунд.', keep: 'Держи, не опускай', hold10: 'Ещё десять секунд', hold5: 'Ещё пять секунд',
   armsUp: 'Руки выше, до уровня плеч', armsDown: 'Опусти руки.',
   bendIntro: 'Наклоны в стороны. Руки вдоль тела.', bendR: 'Медленно наклонись вправо.', bendL: 'Теперь наклонись влево.', lower: 'Ниже, рука скользит по бедру', ret: 'Вернись.',
@@ -372,6 +374,10 @@ const SAY = {
 
 const RETAKE_KEYS = { ohs_front: ['ohs_front'], sls: ['sls_r', 'sls_l'], side: ['ohs_side'], back: ['ohs_back'] };
 const retakeOf = (u, moves) => (RETAKE_KEYS[u] || []).some(k => moves[k] && moves[k].quality === 'RETAKE');
+/** Нормы по базе: только числа замеров, без имени, аккаунта и записи движения. Чем больше тестов, тем точнее пороги (Администрирование → Нормы). */
+function sendNorms(r) { try { if (localStorage.getItem('bp_noev') === '1') return; const f = features(r), qv = Object.values(r.quality || {});
+  delete f.lowq; const body = JSON.stringify({ f, q: qv.length ? Math.min(...qv) : null, r: localStorage.getItem('bp_mode') === 'pro' ? 'pro' : 'client', v: C.bodymap && C.bodymap.version });
+  fetch('/api/norms', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {}); } catch (e) {} }
 export async function runProtocol(protocol, opts = {}) {
   await voice.ensure(Object.values(SAY));
   const pre = opts.pre || {}; const units = sortUnits(protocol); const steps = rowsOf(units.filter(u => !pre[u] || pre[u].alt));
@@ -439,7 +445,7 @@ export async function runProtocol(protocol, opts = {}) {
       if (extra && fr.length) extra(fr, left); await sleep(30); }
     bar(1, ''); voice.beep('stop'); if (key) keep(key, fr, rolls); return fr; };
   // повторы: считаем по движению таза; полоса = сделанные повторы из трех
-  const reps = async (key, an, deep = .12, N = 3) => { voice.beep('start'); const fr = [], rolls = []; if (skip) return { f: {}, reps: 0, quality: 'RETAKE' };
+  const reps = async (key, an, deep = .12, N = 3, quiet = false) => { if (!quiet) voice.beep('start'); const fr = [], rolls = []; if (skip) return { f: {}, reps: 0, quality: 'RETAKE' };
     let n = 0, down = false, base = null, leg = null, maxFlex = 0, downAt = 0, countAt = 0; const hys = []; const t0 = Date.now(); let lastMove = Date.now(); bar(0, `Повторы: 0 из ${N}`); $('#reps').hidden = false; $('#ring').textContent = 0; $('#repn').textContent = `из ${N}`;
     while (!stop && !skip && n < N && Date.now() - t0 < 60000) { grab(fr, rolls); const p = fr.length && fr.at(-1).p;
       // высота таза по медиане последних кадров: дрожание точек не считается повтором
@@ -454,6 +460,8 @@ export async function runProtocol(protocol, opts = {}) {
       await sleep(30); }
     const r = fr.length > 10 ? an(fr) : { f: {}, reps: 0, quality: 'RETAKE' }; if (r.f) r.f.max_knee_flex = maxFlex; keep(key, fr, rolls, r.visibility);
     if (n === 0 && !skip && !stop) r.quality = 'RETAKE'; await sleep(700); voice.beep('stop'); return r; };
+  // счет идет с первого слова команды: люди начинают приседать на «Приседай», и раньше, пока голос договаривал, первые повторы терялись, а лишние засчитывались после
+  const goReps = async (phrase, key, an, deep, N) => { const sp = say(phrase); const r = await reps(key, an, deep, N, true); await sp; return r; };
   // поворот: команда, затем 4 секунды с полосой, чтобы успеть повернуться
   let facing = 'front';
   const face = async want => { if (facing === want) return; step(null, want === 'side' ? 'Повернись правым боком' : want === 'back' ? 'Повернись спиной' : 'Повернись лицом', '');
@@ -491,13 +499,13 @@ export async function runProtocol(protocol, opts = {}) {
       const st = await hold('stand', 5, 'Замри'); if (stop || skipped()) return;
       snapshot = standSnapshot(st);
       const f = cam.frame; setup = { bodyFrac: med(st.map(x => bodyFrac(x.p))) / (f ? f.h : 1), roll: phone.roll, pitch: phone.pitch ?? null, back: cam.back, w: f && f.w, h: f && f.h }; await say(SAY.good); k++; }
-    if (u === 'ohs_front') { await face('front'); step(k, 'Присед с руками вверх', 'Руки вверх, пятки на полу, 5 раз', FOC.squat); await say(SAY.ohsIntro); if (skipped()) return; await say(SAY.ohsGo);
-      moves.ohs_front = await reps('ohs_front', fr => Movement.front(fr), .12, 5); if (skipped()) return; await say(SAY.stop); k++; }
+    if (u === 'ohs_front') { await face('front'); step(k, 'Присед с руками вверх', 'Руки вверх, пятки на полу, 5 раз', FOC.squat); await say(SAY.ohsIntro); if (skipped()) return; 
+      moves.ohs_front = await goReps(SAY.ohsGo, 'ohs_front', fr => Movement.front(fr), .12, 5); if (skipped()) return; await say(SAY.stop); k++; }
     if (u === 'sls') { await face('front');
-      step(k, 'Стоя на правой ноге', 'Чуть согните колено, на 10–15 см, и выпрямитесь. Глубоко не нужно, можно держаться за стену. 3 раза', FOC.kneeR); await say(SAY.slsRIntro); if (skipped()) return; await say(SAY.slsRGo);
-      moves.sls_r = await reps('sls_r', fr => Movement.singleLeg(fr, true), .06); if (skipped()) return; await say(SAY.footDown); k++;
-      step(k, 'Стоя на левой ноге', 'Чуть согните колено, на 10–15 см, и выпрямитесь. Глубоко не нужно, можно держаться за стену. 3 раза', FOC.kneeL); await say(SAY.slsLIntro); if (skipped()) return; await say(SAY.slsLGo);
-      moves.sls_l = await reps('sls_l', fr => Movement.singleLeg(fr, false), .06); if (skipped()) return; await say(SAY.footDown); k++; }
+      step(k, 'Стоя на правой ноге', 'Чуть согните колено на 10–15 см и выпрямитесь, 3 раза. Можно держаться за стену. Не получается — нажмите «Не могу»', FOC.kneeR); await say(SAY.slsRIntro); if (skipped()) return; await say(SAY.cant); if (skipped()) return; 
+      moves.sls_r = await goReps(SAY.slsRGo, 'sls_r', fr => Movement.singleLeg(fr, true), .06); if (skipped()) return; await say(SAY.footDown); k++;
+      step(k, 'Стоя на левой ноге', 'Чуть согните колено на 10–15 см и выпрямитесь, 3 раза. Можно держаться за стену. Не получается — нажмите «Не могу»', FOC.kneeL); await say(SAY.slsLIntro); if (skipped()) return; 
+      moves.sls_l = await goReps(SAY.slsLGo, 'sls_l', fr => Movement.singleLeg(fr, false), .06); if (skipped()) return; await say(SAY.footDown); k++; }
     if (u === 'thold') { await face('front'); step(k, 'Руки в стороны', 'На уровне плеч, держи 20 секунд', FOC.arms); await say(SAY.tholdIntro); if (skipped()) return; await say(SAY.tholdGo);
       const fr = await hold('t_hold', 20, 'Держи', (fr, left) => { const p = fr.at(-1).p; if (left === 15) hint(SAY.keep, 0);
         if (left < 18 && left > 6) { const ab = Math.min(G.angleAt(p[P.R_HIP], p[P.R_SHOULDER], p[P.R_ELBOW]), G.angleAt(p[P.L_HIP], p[P.L_SHOULDER], p[P.L_ELBOW])); if (ab < 70) hint(SAY.armsUp, 5000); } });
@@ -516,13 +524,13 @@ export async function runProtocol(protocol, opts = {}) {
         if (skipped()) return; moves[key] = fr.length > 20 ? Movement.calfRaise(fr, right) : { f: {}, reps: 0, quality: 'RETAKE' }; await say(SAY.footDown); k++; } }
     if (u === 'side') { await face('side'); step(k, 'Боком: стой ровно', 'Правое плечо к телефону', null); await say(SAY.freeze);
       const sf = await hold('side_stand', 5, 'Замри'); if (skipped()) return; side = sideSnapshot(sf);
-      step(k, 'Боком: присед', 'Руки вверх, 3 раза'); await say(SAY.armsOverhead); await say(SAY.squatGo);
-      moves.ohs_side = await reps('ohs_side', fr => Movement.side(fr)); if (skipped()) return; await say(SAY.stop); k++; }
+      step(k, 'Боком: присед', 'Руки вверх, 3 раза'); await say(SAY.armsOverhead); 
+      moves.ohs_side = await goReps(SAY.squatGo, 'ohs_side', fr => Movement.side(fr), .12, 3); if (skipped()) return; await say(SAY.stop); k++; }
     if (u === 'profile') { await face('side'); step(k, 'Боком: стой ровно', 'Руки вдоль тела, смотри прямо', null); await say(SAY.freeze);
       const sf = await hold('side_stand', 5, 'Замри'); if (stop || skipped()) return; side = sideSnapshot(sf);
       await say(SAY.good); k++; }
-    if (u === 'back') { await face('back'); step(k, 'Спиной: присед', 'Руки вверх, 3 раза', FOC.squat); await say(SAY.armsOverhead); if (skipped()) return; await say(SAY.squatGo);
-      moves.ohs_back = await reps('ohs_back', fr => Movement.back(fr)); if (skipped()) return; await say(SAY.stop); k++; }
+    if (u === 'back') { await face('back'); step(k, 'Спиной: присед', 'Руки вверх, 3 раза', FOC.squat); await say(SAY.armsOverhead); if (skipped()) return; 
+      moves.ohs_back = await goReps(SAY.squatGo, 'ohs_back', fr => Movement.back(fr), .12, 3); if (skipped()) return; await say(SAY.stop); k++; }
   };
   // облегченный вариант после «Не могу»
   const runAlt = async u => { if (u === 'ohs_front') { step(k, 'Присед с опорой', 'Держись за стул или стену', FOC.squat); await say(SAY.ohsAltIntro); await say(SAY.ohsAltGo);
@@ -548,7 +556,8 @@ export async function runProtocol(protocol, opts = {}) {
   track('cam_q', { n: fpsMed || 0, q: qv.length ? Math.min(...qv) : 0, c: `${poseInfo.deleg} ${poseInfo.model}` }, false);
   // техника съемки: без нее ретест на другом телефоне нельзя отличить от изменения у человека
   const tech = { model: poseInfo.model, deleg: poseInfo.deleg, fps: fpsMed && Math.round(fpsMed), pitch: phone.ok && Number.isFinite(phone.pitch) ? Math.round(phone.pitch) : null, rules: C.bodymap && C.bodymap.version };
-  return { date: Date.now(), protocol: units, full: units.includes('side') || units.includes('profile'), snapshot, side, moves, poses, quality, limits, setup, tech };
+  const res = { date: Date.now(), protocol: units, full: units.includes('side') || units.includes('profile'), snapshot, side, moves, poses, quality, limits, setup, tech };
+  sendNorms(res); return res;
 }
 
 
@@ -770,6 +779,8 @@ export function map() {
   if ($('#re')) $('#re').onclick = () => { FULL = false; prep(); };
   if ($('#resend')) $('#resend').onclick = async () => { const p = await outbox.get().catch(() => null); if (p) sendResult(p); }; bindRetestCard(); if (!SHARED && INV()) addSpecHint();
   $('#set').onclick = settings; $('#more').onclick = () => moreSheet(cur, top, !!pl.length); if ($('#cab')) $('#cab').onclick = () => { SHOW_T = null; clientHome(); }; if ($('#toLast')) $('#toLast').onclick = () => { SHOW_T = null; map(); };
+  // бета и калибровка: сразу после свежего теста короткая анкета «как прошло, что мешало» (один раз на тест)
+  if (!SHARED && reveal && Date.now() - t.date < 30 * 60e3 && (isBetaMode() || (INV() || {}).cal)) setTimeout(() => { if (document.getElementById('heat') || document.getElementById('vis')) testSurvey(String(t.date), { cal: !!(INV() || {}).cal, steps: (t.protocol || []).length }); }, 2500);
 }
 function again() { if (!SHARED && INV()) return INV().join ? joinForm() : inviteWelcome(); if (SHARED) { SHARED = null; history.replaceState(null, '', location.pathname); } FULL = false; tests().length || SHARED ? prep() : onboarding(); }
 // всё, что не нужно для решения «что делать сегодня», живет в шторке «Подробнее»
@@ -1148,6 +1159,24 @@ async function accountBlock(el, close) {
   if (el.querySelector('#adm')) el.querySelector('#adm').onclick = () => { close(); adminScreen(); };
 }
 /** Панель администратора: режим приложения, участники, статистика, выгрузка данных, сброс. */
+// названия экранов для статистики (в событиях — имя функции экрана, без данных людей)
+const SCREEN_RU = { onboarding: 'Знакомство', prep: 'Подготовка к тесту', runProtocol: 'Тест перед камерой', analysisScreen: 'Подсчет результата', map: 'Карта тела клиента', muscle: 'Мышца подробно', workout: 'Упражнения',
+  done: 'Конец занятия', clientHome: 'Кабинет клиента', inviteWelcome: 'Ссылка от специалиста', joinForm: 'Анкета по ссылке', cameraHelp: 'Нет доступа к камере', reportView: 'Отчет по ссылке',
+  proHome: 'Главная специалиста', clientCard: 'Карточка клиента', result: 'Разбор теста', quickStart: 'Новая оценка', newAssessment: 'Новая оценка (клиент)', allClients: 'Все клиенты', clientForm: 'Анкета клиента',
+  compare: 'Было → стало', calendarScreen: 'Календарь', profileForm: 'Личный бренд', specialtyScreen: 'Выбор специализации', motionViewer: 'Запись движения', experienceScreen: 'Мои проверки', repeatability: 'Повторяемость',
+  trialEndScreen: 'Конец пробного', balanceScreen: 'Баланс', adminScreen: 'Администрирование', funnelScreen: 'Статистика', calibInbox: 'Калибровки', calibReportScreen: 'Сводка калибровки' };
+const CHAN_RU = { calib: 'Ссылка калибровки', join: 'Тест по ссылке (новый клиент)', inv: 'Ссылка клиенту из карточки', pro: 'Приглашение специалиста', app: 'Ссылка на приложение', ref: 'Реферальная ссылка', report: 'Отчет по ссылке', direct: 'Напрямую' };
+function chanCard(d) { const ch = Object.entries(d.channels || {}).sort((a, b) => (b[1].app_open || 0) - (a[1].app_open || 0)); if (!ch.length) return '';
+  const cols = [['app_open', 'Открыли'], ['test_start', 'Начали тест'], ['test_done', 'Прошли'], ['result_sent', 'Отправили'], ['fb_sent', 'Отзыв'], ['pro_open', 'Кабинет спец.']];
+  return `<div class="card" style="padding:14px 16px;overflow-x:auto"><b>Источники: откуда пришли и докуда дошли</b><table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px"><tr><th style="text-align:left;padding:4px">Канал</th>${cols.map(c => `<th style="padding:4px;font-weight:600">${c[1]}</th>`).join('')}</tr>
+    ${ch.map(([k, v]) => `<tr><td style="padding:4px;border-top:1px solid var(--line-2)">${esc(CHAN_RU[k] || k)}</td>${cols.map(([e]) => { const n = v[e] || 0, base = v.app_open || 0; return `<td style="padding:4px;text-align:center;border-top:1px solid var(--line-2)">${n}${e !== 'app_open' && base ? `<small style="display:block;color:var(--sub)">${Math.round(n / base * 100)}%</small>` : ''}</td>`; }).join('')}</tr>`).join('')}</table>
+    <p class="sub" style="font-size:12px;margin-top:6px">Каждая ссылка помечена своим каналом. Проценты от открывших.</p></div>`; }
+function screensCard(d) { const sc = Object.entries(d.screens || {}).filter(([, v]) => v.n >= 2); if (!sc.length) return '';
+  // «тупят»: долго на экране, много нажатий мимо кнопок, часто уходят назад
+  const score = v => (v.p50 || 0) / 30 + v.miss * 2 + v.back / Math.max(1, v.n) * 5; sc.sort((a, b) => score(b[1]) - score(a[1]));
+  return `<div class="card" style="padding:14px 16px;overflow-x:auto"><b>Экраны: где тупят</b><table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px"><tr>${['Экран', 'Показов', 'Время, с (медиана / 90%)', 'Нажатий', 'Мимо кнопок', 'Назад'].map(h => `<th style="text-align:left;padding:4px;font-weight:600">${h}</th>`).join('')}</tr>
+    ${sc.slice(0, 20).map(([k, v]) => `<tr>${[esc(SCREEN_RU[k] || k), v.n, `${v.p50 ?? '—'} / ${v.p90 ?? '—'}`, v.taps, `<b style="color:${v.miss >= 1 ? 'var(--over-t)' : 'inherit'}">${v.miss}</b>`, v.back].map(x => `<td style="padding:4px;border-top:1px solid var(--line-2)">${x}</td>`).join('')}</tr>`).join('')}</table>
+    <p class="sub" style="font-size:12px;margin-top:6px">Сверху экраны, где люди дольше всего стоят, жмут мимо кнопок и уходят назад: их стоит упростить в первую очередь.</p></div>`; }
 /** Сводка калибровки: итог, таблица по мышцам, разбор каждого случая. Пересчитано текущими правилами по сохраненным замерам. */
 function calibReportScreen(rep, back, docs = []) { const t = rep.totals, K = ['match', 'side', 'opposite', 'missed', 'notMeasured', 'extra'];
   const lw = learnWeights(docs, C), wf = v => String(v).replace('.', ',');
@@ -1170,13 +1199,45 @@ function calibReportScreen(rep, back, docs = []) { const t = rep.totals, K = ['m
     </div></div>`);
   $('#back').onclick = back;
   const postW = async body => { const r = await fetch('/api/calib?a=weights', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j.error || r.status); applyRuleWeights(C.bodymap.rules, j.w); C.weightsAt = j.at; return j; };
+    if (!r.ok) throw new Error(j.error || r.status); applyRuleWeights(C.bodymap.rules, j.w, j.t); C.weightsAt = j.at; C.thresholds = j.t || {}; return j; };
   if ($('#wapply')) $('#wapply').onclick = async () => { if (!confirm('Применить новые веса? Они сразу начнут действовать у всех специалистов. Откатить можно здесь же.')) return;
     try { const cur = await fetch('/api/calib?a=weights', { cache: 'no-store' }).then(r => r.json()).catch(() => ({ w: {} }));
-      await postW({ w: { ...(cur.w || {}), ...Object.fromEntries(lw.map(x => [x.key, x.nw])) }, n: rep.n }); toast('Веса применены'); calibReportScreen(calibReport(docs, C), back, docs); } catch (e) { toast('Не получилось: ' + e.message); } };
+      await postW({ w: { ...(cur.w || {}), ...Object.fromEntries(lw.map(x => [x.key, x.nw])) }, t: cur.t || {}, n: rep.n }); toast('Веса применены'); calibReportScreen(calibReport(docs, C), back, docs); } catch (e) { toast('Не получилось: ' + e.message); } };
   $('#wundo').onclick = async () => { try { await postW({ undo: true }); toast('Вернули предыдущие веса'); calibReportScreen(calibReport(docs, C), back, docs); } catch (e) { toast('Не получилось: ' + e.message); } };
-  $('#wreset').onclick = async () => { if (!confirm('Вернуть исходные веса из базы знаний?')) return; try { await postW({ reset: true }); toast('Исходные веса'); calibReportScreen(calibReport(docs, C), back, docs); } catch (e) { toast('Не получилось: ' + e.message); } };
+  $('#wreset').onclick = async () => { if (!confirm('Вернуть исходные веса из базы знаний?')) return; try { const cur = await fetch('/api/calib?a=weights', { cache: 'no-store' }).then(r => r.json()).catch(() => ({})); await postW({ w: {}, t: cur.t || {} }); toast('Исходные веса'); calibReportScreen(calibReport(docs, C), back, docs); } catch (e) { toast('Не получилось: ' + e.message); } };
   $('#csv').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([reportCSV(rep)], { type: 'text/csv' })); a.download = `calibration-summary-${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(a); a.click(); a.remove(); };
+}
+/** Нормы по базе: как распределен каждый замер у всех, кто прошел тест, и как часто срабатывает правило.
+ *  Признак, который «срабатывает» у половины людей, не отличает проблему от нормы: порог предлагается такой, чтобы правило срабатывало примерно у каждого пятого.
+ *  Сдвиг порога ограничен (от 0,7 до 1,6 исходного), нужно не меньше 30 тестов с хорошей съемкой. */
+export function suggestThresholds(norms, rules, minN = 30) {
+  const out = [];
+  for (const r of rules) { const nf = norms[r.feature]; const key = r.absGreater != null ? 'absGreater' : r.greater != null ? 'greater' : r.less != null ? 'less' : null; if (!nf || !key || !nf.raw) continue;
+    const a = nf.raw, t0 = r.t0 ?? r[key], cur = r[key];
+    const fire = thr => key === 'absGreater' ? a.filter(v => Math.abs(v) > thr).length / a.length : key === 'greater' ? a.filter(v => v > thr).length / a.length : a.filter(v => v < thr).length / a.length;
+    const target = key === 'absGreater' ? nf.abs80 : key === 'greater' ? a[Math.floor(a.length * .8)] : a[Math.floor(a.length * .2)];
+    const lo = Math.min(t0 * .7, t0 * 1.6), hi = Math.max(t0 * .7, t0 * 1.6), sug = Math.round(Math.max(lo, Math.min(hi, target)) * 100) / 100;
+    out.push({ id: r.id, feature: r.feature, key, n: nf.n, t0, cur, fire: Math.round(fire(cur) * 100), sug, fireSug: Math.round(fire(sug) * 100), ready: nf.n >= minN && Math.abs(sug - cur) / Math.max(1e-6, Math.abs(cur)) > .05 }); }
+  return out.sort((x, y) => (y.ready - x.ready) || (y.fire - x.fire));
+}
+async function normsScreen(back) {
+  go('<div class="spin"></div>');
+  const [nr, cur] = await Promise.all([fetch('/api/norms?days=365', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null), fetch('/api/calib?a=weights', { cache: 'no-store' }).then(r => r.json()).catch(() => ({ w: {}, t: {} }))]);
+  const sg = nr ? suggestThresholds(nr.features, C.bodymap.rules) : [], ready = sg.filter(x => x.ready), f2 = v => String(Math.round(v * 100) / 100).replace('.', ',');
+  go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:17px">Нормы по базе · ${nr ? nr.tests : 0} тестов</b></div>
+    <div class="pad" style="display:flex;flex-direction:column;gap:12px;padding-bottom:30px">
+     <div class="card" style="font-size:14px;line-height:1.45">Каждый тест анонимно присылает числа замеров (без имени и записи). Здесь видно, у какой доли людей срабатывает каждое правило. Если признак есть у половины людей, он не отличает проблему от нормы: порог стоит поднять. Предложение появляется от 30 тестов с хорошей съемкой. Вместе с весами из калибровок это и есть рост точности с базой.</div>
+     ${!nr ? '<div class="card">Не удалось загрузить</div>' : `<div class="card" style="overflow-x:auto"><b>Правила</b><table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px"><tr>${['Правило', 'Тестов', 'Порог', 'Срабатывает', 'Предложено', 'Будет'].map(h => `<th style="text-align:left;padding:4px;font-weight:600">${h}</th>`).join('')}</tr>
+      ${sg.map(x => `<tr style="${x.ready ? '' : 'color:var(--sub)'}">${[esc(RULE_NAMES[x.id] || x.id), x.n, f2(x.cur) + (x.cur !== x.t0 ? ` <small>(было ${f2(x.t0)})</small>` : ''), `<b style="color:${x.fire > 35 ? 'var(--over-t)' : 'inherit'}">${x.fire}%</b>`, x.ready ? '<b>' + f2(x.sug) + '</b>' : '—', x.ready ? x.fireSug + '%' : ''].map(v => `<td style="padding:4px;border-top:1px solid var(--line-2)">${v}</td>`).join('')}</tr>`).join('')}</table></div>`}
+     ${ready.length ? `<button class="btn" id="tapply" style="height:48px">Применить ${ready.length} ${ready.length === 1 ? 'порог' : ready.length < 5 ? 'порога' : 'порогов'} для всех</button>` : '<p class="sub" style="font-size:13px">Пока нечего менять: мало тестов или пороги уже подходят.</p>'}
+     <button class="btn line" id="treset" style="height:44px">Исходные пороги</button>
+    </div></div>`);
+  $('#back').onclick = back;
+  const post = async t => { const r = await fetch('/api/calib?a=weights', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ w: cur.w || {}, t, n: nr ? nr.tests : 0 }) }); const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || r.status); applyRuleWeights(C.bodymap.rules, j.w, j.t); C.weightsAt = j.at; C.thresholds = j.t || {}; };
+  if ($('#tapply')) $('#tapply').onclick = async () => { if (!confirm('Применить новые пороги? Они сразу начнут действовать у всех. Вернуть можно кнопкой «Исходные пороги».')) return;
+    try { await post({ ...(cur.t || {}), ...Object.fromEntries(ready.map(x => [x.id, x.sug])) }); toast('Пороги применены'); normsScreen(back); } catch (e) { toast('Не получилось: ' + e.message); } };
+  $('#treset').onclick = async () => { if (!confirm('Вернуть исходные пороги правил?')) return; try { await post({}); toast('Исходные пороги'); normsScreen(back); } catch (e) { toast('Не получилось: ' + e.message); } };
 }
 /** Калибровки, присланные специалистами: список, скачать один случай или все сразу одним файлом. */
 async function calibInbox(back) {
@@ -1210,7 +1271,8 @@ export async function adminScreen(back) {
       <button class="row-link" id="ausers">${ic('user-plus', 's')}<span>Участники</span>${ic('chevron-right', 's chev')}</button>
       <button class="row-link" id="afun">${ic('info', 's')}<span>Статистика и отзывы</span>${ic('chevron-right', 's chev')}</button>
       <button class="row-link" id="aexp">${ic('download', 's')}<span>Выгрузить данные для анализа</span>${ic('chevron-right', 's chev')}</button>
-      <button class="row-link" id="acal">${ic('star', 's')}<span>Калибровки от специалистов</span>${ic('chevron-right', 's chev')}</button></div>
+      <button class="row-link" id="acal">${ic('star', 's')}<span>Калибровки от специалистов</span>${ic('chevron-right', 's chev')}</button>
+      <button class="row-link" id="anorm">${ic('cpu', 's')}<span>Нормы по базе и пороги</span>${ic('chevron-right', 's chev')}</button></div>
      <div class="card" style="border:1px solid var(--over-t)"><b>Сбросить статистику и отзывы</b><p class="sub" style="font-size:13px;margin-top:4px">Удаляет все события и отзывы на сервере. Аккаунты и клиенты не трогает. Перед сбросом сделайте выгрузку.</p>
       <input id="rsw" class="field" style="margin-top:10px;height:48px" placeholder="Напишите СБРОС" autocomplete="off"><button class="btn line" id="rsb" style="margin-top:8px;height:48px;color:var(--over-t)" disabled>Сбросить</button></div>
     </div></div>`);
@@ -1220,6 +1282,7 @@ export async function adminScreen(back) {
   $('#noev').onchange = e => { localStorage.setItem('bp_noev', e.target.checked ? '1' : '0'); };
   $('#afun').onclick = () => funnelScreen();
   $('#acal').onclick = () => calibInbox(() => adminScreen(back));
+  $('#anorm').onclick = () => normsScreen(() => adminScreen(back));
   $('#aexp').onclick = async () => { const b = $('#aexp'); b.style.opacity = .5; try { await exportData(); } catch (e) { toast('Не удалось выгрузить: ' + e.message); } b.style.opacity = 1; };
   $('#rsw').oninput = e => { $('#rsb').disabled = e.target.value.trim().toUpperCase() !== 'СБРОС'; };
   $('#rsb').onclick = async () => { if (!confirm('Точно удалить всю статистику и отзывы? Это нельзя отменить.')) return;
@@ -1280,7 +1343,11 @@ export async function funnelScreen(days = 14) {
      <p class="sub" style="font-size:13px">Число вкладок, где шаг был хотя бы раз, сумма по дням. Процент от первого шага.</p>
      <div class="seg">${[7, 30, 90].map(n => `<button data-d="${n}" class="${n === days ? 'on' : ''}">${n} дней</button>`).join('')}</div>
      ${bugCard}
+     ${chanCard(d)}${screensCard(d)}
      ${exitCard}
+     ${fb && fb.testN ? `<div class="card" style="padding:14px 16px"><b>Анкета после теста (${fb.testN})</b><div style="font-size:14px;margin-top:8px">Средняя оценка: <b>${String(fb.testAvg).replace('.', ',')}</b> из 5</div>
+      ${Object.entries(fb.testIssues || {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<div class="row" style="font-size:13px;margin-top:6px"><span style="flex:1">${esc(k)}</span><b>${n}</b></div>`).join('')}
+      ${fb.items.filter(x => x.k === 'test' && x.t).slice(0, 10).map(x => `<div style="font-size:13px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line-2)"><b>${x.s}/5</b>${x.q && x.q.cal ? ' · калибровка' : ''}${x.q && x.q.src ? ' · ' + esc(x.q.src) : ''} ${esc(x.t)}</div>`).join('')}</div>` : ''}
      ${FUNNEL.map(block).join('')}
      ${usersCard}
      ${techCard}
@@ -1296,7 +1363,7 @@ export async function funnelScreen(days = 14) {
 
 // ---------- старт ----------
 (async () => {
-  track('app_open', { r: REF });
+  track('app_open', { r: REF, c: channel() });
   try { await loadContent(); } catch (e) { app.innerHTML = '<div class="scr pad" style="justify-content:center;gap:16px"><h1>Не удалось загрузить данные</h1><p class="sub">Проверь интернет и обнови страницу.</p><button class="btn" id="rl">Обновить</button></div>'; $('#rl').onclick = () => location.reload(); return; }
   mountBugTab(); await voice.init();
   await Promise.all([getMe(), config()]); claimLegacy(); mountBetaBar();

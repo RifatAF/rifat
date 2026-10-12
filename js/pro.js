@@ -296,7 +296,8 @@ export async function proHome(query = '', pulled = null) { if (device.webgl2) pr
     ${clients.length > 6 || q ? `<div class="pad" style="margin-bottom:var(--s2)"><input id="q" class="field" style="height:48px" value="${esc(query)}" placeholder="Найти клиента"></div>` : ''}
     <div class="pad">${list.length ? `<div class="group">${list.map(c => { const a = last(c.id); return row(c, a ? fmtDate(a.date) + ' · ' + esc(a.templateName || 'оценка') : 'оценок пока нет'); }).join('')}</div>`
       : q ? '<p class="sub">Никого не нашлось.</p>' : `<div class="card empty">${ic('file-text')}<b>Посмотрите, что получите</b><span class="sub" style="font-size:14px">Готовая оценка клиента с болью в колене: замер, гипотеза, решение и отчет.</span><button class="btn line" id="demo" style="margin-top:4px">Открыть пример</button></div>`}</div>
-    ${lost ? `<div class="pad" style="margin-top:var(--s3)"><div class="card" style="border:1px solid var(--over-t);font-size:14px;line-height:1.45"><b>Кабинет пуст, хотя здесь было ${was} ${plural(was)}</b><div style="margin-top:6px">Телефон мог очистить данные сайта. Восстановите кабинет из копии через меню «Восстановить из копии». Если копии нет, напишите нам через «Проблема?».</div></div></div>` : ''}
+    ${clients.filter(c => !c.demo).length && !q ? `<div class="pad" style="margin-top:var(--s2)"><button class="btn line" id="allc" style="height:48px">${ic('search', 's')}Все клиенты · ${clients.filter(c => !c.demo).length}</button></div>` : ''}
+    ${lost ? `<div class="pad" style="margin-top:var(--s3)"><div class="card" style="border:1px solid var(--over-t);font-size:14px;line-height:1.45"><b>Кабинет пуст, хотя здесь было ${was} ${plural(was)}</b><div style="margin-top:6px">Телефон мог очистить данные сайта. Восстановите кабинет из копии через меню «Восстановить из копии». Если копии нет, напишите нам через «Отзыв».</div></div></div>` : ''}
     ${iosRisk ? `<div class="pad" style="margin-top:var(--s3)"><div class="card" style="font-size:14px;line-height:1.45"><b>Защитите базу клиентов</b><div style="margin-top:6px">Safari на iPhone может стереть кабинет, если не открывать его неделю. Установите приложение на экран «Домой»: «Поделиться» → «На экран Домой», и раз в неделю сохраняйте копию.</div><button class="btn line" id="bk2" style="height:44px;margin-top:10px">Сохранить копию сейчас</button></div></div>` : ''}
     ${needBackup ? `<div class="pad" style="margin-top:var(--s3)"><button class="link" id="bk" style="width:100%;color:var(--sub);font-weight:500;font-size:13px">Клиенты хранятся только на этом телефоне · <u>сохранить копию с паролем</u></button></div>` : ''}
     ${list.length ? installCard() : ''}
@@ -320,6 +321,7 @@ export async function proHome(query = '', pulled = null) { if (device.webgl2) pr
   $('#rtq').onclick = tool('Ретест', l => l.length >= 1, async (c, l) => { if (await canTrack(c)) newAssessment(c.id, l.at(-1).id); });
   $('#repq').onclick = tool('Отчёт клиенту', l => l.length >= 1, (c, l) => report(l.at(-1).id));
   $('#cmpq').onclick = tool('Было → стало', l => l.length >= 2, (c, l) => compare(l[0].id, l[1].id));
+  if ($('#allc')) $('#allc').onclick = () => allClients();
   if ($('#q')) $('#q').oninput = e => { clearTimeout(window._qt); window._qt = setTimeout(() => proHome(e.target.value).then(() => { const i = $('#q'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }), 250); };
   document.querySelectorAll('[data-id]').forEach(el => el.onclick = () => clientCard(el.dataset.id));
   document.querySelectorAll('[data-msg]').forEach(el => el.onclick = () => { const x = soon.find(y => y.c.id === el.dataset.msg); if (x) messageClient(x.c, x.a.nextDate); });
@@ -425,6 +427,23 @@ function homeBlock(c) {
     <div class="kpi" style="margin-top:8px"><div><b>${w.compliance}%</b><span>выполнение, 7 дн.</span></div><div><b>${m.compliance}%</b><span>выполнение, 30 дн.</span></div><div><b style="color:${w.avgDelta > 0 ? 'var(--ok-t)' : 'var(--ink)'}">${d(w.avgDelta)}</b><span>боль за занятие, неделя</span></div></div>
     <div style="font-size:13px;color:var(--sub);margin-top:8px">Боль за месяц: в среднем ${f(m.avgPre)} до → ${f(m.avgPost)} после, изменение ${d(m.avgDelta)}. Обновлено ${new Date(c.progress.at).toLocaleDateString('ru', { day: 'numeric', month: 'long' })}.</div></div></div>
     ${progressChart(v).replace('<div class="pad" style="margin-top:12px">', '<div class="pad" style="margin-top:8px">')}`;
+}
+/** Все клиенты: поиск и сортировка (недавние, по имени, ближайший ретест). */
+async function allClients(query = '', sort = 'recent') {
+  const clients = (await all('clients')).filter(c => !c.demo), asses = await all('assessments');
+  const last = id => asses.filter(a => a.clientId === id).sort((x, y) => y.date - x.date)[0];
+  const q = query.trim().toLowerCase();
+  const list = clients.filter(c => !q || c.name.toLowerCase().includes(q)).map(c => ({ c, a: last(c.id) }))
+    .sort(sort === 'name' ? (x, y) => x.c.name.localeCompare(y.c.name, 'ru') : sort === 'retest' ? (x, y) => ((x.a && x.a.nextDate) || 9e15) - ((y.a && y.a.nextDate) || 9e15) : (x, y) => ((y.a && y.a.date) || y.c.created) - ((x.a && x.a.date) || x.c.created));
+  const sub = x => x.a ? fmtDate(x.a.date) + ' · ' + esc(x.a.templateName || 'оценка') + (sort === 'retest' && x.a.nextDate ? ' · ретест ' + fmtDate(x.a.nextDate) : '') : 'оценок пока нет';
+  go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>Все клиенты · ${clients.length}</b></div></div>
+   <div class="pad" style="padding-bottom:var(--s5)"><input id="aq" class="field" style="height:48px" value="${esc(query)}" placeholder="Найти клиента">
+    <div class="seg" style="margin-top:10px">${[['recent', 'Недавние'], ['name', 'По имени'], ['retest', 'Ретест']].map(([k, t]) => `<button data-s="${k}" class="${sort === k ? 'on' : ''}">${t}</button>`).join('')}</div>
+    ${list.length ? `<div class="group" style="margin-top:12px">${list.map(x => `<div class="list-item" data-id="${x.c.id}" style="border-radius:0;padding:var(--s3) 0;background:transparent"><span class="avatar">${esc(x.c.name.slice(0, 1).toUpperCase())}</span><div style="flex:1;min-width:0"><b>${esc(x.c.name)}</b><div style="font-size:13px;color:var(--sub)">${sub(x)}</div></div>${ic('chevron-right', 's chev')}</div>`).join('')}</div>` : '<p class="sub" style="margin-top:12px">Никого не нашлось.</p>'}</div></div>`);
+  $('#back').onclick = () => proHome();
+  app.querySelectorAll('[data-s]').forEach(b => b.onclick = () => allClients($('#aq').value, b.dataset.s));
+  app.querySelectorAll('[data-id]').forEach(el => el.onclick = () => clientCard(el.dataset.id));
+  $('#aq').oninput = e => { clearTimeout(window._aq); window._aq = setTimeout(() => allClients(e.target.value, sort).then(() => { const i = $('#aq'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }), 250); };
 }
 export async function clientCard(id) {
   const c = await get('clients', id); if (!c) return proHome();
@@ -1249,7 +1268,7 @@ async function freshBox(b) {
 async function inviteLink(c, units, date) {
   const fresh = await freshBox(c.invite); if (fresh !== c.invite) { c.invite = fresh; await put('clients', c); }
   const author = (await meta('profile')) || defaultAuthor();
-  return location.origin + '/' + (myRef() ? '?ref=' + myRef() : '') + '#inv=' + seal.pack({ i: c.invite.id, k: c.invite.key, n: c.name.split(' ')[0], s: author, p: units, ...(date ? { d: date } : {}) });
+  return location.origin + '/?src=inv' + (myRef() ? '&ref=' + myRef() : '') + '#inv=' + seal.pack({ i: c.invite.id, k: c.invite.key, n: c.name.split(' ')[0], s: author, p: units, ...(date ? { d: date } : {}) });
 }
 async function sendInvite(c) {
   if (!gate('invite')) return;
@@ -1319,7 +1338,7 @@ async function calibSheet(edit) {
     try { const c = { id: uid(), created: Date.now(), name, notes: '', calib: { labels: labels.slice(), note: d.querySelector('#cl_note').value.trim().slice(0, 2000), at: Date.now() } };
       c.invite = await freshBox(null); await put('clients', c); track('calib_link', { n: labels.length }, false);
       const author = (await meta('profile')) || defaultAuthor();
-      const url = location.origin + '/#join=' + seal.pack({ i: c.invite.id, k: c.invite.key, s: author, p: tpl[2], cal: 1 });
+      const url = location.origin + '/?src=calib#join=' + seal.pack({ i: c.invite.id, k: c.invite.key, s: author, p: tpl[2], cal: 1 });
       const text = `${name.split(' ')[0]}, здравствуйте! Помогите настроить тест движения: короткая анкета (где болит, что беспокоит) и тест перед камерой, около ${mins(SETUP_SEC + secs(rowsOf(tpl[2])))} мин. Результат придет мне, а без имени уйдет разработчику для настройки приложения.`;
       d.remove(); if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url).catch(() => {}); toast('Ссылка скопирована'); }
       clientCard(c.id); }
@@ -1364,7 +1383,7 @@ async function sendJoin() {
     d.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tpl = TEMPLATES.find(t => t[0] === b.dataset.t); draw(); });
     d.querySelector('#cx').onclick = () => d.remove();
     d.querySelector('#snd').onclick = async () => { let bx; try { bx = await inbox(); } catch (e) { toast('Не удалось создать ссылку: ' + e.message); return; } track('join_sent'); useHit('tpl', tpl[0]); const author = (await meta('profile')) || defaultAuthor();
-      const url = location.origin + '/' + (myRef() ? '?ref=' + myRef() : '') + '#join=' + seal.pack({ i: bx.id, k: bx.key, s: author, p: tpl[2] });
+      const url = location.origin + '/?src=join' + (myRef() ? '&ref=' + myRef() : '') + '#join=' + seal.pack({ i: bx.id, k: bx.key, s: author, p: tpl[2] });
       const text = 'Здравствуйте! Пройдите, пожалуйста, тест движения по ссылке: короткая анкета и 2–4 минуты перед камерой. Результат сразу придет мне.';
       if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url); toast('Ссылка скопирована'); } d.remove(); }; };
   draw(); document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };

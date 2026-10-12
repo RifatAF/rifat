@@ -12,7 +12,7 @@ const NAMES = new Set(['app_open', 'onb_done', 'login_ok', 'safety_ok', 'safety_
   'pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'db_empty', 'db_other', 'backup_done', 'restore_done',
   'gate_hit', 'compare_open', 'retest_done', 'report_shared', 'bug_sent', 'rage', 'slow',
   'pro_click', 'vas_done', 'report_link', 'progress_sent',
-  'paywall_view', 'limit_hit', 'trial_end', 'trial_end_view', 'balance_pay']);
+  'paywall_view', 'limit_hit', 'trial_end', 'trial_end_view', 'balance_pay', 'screen', 'back']);
 const KEYS = new Set(['m', 'f', 'l', 'n', 'c', 'r', 'd', 's', 'q']); // ошибка, файл, строка, число, категория, источник, секунды, оценка, качество
 // события, у которых в сводке видна разбивка по категории (c) и медиана чисел (d, n, q)
 const DETAIL = new Set(['pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'gate_hit', 'rage', 'slow', 'result_fail', 'test_done', 'assess_done', 'vas_done', 'report_link', 'paywall_view', 'limit_hit', 'trial_end', 'pro_click', 'fb_sent']);
@@ -31,7 +31,10 @@ function clean(b) {
 async function readAll(stream) { const ch = []; for await (const c of stream) ch.push(Buffer.from(c)); return Buffer.concat(ch).toString('utf8'); }
 
 async function stats(days) {
-  const out = { days: [], events: {}, errors: {}, sources: {}, testSec: [], detail: {}, users: {}, weeks: {} };
+  const out = { days: [], events: {}, errors: {}, sources: {}, testSec: [], detail: {}, users: {}, weeks: {}, channels: {}, screens: {} };
+  // воронка по каналу: сколько вкладок из каждого источника дошли до шага
+  const FUN = ['app_open', 'inv_open', 'safety_ok', 'test_start', 'test_done', 'result_sent', 'map_view', 'fb_sent', 'pro_open', 'assess_done', 'invite_sent', 'join_sent', 'report_sent'];
+  const scr = {}; const chOf = {};
   const nums = {}; const push = (k, v) => { if (Number.isFinite(v) && (nums[k] ||= []).length < 3000) nums[k].push(v); };
   for (let i = days - 1; i >= 0; i--) {
     const d = day(Date.now() - i * 864e5); out.days.push(d); let cursor; const names = [];
@@ -46,13 +49,18 @@ async function stats(days) {
           if (DETAIL.has(x.e) && x.p) { if (x.p.c != null) { const D = (out.detail[x.e] ||= {}); const c = String(x.p.c).slice(0, 40); D[c] = (D[c] || 0) + 1; }
             for (const nk of ['d', 'n', 'q']) if (typeof x.p[nk] === 'number') push(x.e + '.' + nk, x.p[nk]); }
           if (x.e === 'err' && x.p) { const m = `${x.p.m || ''} @ ${x.p.f || ''}:${x.p.l || 0}`; out.errors[m] = (out.errors[m] || 0) + 1; }
+          if (x.e === 'app_open' && x.p && x.p.c) chOf[b.s] = String(x.p.c).slice(0, 20);
+          if (x.e === 'screen' && x.p && x.p.c) { const S = (scr[String(x.p.c).slice(0, 40)] ||= { n: 0, sec: [], taps: 0, miss: 0, back: 0 }); S.n++; if (typeof x.p.d === 'number' && S.sec.length < 2000) S.sec.push(x.p.d); S.taps += +x.p.n || 0; S.miss += +x.p.q || 0; }
+          if (x.e === 'back' && x.p && x.p.c) { const S = (scr[String(x.p.c).slice(0, 40)] ||= { n: 0, sec: [], taps: 0, miss: 0, back: 0 }); S.back++; }
           if (x.e === 'app_open' && x.p && x.p.r) { const k = String(x.p.r).slice(0, 40); out.sources[k] = (out.sources[k] || 0) + 1; }
           if (x.e === 'test_done' && x.p && x.p.d > 0 && out.testSec.length < 2000) out.testSec.push(x.p.d); } } catch (e) {} }));
     for (const [k, s] of Object.entries(sess)) ((out.events[k] ||= {})[d] = s.size);
+    for (const [k, set] of Object.entries(sess)) { const e = k.split(':')[1]; if (!FUN.includes(e)) continue; for (const sid of set) { const ch = chOf[sid] || 'direct'; const C = (out.channels[ch] ||= {}); C[e] = (C[e] || 0) + 1; } }
   }
   const pct = (a, q) => a[Math.min(a.length - 1, Math.floor(a.length * q))];
   out.medians = Object.fromEntries(Object.entries(nums).map(([k, a]) => { a.sort((x, y) => x - y); return [k, { p50: pct(a, .5), p90: pct(a, .9), n: a.length }]; }));
   out.users = Object.entries(out.users).map(([id, U]) => ({ id, r: U.r, days: U.days.size, assess: U.assess, reports: U.reports, retests: U.retests, bugs: U.bugs })).sort((a, b) => b.days - a.days).slice(0, 200);
+  out.screens = Object.fromEntries(Object.entries(scr).map(([k, S]) => { S.sec.sort((x, y) => x - y); return [k, { n: S.n, p50: S.sec.length ? Math.round(pct(S.sec, .5)) : null, p90: S.sec.length ? Math.round(pct(S.sec, .9)) : null, taps: S.n ? Math.round(S.taps / S.n * 10) / 10 : 0, miss: S.n ? Math.round(S.miss / S.n * 10) / 10 : 0, back: S.back }]; }));
   out.weeks = Object.fromEntries(Object.entries(out.weeks).map(([w, s]) => [w, s.size]));
   const t = out.testSec.sort((a, b) => a - b); out.testMedianSec = t.length ? t[Math.floor(t.length / 2)] : null; out.testN = t.length; delete out.testSec;
   return out;
