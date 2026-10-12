@@ -21,7 +21,7 @@ export function sessionUid(req) {
   if (!m) return null;
   const a = Buffer.from(sign(m[1])), b = Buffer.from(m[2]);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-  try { const s = JSON.parse(Buffer.from(m[1], 'base64url').toString('utf8')); return s.exp > Date.now() && /^[gt]_[A-Za-z0-9_.-]{1,80}$/.test(s.uid) ? s.uid : null; } catch (e) { return null; }
+  try { const s = JSON.parse(Buffer.from(m[1], 'base64url').toString('utf8')); return s.exp > Date.now() && /^[gte]_[A-Za-z0-9_.-]{1,80}$/.test(s.uid) ? s.uid : null; } catch (e) { return null; }
 }
 
 async function readStream(st) { const ch = []; for await (const c of st) ch.push(Buffer.from(c)); return Buffer.concat(ch).toString('utf8'); }

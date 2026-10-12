@@ -21,6 +21,7 @@ export async function providers() {
   if (c.telegram && TG()) out.push('tg-app');
   if (c.google && !TG() && !device.inApp) out.push('google');
   if (c.telegram && c.telegramWeb && !TG()) out.push('tg-web');
+  if (c.email) out.push('email'); // запасной вход для всех: iPhone без Google, встроенные браузеры
   return out;
 }
 export async function getMe(force) {
@@ -81,7 +82,7 @@ export function loginScreen(role, cont, opts = {}) {
    <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:var(--s3)">
     <div class="eyebrow">${pro ? 'Кабинет специалиста' : 'Вход'}${configSync().beta !== false ? ' · бета' : ''}</div>
     <h1>${pro ? 'Вход в кабинет' : 'Вход в BodyPassport'}</h1>
-    <p class="sub">${pro ? 'Кабинет привязан к вашему аккаунту. Результаты клиентов видите только вы.' : 'Аккаунт сохранит ваши результаты и историю тестов. Пароль не нужен: вход через Google или Telegram.'}</p>
+    <p class="sub">${pro ? 'Кабинет привязан к вашему аккаунту. Результаты клиентов видите только вы.' : 'Аккаунт сохранит ваши результаты и историю тестов. Пароль не нужен: вход через Google, Telegram или код на почту.'}</p>
     <label class="card row" style="align-items:flex-start;border-radius:var(--r-md)"><input type="checkbox" class="check" id="cons" ${localStorage.getItem(CONSENT_KEY) ? 'checked' : ''}>
      <span style="font-size:14px;line-height:1.45">Мне есть 18 лет. Принимаю <a href="/terms" target="_blank">соглашение</a> и <a href="/privacy" target="_blank">политику конфиденциальности</a>. Понимаю, что это оценка движения, а не диагноз.</span></label>
     <label class="card row" style="align-items:flex-start;border-radius:var(--r-md)"><input type="checkbox" class="check" id="consh" ${localStorage.getItem(CONSENT_KEY) ? 'checked' : ''}>
@@ -89,7 +90,7 @@ export function loginScreen(role, cont, opts = {}) {
     
     ${pro && configSync().beta === false ? '<a href="/pricing" target="_blank" class="link" style="text-align:center;display:block;line-height:48px">Тарифы и возможности</a>' : ''}
    </div>
-   <div class="dock"><p id="lhint" style="font-size:13px;color:var(--sub);text-align:center">Отметьте оба пункта, чтобы продолжить</p>
+   <div class="dock flow"><p id="lhint" style="font-size:13px;color:var(--sub);text-align:center">Отметьте оба пункта, чтобы продолжить</p>
     <div id="lbtns" style="display:flex;flex-direction:column;gap:var(--s2);align-items:stretch;transition:opacity .2s"></div>
     <p id="lerr" style="font-size:13px;color:var(--over-t);min-height:18px;text-align:center"></p></div></div>`);
   if (opts.back) document.getElementById('lback').onclick = opts.back;
@@ -117,6 +118,21 @@ export function loginScreen(role, cont, opts = {}) {
       const u = `https://oauth.telegram.org/auth?bot_id=${cfg.telegramId}&origin=${encodeURIComponent(location.origin)}&request_access=write&return_to=${encodeURIComponent(location.origin + '/')}`;
       // основной вход Google, Telegram дополнительный: второстепенная кнопка под ним
       box.insertAdjacentHTML('beforeend', `${list.includes('google') ? '<p class="sub" style="font-size:13px;text-align:center;margin:2px 0">или</p>' : ''}<a class="btn${list.includes('google') ? ' line' : ''}" id="tgweb" href="${u}" style="text-decoration:none"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="${list.includes('google') ? '#229ED9' : '#fff'}" d="M9.8 15.2 9.6 19c.4 0 .6-.2.8-.4l2-1.9 4.1 3c.8.4 1.3.2 1.5-.7l2.7-12.6c.3-1.1-.4-1.6-1.2-1.3L3.7 11.3c-1.1.4-1.1 1-.2 1.3l4.1 1.3 9.6-6c.5-.3.9-.1.5.2"/></svg>Войти через Telegram</a>${pro && list.includes('google') ? '<p class="sub" style="font-size:12px;text-align:center">Через Telegram бот сразу пишет, когда клиент прошел тест по ссылке</p>' : ''}`);
+    }
+    if (list.includes('email')) {
+      box.insertAdjacentHTML('beforeend', `${list.length > 1 ? '<p class="sub" style="font-size:13px;text-align:center;margin:2px 0">или по почте</p>' : ''}<div id="mailbox" style="display:flex;flex-direction:column;gap:8px">
+        <input id="mail" class="field" type="email" inputmode="email" autocomplete="email" autocapitalize="off" placeholder="Электронная почта" style="height:48px">
+        <button class="btn line" id="mailgo">Получить код на почту</button></div>`);
+      const mb = document.getElementById('mailbox'), mail = () => document.getElementById('mail').value.trim();
+      const ask = async () => { if (!consented()) { err.textContent = 'Отметьте оба пункта выше'; return; } err.textContent = 'Отправляю код…';
+        try { await post('mailcode', { email: mail() }); err.textContent = ''; track('mail_code'); } catch (e) { err.textContent = e.message; return; }
+        const em = mail(); mb.innerHTML = `<p style="font-size:14px;text-align:center">Код отправлен на <b>${em.replace(/[<>&"]/g, '')}</b>. Проверьте и папку «Спам».</p>
+          <input id="mcode" class="field" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Код из письма" style="height:48px;text-align:center;font-size:20px;letter-spacing:.3em">
+          <button class="btn" id="mcgo">Войти</button><button class="link" id="mcre" style="font-size:14px">Отправить код еще раз</button>`;
+        const c = document.getElementById('mcode'); c.focus();
+        const go = () => done('mail', { email: em, code: c.value.trim() }); document.getElementById('mcgo').onclick = go; c.oninput = () => { if (/^\d{6}$/.test(c.value.trim())) go(); };
+        document.getElementById('mcre').onclick = async () => { try { await post('mailcode', { email: em }); err.textContent = 'Код отправлен еще раз'; } catch (e) { err.textContent = e.message; } }; };
+      document.getElementById('mailgo').onclick = ask; document.getElementById('mail').onkeydown = e => { if (e.key === 'Enter') ask(); };
     }
   });
 }

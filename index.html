@@ -14,7 +14,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/logo.svg">
 <link rel="apple-touch-icon" href="icons/bp-apple-180.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="BodyPassport"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="format-detection" content="telephone=no">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <script>if (/tgWebApp/.test(location.hash + location.search) || sessionStorage.getItem('bp_tg')) { sessionStorage.setItem('bp_tg', '1'); document.write('<script src="https://telegram.org/js/telegram-web-app.js"><\/script>'); }</script>
@@ -197,6 +197,12 @@ details>summary{cursor:pointer;list-style:none;min-height:var(--tap);display:fle
 .sheet>div{background:var(--bg);width:100%;max-width:480px;max-height:92dvh;overflow:auto;margin:0 auto;border-radius:var(--r-xl) var(--r-xl) 0 0;padding:28px var(--gutter) calc(env(safe-area-inset-bottom) + 28px);position:relative;animation:up var(--d3) var(--ease-out);box-shadow:var(--sh-3)}
 #betabar{position:fixed;top:0;left:0;right:0;z-index:20;height:calc(30px + env(safe-area-inset-top));padding:env(safe-area-inset-top) 12px 0;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--brand);color:#fff;font:500 12px Onest,sans-serif}
 #betabar button{border:0;background:#fff;color:var(--brand);border-radius:999px;padding:4px 10px;font:600 11px Onest,sans-serif;cursor:pointer}
+/* платформы и экраны: длинные блоки кнопок не прилипают к низу; планшет и компьютер шире; телефон боком во время теста */
+.dock.flow{position:static;background:none}
+@media (min-width:768px){#app{max-width:720px}:root{--gutter:32px}.sheet{align-items:center}.sheet>div{max-width:560px;border-radius:var(--r-xl);max-height:86dvh}}
+@media (min-width:1200px){#app{max-width:760px}}
+@media (orientation:landscape) and (max-height:500px) and (pointer:coarse){.cam::after{content:'Поверните телефон вертикально: так в кадр поместится все тело';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.78);color:#fff;padding:14px 18px;border-radius:14px;font:600 16px var(--font);text-align:center;max-width:80%;z-index:30;pointer-events:none}}
+input,select,textarea{font-size:max(16px,1em)} /* iOS не увеличивает страницу при вводе */
 body.beta #app{padding-top:calc(30px + env(safe-area-inset-top))}body.beta .scr{min-height:calc(100dvh - 30px - env(safe-area-inset-top))}
 body:has(.cam) #betabar{display:none}body.beta:has(.cam) #app{padding-top:0}
 #bugtab{position:fixed;right:0;top:46%;z-index:15;writing-mode:vertical-rl;transform:rotate(180deg);background:var(--ink);color:#fff;border:0;border-radius:0 10px 10px 0;padding:10px 5px;font:600 11px Onest;letter-spacing:.04em;opacity:.55;cursor:pointer}
