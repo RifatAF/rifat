@@ -11,7 +11,8 @@ import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetySc
 import { exFigure, hasFigure } from './exfig.js';
 import { recordTest, saveBlob } from './core.js';
 import { sayText } from './saytext.js';
-import { ready3D, C, loadContent, voice, sleep, phone, startMotion, initPose, poseInfo, prefetchPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, RAMP_CSS, body3D, preload3D, device, keepAwake, ic, toast, reduceMotion } from './core.js';
+import { repCounter, repKind, targetReps, setsOf, REP_KINDS } from './repcount.js';
+import { ready3D, C, loadContent, voice, sleep, phone, startMotion, initPose, poseInfo, notePoseSpeed, prefetchPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, RAMP_CSS, body3D, preload3D, device, keepAwake, ic, toast, reduceMotion } from './core.js';
 export { ic, toast };
 
 const $ = s => document.querySelector(s);
@@ -568,6 +569,7 @@ export async function runProtocol(protocol, opts = {}) {
   step(null, 'Готово', 'Считаю результат'); bar(1, ''); cam.onFrame = null; await say(SAY.finish); await saveRec(); stopCamera();
   track('test_done', { n: units.length, d: Math.round((Date.now() - tStart) / 1000) }, false);
   const fpsMed = fpsS.length ? [...fpsS].sort((a, b) => a - b)[fpsS.length >> 1] : null, qv = Object.values(quality);
+  notePoseSpeed(fpsMed);
   track('cam_q', { n: fpsMed || 0, q: qv.length ? Math.min(...qv) : 0, c: `${poseInfo.deleg} ${poseInfo.model}` }, false);
   // техника съемки: без нее ретест на другом телефоне нельзя отличить от изменения у человека
   const tech = { model: poseInfo.model, deleg: poseInfo.deleg, fps: fpsMed && Math.round(fpsMed), pitch: phone.ok && Number.isFinite(phone.pitch) ? Math.round(phone.pitch) : null, rules: C.bodymap && C.bodymap.version };
@@ -709,8 +711,18 @@ function bindSpecHint() { const b = document.getElementById('iamsp'); if (!b) re
 function addSpecHint() { const sc = app.querySelector('.scr'); if (sc && !document.getElementById('iamsp')) { sc.insertAdjacentHTML('beforeend', specHint()); bindSpecHint(); } }
 function retestCard() { const inv = INV(); if (!inv || !inv.d) return '';
   const days = Math.ceil((inv.d - Date.now()) / 864e5), date = new Date(inv.d).toLocaleDateString('ru', { day: 'numeric', month: 'long' });
-  return `<div class="pad" style="padding-top:8px"><div class="card row" style="gap:10px;font-size:14px">${ic('calendar', 's')}<span style="flex:1">${days <= 0 ? '<b>Пора пройти повторный тест</b>' : `Повторный тест: <b>${date}</b>`}<br><span class="sub" style="font-size:13px">Назначил специалист: ${esc(inv.s)}</span></span><button class="pill" id="rtcal">${days <= 0 ? 'Пройти' : 'В календарь'}</button></div></div>`; }
-function bindRetestCard() { const b = document.getElementById('rtcal'); if (!b) return; const inv = INV();
+  return `<div class="pad" style="padding-top:8px"><div class="card row" style="gap:10px;font-size:14px">${ic('calendar', 's')}<span style="flex:1">${days <= 0 ? '<b>Пора пройти повторный тест</b>' : `Повторный тест: <b>${date}</b>`}<br><span class="sub" style="font-size:13px">Назначил специалист: ${esc(inv.s)}</span></span><button class="pill" id="rtcal">${days <= 0 ? 'Пройти' : 'В календарь'}</button></div>
+    ${days > 0 ? `<button class="btn line" id="rttg" style="margin-top:8px;height:44px">${localStorage.getItem('bp_tgon') ? 'Напоминание в Telegram включено' : 'Напомнить в Telegram'}</button>` : ''}</div>`; }
+// напоминание о ретесте от бота: имя, дата и специалист, без данных о здоровье. Дата обновляется сама при новой ссылке
+async function tgRemind(open) { const inv = INV(); if (!inv || !inv.d) return;
+  const pr = PROFILE(), body = { code: localStorage.getItem('bp_tgc') || undefined, d: inv.d, n: (pr && pr.name ? pr.name : inv.n || '').split(' ')[0], s: inv.s };
+  const r = await fetch('/api/remind?a=client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
+  const j = r && r.ok ? await r.json().catch(() => ({})) : {}; if (!j.code) { if (open) toast(r && r.status === 503 ? 'Бот пока не подключен' : 'Нет связи, попробуйте позже'); return; }
+  localStorage.setItem('bp_tgc', j.code); localStorage.setItem('bp_tgd', String(inv.d)); if (j.linked) localStorage.setItem('bp_tgon', '1');
+  if (open) { track('tg_remind', {}, false); location.href = `https://t.me/${j.bot}?start=c_${j.code}`; localStorage.setItem('bp_tgon', '1'); } }
+function bindRetestCard() { const t = document.getElementById('rttg'); if (t) t.onclick = () => tgRemind(true);
+  { const inv = INV(); if (inv && inv.d && localStorage.getItem('bp_tgc') && localStorage.getItem('bp_tgd') !== String(inv.d)) tgRemind(false); }
+  const b = document.getElementById('rtcal'); if (!b) return; const inv = INV();
   b.onclick = () => { if (inv.d - Date.now() <= 0) return inviteWelcome();
     const z = n => String(n).padStart(2, '0'), d = new Date(inv.d), day = `${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}`, url = location.origin + '/';
     const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//BodyPassport//RU', 'BEGIN:VEVENT', 'UID:bp-retest-' + inv.i.slice(0, 12) + '@bodypassport', 'DTSTART;VALUE=DATE:' + day, 'SUMMARY:Повторный тест движения (BodyPassport)', 'DESCRIPTION:Откройте ' + url + ' и пройдите тест', 'BEGIN:VALARM', 'TRIGGER:-PT15H', 'ACTION:DISPLAY', 'DESCRIPTION:Завтра повторный тест движения', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
@@ -998,6 +1010,12 @@ export async function workout(ids, reasons = {}) {
   const run = async () => {
     if (closed) return; if (i >= list.length) return finish();
     const e = list[i], total = Math.max(10, e.durationSec); let left = total, playing = false; const rs = reasons[e.id];
+    // камера считает повторы и подсказывает по технике там, где это надежно (мост, носки, отведение, руки вверх)
+    camOff(); const tgt = targetReps(e.dose), rk = device.camera && tgt && repKind(e.id) ? repCounter(e.id) : null, sets = setsOf(e.dose);
+    const camHtml = () => localStorage.getItem('bp_excam') === '1' ? `<div style="position:relative;border-radius:var(--r-lg);overflow:hidden;background:#000;height:190px"><video id="exv" playsinline muted style="width:100%;height:100%;object-fit:cover"></video>
+      <div style="position:absolute;left:10px;top:8px;background:rgba(0,0,0,.55);border-radius:12px;padding:4px 10px;color:#fff"><b id="exn" class="num" style="font-size:28px">0</b><span style="font-size:14px;opacity:.8"> / ${tgt}${sets > 1 ? ' · подход <span id="exs">1</span> из ' + sets : ''}</span></div>
+      <button class="pill" id="excoff" style="position:absolute;right:8px;top:8px;background:rgba(0,0,0,.55);color:#fff">Выключить</button><div id="exhint" style="position:absolute;left:10px;right:10px;bottom:8px;color:#fff;font-size:14px;text-shadow:0 1px 3px #000"></div></div>`
+      : `<button class="btn line" id="excam" style="height:44px;color:#fff;border-color:rgba(255,255,255,.3)">${ic('camera', 's')}Считать повторы камерой</button>`;
     go(`<div class="scr dark fade" style="padding:16px 20px 28px">
       <div class="row"><div class="segs" style="flex:1">${list.map((_, k) => `<div><b style="width:${k <= i ? 100 : 0}%;background:${k === i ? '#fff' : 'var(--signal)'}"></b></div>`).join('')}</div><button class="round glass" id="x" aria-label="Закончить">${ic('x')}</button></div>
       <div class="eyebrow" style="color:var(--signal);margin-top:18px">${i + 1} из ${list.length}${rs ? ' · для итога' : ''}</div>
@@ -1006,14 +1024,26 @@ export async function workout(ids, reasons = {}) {
       ${exSide(e) ? `<div style="display:inline-block;align-self:flex-start;width:fit-content;margin-top:8px;padding:6px 12px;border-radius:999px;background:var(--signal);color:var(--cam-bg,#0B1A20);font-weight:700;font-size:15px">${exSide(e) === 'слева' ? 'Левая сторона' : 'Правая сторона'}</div>` : ''}
       <div class="row" style="gap:6px;margin-top:12px;flex-wrap:wrap">${[e.dose, e.feel].filter(Boolean).map(x => `<span class="pill" style="background:rgba(255,255,255,.12);color:#fff">${x}</span>`).join('')}</div>
       ${hasFigure(e.id) ? `<div style="margin-top:16px;background:#F4F7F8;border-radius:var(--r-lg);padding:10px 12px 8px">${exFigure(e.id)}<div style="text-align:center;font-size:13px;color:#4A5A63;margin-top:2px">Повторяйте за фигурой · <span style="color:#C77D12">светится</span> рабочая зона</div></div>` : ''}
+      ${rk ? `<div id="cambox" style="margin-top:12px">${camHtml()}</div>` : ''}
       <div class="row" style="gap:14px;margin-top:14px;align-items:center"><div style="position:relative;width:${hasFigure(e.id) ? 72 : 200}px;height:${hasFigure(e.id) ? 72 : 200}px;flex:none;margin:${hasFigure(e.id) ? '0' : '8px auto 0'}"><svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg)"><circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="6"/><circle id="arc" cx="50" cy="50" r="45" fill="none" stroke="#D4F25A" stroke-width="6" stroke-linecap="round" stroke-dasharray="283" stroke-dashoffset="283"/></svg>
         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><b id="tm" class="num" style="font-size:${hasFigure(e.id) ? 20 : 56}px;font-weight:600;letter-spacing:-.02em;opacity:.45">${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}</b></div></div><span id="tml" style="font-size:14px;color:var(--cam-sub)">старт после подсказки</span></div>
       <div style="flex:1;margin-top:20px;display:flex;flex-direction:column;gap:12px">${e.steps.slice(0, 3).map((s, k) => `<div class="row st" style="opacity:.45;align-items:flex-start"><span class="step-n" style="color:var(--signal);width:22px;padding-top:2px">${String(k + 1).padStart(2, '0')}</span><span style="font-size:16px;line-height:1.35;flex:1">${s}</span></div>`).join('')}
         ${e.check ? `<div class="row" style="background:rgba(255,255,255,.08);border-radius:var(--r-md);padding:12px;align-items:flex-start;gap:10px"><span style="color:var(--signal)">${ic('info', 's')}</span><span style="font-size:14px;line-height:1.4">${e.check}</span></div>` : ''}</div>
       <div class="row" style="justify-content:center;gap:28px;margin-top:16px"><button class="round" id="pv" aria-label="Назад" style="width:56px;height:56px;background:rgba(255,255,255,.1);color:#fff">${ic('skip-back')}</button><button class="round" id="pp" aria-label="Пауза" style="width:80px;height:80px;background:var(--signal);color:var(--cam-bg)">${ic('pause')}</button><button class="round" id="nx" aria-label="Дальше" style="width:56px;height:56px;background:rgba(255,255,255,.1);color:#fff">${ic('skip-forward')}</button></div></div>`);
     let token = {}; const myTok = token;
+    const camStart = async () => { const v = $('#exv'); if (!v || !rk) return; $('#excoff').onclick = () => { localStorage.setItem('bp_excam', '0'); camOff(); $('#cambox').innerHTML = camHtml(); bindCam(); };
+      $('#exhint').textContent = 'Поставьте телефон так, чтобы было видно все тело'; let lastCue = 0, setN = 1;
+      try { await initPose(); if (myTok.dead || closed) return; await startCamera(v); } catch (er) { $('#exhint').textContent = 'Камера недоступна'; return; }
+      track('ex_cam', { c: rk.kind }, false);
+      cam.onFrame = f => { if (myTok.dead || closed) return camOff(); const r = rk.feed(f.pose, f.t); if (!f.pose) return; if ($('#exhint').textContent.startsWith('Поставьте')) $('#exhint').textContent = '';
+        if (r.ev === 'rep') { const inSet = r.n - (setN - 1) * tgt; $('#exn').textContent = inSet; voice.say(String(inSet));
+          if (inSet >= tgt) { if (setN >= sets) { camOff(); voice.say('Отлично, упражнение выполнено'); mark(e); doneN++; i++; token.dead = true; setTimeout(run, 1500); return; }
+            setN++; if ($('#exs')) $('#exs').textContent = setN; setTimeout(() => voice.say('Подход готов. Отдохните и продолжайте'), 600); $('#exn').textContent = 0; } }
+        if (r.ev === 'low' && f.t - lastCue > 6) { lastCue = f.t; const cue = REP_KINDS[rk.kind].cue.low; $('#exhint').textContent = cue; voice.say(cue); } }; };
+    const bindCam = () => { if ($('#excam')) $('#excam').onclick = () => { localStorage.setItem('bp_excam', '1'); $('#cambox').innerHTML = camHtml(); bindCam(); camStart(); }; };
+    if (rk) { bindCam(); if ($('#exv')) camStart(); }
     const hush = () => { voice.say(''); try { speechSynthesis.cancel(); } catch (er) {} };
-    $('#x').onclick = () => { closed = true; hush(); keepAwake(false); if (doneN) finish(); else map(); };
+    $('#x').onclick = () => { closed = true; hush(); camOff(); keepAwake(false); if (doneN) finish(); else map(); };
     $('#pv').onclick = () => { token.dead = true; hush(); i = Math.max(0, i - 1); run(); };
     $('#nx').onclick = () => { token.dead = true; hush(); mark(e); doneN++; i++; run(); };
     $('#pp').onclick = () => { playing = !playing; $('#pp').innerHTML = ic(playing ? 'pause' : 'play'); $('#pp').setAttribute('aria-label', playing ? 'Пауза' : 'Продолжить'); };
@@ -1037,9 +1067,10 @@ export async function workout(ids, reasons = {}) {
   };
   run();
 }
+function camOff() { cam.onFrame = null; if (cam.running) stopCamera(); }
 function mark(e) { const d = JSON.parse(localStorage.getItem(K('bp_done')) || '[]'); d.push({ id: e.id, t: Date.now() }); localStorage.setItem(K('bp_done'), JSON.stringify(d.slice(-500))); }
 function streak() { const days = new Set(JSON.parse(localStorage.getItem(K('bp_done')) || '[]').map(x => new Date(x.t).toDateString())); let n = 0; const d = new Date(); if (!days.has(d.toDateString())) d.setDate(d.getDate() - 1); while (days.has(d.toDateString())) { n++; d.setDate(d.getDate() - 1); } return n; }
-async function done(list, pre = null, n = list.length) { keepAwake(false); const s = Math.max(1, streak());
+async function done(list, pre = null, n = list.length) { camOff(); keepAwake(false); const s = Math.max(1, streak());
   const post = await vasSheet('Оцените уровень боли после упражнений (0–10)', pre ?? 0);
   const rec = { t: Date.now(), pre: pre ?? undefined, post: post ?? undefined, n, all: list.length }; const log = vasSave(rec, K('bp_vas'));
   const dl = vasDelta(pre, post); track('vas_done', { n, d: dl ?? undefined }, false);

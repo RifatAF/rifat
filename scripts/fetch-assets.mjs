@@ -7,7 +7,8 @@ import { dirname } from 'node:path';
 
 const ORIGINS = (process.env.ASSETS_ORIGIN || 'https://bodypassport.vercel.app,https://test.rifataiupov.com').split(',');
 const MP = { 'models/pose_landmarker_full.task': 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task',
-  'models/pose_landmarker_lite.task': 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task' };
+  'models/pose_landmarker_lite.task': 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
+  'models/pose_landmarker_heavy.task': 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task' };
 // MediaPipe и three.js отдаются с нашего домена: в РФ jsdelivr бывает недоступен или медленный, а модель на приеме должна открыться всегда.
 // Версии закреплены так же, как в коде (js/core.js, index.html); без них сборка падает.
 const CDN = 'https://cdn.jsdelivr.net/npm/', TV = '@mediapipe/tasks-vision@0.10.20/', TH = 'three@0.160.0/';
@@ -42,6 +43,8 @@ await save(OUT + '/voice/index.json', JSON.stringify(idx));
 let n = 0;
 for (let i = 0; i < files.length; i += 10) await Promise.all(files.slice(i, i + 10).map(async f => { if (await exists(OUT + '/' + f)) return; await save(OUT + '/' + f, await get(f)); n++; }));
 console.log(`assets: ${n} файлов скопировано, всего ${files.length + 1}`);
+// точная модель для сильных телефонов: без нее приложение просто остается на full
+try { if (!(await exists(OUT + '/models/pose_landmarker_heavy.task'))) await save(OUT + '/models/pose_landmarker_heavy.task', await get('models/pose_landmarker_heavy.task')); } catch (e) { console.warn('heavy: ' + e.message); }
 
 // Озвучка фраз, для которых еще нет записи (упражнения на «вы», новые подсказки): нейроголос ru-RU-DmitryNeural при сборке.
 // Новые записи попадают в voice/index.json на сайте, и следующая сборка просто копирует их. VOICE_REGEN_ALL=1 переозвучивает все фразы одним голосом.

@@ -117,18 +117,25 @@ export async function initPose() {
     const { PoseLandmarker, FilesetResolver } = mod; poseInfo.src = MP === MP_LOCAL ? 'local' : 'cdn';
     const fs = await FilesetResolver.forVisionTasks(MP + '/wasm');
     // на слабых телефонах облегченная модель: точность чуть ниже, но кадров в секунду вдвое больше
-    poseInfo.model = device.weak ? 'lite' : 'full'; const model = `models/pose_landmarker_${poseInfo.model}.task`;
+    poseInfo.model = poseModel(); const model = `models/pose_landmarker_${poseInfo.model}.task`;
     const opts = (d) => ({ baseOptions: { modelAssetPath: model, delegate: d }, runningMode: 'VIDEO', numPoses: 1, minPoseDetectionConfidence: .4, minPosePresenceConfidence: .4, minTrackingConfidence: .4 });
-    try { landmarker = await PoseLandmarker.createFromOptions(fs, opts('GPU')); poseInfo.deleg = 'GPU'; } catch (e) { landmarker = await PoseLandmarker.createFromOptions(fs, opts('CPU')); poseInfo.deleg = 'CPU'; }
+    try { landmarker = await PoseLandmarker.createFromOptions(fs, opts('GPU')); poseInfo.deleg = 'GPU'; }
+    catch (e) { if (poseInfo.model === 'heavy') { localStorage.setItem('bp_heavy', '0'); poseInfo.model = 'full'; return initPose(); } landmarker = await PoseLandmarker.createFromOptions(fs, opts('CPU')); poseInfo.deleg = 'CPU'; }
   } catch (e) { track('pose_fail', { c: String(e && e.message || e).slice(0, 50), d: (performance.now() - t0) / 1000 }, false); throw e; }
   poseInfo.loadSec = Math.round((performance.now() - t0) / 100) / 10;
   track('pose_init', { c: `${poseInfo.deleg} ${poseInfo.model} ${poseInfo.src}`, d: poseInfo.loadSec }, false);
   return landmarker;
 }
+// точная модель (heavy) только там, где прошлый тест на full шел быстро (от 26 кадров/с на видеокарте);
+// если на heavy кадров стало меньше 18, телефон возвращается на full. Слабые телефоны всегда на lite.
+function poseModel() { if (device.weak) return 'lite'; return localStorage.getItem('bp_heavy') === '1' ? 'heavy' : 'full'; }
+export function notePoseSpeed(fps) { if (!fps || poseInfo.deleg !== 'GPU') return;
+  try { if (poseInfo.model === 'full' && fps >= 26 && localStorage.getItem('bp_heavy') == null) localStorage.setItem('bp_heavy', '1');
+    if (poseInfo.model === 'heavy' && fps < 18) localStorage.setItem('bp_heavy', '0'); } catch (e) {} }
 // модель и MediaPipe заранее, пока человек читает инструкцию: на плохом Wi-Fi клиент не стоит и не ждет «Загружаю модель…»
 let prefetched = false;
 export function prefetchPose() { if (prefetched || landmarker) return; prefetched = true;
-  const go = () => [`models/pose_landmarker_${device.weak ? 'lite' : 'full'}.task`, MP_LOCAL + '/vision_bundle.mjs', MP_LOCAL + '/wasm/vision_wasm_internal.js', MP_LOCAL + '/wasm/vision_wasm_internal.wasm']
+  const go = () => [`models/pose_landmarker_${poseModel()}.task`, MP_LOCAL + '/vision_bundle.mjs', MP_LOCAL + '/wasm/vision_wasm_internal.js', MP_LOCAL + '/wasm/vision_wasm_internal.wasm']
     .forEach(u => fetch(u, { priority: 'low' }).catch(() => {}));
   (window.requestIdleCallback || (f => setTimeout(f, 1500)))(go); }
 export const cam = { video: null, stream: null, back: localStorage.getItem('bp_back') === '1', frame: null, running: false };
