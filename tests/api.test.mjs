@@ -275,3 +275,13 @@ test('веса калибровки: читают все, меняет толь�
   await call(calib, { method: 'POST', query: { a: 'weights' }, body: { reset: true }, headers: { cookie: cookie('t_1') } });
   assert.deepEqual((await call(calib, { query: { a: 'weights' } })).j.w, {}, 'сброс');
 });
+
+test('нормы: только числа признаков, сводка только админу, плохая съемка не идет в нормы', async () => {
+  const norms = (await import(R + 'norms.js')).default; user('t_1', 'specialist'); user('t_5', 'specialist');
+  assert.equal((await call(norms, { method: 'POST', body: { f: { a: 1 } } })).code, 400, 'слишком мало признаков');
+  for (const v of [2, 4, 6, 8, 10]) assert.equal((await call(norms, { method: 'POST', body: { f: { pelvic_tilt: v, valgus_max: v * 2, sq_heel: .1, name: 'Иван', 'bad key': 1, const_r: 1 }, q: 90 } })).code, 204);
+  await call(norms, { method: 'POST', body: { f: { pelvic_tilt: 99, valgus_max: 99, sq_heel: 99 }, q: 30 } });
+  assert.equal((await call(norms, { headers: { cookie: cookie('t_5') } })).code, 403);
+  const r = await call(norms, { headers: { cookie: cookie('t_1') } });
+  assert.equal(r.j.tests, 5, 'съемка 30 из 100 отброшена'); assert.equal(r.j.features.pelvic_tilt.p50, 6); assert.equal(r.j.features.name, undefined); assert.equal(r.j.features.const_r, undefined);
+});

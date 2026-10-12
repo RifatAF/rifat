@@ -1,6 +1,6 @@
 // Рост продукта: отзывы, «порекомендуете ли» (NPS), приглашение коллег, установка на экран телефона.
 import { meSync, configSync } from './auth.js';
-import { track, diagnostics } from './track.js';
+import { track, diagnostics, currentScreen } from './track.js';
 import { refLink, copyRefText, BASE_SLOTS, REF_SLOTS } from './plans.js';
 import { toast, poseInfo, cam } from './core.js';
 
@@ -44,28 +44,32 @@ export function feedbackSheet(where = 'menu', preset = {}) {
 /** «Что-то не так»: одна фраза от человека плюс сведения об устройстве и последние нажатия. Приходит автору в Telegram сразу. */
 export async function bugSheet() {
   if (document.querySelector('.sheet #bgt')) return;
-  const d = sheet(`<h2 style="font-size:21px">Что-то не так?</h2>
-    <p class="sub" style="font-size:14px;margin-top:6px">Опишите одной фразой, что случилось или что ожидали увидеть. Каждое сообщение читаю в тот же день.</p>${devCard('отвечаю сам')}
+  const d = sheet(`<h2 style="font-size:21px">Ошибка, неудобство или идея?</h2>
+    <p class="sub" style="font-size:14px;margin-top:6px">Пара слов о том, что на этом экране не так или как сделать удобнее. Каждое сообщение читаю в тот же день.</p>${devCard('отвечаю сам')}
+    <div class="row" style="flex-wrap:wrap;gap:8px;margin-top:12px">${['Ошибка', 'Неудобно', 'Непонятно', 'Идея'].map(t => `<button class="pill" data-bk="${t}">${t}</button>`).join('')}</div>
     <textarea id="bgt" rows="4" maxlength="1500" placeholder="Например: на шаге «одна нога» зависло, кнопка «Ещё раз» не нажималась" style="width:100%;margin-top:14px;border-radius:16px;border:1px solid var(--line);padding:12px 14px;font:16px Onest;background:#fff;resize:vertical"></textarea>
     <label class="row" style="margin-top:12px;font-size:14px;align-items:flex-start;gap:10px"><input type="checkbox" id="bgd" checked style="width:20px;height:20px;flex:none;accent-color:var(--ink);margin-top:1px"><span>Приложить сведения о телефоне и последние нажатия. Без имен клиентов, видео и результатов.</span></label>
     ${contactBox()}
     <p id="bge" class="sub" style="font-size:13px;min-height:18px;margin-top:6px;color:var(--over-t)"></p>
     <button class="btn" id="bgs" style="margin-top:6px">Отправить</button><button class="btn ghost" id="bgx" style="margin-top:8px;border:0">Отмена</button>`);
   const c = d.querySelector('#fbc'); if (c) c.checked = true;
+  let kind = ''; d.querySelectorAll('[data-bk]').forEach(b => b.onclick = () => { kind = kind === b.dataset.bk ? '' : b.dataset.bk; d.querySelectorAll('[data-bk]').forEach(x => x.classList.toggle('on', x.dataset.bk === kind)); });
   d.querySelector('#bgx').onclick = () => d.remove(); setTimeout(() => d.querySelector('#bgt').focus(), 50);
   d.querySelector('#bgs').onclick = async () => { const t = d.querySelector('#bgt').value.trim(); if (!t) { d.querySelector('#bge').textContent = 'Напишите пару слов'; return; }
     d.querySelector('#bgs').textContent = 'Отправляю…';
     let st = {}; try { if (navigator.storage) { const [p, e] = await Promise.all([navigator.storage.persisted ? navigator.storage.persisted() : null, navigator.storage.estimate ? navigator.storage.estimate() : null]); st = { persisted: p === true, quota: e ? Math.round(e.quota / 1048576) : null }; } } catch (e) {}
     const dg = d.querySelector('#bgd').checked ? diagnostics({ model: poseInfo.model, deleg: poseInfo.deleg, loadSec: poseInfo.loadSec, fps: cam.fps ? Math.round(cam.fps) : null, ...st }) : null;
-    try { await sendFeedback({ k: 'bug', t, w: 'any', d: dg, contact: !!(c && c.checked) }); track('bug_sent', null, false);
+    // тип и экран идут в начало текста: в сводке сразу видно, где и что
+    const scrName = currentScreen(); const t2 = (kind ? '[' + kind + '] ' : '') + (scrName ? '(' + scrName + ') ' : '') + t;
+    try { await sendFeedback({ k: 'bug', t: t2.slice(0, 2000), w: 'any', d: dg ? { ...dg, screen: scrName } : null, contact: !!(c && c.checked) }); track('bug_sent', null, false);
       d.firstElementChild.innerHTML = '<h2 style="font-size:21px">Получил, спасибо!</h2><p class="sub" style="margin-top:8px">Разберусь и напишу, если оставили контакт.</p><button class="btn" id="bgok" style="margin-top:16px">Готово</button>';
       d.querySelector('#bgok').onclick = () => d.remove(); }
     catch (e) { d.querySelector('#bgs').textContent = 'Отправить'; d.querySelector('#bge').textContent = 'Не отправилось, проверьте интернет'; } };
 }
-/** Язычок «Проблема?» у края экрана на всех экранах, кроме камеры. */
+/** Язычок «Отзыв» у края экрана на всех экранах, кроме камеры. */
 export function mountBugTab() {
   if (document.getElementById('bugtab')) return;
-  const b = document.createElement('button'); b.id = 'bugtab'; b.type = 'button'; b.textContent = 'Проблема?'; b.setAttribute('aria-label', 'Сообщить о проблеме');
+  const b = document.createElement('button'); b.id = 'bugtab'; b.type = 'button'; b.textContent = 'Отзыв'; b.setAttribute('aria-label', 'Ошибка, неудобство или идея');
   b.onclick = bugSheet; document.body.appendChild(b);
 }
 
@@ -107,7 +111,7 @@ export function bindNps() {
 
 // ссылка с кодом приглашения: у вошедшего свой код, иначе ссылка без кода
 export const myRef = () => (meSync() && meSync().refCode) || '';
-export const appLink = () => location.origin + '/' + (myRef() ? '?ref=' + myRef() : '');
+export const appLink = () => location.origin + '/?src=app' + (myRef() ? '&ref=' + myRef() : '');
 export async function shareApp() {
   const url = appLink(), text = 'Тест движения по камере телефона за 3 минуты: карта мышц и что укрепить, растянуть, расслабить. Бесплатно.';
   track('ref_share', { c: 'client' }, false);
@@ -189,6 +193,28 @@ export function exitSurvey(where = 'exit', then = null) {
     try { await sendFeedback({ k: 'exit', s: pick.s, t: d.querySelector('#ext').value.trim().slice(0, 2000), w: where, q: { goal: pick.goal, issues: pick.issues, sec: Math.round((Date.now() - SESSION_START) / 1000) } });
       LS.set('bp_exit_at', String(Date.now())); if (sess) LS.set('bp_sess_rated', String(sess.start)); toast('Спасибо! Это очень помогает'); done(); }
     catch (e) { b.disabled = false; b.textContent = 'Отправить'; d.querySelector('#exe').textContent = 'Не отправилось, попробуйте еще раз'; } };
+}
+/** Анкета после теста (бета и калибровка): как прошло, что мешало. Один раз на тест, открывается сама после результата. */
+const TEST_ISSUES = ['Голос непонятный', 'Счет повторов сбивался', 'Камера не видела меня', 'Непонятно, что делать', 'Слишком долго', 'Зависло или ошибка', 'Было больно или неудобно', 'Результат не похож на правду'];
+export function testSurvey(key, ctx = {}) {
+  if (LS.get('bp_tfb_' + key)) return; LS.set('bp_tfb_' + key, '1'); track('fb_sent', { c: 'test_open' }, false);
+  const pick = { s: 0, issues: [] };
+  const d = sheet(`<div class="eyebrow">${ctx.cal ? 'Калибровка' : 'Бета-версия'}</div><h2 style="font-size:22px;margin-top:6px">Как прошел тест?</h2>
+    <p class="sub" style="font-size:14px;margin-top:6px">30 секунд. Все замечания читает разработчик и правит приложение.</p>
+    <b style="display:block;margin-top:16px">Оценка</b><div class="row" style="gap:6px;margin-top:8px">${[1, 2, 3, 4, 5].map(n => `<button class="pill" data-s="${n}" style="flex:1;min-height:48px;font-size:18px">${n}</button>`).join('')}</div>
+    <div class="row" style="justify-content:space-between;font-size:12px;color:var(--sub);margin:4px 4px 0"><span>плохо</span><span>отлично</span></div>
+    <b style="display:block;margin-top:16px">Что пошло не так?</b><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px">${TEST_ISSUES.map(t => `<button class="pill" data-i="${t}">${t}</button>`).join('')}</div>
+    <textarea id="tst" class="field" rows="3" maxlength="2000" placeholder="На каком шаге и что именно? Любые мелочи важны" style="height:auto;padding:12px 16px;margin-top:14px"></textarea>
+    <p id="tse" style="font-size:13px;color:var(--over-t);min-height:18px"></p>
+    <button class="btn" id="tsok">Отправить</button><button class="btn ghost" id="tsno" style="margin-top:8px;border:0">Пропустить</button>`);
+  d.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { pick.s = +b.dataset.s; d.querySelectorAll('[data-s]').forEach(x => { const on = +x.dataset.s <= pick.s; x.style.background = on ? 'var(--ink)' : ''; x.style.color = on ? '#fff' : ''; }); });
+  d.querySelectorAll('[data-i]').forEach(b => b.onclick = () => { const t = b.dataset.i, on = !pick.issues.includes(t); pick.issues = on ? [...pick.issues, t] : pick.issues.filter(x => x !== t); b.classList.toggle('on', on); });
+  d.querySelector('#tsno').onclick = () => { track('fb_sent', { c: 'test_skip' }, false); d.remove(); };
+  d.querySelector('#tsok').onclick = async () => { if (!pick.s) { d.querySelector('#tse').textContent = 'Поставьте оценку от 1 до 5'; return; }
+    const b = d.querySelector('#tsok'); b.disabled = true; b.textContent = 'Отправляю…';
+    try { await sendFeedback({ k: 'test', s: pick.s, t: d.querySelector('#tst').value.trim().slice(0, 2000), w: ctx.cal ? 'calib' : 'test', q: { issues: pick.issues, cal: !!ctx.cal, src: LS.get('bp_src') || '', steps: ctx.steps } });
+      toast('Спасибо! Это очень помогает'); d.remove(); }
+    catch (e) { b.disabled = false; b.textContent = 'Отправить'; d.querySelector('#tse').textContent = 'Не отправилось, попробуйте еще раз'; } };
 }
 /** Плашка беты сверху экрана (только в режиме «Бета»): видно, что это бета, и можно сразу оценить работу. */
 export function mountBetaBar() {

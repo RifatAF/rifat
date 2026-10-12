@@ -25,3 +25,13 @@ test('обучение весов: опровергнутая связь тер�
   assert.ok(by['elbow_bend_r|lats'].nw > by['elbow_bend_r|lats'].w, 'широчайшая: вес выше');
   assert.equal(learnWeights([doc()], C).length, 0, 'одного мнения мало');
 });
+
+test('пороги по базе: правило, что срабатывает у многих, получает порог выше, но не больше чем в 1,6 раза', async () => {
+  const fs = await import('node:fs');
+  const src = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8'); const i = src.indexOf('export function suggestThresholds'); const j = src.indexOf('async function normsScreen');
+  const suggest = new Function('return ' + src.slice(i, j).replace('export function', 'function'))();
+  const raw = Array.from({ length: 100 }, (_, k) => (k % 20) - 10 + (k % 3)); // |v| часто больше 5
+  const rules = [{ id: 'pelvis_tilt', feature: 'pelvic_tilt', absGreater: 5 }];
+  const s = suggest({ pelvic_tilt: { n: 100, raw, abs80: 8.5 } }, rules)[0];
+  assert.ok(s.fire > 35); assert.ok(s.ready); assert.equal(s.sug, 8); assert.ok(s.fireSug < s.fire);
+});
