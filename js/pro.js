@@ -804,7 +804,7 @@ function hypCard(a, an, s, open, evid) {
     ${confLine(sc)}
     <div class="seg" style="margin-top:8px;border-radius:var(--r-sm)">${STATE4.map(([k, n]) => `<button data-k="${s.key}" data-s="${k}" class="${s.k === k ? 'on' : ''}" style="min-height:44px;padding:4px 2px;border-radius:var(--r-xs);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:12px"><span class="mark sm ${k}"></span>${n}</button>`).join('')}</div>
     ${m && m.proTest ? `<details style="margin-top:var(--s3);border-top:1px solid var(--line-2);padding-top:4px" ${open ? 'open' : ''}><summary class="row" style="font-size:14px;font-weight:600;color:var(--focus)"><span style="flex:1">Проверь руками${chk[s.key] === 'yes' ? ' · подтвердилось' : chk[s.key] === 'no' ? ' · не подтвердилось' : ''}</span>${ic('chevron-down', 's')}</summary>
-      <p style="font-size:14px;line-height:1.45;margin-top:4px">${m.proTest}</p>
+      ${m.parts ? `<p class="sub" style="font-size:13px;margin-top:4px">Входят: ${m.parts}</p>` : ''}<p style="font-size:14px;line-height:1.45;margin-top:4px">${m.proTest}</p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s2);margin-top:10px"><button class="btn${chk[s.key] === 'yes' ? '' : ' line'}" data-chk="${s.key}" data-v="yes" style="height:48px;border-radius:var(--r-sm);font-size:15px">Подтвердилось</button><button class="btn${chk[s.key] === 'no' ? '' : ' line'}" data-chk="${s.key}" data-v="no" style="height:48px;border-radius:var(--r-sm);font-size:15px">Не подтвердилось</button></div></details>` : ''}</div>`;
 }
 // причина правки обязательна (ТЗ v2.1, раздел 6): быстрый выбор или свой текст
