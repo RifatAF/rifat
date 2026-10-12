@@ -28,11 +28,28 @@
    ]
   },
   {
-   "source": "/(models|voice|img)/(.*)",
+   "source": "/(voice|img)/(.*)",
    "headers": [
     {
      "key": "Cache-Control",
      "value": "public, max-age=31536000, immutable"
+    }
+   ]
+  },
+  {
+   "source": "/(models|vendor)/(.*)",
+   "headers": [
+    {
+     "key": "Cache-Control",
+     "value": "public, max-age=31536000, immutable"
+    },
+    {
+     "key": "CDN-Cache-Control",
+     "value": "max-age=31536000"
+    },
+    {
+     "key": "x-vercel-enable-rewrite-caching",
+     "value": "1"
     }
    ]
   },
@@ -63,6 +80,24 @@
   {
    "path": "/api/remind?a=cron",
    "schedule": "0 12 * * *"
+  }
+ ],
+ "rewrites": [
+  {
+   "source": "/models/pose_landmarker_:v(lite|full|heavy).task",
+   "destination": "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_:v/float16/1/pose_landmarker_:v.task"
+  },
+  {
+   "source": "/vendor/mediapipe/:path*",
+   "destination": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.20/:path*"
+  },
+  {
+   "source": "/vendor/three/three.module.js",
+   "destination": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  },
+  {
+   "source": "/vendor/three/addons/:path*",
+   "destination": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/:path*"
   }
  ]
 }
