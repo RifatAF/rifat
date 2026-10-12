@@ -12,3 +12,16 @@ test('калибровка: исходы сверки', () => {
   assert.equal(by['ql:RIGHT'], 'missed', 'слабый тон 0,1 не гипотеза'); assert.equal(by['suboccipital:LEFT'], 'notMeasured'); assert.equal(by['suboccipital:RIGHT'], 'notMeasured');
   assert.deepEqual(r.extra.map(x => x.id), ['triceps'], 'выведенные по цепи не считаются'); assert.equal(r.counts.expert, 6);
 });
+
+test('обучение весов: опровергнутая связь теряет вес, подтвержденная набирает', async () => {
+  const fs = await import('node:fs'); const { learnWeights } = await import('../js/calibreport.js');
+  const j = n => JSON.parse(fs.readFileSync(new URL('../data/' + n + '.json', import.meta.url)));
+  const C = { muscles: j('muscles').muscles, bodymap: j('bodymap'), chains: j('chains').chains };
+  // локоть сгибается в приседе справа (60°): правило говорит «трицепс и широчайшая укорочены»; специалист: трицепс слабый, широчайшая перегружена
+  const doc = () => ({ case: { expert: { labels: [{ muscle: 'triceps', side: 'RIGHT', state: 'WEAK' }, { muscle: 'lats', side: 'RIGHT', state: 'HYPER' }] },
+    assessments: [{ date: '2026-10-12', moves: { ohs_front: { f: { ohs_elbow_r: 60 }, quality: 'GOOD' } }, quality: { ohs_front: 100 } }] } });
+  const lw = learnWeights([doc(), doc()], C), by = Object.fromEntries(lw.map(x => [x.key, x]));
+  assert.ok(by['elbow_bend_r|triceps'].nw < by['elbow_bend_r|triceps'].w, 'трицепс: вес ниже');
+  assert.ok(by['elbow_bend_r|lats'].nw > by['elbow_bend_r|lats'].w, 'широчайшая: вес выше');
+  assert.equal(learnWeights([doc()], C).length, 0, 'одного мнения мало');
+});

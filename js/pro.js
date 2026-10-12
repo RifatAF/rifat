@@ -773,7 +773,8 @@ const LEGEND = `<div class="row" style="justify-content:center;gap:14px;flex-wra
 function focusOf(a, sp = proSpots(a)) { const conf = a.check || {};
   const decided = sp.filter(s => s.k !== 'OK' && (conf[s.key] === 'yes' || s.edited)).sort(byTone);
   const top = sp.filter(s => s.k !== 'OK' && conf[s.key] !== 'no' && (!s.derived || s.edited || s.byChain)).sort(byTone);
-  const base = decided.length ? decided : top, items = ['WEAK', 'SHORT', 'HYPER'].flatMap(k => base.filter(s => s.k === k && !s.ambiguous).slice(0, 2));
+  // решения специалиста показываем все (до 12): это его вывод, а не черновик; без решений — по 2 главные гипотезы каждого типа
+  const base = decided.length ? decided : top, items = ['WEAK', 'SHORT', 'HYPER'].flatMap(k => base.filter(s => s.k === k && !s.ambiguous).slice(0, decided.length ? 12 : 2));
   // упражнения: сначала по одному на каждую строку решения, потом остальные
   const lead = ['WEAK', 'SHORT', 'HYPER'].map(k => items.find(s => s.k === k)).filter(Boolean);
   return { base, decided, items, keys: new Set(items.map(s => s.key)), planSpots: [...lead, ...items.filter(s => !lead.includes(s))] }; }
@@ -798,7 +799,7 @@ export async function result(aid, view = 'measured') {
   let dock = '';
   if (view === 'measured') { const conf = a.check || {};
     // на «Итоге» одна главная гипотеза (меньше 60 слов), остальные во вкладке «Гипотеза»
-    const hypAll = top.filter(s => !s.edited || s.k !== 'OK'), hypTop = hypAll.slice(0, 1), hypMore = hypAll.length - hypTop.length;
+    const hypAll = top.filter(s => !s.edited && conf[s.key] !== 'yes'), hypTop = hypAll.slice(0, 1), hypMore = hypAll.length - hypTop.length;
     const decided = sp.filter(s => s.k !== 'OK' && (conf[s.key] === 'yes' || s.edited)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
     const isBefore = a.template === 'posture' && !a.prevId;
     body = `
@@ -834,7 +835,7 @@ export async function result(aid, view = 'measured') {
     <details class="card" id="hdet" style="padding:14px 16px"${HYPOPEN ? ' open' : ''}><summary style="font-weight:600;cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px"><span style="flex:1">Проверка руками · ${list.length} ${list.length % 10 === 1 && list.length % 100 !== 11 ? 'мышца' : [2, 3, 4].includes(list.length % 10) && ![12, 13, 14].includes(list.length % 100) ? 'мышцы' : 'мышц'}</span>${ic('chevron-down', 's')}</summary>
       <p class="sub" style="font-size:13px;margin-top:6px">Черновик по замеру. В отчёт пойдёт ваша версия.</p>
       <div id="hlist" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s3)">${list.map((s, i) => hypCard(a, an, s, i === list.findIndex(x => C.muscles[x.id] && C.muscles[x.id].proTest && !chk[x.key]), evid)).join('')}</div></details>`;
-    dock = `<div class="dock bar"><div style="flex:1;font-size:14px;align-self:center">Проверено руками <b class="num" id="hcnt">${testable.filter(s => chk[s.key]).length} из ${testable.length}</b></div><button class="btn line" id="addm" style="width:auto;padding:0 18px">${ic('plus', 's')}Мышца</button></div>`; }
+    dock = `<div class="dock bar"><div style="flex:1;font-size:14px;align-self:center">Проверено руками <b class="num" id="hcnt">${testable.filter(s => chk[s.key] || s.edited).length} из ${testable.length}</b></div><button class="btn line" id="addm" style="width:auto;padding:0 18px">${ic('plus', 's')}Мышца</button></div>`; }
   if (view === 'measured') { const pl = a.plan || { ex: plan(focusOf(a, sp).planSpots), text: '' }; const recs = muscleRecs(a);
     body += `<h2 id="planh" style="font-size:20px;margin-top:var(--s4)">Назначение</h2><div class="card"><div class="row"><div class="eyebrow" style="flex:1">Рекомендации по мышцам</div>${recs.length ? '<button class="pill" id="addall" style="font-size:12px">Добавить все</button>' : ''}</div>
       ${recs.length ? recs.map((r, i) => `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line-2)"><div class="row"><i class="bar" style="background:${TONE_HEX[r.s.k]};height:22px"></i><b style="flex:1;font-size:15px">${r.head}</b>${r.all.length ? `<button class="pill" data-add="${i}" style="font-size:12px">Добавить</button>` : ''}</div>
@@ -890,7 +891,7 @@ export async function result(aid, view = 'measured') {
     const refresh = key => { const all = proSpots(a); cur = onlyKeys(all, hk()); const s = all.find(x => x.key === key);
       const el = document.querySelector(`[data-card="${key}"]`); if (el && s) { const open = el.querySelector('details') && el.querySelector('details').open; el.outerHTML = hypCard(a, an, s, open, evid); bindCard(document.querySelector(`[data-card="${key}"]`)); }
       if (mode3 && v3) v3.update(cur); else if ($('#heat')) drawHeat($('#heat'), cur, back, null, lab);
-      const list = hypList(a, cur, top), testable = list.filter(x => C.muscles[x.id] && C.muscles[x.id].proTest), chk = a.check || {}; $('#hcnt').textContent = `${testable.filter(x => chk[x.key]).length} из ${testable.length}`; };
+      const list = hypList(a, cur, top), testable = list.filter(x => C.muscles[x.id] && C.muscles[x.id].proTest), chk = a.check || {}; $('#hcnt').textContent = `${testable.filter(x => chk[x.key] || x.edited).length} из ${testable.length}`; };
     const bindCard = el => {
       el.querySelectorAll('[data-s]').forEach(b => b.onclick = async () => { const key = b.dataset.k, to = b.dataset.s, s = cur.find(x => x.key === key), from = s ? s.k : null; if (to === from) return;
         const why = await whySheet(`${ntitle(s)} → ${STATE4.find(x => x[0] === to)[1].toLowerCase()}`); if (!why) return;

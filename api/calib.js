@@ -15,6 +15,22 @@ async function notify(text) { const tok = process.env.TELEGRAM_BOT_TOKEN; if (!t
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   try {
+    // веса правил, выученные по калибровкам: читают все приложения, меняет только администратор
+    if (req.query.a === 'weights') {
+      const W = 'config/weights.json', load = async () => { try { const r = await get(W, { access: 'private', useCache: false }); return r && r.stream ? JSON.parse(await readAll(r.stream)) : null; } catch (e) { return null; } };
+      if (req.method === 'GET') { const cur = await load(); res.setHeader('Cache-Control', 'public, max-age=300'); return res.status(200).json(cur ? { w: cur.w || {}, at: cur.at, n: cur.n || 0 } : { w: {} }); }
+      if (req.method !== 'POST') return res.status(405).json({ error: 'method' });
+      const u = await currentUser(req).catch(() => null); if (!isAdmin(u)) return res.status(403).json({ error: 'forbidden' });
+      let b; try { b = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}); } catch (e) { return res.status(400).json({ error: 'bad body' }); }
+      const prev = await load(); let hist = [...((prev && prev.history) || []), ...(prev && prev.w ? [{ at: prev.at, w: prev.w }] : [])].slice(-10);
+      let w = {};
+      // откат: берем версию до текущей, текущую в историю не кладем
+      if (b.undo) { hist = ((prev && prev.history) || []).slice(); const last = hist.pop(); w = last ? last.w : {}; }
+      else if (!b.reset) { for (const [k, v] of Object.entries(b.w || {})) if (/^[a-z0-9_]{1,40}\|[a-z0-9_]{1,40}$/.test(k) && Number.isFinite(+v) && +v >= .05 && +v <= 2) w[k] = Math.round(+v * 100) / 100; }
+      const doc = { at: Date.now(), by: String(u.id), n: Math.max(0, Math.round(+b.n || 0)), w, history: hist };
+      await put(W, JSON.stringify(doc), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true });
+      return res.status(200).json({ ok: true, w, at: doc.at });
+    }
     const u = await currentUser(req).catch(() => null);
     if (req.method === 'POST') {
       const origin = req.headers.origin; let oh = null; try { oh = origin ? new URL(origin).host : null; } catch (e) { oh = '?'; }
