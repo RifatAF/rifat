@@ -334,13 +334,14 @@ export async function ready3D() {
     const fl = new THREE.DirectionalLight(0xffffff, .6); fl.position.set(-1, 0, 2); scene.add(fl);
     const cam = new THREE.OrthographicCamera(-SNAP_HW, SNAP_HW, SNAP_HT, -SNAP_HT, .1, 10); cam.position.set(0, 0, 4);
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }); renderer.setClearColor(0xffffff, 0);
-    snap3 = { m, geo, col, root, scene, cam, renderer, cz, k };
+    snap3 = { m, geo, col, root, scene, cam, renderer, cz, k, THREE, ix: m.idx };
     return snap3;
   } catch (e) { snapFail = true; throw e; }
 }
 /** Нарисовать модель в canvas-контекст (в координатах 200×440) и вернуть точки мышц в долях кадра. */
 function draw3D(spots, back, wpx, hpx) {
   const S = snap3; paintMesh(S.m, spots, S.col); S.geo.attributes.color.needsUpdate = true;
+  { const ix = meshIndex(S.m, spots); if (S.ix !== ix) { S.ix = ix; S.geo.setIndex(new S.THREE.BufferAttribute(ix, 1)); } }
   S.root.rotation.y = back ? Math.PI : 0;
   if (S.renderer.domElement.width !== wpx || S.renderer.domElement.height !== hpx) S.renderer.setSize(wpx, hpx, false);
   S.renderer.render(S.scene, S.cam);
@@ -417,6 +418,15 @@ function callouts(ctx, labels, mine, alpha) {
 
 // ---------- 3D-модель мышц (Z-Anatomy на основе BodyParts3D, CC BY-SA) ----------
 let mesh3d = null;
+const TRAP_MID = 254; // средние (поперечные) волокна трапециевидной: своей мышцы в списке нет, красятся нейтрально
+/** Индексы треугольников: если отмечены ромбовидные, трапециевидная над ними не рисуется (окно), видна сама глубокая мышца. */
+function meshIndex(m, spots) {
+  const sides = [...new Set((spots || []).filter(s => s.id === 'rhomboid' && s.k !== 'OK').flatMap(s => s.side === 'BOTH' ? ['LEFT', 'RIGHT'] : [s.side]))].sort();
+  if (!sides.length || m.rh < 0) return m.idx; const key = sides.join(); if (m.idxCache.has(key)) return m.idxCache.get(key);
+  const inWin = v => { const x = m.pos[v * 3], y = m.pos[v * 3 + 1], z = m.pos[v * 3 + 2];
+    return m.trapG.has(m.grp[v]) && y > 50 && z > 1280 && z < 1475 && Math.abs(x) < 95 && sides.includes(x > 0 ? 'LEFT' : 'RIGHT'); };
+  const keep = []; for (let t = 0; t < m.idx.length; t += 3) { const a = m.idx[t], b = m.idx[t + 1], c = m.idx[t + 2]; if (inWin(a) || inWin(b) || inWin(c)) continue; keep.push(a, b, c); }
+  const out = new Uint32Array(keep); m.idxCache.set(key, out); return out; }
 async function loadMesh() {
   if (mesh3d) return mesh3d;
   const [buf, meta] = await Promise.all([fetch('data/body3d.bin').then(r => r.arrayBuffer()), fetch('data/body3d.json').then(r => r.json())]);
@@ -436,14 +446,16 @@ async function loadMesh() {
   let ra = -1; const blobs = { ...meta.blobs }, acc = { L: [0, 0, 0, 0], R: [0, 0, 0, 0] };
   if (!ord.includes('rectus_abd') && 1 + ord.length * 2 + 1 < 255) { ord.push('rectus_abd'); ra = ord.length - 1; }
   for (let i = 0; i < nv; i++) { const g = grp[i], x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
-    if (isG(g, rh) && Math.abs(x) > 85) grp[i] = 0;
-    else if (isG(g, lt) && z > 1360) grp[i] = 0;
+    if (isG(g, rh) && Math.abs(x) > 85) grp[i] = TRAP_MID;
+    else if (isG(g, lt) && z > 1360) grp[i] = TRAP_MID;
     else if (ra >= 0 && (isG(g, ob) || isG(g, ab)) && Math.abs(x) < 55 && y < -80 && z > 880 && z < 1260) { const s = x > 0 ? 'L' : 'R'; grp[i] = 1 + ra * 2 + (s === 'R' ? 1 : 0); const a = acc[s]; a[0] += x; a[1] += y; a[2] += z; a[3]++; } }
   if (ra >= 0) for (const [s, a] of Object.entries(acc)) if (a[3]) blobs[1 + ra * 2 + (s === 'R' ? 1 : 0)] = [a[0] / a[3], a[1] / a[3], a[2] / a[3]];
   // центры поправленных групп пересчитываем, чтобы маркеры и подсветка глубоких мышц стояли на месте
   for (const o of [rh, lt]) if (o >= 0) for (const d of [0, 1]) { const g = 1 + o * 2 + d; let n = 0, c = [0, 0, 0];
     for (let i = 0; i < nv; i++) if (grp[i] === g) { c[0] += pos[i * 3]; c[1] += pos[i * 3 + 1]; c[2] += pos[i * 3 + 2]; n++; } if (n) blobs[g] = c.map(v => v / n); }
-  mesh3d = { pos, nrm, grp, idx, meta: { ...meta, order: ord, blobs }, nv };
+  // группы трапециевидной: над ромбовидными в них вырезается окно, когда ромбовидные отмечены
+  const trapG = new Set([TRAP_MID, ...[lt, gOf('upper_trap')].filter(o => o >= 0).flatMap(o => [1 + o * 2, 2 + o * 2])]);
+  mesh3d = { pos, nrm, grp, idx, trapG, rh, idxCache: new Map(), meta: { ...meta, order: ord, blobs }, nv };
   return mesh3d;
 }
 /** Фоновая подгрузка 3D, пока человек смотрит карту: кнопка 3D потом открывается сразу. */
@@ -454,7 +466,7 @@ function paintMesh(m, spots, out) { const order = m.meta.order, lin = c => (c / 
   // группа сетки → цвет мышцы по состоянию; соседям достается слабый край того же цвета, чтобы граница читалась
   const col = new Map(); for (const s of spots) { const o = order.indexOf(s.id); if (o < 0 || s.k === 'OK' || Math.abs(s.tone) < .02) continue; col.set(1 + o * 2 + (s.side === 'RIGHT' ? 1 : 0), stateRGB(s.k, s.tone).map(lin)); }
   // глубокие мышцы закрыты поверхностными (ромбовидные под трапецией, малая грудная под большой): их цвет просвечивает четким пятном над ними
-  const DEEP = new Set(['rhomboid', 'levator', 'suboccipital', 'pec_minor', 'deep_neck_flex', 'iliopsoas'].map(id => m.meta.order.indexOf(id)).filter(i => i >= 0));
+  const DEEP = new Set(['levator', 'suboccipital', 'pec_minor', 'deep_neck_flex', 'iliopsoas'].map(id => m.meta.order.indexOf(id)).filter(i => i >= 0));
   const blobs = Object.entries(m.meta.blobs).map(([g, c]) => [+g, c, DEEP.has((+g - 1) >> 1)]).filter(([g]) => col.has(+g));
   for (let i = 0; i < m.nv; i++) { const g = m.grp[i];
     if (g === 255) { out.set(BASE3, i * 3); continue; }
@@ -480,7 +492,7 @@ export async function body3D(container, spots, onPick, opts = {}) {
   for (let i = 0; i < m.nv; i++) { p2[i * 3] = m.pos[i * 3]; p2[i * 3 + 1] = m.pos[i * 3 + 2]; p2[i * 3 + 2] = -m.pos[i * 3 + 1];
     n2[i * 3] = m.nrm[i * 3] / 127; n2[i * 3 + 1] = m.nrm[i * 3 + 2] / 127; n2[i * 3 + 2] = -m.nrm[i * 3 + 1] / 127; }
   geo.setAttribute('position', new THREE.BufferAttribute(p2, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(n2, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.setIndex(new THREE.BufferAttribute(m.idx, 1));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); let curIx = meshIndex(m, spots); geo.setIndex(new THREE.BufferAttribute(curIx, 1));
   const scene = new THREE.Scene(); scene.background = new THREE.Color(0xFFFFFF);
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .85, metalness: 0, side: THREE.DoubleSide });
   const obj = new THREE.Mesh(geo, mat); const cz = (m.meta.zmin + m.meta.zmax) / 2; obj.position.y = -cz; const root = new THREE.Group(); root.add(obj); root.scale.setScalar(2 / (m.meta.zmax - m.meta.zmin)); scene.add(root);
@@ -507,7 +519,7 @@ export async function body3D(container, spots, onPick, opts = {}) {
     tapT = Date.now(); });
   renderer.domElement.addEventListener('pointerup', e => { if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 8) return; const r = renderer.domElement.getBoundingClientRect();
     ray.setFromCamera({ x: (e.clientX - r.left) / r.width * 2 - 1, y: -((e.clientY - r.top) / r.height) * 2 + 1 }, camera);
-    const hit = ray.intersectObject(obj)[0]; if (!hit) return; const g = m.grp[hit.face.a]; if (g > 0 && g < 255) { const id = order[(g - 1) >> 1]; onPick && onPick(id + ':' + ((g - 1) % 2 ? 'RIGHT' : 'LEFT')); } });
+    const hit = ray.intersectObject(obj)[0]; if (!hit) return; const g = m.grp[hit.face.a]; if (g > 0 && g < 255 && order[(g - 1) >> 1]) { const id = order[(g - 1) >> 1]; onPick && onPick(id + ':' + ((g - 1) % 2 ? 'RIGHT' : 'LEFT')); } });
   // маркеры состояния поверх модели. Видимость без трассировки лучей: маркер виден, если его сторона тела смотрит на камеру
   // (трассировка по сетке на каждом кадре тормозила вращение на телефонах)
   let marks = [];
@@ -540,7 +552,7 @@ export async function body3D(container, spots, onPick, opts = {}) {
   const api = { turn(back) { isBack = back; const d = camera.position.distanceTo(ctl.target); flyTo(ctl.target, d, back); },
     focus(zone) { const [y, d] = ZONES[zone] || ZONES.all; flyTo(new THREE.Vector3(0, y, 0), d, isBack); },
     /** Новая раскраска и маркеры (правка специалиста) без пересоздания сцены и сброса камеры. */
-    update(spots) { paint(spots, col); target.set(col); geo.attributes.color.needsUpdate = true; buildMarks(spots); dirty = true; },
+    update(spots) { paint(spots, col); target.set(col); geo.attributes.color.needsUpdate = true; { const ix = meshIndex(m, spots); if (ix !== curIx) { curIx = ix; geo.setIndex(new THREE.BufferAttribute(ix, 1)); } } buildMarks(spots); dirty = true; },
     dispose() { if (!alive) return; alive = false; ctl.dispose(); geo.dispose(); mat.dispose(); renderer.dispose(); try { renderer.forceContextLoss(); } catch (e) {} } };
   anim(); return api;
 }
