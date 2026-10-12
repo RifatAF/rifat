@@ -60,8 +60,11 @@ export async function cleanup() {
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   const a = String(req.query.a || '');
+  const revoked = async id => { try { const { blobs } = await list({ prefix: `relayrevoked/${id}`, limit: 1 }); return blobs.length > 0; } catch (e) { return false; } };
   try {
-    if (req.method === 'POST' && a !== 'new') {
+    // жива ли ссылка: специалист мог удалить клиента и закрыть доступ (ответ без данных, только да/нет)
+    if (req.method === 'GET' && a === 'alive') { const id = String(req.query.id || ''); if (!ID.test(id)) return res.status(400).json({ error: 'bad id' }); return res.status(200).json({ alive: !(await revoked(id)) }); }
+    if (req.method === 'POST' && a !== 'new' && a !== 'revoke') {
       const id = String(req.query.id || '');
       if (!ID.test(id)) return res.status(400).json({ error: 'bad id' });
       if (!parse(id) && !legacyOk()) return res.status(410).json({ error: 'link expired' });
@@ -70,6 +73,7 @@ export default async function handler(req, res) {
       // принимаем только конверт шифрования, а не произвольные данные
       let env; try { env = JSON.parse(body); } catch (e) { return res.status(400).json({ error: 'bad body' }); }
       if (!env || env.v !== 1 || typeof env.iv !== 'string' || typeof env.ct !== 'string') return res.status(400).json({ error: 'bad body' });
+      if (await revoked(id)) return res.status(410).json({ error: 'revoked' });
       const { blobs } = await list({ prefix: `relay/${id}/`, limit: PER_ID });
       if (blobs.length >= PER_ID) return res.status(429).json({ error: 'too many' });
       const name = `relay/${id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`;
@@ -80,6 +84,12 @@ export default async function handler(req, res) {
     const u = await currentUser(req);
     if (!u || u.role !== 'specialist') return res.status(401).json({ error: 'login' });
     await rememberOwner(u).catch(() => {}); // старые ссылки тоже начнут присылать уведомления, как только специалист откроет кабинет
+    // специалист удалил клиента: ящик закрывается навсегда, неразобранные результаты стираются
+    if (req.method === 'POST' && a === 'revoke') { const id = String(req.query.id || ''); if (!ID.test(id)) return res.status(400).json({ error: 'bad id' });
+      if (!owns(u, id)) return res.status(403).json({ error: 'forbidden' });
+      await put(`relayrevoked/${id}.json`, JSON.stringify({ at: Date.now() }), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true });
+      const { blobs } = await list({ prefix: `relay/${id}/`, limit: 100 }); if (blobs.length) await del(blobs.map(b => b.url));
+      return res.status(200).json({ ok: true }); }
     if (req.method === 'POST') { // a === 'new': новый подписанный ящик
       if (!SECRET) return res.status(503).json({ error: 'not configured' });
       const day = new Date().toISOString().slice(0, 10);

@@ -235,7 +235,7 @@ function slotWidget(s) {
     <div style="height:6px;border-radius:3px;background:var(--surface);margin-top:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${full ? 'var(--over)' : 'var(--ink)'}"></div></div>
     ${full ? '<div style="font-size:13px;margin-top:8px">Новых клиентов тестируйте свободно. Ретест еще одного клиента откроется в PRO или когда закончится 30 дней ведения у кого-то из текущих.</div>' : ''}</div></div>`;
 }
-export async function proHome(query = '', pulled = null) { if (device.webgl2) preload3D(); // схемы в карточках и отчетах рисуются по 3D-модели
+export async function proHome(query = '', pulled = null) { syncAutoCalib().catch(() => {}); if (device.webgl2) preload3D(); // схемы в карточках и отчетах рисуются по 3D-модели
   track('pro_open');
   localStorage.setItem('bp_mode', 'pro');
   const lc = await legacyCount().catch(() => 0);
@@ -310,7 +310,7 @@ export async function proHome(query = '', pulled = null) { if (device.webgl2) pr
     const it = (id, icon, t, sub) => `<button class="row-link" data-act="${id}">${ic(icon, 's')}<span style="flex:1;text-align:left"><b style="font-weight:600">${t}</b><br><small class="sub" style="font-size:13px">${sub}</small></span>${ic('chevron-right', 's chev')}</button>`;
     const acts = [['qs', 'camera', ({ trainer: 'Скрининг клиента', manual: 'До сеанса', sport: 'Спортивный тест' })[sp] || 'Новая оценка', 'Клиент рядом, тест на этом телефоне'],
       ['join', 'mail', 'Тест по ссылке', 'Клиент пройдет тест дома'], ['rtq', 'rotate-ccw', 'Ретест', 'Повторный тест того же клиента'], ['repq', 'file-text', 'Отчёт клиенту', 'PDF, картинка или ссылка'],
-      ['cmpq', 'arrow-right-left', 'Было → стало', 'Сравнить два теста'], ...(isBeta() ? [['calq', 'star', 'Калибровка (бета)', 'Вы знаете проблему человека, он проходит тест, данные уходят на настройку']] : [])];
+      ['cmpq', 'arrow-right-left', 'Было → стало', 'Сравнить два теста'], ...(isBeta() && (meSync() || {}).admin ? [['calq', 'star', 'Калибровка (бета)', 'Вы знаете проблему человека, он проходит тест, данные уходят на настройку']] : [])];
     // чаще используемое наверху: список подстраивается под специалиста
     d.innerHTML = `<div><h2>Что сделать?</h2><div class="group" style="margin-top:var(--s3)">${byUse('act', acts, x => x[0]).map(x => it(...x)).join('')}</div></div>`;
     document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
@@ -338,6 +338,38 @@ function pickClient(title, cs, then) {
   d.querySelector('#pcq').oninput = e => draw(e.target.value); draw('');
 }
 
+/** Смена режима клиент ↔ специалист: администратору всегда; в бете всем, кроме клиентов, пришедших по ссылке специалиста; в полном режиме только администратору. */
+export function canSwitchMode() { const u = meSync(); if (u && u.admin) return true; if (!isBeta()) return false; try { return !localStorage.getItem('bp_inv'); } catch (e) { return false; } }
+/** Одна точка обратной связи вместо четырех похожих пунктов. */
+function feedbackHub() { const d = document.createElement('div'); d.className = 'sheet';
+  const it = (id, icon, t, sub) => `<button class="row-link" data-f="${id}">${ic(icon, 's')}<span style="flex:1;text-align:left"><b style="font-weight:600">${t}</b><br><small class="sub" style="font-size:13px">${sub}</small></span>${ic('chevron-right', 's chev')}</button>`;
+  d.innerHTML = `<div><h2>Обратная связь</h2><div class="group" style="margin-top:var(--s3)">
+    ${it('bug', 'message-square', 'Ошибка, неудобство или идея', 'Экран и устройство приложатся сами')}
+    ${isBeta() ? it('rate', 'star', 'Оценить работу с приложением', '30 секунд, 5 вопросов') : ''}
+    <a class="row-link" href="https://t.me/${DEV.tg}" target="_blank" rel="noopener"><img src="${DEV.photo}" alt="" width="22" height="22" style="border-radius:50%;object-fit:cover"><span style="flex:1"><b style="font-weight:600">Написать разработчику</b><br><small class="sub" style="font-size:13px">Telegram, отвечаю сам</small></span>${ic('chevron-right', 's chev')}</a></div>
+    <button class="btn ghost" id="fx" style="margin-top:8px;border:0">Закрыть</button></div>`;
+  document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; d.querySelector('#fx').onclick = () => d.remove();
+  d.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { d.remove(); if (b.dataset.f === 'bug') bugSheet(); else exitSurvey('menu'); }); }
+/** Удаление кабинета: все клиенты, оценки и записи на этом телефоне, ссылки клиентов закрываются; по желанию и аккаунт на сервере. С защитой от случайного нажатия. */
+async function wipeCabinet() {
+  const n = (await all('clients')).filter(c => !c.demo).length;
+  go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>Удалить кабинет</b></div></div>
+   <div class="pad" style="display:flex;flex-direction:column;gap:12px;padding-bottom:var(--s5)">
+    <div class="card" style="border:1px solid var(--over-t);font-size:15px;line-height:1.45">Будут удалены ${n} ${plural(n)}, все оценки, записи движения, отчеты и настройки кабинета на этом телефоне. Ссылки ваших клиентов перестанут работать. Вернуть можно только из сохраненной копии.</div>
+    <button class="btn line" id="wbk" style="height:48px">${ic('download', 's')}Сначала сохранить копию</button>
+    ${meSync() ? `<label class="row" style="gap:10px;font-size:14px;align-items:flex-start"><input type="checkbox" id="wacc" style="width:20px;height:20px;flex:none;accent-color:var(--ink)"><span>Удалить и аккаунт на сервере (вход, тариф, приглашения)</span></label>` : ''}
+    <input id="wword" class="field" style="height:48px" placeholder="Напишите УДАЛИТЬ" autocomplete="off">
+    <button class="btn" id="wgo" style="height:48px;background:var(--over-t)" disabled>Удалить навсегда</button></div></div>`);
+  $('#back').onclick = () => proHome(); $('#wbk').onclick = () => backup();
+  $('#wword').oninput = e => { $('#wgo').disabled = e.target.value.trim().toUpperCase() !== 'УДАЛИТЬ'; };
+  $('#wgo').onclick = async () => { if (!(await confirm2('Точно удалить кабинет? Это нельзя отменить.', 'Удалить'))) return; $('#wgo').disabled = true; $('#wgo').textContent = 'Удаляю…';
+    const cs = await all('clients').catch(() => []);
+    await Promise.all(cs.filter(c => c.invite && c.invite.id).map(c => fetch('/api/relay?a=revoke&id=' + encodeURIComponent(c.invite.id), { method: 'POST' }).catch(() => {})));
+    const name = nameFor(); try { if (dbp) (await dbp).close(); } catch (e) {} dbp = null; try { indexedDB.deleteDatabase(name); } catch (e) {}
+    for (const k of Object.keys(localStorage)) if (/^bp_(use|sp|ntf|nps|exit_at|sess|cnt_|share_|other_|pending|prog_at|inst)/.test(k)) localStorage.removeItem(k);
+    if ($('#wacc') && $('#wacc').checked) { await fetch('/api/auth?a=delete', { method: 'POST' }).catch(() => {}); await logout().catch(() => {}); }
+    localStorage.removeItem('bp_mode'); toast('Кабинет удален'); location.replace('/'); };
+}
 async function proMenu() {
   const hasSnap = await snapLoad().then(Boolean).catch(() => false);
   const d = document.createElement('div'); d.className = 'sheet'; const p = tariff(), u = meSync();
@@ -358,35 +390,32 @@ async function proMenu() {
     ${h('Помощь')}<div class="group">
       ${canInstall() ? r('minst', 'download', 'Установить приложение на телефон') : ''}
       ${r('demo2', 'file-text', 'Пример оценки')}
-      ${isBeta() ? r('mexit', 'star', 'Оценить работу с приложением') : ''}
-      ${r('mbug', 'info', 'Сообщить о проблеме')}
-      <a class="row-link" href="https://t.me/${DEV.tg}" target="_blank" rel="noopener"><img src="${DEV.photo}" alt="" width="22" height="22" style="border-radius:50%;object-fit:cover"><span>Написать разработчику</span>${ic('chevron-right', 's chev')}</a>
-      ${r('mfb', 'message-square', 'Отзыв или идея')}
+      ${r('mfb', 'message-square', 'Обратная связь: ошибка, идея, оценка')}
       ${r('mexp', 'info', 'Мои проверки: что подтверждается')}
       <a class="row-link" href="/privacy" target="_blank">${ic('shield-check', 's')}<span>Конфиденциальность</span>${ic('chevron-right', 's chev')}</a></div>
     ${h('Аккаунт')}<div class="group">
       ${u && u.admin ? r('mst', 'settings', 'Администрирование') : ''}
-      ${isBeta() ? r('mcal2', 'download', 'Калибровка: сохранить файл себе') : ''}
-      ${r('mc', 'rotate-ccw', 'Перейти в режим клиента')}
+      ${u && u.admin ? r('mcal2', 'download', 'Калибровка: сохранить файл себе') : ''}
+      ${canSwitchMode() ? r('mc', 'rotate-ccw', 'Перейти в режим клиента') : ''}
       ${u ? `<button class="row-link" id="mo">${ic('log-out', 's')}<span>Выйти: ${esc(u.name)}</span></button>` : ''}</div>
+    <details style="margin-top:var(--s4)"><summary class="sub" style="font-size:13px;cursor:pointer">Опасная зона</summary><div class="group" style="margin-top:var(--s2)"><button class="row-link" id="mwipe" style="color:var(--over-t)">${ic('x', 's')}<span>Удалить кабинет и всех клиентов</span></button></div></details>
     <button class="btn" id="mx" style="margin-top:var(--s4)">Закрыть</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
   d.querySelector('#mb').onclick = () => { d.remove(); backup(); };
   if (d.querySelector('#mst')) d.querySelector('#mst').onclick = () => { d.remove(); adminScreen(); };
   if (d.querySelector('#mcal2')) d.querySelector('#mcal2').onclick = () => { d.remove(); calibExport(); };
-  d.querySelector('#mbug').onclick = () => { d.remove(); bugSheet(); };
-  if (d.querySelector('#mexit')) d.querySelector('#mexit').onclick = () => { d.remove(); exitSurvey('menu'); };
+  d.querySelector('#mwipe').onclick = () => { d.remove(); wipeCabinet(); };
   if (d.querySelector('#mund')) d.querySelector('#mund').onclick = () => { d.remove(); undoRestore(); };
   d.querySelector('#mexp').onclick = () => { d.remove(); experienceScreen(); };
   d.querySelector('#demo2').onclick = () => { d.remove(); openDemo(); };
   if (d.querySelector('#minst')) d.querySelector('#minst').onclick = () => { d.remove(); installNow(); };
-  d.querySelector('#mfb').onclick = () => { d.remove(); feedbackSheet('menu'); };
+  d.querySelector('#mfb').onclick = () => { d.remove(); feedbackHub(); };
   d.querySelector('#msp').onclick = () => { d.remove(); specialtyScreen(proHome); };
   d.querySelector('#mr').onchange = e => { const f = e.target.files[0]; d.remove(); if (f) restore(f); };
   d.querySelector('#mp').onclick = async () => { d.remove(); profileForm(); };
   d.querySelector('#mref').onclick = () => { d.remove(); referralSheet(); };
   if (d.querySelector('#mbal')) d.querySelector('#mbal').onclick = () => { d.remove(); balanceScreen(); };
-  d.querySelector('#mc').onclick = () => { localStorage.setItem('bp_mode', 'client'); d.remove(); onboarding(); };
+  if (d.querySelector('#mc')) d.querySelector('#mc').onclick = () => { localStorage.setItem('bp_mode', 'client'); d.remove(); onboarding(); };
   if (d.querySelector('#mo')) d.querySelector('#mo').onclick = async () => { d.remove(); const out = async () => { await logout(); localStorage.removeItem('bp_mode'); onboarding(); }; if (isBeta()) exitSurvey('logout', out); else out(); };
   d.querySelector('#mx').onclick = () => d.remove();
   d.querySelector('#mcal').onclick = () => { d.remove(); calendarScreen(); };
@@ -519,7 +548,10 @@ export async function clientCard(id) {
   document.querySelectorAll('[data-vy],[data-vn]').forEach(b => b.onclick = async () => { const vid = b.dataset.vy || b.dataset.vn, v = (c.visits || []).find(x => x.id === vid); if (!v) return;
     if (b.dataset.vy) v.done = true; else c.visits = c.visits.filter(x => x.id !== vid); await put('clients', c); clientCard(id); });
   document.querySelectorAll('[data-a]').forEach(el => el.onclick = () => result(el.dataset.a));
-  $('#del').onclick = async () => { if (!(await confirm2(`Удалить ${c.name} и все оценки? Это нельзя отменить.`, 'Удалить'))) return; for (const a of as) { await del('assessments', a.id); await del('poses', a.id); } await del('clients', id); syncReminders().catch(() => {}); proHome(); };
+  $('#del').onclick = async () => { if (!(await confirm2(`Удалить ${c.name} и все оценки? Ссылка клиента перестанет работать, у него пропадет доступ к вашим рекомендациям. Это нельзя отменить.`, 'Удалить'))) return;
+    // закрываем ссылку клиента на сервере: новые результаты не придут, а его приложение покажет, что доступ закрыт
+    if (c.invite && c.invite.id) await fetch('/api/relay?a=revoke&id=' + encodeURIComponent(c.invite.id), { method: 'POST' }).catch(() => {});
+    for (const a of as) { await del('assessments', a.id); await del('poses', a.id); } await del('clients', id); syncReminders().catch(() => {}); toast('Клиент удален'); proHome(); };
 }
 // все предстоящие события кабинета: ретесты (дата из последней оценки) и консультации
 async function upcoming(days = 60) {
@@ -1344,13 +1376,33 @@ async function calibSheet(edit) {
       clientCard(c.id); }
     catch (e) { b.disabled = false; b.textContent = 'Создать ссылку'; toast('Не удалось создать ссылку: ' + e.message); } };
 }
+/** Вердикты специалиста по разбору: свои правки мышц и «Подтверждаю / Убрать» у гипотез приложения.
+ *  hands: проверено руками (мышечный тест или кнопки проверки), а не просто мнение. */
+function verdictsOf(a) { const out = new Map(), raw = (() => { try { return spots(analyze(a, C)); } catch (e) { return []; } })();
+  for (const [k, v] of Object.entries(a.check || {})) { const app = raw.find(x => x.key === k); const [id, side] = k.split(':');
+    if (v === 'yes' && app && app.k !== 'OK') out.set(k, { muscle: id, side, state: app.k, why: 'подтверждено руками', hands: true });
+    if (v === 'no') out.set(k, { muscle: id, side, state: 'OK', why: 'не подтвердилось руками', hands: true }); }
+  for (const [k, v] of Object.entries(a.hyp || {})) { const [id, side] = k.split(':'), why = (a.hypWhy || {})[k] || ''; out.set(k, { muscle: id, side, state: v, why, hands: /тест|рук/i.test(why) || (a.check || {})[k] != null }); }
+  return [...out.values()]; }
+/** Фоновая калибровка (бета): проверки специалиста в разборах уходят без имени, как только изменились. Раз в 10 минут, при открытии главной. */
+let autoCalAt = 0;
+async function syncAutoCalib() { if (!isBeta() || !meSync() || Date.now() - autoCalAt < 10 * 60e3) return; autoCalAt = Date.now();
+  const as = (await all('assessments').catch(() => [])).filter(a => !a.demo);
+  for (const a of as) { const v = verdictsOf(a); if (!v.length) continue; const h = JSON.stringify(v); if (a.autoCal === h) continue;
+    const c = await get('clients', a.clientId).catch(() => null); if (!c || c.demo) continue;
+    // свободный текст (жалобы) в фоновую калибровку не идет: там могут быть имена
+    const sr = c.selfReport ? { sex: c.selfReport.sex || '', age: c.selfReport.dob ? Math.floor((Date.now() - Date.parse(c.selfReport.dob)) / 31557600000) : null } : null;
+    const body = JSON.stringify({ app: location.host, case: { auto: true, caseId: (a.id || '').slice(0, 8), created: new Date(a.date).toISOString(), expert: { labels: [], note: '' }, selfReport: sr,
+      assessments: [{ date: new Date(a.date).toISOString(), protocol: a.protocol, pain: a.pain, quality: a.quality, limits: a.limits, snapshot: a.snapshot, side: a.side, moves: a.moves, specialistEdits: v }] } });
+    const r = await fetch('/api/calib', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).catch(() => null);
+    if (r && r.ok) { a.autoCal = h; await put('assessments', a); } else break; } }
 /** Один случай калибровки: оценка специалиста, анкета, замеры, гипотезы приложения, запись движения. anon: без имени (для отправки разработчику). */
 async function calibCase(c, anon) { const as = await byClient(c.id), out = [];
   for (const a of as) { const pp = await get('poses', a.id), sp = spots(analyze(a, C)).filter(s => s.k !== 'OK' && (!s.derived || s.byChain)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
     out.push({ date: new Date(a.date).toISOString(), protocol: a.protocol, pain: a.pain, clientNote: a.clientNote || '', quality: a.quality, limits: a.limits, snapshot: a.snapshot, side: a.side, moves: a.moves,
       findings: analyze(a, C).findings.map(f => f.observed), appHypotheses: sp.slice(0, 10).map(s => ({ muscle: s.id, name: C.muscles[s.id].name, side: s.side, state: s.k, tone: Math.round(s.tone * 100) / 100 })),
       // правки специалиста в карточке («Норма», «Слабость» и т.д.) отдельно: в гипотезы приложения они больше не подмешиваются
-      specialistEdits: a.hyp ? Object.entries(a.hyp).map(([k, v]) => { const [id, side] = k.split(':'); return { muscle: id, side, state: v, why: (a.hypWhy || {})[k] || '' }; }) : [], poses: pp && pp.poses || {} }); }
+      specialistEdits: verdictsOf(a), poses: pp && pp.poses || {} }); }
   const sr = c.selfReport ? { ...c.selfReport } : null; if (sr && anon) { if (sr.dob) sr.age = Math.floor((Date.now() - Date.parse(sr.dob)) / 31557600000); delete sr.dob; delete sr.name; delete sr.contact; delete sr.phone; }
   return { ...(anon ? { caseId: c.id.slice(0, 8) } : { name: c.name }), created: new Date(c.created).toISOString(), expert: { labels: c.calib.labels.map(l => ({ muscle: l.id, name: C.muscles[l.id] ? C.muscles[l.id].name : l.id, side: l.side, state: l.k })), note: c.calib.note },
     selfReport: sr, assessments: out }; }

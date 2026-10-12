@@ -42,3 +42,26 @@ await save(OUT + '/voice/index.json', JSON.stringify(idx));
 let n = 0;
 for (let i = 0; i < files.length; i += 10) await Promise.all(files.slice(i, i + 10).map(async f => { if (await exists(OUT + '/' + f)) return; await save(OUT + '/' + f, await get(f)); n++; }));
 console.log(`assets: ${n} файлов скопировано, всего ${files.length + 1}`);
+
+// Озвучка фраз, для которых еще нет записи (упражнения на «вы», новые подсказки): нейроголос ru-RU-DmitryNeural при сборке.
+// Новые записи попадают в voice/index.json на сайте, и следующая сборка просто копирует их. VOICE_REGEN_ALL=1 переозвучивает все фразы одним голосом.
+// Ошибка озвучки не валит сборку: приложение тогда читает фразу голосом телефона.
+try {
+  const { sayText } = await import('../js/saytext.js');
+  const { readFile } = await import('node:fs/promises'); const crypto = await import('node:crypto');
+  const ex = JSON.parse(await readFile('data/exercises.json', 'utf8')).exercises;
+  const extra = JSON.parse(await readFile('data/voice-extra.json', 'utf8').catch(() => '[]'));
+  const regen = process.env.VOICE_REGEN_ALL === '1', voiceName = process.env.VOICE_TTS || 'ru-RU-DmitryNeural';
+  const need = [...new Set([...ex.map(sayText), ...extra, ...(regen ? Object.keys(idx) : [])])].filter(t => t && (regen || !idx[t]));
+  if (need.length) {
+    const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
+    const tts = new MsEdgeTTS(); await tts.setMetadata(voiceName, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+    let made = 0; const t0 = Date.now();
+    for (const text of need) { if (Date.now() - t0 > 240000) break;
+      try { const { audioStream } = tts.toStream(text); const ch = []; await new Promise((ok, bad) => { audioStream.on('data', c => ch.push(c)); audioStream.on('end', ok); audioStream.on('close', ok); audioStream.on('error', bad); });
+        const buf = Buffer.concat(ch); if (buf.length < 2000) continue;
+        const f = crypto.createHash('sha1').update(voiceName + text).digest('hex').slice(0, 16) + '.mp3'; await save(OUT + '/voice/' + f, buf); idx[text] = f; made++; } catch (e) { console.log('voice: не озвучено', text.slice(0, 40), e.message); } }
+    try { tts.close(); } catch (e) {}
+    await save(OUT + '/voice/index.json', JSON.stringify(idx)); console.log(`voice: озвучено ${made} из ${need.length} (${voiceName})`);
+  }
+} catch (e) { console.log('voice: озвучка пропущена:', e.message); }

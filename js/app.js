@@ -1,8 +1,8 @@
 // BodyPassport web: тот же поток, тексты и дизайн, что в Android-версии.
 import { P, F, G, Movement, sideView, levelled, analyze, fmt, standSnapshot, sideSnapshot, features } from './analysis.js';
 import { track, vasSave, vasLog, vasStats, vasDelta, channel, screenView } from './track.js';
-import { rateCard, bindRate, installCard, bindInstall, installNow, canInstall, feedbackSheet, shareApp, appLink, mountBugTab, mountBetaBar, exitSurvey, testSurvey } from './grow.js';
-import { proHome, motionViewer, consumerPoses } from './pro.js';
+import { bugSheet, rateCard, bindRate, installCard, bindInstall, installNow, canInstall, feedbackSheet, shareApp, appLink, mountBugTab, mountBetaBar, exitSurvey, testSurvey } from './grow.js';
+import { proHome, motionViewer, consumerPoses, canSwitchMode } from './pro.js';
 import { seal } from './core.js';
 import { calibReport, reportCSV, caseLines, RES_NAMES, learnWeights } from './calibreport.js';
 import { RULE_NAMES } from './evidence.js';
@@ -10,6 +10,7 @@ import { applyRuleWeights } from './core.js';
 import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, logout, deleteAccount, betaUsers, providers, config, setAppMode } from './auth.js';
 import { exFigure, hasFigure } from './exfig.js';
 import { recordTest, saveBlob } from './core.js';
+import { sayText } from './saytext.js';
 import { ready3D, C, loadContent, voice, sleep, phone, startMotion, initPose, poseInfo, prefetchPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, RAMP_CSS, body3D, preload3D, device, keepAwake, ic, toast, reduceMotion } from './core.js';
 export { ic, toast };
 
@@ -181,8 +182,8 @@ export function onboarding() {
     <div class="pad" style="margin-top:24px"><h1>Тест движения за 3 минуты</h1>
       <p class="sub" style="margin-top:12px">Встаньте перед камерой телефона и сделайте несколько простых движений. Вы увидите, какие мышцы перегружены, а какие работают слабо, и получите упражнения. Это оценка движения, а не диагноз.</p>
       ${INV() ? '' : `<div class="row" style="margin-top:20px"><img src="img/rifat.jpg" alt="Рифат Аюпов" width="44" height="44" style="border-radius:50%;object-fit:cover;flex:none"><div><b style="font-size:14px;font-weight:600;display:block">Методика Рифата Аюпова</b><span style="font-size:13px;color:var(--sub)">кинезиотерапевт, биомеханик</span></div></div>`}</div>
-    <div class="dock"><button class="btn" id="next">Начать тест <span class="meta">· бесплатно</span></button>${myReports().length || tests().length ? '<button class="btn line" id="mycab">Мой кабинет</button>' : ''}<button class="btn ghost" id="pro">Я специалист: вход в кабинет</button>${canInstall() ? `<button class="link" id="inst1" style="display:block;margin:4px auto 0;font-size:14px;color:var(--sub)">${ic('download', 's')} Установить приложение</button>` : ''}</div></div>`);
-  $('#next').onclick = () => { track('onb_done'); prep(); }; $('#pro').onclick = () => openPro(); if ($('#mycab')) $('#mycab').onclick = clientHome; if ($('#inst1')) $('#inst1').onclick = () => installNow();
+    <div class="dock"><button class="btn" id="next">Начать тест <span class="meta">· бесплатно</span></button>${myReports().length || tests().length ? '<button class="btn line" id="mycab">Мой кабинет</button>' : ''}${localStorage.getItem('bp_inv') && !canSwitchMode() ? '' : `<button class="btn ghost" id="pro">Я специалист: вход в кабинет</button>`}${canInstall() ? `<button class="link" id="inst1" style="display:block;margin:4px auto 0;font-size:14px;color:var(--sub)">${ic('download', 's')} Установить приложение</button>` : ''}</div></div>`);
+  $('#next').onclick = () => { track('onb_done'); prep(); }; if ($('#pro')) $('#pro').onclick = () => openPro(); if ($('#mycab')) $('#mycab').onclick = clientHome; if ($('#inst1')) $('#inst1').onclick = () => installNow();
 }
 
 // ---------- 2. подготовка ----------
@@ -684,7 +685,7 @@ async function sendResult(r) {
 }
 // клиенту по ссылке специалиста: дата повторного теста и кнопка «в календарь телефона» с напоминанием за день
 // специалист открыл ссылку, присланную как клиенту (например, коллега показал приложение): объясняем и ведем в свой кабинет
-function specHint() { return '<div class="pad" style="padding-top:8px;text-align:center"><button class="link" id="iamsp" style="font-size:14px;color:var(--sub)">Вы специалист? Откройте свой кабинет</button></div>'; }
+function specHint() { if (!canSwitchMode()) return ''; return '<div class="pad" style="padding-top:8px;text-align:center"><button class="link" id="iamsp" style="font-size:14px;color:var(--sub)">Вы специалист? Откройте свой кабинет</button></div>'; }
 function bindSpecHint() { const b = document.getElementById('iamsp'); if (!b) return; b.onclick = () => {
   const d = document.createElement('div'); d.className = 'sheet'; const who = (INV() || {}).s || 'Коллега';
   d.innerHTML = `<div><h2>Это тест для клиента</h2><p class="sub" style="margin-top:8px">${esc(who)} прислал ссылку, по которой клиент проходит тест и результат уходит специалисту. Чтобы работать со своими клиентами, откройте собственный кабинет: в нем ваши клиенты, отчеты с вашим именем и ссылки для ваших клиентов.</p>
@@ -1005,9 +1006,11 @@ export async function workout(ids, reasons = {}) {
     // читаем название и шаги по очереди, подсвечивая текущий шаг; без записи звучит системный голос
     const lit = k => app.querySelectorAll('.st').forEach((el, n) => el.style.opacity = n <= k ? 1 : .45);
     // есть мужская запись этого упражнения (тот же голос, что в тесте): играем ее, шаги подсвечиваем по ходу записи
-    if (e.voice && voice.has(e.voice)) { const nS = Math.min(3, e.steps.length), t0 = Date.now(), per = (e.voice.length * 65) / (nS + (e.check ? 1 : 0));
+    // запись на «вы» со стороной (озвучивается при сборке), иначе старая запись, иначе голос телефона по шагам
+    const rec = [sayText(e), e.voice].find(x => x && voice.has(x));
+    if (rec) { const nS = Math.min(3, e.steps.length), t0 = Date.now(), per = (rec.length * 65) / (nS + (e.check ? 1 : 0));
       const tick = setInterval(() => { if (myTok.dead || closed) return clearInterval(tick); lit(Math.min(nS - 1, Math.floor((Date.now() - t0) / per))); }, 300);
-      await voice.speak(e.voice); clearInterval(tick); }
+      await voice.speak(rec); clearInterval(tick); }
     else { await voice.speak(e.title.split(' (')[0] + (exSide(e) ? ', ' + (exSide(e) === 'слева' ? 'левая сторона' : 'правая сторона') : ''));
       for (let k = 0; k < Math.min(3, e.steps.length); k++) { if (myTok.dead || closed) return; lit(k); await voice.speak(e.steps[k]); }
       if (e.check && !myTok.dead && !closed) await voice.speak(e.check); }
@@ -1125,26 +1128,23 @@ export function settings() {
     <p class="ondevice" style="margin-top:var(--s3)">${ic('shield-check', 's')}Результаты хранятся только в этом браузере.</p>
     <div id="acc"></div>
     <div class="group" style="margin-top:var(--s3)">
-      <button class="row-link" id="fbk">${ic('message-square', 's')}<span>Отзыв или идея</span>${ic('chevron-right', 's chev')}</button>
+      <button class="row-link" id="fbk">${ic('message-square', 's')}<span>Ошибка, неудобство или идея</span>${ic('chevron-right', 's chev')}</button>
       ${canInstall() ? `<button class="row-link" id="sinst">${ic('download', 's')}<span>Установить приложение</span>${ic('chevron-right', 's chev')}</button>` : ''}
       <button class="row-link" id="shapp">${ic('share', 's')}<span>Поделиться приложением</span>${ic('chevron-right', 's chev')}</button>
-      <button class="row-link" id="topro">${ic('user-plus', 's')}<span>Кабинет специалиста</span>${ic('chevron-right', 's chev')}</button>
+      ${canSwitchMode() ? `<button class="row-link" id="topro">${ic('user-plus', 's')}<span>Кабинет специалиста</span>${ic('chevron-right', 's chev')}</button>` : ''}
       <a class="row-link" href="/privacy" target="_blank">${ic('shield-check', 's')}<span>Конфиденциальность</span>${ic('chevron-right', 's chev')}</a>
-      <button class="row-link" id="wipe" style="color:var(--over-t)">${ic('x', 's')}<span>Удалить мои результаты</span></button></div>
+      <button class="row-link" id="wipe" style="color:var(--over-t)">${ic('x', 's')}<span>Удалить все мои данные</span></button></div>
     <div class="row" style="justify-content:center;gap:16px;margin-top:var(--s3);font-size:13px"><a href="/terms" target="_blank" style="color:var(--sub);font-weight:500">Соглашение</a><a href="/licenses" target="_blank" style="color:var(--sub);font-weight:500">Лицензии</a></div>
     <p style="margin-top:var(--s3);font-size:12px;color:var(--sub);line-height:1.45">Автор методики: Рифат Аюпов, биомеханик, кинезиотерапевт, rifataiupov.com. Распознавание позы: MediaPipe (Google, Apache 2.0). 3D-модель: Z-Anatomy на основе BodyParts3D (DBCLS), CC BY-SA.</p>
     <button class="btn" id="cl" style="margin-top:var(--s4)">Готово</button></div>`;
   document.body.appendChild(d);
-  d.querySelector('#fbk').onclick = () => { d.remove(); feedbackSheet('settings'); };
+  d.querySelector('#fbk').onclick = () => { d.remove(); bugSheet(); };
   d.querySelector('#shapp').onclick = () => shareApp();
   if (d.querySelector('#sinst')) d.querySelector('#sinst').onclick = () => { d.remove(); installNow(); };
   d.querySelector('#vm').onclick = e => { voice.muted = !voice.muted; localStorage.setItem('bp_mute', voice.muted ? '1' : '0'); e.target.textContent = voice.muted ? 'Выкл' : 'Вкл'; };
-  d.querySelector('#wipe').onclick = async () => { if (!confirm('Удалить все результаты?')) return;
-    for (const k of ['bp_tests', 'bp_done', 'bp_profile']) localStorage.removeItem(K(k)); localStorage.removeItem('bp_sent');
-    // записи движения тоже: последняя запись клиента, копия для специалиста и неотправленный результат
-    await consumerPoses.clear().catch(() => {}); await outbox.clear().catch(() => {}); try { indexedDB.deleteDatabase('bodypassport-client'); } catch (e) {}
-    SHARED = null; d.remove(); onboarding(); };
-  d.querySelector('#topro').onclick = () => { d.remove(); openPro(); };
+  d.querySelector('#wipe').onclick = async () => { if (!confirm('Удалить все мои данные на этом телефоне: тесты, отчеты специалиста, занятия, анкету и ссылку от специалиста? Это нельзя отменить.')) return;
+    await wipeClientData(); d.remove(); toast('Данные удалены'); onboarding(); };
+  if (d.querySelector('#topro')) d.querySelector('#topro').onclick = () => { d.remove(); openPro(); };
   d.querySelector('#cl').onclick = () => d.remove(); d.onclick = e => { if (e.target === d) d.remove(); };
   accountBlock(d.querySelector('#acc'), () => d.remove());
 }
@@ -1180,6 +1180,8 @@ function screensCard(d) { const sc = Object.entries(d.screens || {}).filter(([, 
 /** Сводка калибровки: итог, таблица по мышцам, разбор каждого случая. Пересчитано текущими правилами по сохраненным замерам. */
 function calibReportScreen(rep, back, docs = []) { const t = rep.totals, K = ['match', 'side', 'opposite', 'missed', 'notMeasured', 'extra'];
   const lw = learnWeights(docs, C), wf = v => String(v).replace('.', ',');
+  const names = Object.fromEntries(docs.filter(d => d.from).map(d => [d.from.id, d.from.name || d.from.handle || d.from.id]));
+  const relRows = Object.entries(lw.reliability || {}).sort((a, b) => b[1] - a[1]);
   const pct = v => v == null ? '—' : v + '%';
   go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:17px">Сводка калибровки · ${rep.n}</b></div>
     <div class="pad" style="display:flex;flex-direction:column;gap:12px;padding-bottom:30px">
@@ -1190,7 +1192,8 @@ function calibReportScreen(rep, back, docs = []) { const t = rep.totals, K = ['m
       ${rep.muscles.map(m => `<tr>${[esc(m.name), ...K.map(k => m[k] || '·')].map((v, i) => `<td style="padding:4px 6px;border-bottom:1px solid var(--line-2);${i && v !== '·' ? 'font-weight:600' : 'color:var(--sub)'}">${v}</td>`).join('')}</tr>`).join('')}</table>
       <button class="btn line" id="csv" style="margin-top:10px;height:44px">Скачать таблицу (Excel)</button></div>
      <div class="card"><b>Обучение: веса правил</b><p class="sub" style="font-size:13px;line-height:1.4;margin-top:4px">Сколько раз вывод правила подтвердили специалисты (за) и опровергли (против). Новый вес = старый × √((за+2)/(против+2)), от 0,1 до 1,5, нужно минимум 2 мнения. ${C.weightsAt ? 'Сейчас действуют веса от ' + new Date(C.weightsAt).toLocaleString('ru') + '.' : 'Сейчас действуют исходные веса.'}</p>
-      ${lw.length ? lw.map(x => `<div class="row" style="gap:8px;margin-top:8px;font-size:14px;line-height:1.35"><span style="flex:1">${esc(RULE_NAMES[x.rule] || x.rule)} → ${esc(x.name)}<br><small class="sub">за ${x.agree}, против ${x.disagree}</small></span><b class="num" style="color:${x.nw < x.w ? 'var(--over-t)' : 'var(--ok-t,#2E7D5B)'}">${wf(x.w)} → ${wf(x.nw)}</b></div>`).join('') + `<button class="btn" id="wapply" style="margin-top:12px;height:48px">Применить ${lw.length} ${lw.length === 1 ? 'изменение' : lw.length < 5 ? 'изменения' : 'изменений'} для всех</button>` : '<p style="font-size:14px;margin-top:8px">Пока нечего менять: мало мнений по одним и тем же правилам.</p>'}
+      ${lw.length ? lw.map(x => `<div class="row" style="gap:8px;margin-top:8px;font-size:14px;line-height:1.35"><span style="flex:1">${esc(RULE_NAMES[x.rule] || x.rule)} → ${esc(x.name)}<br><small class="sub">за ${wf(x.agree)}, против ${wf(x.disagree)} · источников ${x.sources}</small></span><b class="num" style="color:${x.nw < x.w ? 'var(--over-t)' : 'var(--ok-t,#2E7D5B)'}">${wf(x.w)} → ${wf(x.nw)}</b></div>`).join('') + `<button class="btn" id="wapply" style="margin-top:12px;height:48px">Применить ${lw.length} ${lw.length === 1 ? 'изменение' : lw.length < 5 ? 'изменения' : 'изменений'} для всех</button>` : '<p style="font-size:14px;margin-top:8px">Пока нечего менять: мало мнений по одним и тем же правилам.</p>'}
+      ${relRows.length ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line-2)"><b style="font-size:14px">Доверие к сторонним специалистам</b><p class="sub" style="font-size:12px;margin-top:2px">Насколько их проверки совпадают с вашими (или с большинством). С таким весом их мнение идет в обучение.</p>${relRows.map(([id, v]) => `<div class="row" style="font-size:14px;margin-top:6px"><span style="flex:1">${esc(names[id] || id)}</span><b>${v}%</b></div>`).join('')}</div>` : ''}
       <div class="row" style="gap:8px;margin-top:8px"><button class="btn line" id="wundo" style="flex:1;height:44px;font-size:14px">Откатить последнее</button><button class="btn line" id="wreset" style="flex:1;height:44px;font-size:14px">Исходные веса</button></div></div>
      ${rep.cases.map(c => `<div class="card"><b>Случай ${esc(c.label)}</b> <span class="sub" style="font-size:13px">${esc(c.from || '')} · ${String(c.date).slice(0, 10)}</span>
        <ul style="margin:8px 0 0 18px;font-size:14px;line-height:1.45">${caseLines(c, C).map(l => `<li>${esc(l)}</li>`).join('')}</ul>
@@ -1206,6 +1209,18 @@ function calibReportScreen(rep, back, docs = []) { const t = rep.totals, K = ['m
   $('#wundo').onclick = async () => { try { await postW({ undo: true }); toast('Вернули предыдущие веса'); calibReportScreen(calibReport(docs, C), back, docs); } catch (e) { toast('Не получилось: ' + e.message); } };
   $('#wreset').onclick = async () => { if (!confirm('Вернуть исходные веса из базы знаний?')) return; try { const cur = await fetch('/api/calib?a=weights', { cache: 'no-store' }).then(r => r.json()).catch(() => ({})); await postW({ w: {}, t: cur.t || {} }); toast('Исходные веса'); calibReportScreen(calibReport(docs, C), back, docs); } catch (e) { toast('Не получилось: ' + e.message); } };
   $('#csv').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([reportCSV(rep)], { type: 'text/csv' })); a.download = `calibration-summary-${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(a); a.click(); a.remove(); };
+}
+/** Проверка 3D-модели: выбранная мышца подсвечивается слева (синим, «слабая») и справа (красным, «перегружена»), остальное серое. */
+async function check3D(back, id = 'lower_trap') {
+  const ids = Object.keys(C.muscles);
+  go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:17px">Проверка 3D-модели</b></div>
+   <div class="pad" style="padding-bottom:30px"><p class="sub" style="font-size:13px;line-height:1.4">Левая сторона человека синяя, правая красная. Если подсветилась не та мышца, напишите название через «Отзыв».</p>
+    <select id="m3" class="field" style="margin-top:10px">${ids.map(k => `<option value="${k}" ${k === id ? 'selected' : ''}>${esc(C.muscles[k].name)}</option>`).join('')}</select>
+    <div id="v3d" style="height:420px;margin-top:10px"></div><b id="m3n" style="display:block;text-align:center;margin-top:8px">${esc(C.muscles[id].name)}</b></div></div>`);
+  $('#back').onclick = back;
+  const sp = ids.map(k => ['LEFT', 'RIGHT'].map(sd => ({ id: k, side: sd, key: k + ':' + sd, k: k === id ? (sd === 'LEFT' ? 'WEAK' : 'HYPER') : 'OK', tone: k === id ? (sd === 'LEFT' ? -1 : 1) : 0, back: C.muscles[k].view === 'back' }))).flat();
+  try { const v = await body3D($('#v3d'), sp, () => {}); v.turn(C.muscles[id].view === 'back'); view3d = v; } catch (e) { $('#v3d').innerHTML = '<p class="sub">3D не загрузилось</p>'; }
+  $('#m3').onchange = e => check3D(back, e.target.value);
 }
 /** Нормы по базе: как распределен каждый замер у всех, кто прошел тест, и как часто срабатывает правило.
  *  Признак, который «срабатывает» у половины людей, не отличает проблему от нормы: порог предлагается такой, чтобы правило срабатывало примерно у каждого пятого.
@@ -1240,20 +1255,22 @@ async function normsScreen(back) {
   $('#treset').onclick = async () => { if (!confirm('Вернуть исходные пороги правил?')) return; try { await post({}); toast('Исходные пороги'); normsScreen(back); } catch (e) { toast('Не получилось: ' + e.message); } };
 }
 /** Калибровки, присланные специалистами: список, скачать один случай или все сразу одним файлом. */
-async function calibInbox(back) {
-  const j = await fetch('/api/calib', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null), items = (j && j.items) || [];
+async function calibInbox(back, flt = 'all') {
+  const j = await fetch('/api/calib', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null), allItems = (j && j.items) || [];
+  const items = allItems.filter(x => flt === 'all' || (flt === 'own' ? x.own : !x.own));
   const kb = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' МБ' : Math.max(1, Math.round(n / 1024)) + ' КБ';
   go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:17px">Калибровки · ${items.length}</b></div>
     <div class="pad" style="display:flex;flex-direction:column;gap:8px;padding-bottom:30px">
-     <p class="sub" style="font-size:14px;line-height:1.4">Сюда приходят случаи, которые специалисты отправили кнопкой «Отправить на калибровку» в карточке человека. Имен нет, только номер случая.</p>
-     ${!j ? '<div class="card">Не удалось загрузить список</div>' : items.length ? `<button class="btn" id="calrep" style="height:48px">Сводка: где приложение совпадает со специалистами</button><button class="btn line" id="calall" style="height:48px">Скачать все одним файлом</button>` + items.map(x => `<button class="row-link card" data-p="${esc(x.p)}" style="padding:12px 14px"><span style="flex:1;text-align:left"><b style="font-weight:600">${new Date(x.at).toLocaleString('ru')}</b><br><small class="sub">${kb(x.size)}</small></span>${ic('download', 's')}</button>`).join('') : '<div class="card">Пока ничего не прислали</div>'}
+     <p class="sub" style="font-size:14px;line-height:1.4">Явные калибровки (ваша оценка + тест человека) и фоновые: в бете каждая проверка специалиста в разборе («Подтверждаю», «Убрать», правка мышцы) приходит сюда сама. Имен нет.</p>
+     <div class="seg">${[['all', 'Все · ' + allItems.length], ['own', 'Мои клиенты · ' + allItems.filter(x => x.own).length], ['ext', 'Специалисты · ' + allItems.filter(x => !x.own).length]].map(([k, t]) => `<button data-flt="${k}" class="${flt === k ? 'on' : ''}">${t}</button>`).join('')}</div>
+     ${!j ? '<div class="card">Не удалось загрузить список</div>' : items.length ? `<button class="btn" id="calrep" style="height:48px">Сводка: где приложение совпадает со специалистами</button><button class="btn line" id="calall" style="height:48px">Скачать все одним файлом</button>` + items.map(x => `<button class="row-link card" data-p="${esc(x.p)}" style="padding:12px 14px"><span style="flex:1;text-align:left"><b style="font-weight:600">${new Date(x.at).toLocaleString('ru')}</b><br><small class="sub">${x.own ? 'мой клиент' : 'специалист'} · ${x.kind === 'auto' ? 'фоновая' : 'явная'} · ${kb(x.size)}</small></span>${ic('download', 's')}</button>`).join('') : '<div class="card">Пока ничего не прислали</div>'}
     </div></div>`);
-  $('#back').onclick = back;
+  $('#back').onclick = back; app.querySelectorAll('[data-flt]').forEach(b => b.onclick = () => calibInbox(back, b.dataset.flt));
   const load = p => fetch('/api/calib?p=' + encodeURIComponent(p), { cache: 'no-store' }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
   const save = (obj, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); };
   app.querySelectorAll('[data-p]').forEach(b => b.onclick = async () => { try { save(await load(b.dataset.p), 'calib-' + b.dataset.p.split('/').pop()); } catch (e) { toast('Не удалось скачать: ' + e.message); } });
   if ($('#calrep')) $('#calrep').onclick = async () => { const b = $('#calrep'); b.disabled = true; b.textContent = 'Считаю…';
-    try { const docs = []; for (const x of items) docs.push(await load(x.p)); calibReportScreen(calibReport(docs, C), () => calibInbox(back), docs); }
+    try { const docs = []; for (const x of items) docs.push(await load(x.p)); calibReportScreen(calibReport(docs, C), () => calibInbox(back, flt), docs); }
     catch (e) { b.disabled = false; b.textContent = 'Сводка'; toast('Не удалось посчитать: ' + e.message); } };
   if ($('#calall')) $('#calall').onclick = async () => { const b = $('#calall'); b.disabled = true; b.textContent = 'Собираю…';
     try { const docs = []; for (const x of items) docs.push(await load(x.p)); save({ exported: new Date().toISOString(), cases: docs }, `bodypassport-calibration-all-${new Date().toISOString().slice(0, 10)}.json`); }
@@ -1272,7 +1289,8 @@ export async function adminScreen(back) {
       <button class="row-link" id="afun">${ic('info', 's')}<span>Статистика и отзывы</span>${ic('chevron-right', 's chev')}</button>
       <button class="row-link" id="aexp">${ic('download', 's')}<span>Выгрузить данные для анализа</span>${ic('chevron-right', 's chev')}</button>
       <button class="row-link" id="acal">${ic('star', 's')}<span>Калибровки от специалистов</span>${ic('chevron-right', 's chev')}</button>
-      <button class="row-link" id="anorm">${ic('cpu', 's')}<span>Нормы по базе и пороги</span>${ic('chevron-right', 's chev')}</button></div>
+      <button class="row-link" id="anorm">${ic('cpu', 's')}<span>Нормы по базе и пороги</span>${ic('chevron-right', 's chev')}</button>
+      ${device.webgl2 ? `<button class="row-link" id="a3d">${ic('search', 's')}<span>Проверка 3D-модели: какая мышца где</span>${ic('chevron-right', 's chev')}</button>` : ''}</div>
      <div class="card" style="border:1px solid var(--over-t)"><b>Сбросить статистику и отзывы</b><p class="sub" style="font-size:13px;margin-top:4px">Удаляет все события и отзывы на сервере. Аккаунты и клиенты не трогает. Перед сбросом сделайте выгрузку.</p>
       <input id="rsw" class="field" style="margin-top:10px;height:48px" placeholder="Напишите СБРОС" autocomplete="off"><button class="btn line" id="rsb" style="margin-top:8px;height:48px;color:var(--over-t)" disabled>Сбросить</button></div>
     </div></div>`);
@@ -1283,6 +1301,7 @@ export async function adminScreen(back) {
   $('#afun').onclick = () => funnelScreen();
   $('#acal').onclick = () => calibInbox(() => adminScreen(back));
   $('#anorm').onclick = () => normsScreen(() => adminScreen(back));
+  if ($('#a3d')) $('#a3d').onclick = () => check3D(() => adminScreen(back));
   $('#aexp').onclick = async () => { const b = $('#aexp'); b.style.opacity = .5; try { await exportData(); } catch (e) { toast('Не удалось выгрузить: ' + e.message); } b.style.opacity = 1; };
   $('#rsw').oninput = e => { $('#rsb').disabled = e.target.value.trim().toUpperCase() !== 'СБРОС'; };
   $('#rsb').onclick = async () => { if (!confirm('Точно удалить всю статистику и отзывы? Это нельзя отменить.')) return;
@@ -1361,12 +1380,23 @@ export async function funnelScreen(days = 14) {
   app.querySelectorAll('[data-d]').forEach(b => b.onclick = () => funnelScreen(+b.dataset.d));
 }
 
+/** Все данные клиента на этом телефоне: тесты, отчеты, занятия, анкета, ссылка, комментарии, записи движения. Настройки (звук, камера) и согласие остаются. */
+const KEEP = /^bp_(mode|ref|src|sid|noev|back|mute|login_role|legacy_pro|legacy_client|consent)/;
+async function wipeClientData() {
+  for (const k of Object.keys(localStorage)) if (k.startsWith('bp_') && !KEEP.test(k) && !/consent/i.test(k)) localStorage.removeItem(k);
+  await consumerPoses.clear().catch(() => {}); await outbox.clear().catch(() => {}); try { indexedDB.deleteDatabase('bodypassport-client'); } catch (e) {}
+  SHARED = null; SHOW_T = null; }
+/** Специалист удалил клиента: ссылка закрыта. Убираем ее и отчеты, показываем понятное сообщение. */
+async function checkInvAlive() { const inv = INV(); if (!inv || !inv.i) return;
+  const j = await fetch('/api/relay?a=alive&id=' + encodeURIComponent(inv.i), { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
+  if (j && j.alive === false) { for (const k of ['bp_inv', 'bp_reports', 'bp_sent']) localStorage.removeItem(k); toast(`${inv.s || 'Специалист'} закрыл доступ по ссылке. Ваши тесты остались на телефоне`); } }
+
 // ---------- старт ----------
 (async () => {
   track('app_open', { r: REF, c: channel() });
   try { await loadContent(); } catch (e) { app.innerHTML = '<div class="scr pad" style="justify-content:center;gap:16px"><h1>Не удалось загрузить данные</h1><p class="sub">Проверь интернет и обнови страницу.</p><button class="btn" id="rl">Обновить</button></div>'; $('#rl').onclick = () => location.reload(); return; }
   mountBugTab(); await voice.init();
-  await Promise.all([getMe(), config()]); claimLegacy(); mountBetaBar();
+  await Promise.all([getMe(), config()]); claimLegacy(); mountBetaBar(); if (localStorage.getItem('bp_mode') !== 'pro') checkInvAlive();
   if ('serviceWorker' in navigator) {
     // когда выходит новая версия, страница один раз перезагружается сама
     let reloaded = false; const had = !!navigator.serviceWorker.controller;
