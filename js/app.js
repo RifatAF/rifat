@@ -4,7 +4,9 @@ import { track, vasSave, vasLog, vasStats, vasDelta } from './track.js';
 import { rateCard, bindRate, installCard, bindInstall, installNow, canInstall, feedbackSheet, shareApp, appLink, mountBugTab, mountBetaBar, exitSurvey } from './grow.js';
 import { proHome, motionViewer, consumerPoses } from './pro.js';
 import { seal } from './core.js';
-import { calibReport, reportCSV, caseLines, RES_NAMES } from './calibreport.js';
+import { calibReport, reportCSV, caseLines, RES_NAMES, learnWeights } from './calibreport.js';
+import { RULE_NAMES } from './evidence.js';
+import { applyRuleWeights } from './core.js';
 import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, logout, deleteAccount, betaUsers, providers, config, setAppMode } from './auth.js';
 import { exFigure, hasFigure } from './exfig.js';
 import { ready3D, C, loadContent, voice, sleep, phone, startMotion, initPose, poseInfo, prefetchPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, RAMP_CSS, body3D, preload3D, device, keepAwake, ic, toast, reduceMotion } from './core.js';
@@ -1143,7 +1145,8 @@ async function accountBlock(el, close) {
 }
 /** Панель администратора: режим приложения, участники, статистика, выгрузка данных, сброс. */
 /** Сводка калибровки: итог, таблица по мышцам, разбор каждого случая. Пересчитано текущими правилами по сохраненным замерам. */
-function calibReportScreen(rep, back) { const t = rep.totals, K = ['match', 'side', 'opposite', 'missed', 'notMeasured', 'extra'];
+function calibReportScreen(rep, back, docs = []) { const t = rep.totals, K = ['match', 'side', 'opposite', 'missed', 'notMeasured', 'extra'];
+  const lw = learnWeights(docs, C), wf = v => String(v).replace('.', ',');
   const pct = v => v == null ? '—' : v + '%';
   go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:17px">Сводка калибровки · ${rep.n}</b></div>
     <div class="pad" style="display:flex;flex-direction:column;gap:12px;padding-bottom:30px">
@@ -1153,12 +1156,22 @@ function calibReportScreen(rep, back) { const t = rep.totals, K = ['match', 'sid
      <div class="card" style="overflow-x:auto"><b>По мышцам</b><table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px"><tr>${['Мышца', ...K.map(k => RES_NAMES[k])].map(h => `<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--line-2);font-weight:600">${h}</th>`).join('')}</tr>
       ${rep.muscles.map(m => `<tr>${[esc(m.name), ...K.map(k => m[k] || '·')].map((v, i) => `<td style="padding:4px 6px;border-bottom:1px solid var(--line-2);${i && v !== '·' ? 'font-weight:600' : 'color:var(--sub)'}">${v}</td>`).join('')}</tr>`).join('')}</table>
       <button class="btn line" id="csv" style="margin-top:10px;height:44px">Скачать таблицу (Excel)</button></div>
+     <div class="card"><b>Обучение: веса правил</b><p class="sub" style="font-size:13px;line-height:1.4;margin-top:4px">Сколько раз вывод правила подтвердили специалисты (за) и опровергли (против). Новый вес = старый × √((за+2)/(против+2)), от 0,1 до 1,5, нужно минимум 2 мнения. ${C.weightsAt ? 'Сейчас действуют веса от ' + new Date(C.weightsAt).toLocaleString('ru') + '.' : 'Сейчас действуют исходные веса.'}</p>
+      ${lw.length ? lw.map(x => `<div class="row" style="gap:8px;margin-top:8px;font-size:14px;line-height:1.35"><span style="flex:1">${esc(RULE_NAMES[x.rule] || x.rule)} → ${esc(x.name)}<br><small class="sub">за ${x.agree}, против ${x.disagree}</small></span><b class="num" style="color:${x.nw < x.w ? 'var(--over-t)' : 'var(--ok-t,#2E7D5B)'}">${wf(x.w)} → ${wf(x.nw)}</b></div>`).join('') + `<button class="btn" id="wapply" style="margin-top:12px;height:48px">Применить ${lw.length} ${lw.length === 1 ? 'изменение' : lw.length < 5 ? 'изменения' : 'изменений'} для всех</button>` : '<p style="font-size:14px;margin-top:8px">Пока нечего менять: мало мнений по одним и тем же правилам.</p>'}
+      <div class="row" style="gap:8px;margin-top:8px"><button class="btn line" id="wundo" style="flex:1;height:44px;font-size:14px">Откатить последнее</button><button class="btn line" id="wreset" style="flex:1;height:44px;font-size:14px">Исходные веса</button></div></div>
      ${rep.cases.map(c => `<div class="card"><b>Случай ${esc(c.label)}</b> <span class="sub" style="font-size:13px">${esc(c.from || '')} · ${String(c.date).slice(0, 10)}</span>
        <ul style="margin:8px 0 0 18px;font-size:14px;line-height:1.45">${caseLines(c, C).map(l => `<li>${esc(l)}</li>`).join('')}</ul>
        ${c.note ? `<p style="font-size:13px;line-height:1.4;margin-top:8px"><span class="sub">Заметка (не сравнивается):</span> ${esc(c.note)}</p>` : ''}
        ${c.clientNote ? `<p style="font-size:13px;line-height:1.4;margin-top:4px"><span class="sub">Человек:</span> ${esc(c.clientNote)}</p>` : ''}</div>`).join('')}
     </div></div>`);
   $('#back').onclick = back;
+  const postW = async body => { const r = await fetch('/api/calib?a=weights', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || r.status); applyRuleWeights(C.bodymap.rules, j.w); C.weightsAt = j.at; return j; };
+  if ($('#wapply')) $('#wapply').onclick = async () => { if (!confirm('Применить новые веса? Они сразу начнут действовать у всех специалистов. Откатить можно здесь же.')) return;
+    try { const cur = await fetch('/api/calib?a=weights', { cache: 'no-store' }).then(r => r.json()).catch(() => ({ w: {} }));
+      await postW({ w: { ...(cur.w || {}), ...Object.fromEntries(lw.map(x => [x.key, x.nw])) }, n: rep.n }); toast('Веса применены'); calibReportScreen(calibReport(docs, C), back, docs); } catch (e) { toast('Не получилось: ' + e.message); } };
+  $('#wundo').onclick = async () => { try { await postW({ undo: true }); toast('Вернули предыдущие веса'); calibReportScreen(calibReport(docs, C), back, docs); } catch (e) { toast('Не получилось: ' + e.message); } };
+  $('#wreset').onclick = async () => { if (!confirm('Вернуть исходные веса из базы знаний?')) return; try { await postW({ reset: true }); toast('Исходные веса'); calibReportScreen(calibReport(docs, C), back, docs); } catch (e) { toast('Не получилось: ' + e.message); } };
   $('#csv').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([reportCSV(rep)], { type: 'text/csv' })); a.download = `calibration-summary-${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(a); a.click(); a.remove(); };
 }
 /** Калибровки, присланные специалистами: список, скачать один случай или все сразу одним файлом. */
@@ -1175,7 +1188,7 @@ async function calibInbox(back) {
   const save = (obj, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); };
   app.querySelectorAll('[data-p]').forEach(b => b.onclick = async () => { try { save(await load(b.dataset.p), 'calib-' + b.dataset.p.split('/').pop()); } catch (e) { toast('Не удалось скачать: ' + e.message); } });
   if ($('#calrep')) $('#calrep').onclick = async () => { const b = $('#calrep'); b.disabled = true; b.textContent = 'Считаю…';
-    try { const docs = []; for (const x of items) docs.push(await load(x.p)); calibReportScreen(calibReport(docs, C), () => calibInbox(back)); }
+    try { const docs = []; for (const x of items) docs.push(await load(x.p)); calibReportScreen(calibReport(docs, C), () => calibInbox(back), docs); }
     catch (e) { b.disabled = false; b.textContent = 'Сводка'; toast('Не удалось посчитать: ' + e.message); } };
   if ($('#calall')) $('#calall').onclick = async () => { const b = $('#calall'); b.disabled = true; b.textContent = 'Собираю…';
     try { const docs = []; for (const x of items) docs.push(await load(x.p)); save({ exported: new Date().toISOString(), cases: docs }, `bodypassport-calibration-all-${new Date().toISOString().slice(0, 10)}.json`); }

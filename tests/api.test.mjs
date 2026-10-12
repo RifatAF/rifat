@@ -262,3 +262,16 @@ test('калибровка: отправляет только вошедший, 
   assert.equal(one.j.case.caseId, 'abc'); assert.equal(one.j.from.id, 't_5');
   assert.equal((await call(calib, { query: { p: '../users/t_1.json' }, headers: { cookie: cookie('t_1') } })).code, 400, 'чужие пути нельзя');
 });
+
+test('веса калибровки: читают все, меняет только админ, откат и сброс', async () => {
+  const calib = (await import(R + 'calib.js')).default; user('t_1', 'specialist'); user('t_5', 'specialist');
+  assert.deepEqual((await call(calib, { query: { a: 'weights' } })).j.w, {}, 'по умолчанию пусто');
+  assert.equal((await call(calib, { method: 'POST', query: { a: 'weights' }, body: { w: { 'a|b': .5 } }, headers: { cookie: cookie('t_5') } })).code, 403);
+  await call(calib, { method: 'POST', query: { a: 'weights' }, body: { w: { 'elbow_bend_r|triceps': .35, 'bad key': 1, 'x|y': 9 } }, headers: { cookie: cookie('t_1') } });
+  assert.deepEqual((await call(calib, { query: { a: 'weights' } })).j.w, { 'elbow_bend_r|triceps': .35 }, 'лишнее отброшено');
+  await call(calib, { method: 'POST', query: { a: 'weights' }, body: { w: { 'elbow_bend_r|triceps': .3 } }, headers: { cookie: cookie('t_1') } });
+  await call(calib, { method: 'POST', query: { a: 'weights' }, body: { undo: true }, headers: { cookie: cookie('t_1') } });
+  assert.equal((await call(calib, { query: { a: 'weights' } })).j.w['elbow_bend_r|triceps'], .35, 'откат к предыдущим');
+  await call(calib, { method: 'POST', query: { a: 'weights' }, body: { reset: true }, headers: { cookie: cookie('t_1') } });
+  assert.deepEqual((await call(calib, { query: { a: 'weights' } })).j.w, {}, 'сброс');
+});

@@ -6,10 +6,15 @@ const MP_LOCAL = new URL('../vendor/mediapipe', import.meta.url).href, MP_CDN = 
 
 // ---------- контент ----------
 export const C = {};
+/** Выученные веса поверх исходных; исходный вес хранится в w0, повторное применение не накапливается. */
+export function applyRuleWeights(rules, w) { for (const r of rules) for (const m of r.muscles) { if (m.w0 === undefined) m.w0 = m.w ?? 1; const v = w && w[r.id + '|' + m.id]; m.w = Number.isFinite(v) ? v : m.w0; } }
 export async function loadContent() {
   const get = n => fetch('data/' + n + '.json').then(r => r.json());
   const [mus, bm, ch, ex] = await Promise.all([get('muscles'), get('bodymap'), get('chains'), get('exercises')]);
   C.muscles = mus.muscles; C.bodymap = bm; C.chains = ch.chains; C.exercises = Object.fromEntries(ex.exercises.map(e => [e.id, e])); C.booking = 'https://t.me/BodyPassport_bot';
+  // веса «правило → мышца», выученные по калибровкам специалистов (Администрирование → Калибровки): без сети остаются исходные из базы
+  // не ждем ответа: запуск не замедляется, веса подхватятся к первому разбору
+  fetch('/api/calib?a=weights', { signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : null).then(j => { if (j && j.w) { applyRuleWeights(bm.rules, j.w); C.weightsAt = j.at || 0; } }).catch(() => {});
   return C;
 }
 
@@ -384,7 +389,11 @@ async function loadMesh() {
   const [buf, meta] = await Promise.all([fetch('data/body3d.bin').then(r => r.arrayBuffer()), fetch('data/body3d.json').then(r => r.json())]);
   const dv = new DataView(buf); const nv = dv.getInt32(4, true), ni = dv.getInt32(8, true);
   const pos = new Float32Array(buf, 12, nv * 3); const nrm = new Int8Array(buf, 12 + nv * 12, nv * 3); const grp = new Uint8Array(buf, 12 + nv * 15, nv); const idx = new Uint32Array(buf.slice(12 + nv * 16, 12 + nv * 16 + ni * 4));
-  mesh3d = { pos, nrm, grp, idx, meta, nv };
+  // в сетке группы трапециевидной подписаны наоборот: «верхняя» лежит на уровне середины спины (центр 1325 мм), «нижняя» у шеи (1474 мм).
+  // Меняем имена местами, чтобы слабая нижняя трапециевидная красилась внизу, а не у шеи
+  const ord = meta.order.slice(), iu = ord.indexOf('upper_trap'), il = ord.indexOf('lower_trap');
+  if (iu >= 0 && il >= 0 && meta.blobs[1 + iu * 2] && meta.blobs[1 + il * 2] && meta.blobs[1 + iu * 2][2] < meta.blobs[1 + il * 2][2]) { ord[iu] = 'lower_trap'; ord[il] = 'upper_trap'; }
+  mesh3d = { pos, nrm, grp, idx, meta: { ...meta, order: ord }, nv };
   return mesh3d;
 }
 /** Фоновая подгрузка 3D, пока человек смотрит карту: кнопка 3D потом открывается сразу. */
@@ -394,12 +403,14 @@ export function preload3D() { const go = () => { import('three'); import('three/
 function paintMesh(m, spots, out) { const order = m.meta.order, lin = c => (c / 255) ** 2.2, BASE3 = BASE_RGB.map(lin);
   // группа сетки → цвет мышцы по состоянию; соседям достается слабый край того же цвета, чтобы граница читалась
   const col = new Map(); for (const s of spots) { const o = order.indexOf(s.id); if (o < 0 || s.k === 'OK' || Math.abs(s.tone) < .02) continue; col.set(1 + o * 2 + (s.side === 'RIGHT' ? 1 : 0), stateRGB(s.k, s.tone).map(lin)); }
-  const blobs = Object.entries(m.meta.blobs).map(([g, c]) => [+g, c]).filter(([g]) => col.has(+g));
+  // глубокие мышцы закрыты поверхностными (ромбовидные под трапецией, малая грудная под большой): их цвет просвечивает четким пятном над ними
+  const DEEP = new Set(['rhomboid', 'levator', 'suboccipital', 'pec_minor', 'deep_neck_flex', 'iliopsoas'].map(id => m.meta.order.indexOf(id)).filter(i => i >= 0));
+  const blobs = Object.entries(m.meta.blobs).map(([g, c]) => [+g, c, DEEP.has((+g - 1) >> 1)]).filter(([g]) => col.has(+g));
   for (let i = 0; i < m.nv; i++) { const g = m.grp[i];
     if (g === 255) { out.set(BASE3, i * 3); continue; }
     let c = col.get(g);
     if (!c) { const x = m.pos[i * 3], y = m.pos[i * 3 + 1], z = m.pos[i * 3 + 2]; let w0 = 1, acc = BASE3.slice();
-      for (const [bg, ctr] of blobs) { const sg = 22, d2 = (x - ctr[0]) ** 2 + (y - ctr[1]) ** 2 + (z - ctr[2]) ** 2; if (d2 > 9 * sg * sg) continue; const w = .3 * Math.exp(-d2 / (2 * sg * sg)), bc = col.get(bg);
+      for (const [bg, ctr, deep] of blobs) { const sg = deep ? 30 : 22, d2 = (x - ctr[0]) ** 2 + (y - ctr[1]) ** 2 + (z - ctr[2]) ** 2; if (d2 > 9 * sg * sg) continue; const w = (deep ? 1.6 : .3) * Math.exp(-d2 / (2 * sg * sg)), bc = col.get(bg);
         for (let q = 0; q < 3; q++) acc[q] += w * bc[q]; w0 += w; }
       c = acc.map(v => v / w0); }
     if (g === 0 && c !== BASE3) c = c.map((v, q) => BASE3[q] + (v - BASE3[q]) * .7);
