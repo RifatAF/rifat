@@ -42,11 +42,14 @@ export default async function handler(req, res) {
       if (raw.length > MAX) return res.status(413).json({ error: 'too large' });
       let b; try { b = JSON.parse(raw); } catch (e) { return res.status(400).json({ error: 'bad body' }); }
       const c = b && b.case; if (!c || typeof c !== 'object' || !c.expert || !Array.isArray(c.assessments)) return res.status(400).json({ error: 'case' });
+      // фоновый случай: проверки специалиста в разборе (без явной оценки); нужен хотя бы один вердикт
+      const auto = c.auto === true; if (auto && !c.assessments.some(x => Array.isArray(x.specialistEdits) && x.specialistEdits.length)) return res.status(400).json({ error: 'empty' });
       const at = Date.now(), from = { id: String(u.id), name: clip(u.name, 80), handle: u.username ? '@' + clip(u.username, 40) : clip(u.email, 120) };
-      const doc = { at, app: clip(b.app, 80), v: clip(b.v, 20), from, case: c };
-      const path = `calib/${new Date(at).toISOString().slice(0, 10)}/${at}-${Math.random().toString(36).slice(2, 8)}.json`;
+      // own: случай от администратора (его клиенты), иначе сторонний специалист; kind: явная калибровка или фоновая
+      const doc = { at, app: clip(b.app, 80), v: clip(b.v, 20), from, own: isAdmin(u), kind: auto ? 'auto' : 'explicit', case: c };
+      const path = `calib/${new Date(at).toISOString().slice(0, 10)}/${at}-${doc.own ? 'o' : 's'}${auto ? 'a' : 'e'}-${Math.random().toString(36).slice(2, 8)}.json`;
       await put(path, JSON.stringify(doc), { access: 'private', contentType: 'application/json', addRandomSuffix: false });
-      await notify(`Калибровка от ${from.name || from.handle}: оценка специалиста ${c.expert.labels ? c.expert.labels.length : 0} пунктов, тестов ${c.assessments.length}. Скачать: Администрирование → Калибровки.`).catch(() => {});
+      if (!auto) await notify(`Калибровка от ${from.name || from.handle}: оценка специалиста ${c.expert.labels ? c.expert.labels.length : 0} пунктов, тестов ${c.assessments.length}. Скачать: Администрирование → Калибровки.`).catch(() => {});
       return res.status(200).json({ ok: true, at });
     }
     if (req.method === 'GET') {
@@ -56,7 +59,7 @@ export default async function handler(req, res) {
         return res.status(200).json(JSON.parse(await readAll(r.stream))); }
       const items = []; let cursor;
       do { const r = await list({ prefix: 'calib/', limit: 1000, cursor }); cursor = r.hasMore ? r.cursor : undefined;
-        items.push(...r.blobs.map(x => ({ p: x.pathname, at: new Date(x.uploadedAt).getTime(), size: x.size }))); } while (cursor);
+        items.push(...r.blobs.map(x => { const m = /-(o|s)(a|e)-/.exec(x.pathname); return { p: x.pathname, at: new Date(x.uploadedAt).getTime(), size: x.size, own: m ? m[1] === 'o' : true, kind: m && m[2] === 'a' ? 'auto' : 'explicit' }; })); } while (cursor);
       items.sort((x, y) => y.at - x.at);
       return res.status(200).json({ items });
     }

@@ -35,3 +35,19 @@ test('пороги по базе: правило, что срабатывает 
   const s = suggest({ pelvic_tilt: { n: 100, raw, abs80: 8.5 } }, rules)[0];
   assert.ok(s.fire > 35); assert.ok(s.ready); assert.equal(s.sug, 8); assert.ok(s.fireSug < s.fire);
 });
+
+test('фоновая калибровка: доверие к специалисту по совпадению с администратором, одного стороннего мнения мало', async () => {
+  const fs = await import('node:fs'); const { learnWeights } = await import('../js/calibreport.js');
+  const j = n => JSON.parse(fs.readFileSync(new URL('../data/' + n + '.json', import.meta.url)));
+  const C = { muscles: j('muscles').muscles, bodymap: j('bodymap'), chains: j('chains').chains };
+  const mv = { ohs_front: { f: { ohs_elbow_r: 60 }, quality: 'GOOD' } };
+  const doc = (own, id, st) => ({ own, from: { id, name: id }, case: { auto: true, expert: { labels: [] }, assessments: [{ date: '2026-10-12', moves: mv, quality: { ohs_front: 100 }, specialistEdits: [{ muscle: 'triceps', side: 'RIGHT', state: st, hands: true }] }] } });
+  const lw = learnWeights([doc(true, 'me', 'WEAK'), doc(true, 'me', 'WEAK'), doc(false, 'good', 'WEAK'), doc(false, 'bad', 'SHORT')], C);
+  assert.ok(lw.reliability.good > lw.reliability.bad, 'совпадающий с админом весит больше');
+  const t = lw.find(x => x.key === 'elbow_bend_r|triceps'); assert.ok(t && t.nw < t.w);
+  // только один сторонний специалист: вес не меняется
+  assert.equal(learnWeights([doc(false, 'x', 'WEAK'), doc(false, 'x', 'WEAK'), doc(false, 'x', 'WEAK')], C).filter(x => x.key === 'elbow_bend_r|triceps').length, 0);
+  // мнение без проверки руками в фоновом случае не учитывается
+  const noHands = doc(true, 'me', 'WEAK'); noHands.case.assessments[0].specialistEdits[0].hands = false;
+  assert.equal(learnWeights([noHands, noHands], C).length, 0);
+});
