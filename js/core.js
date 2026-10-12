@@ -426,7 +426,24 @@ async function loadMesh() {
   // Меняем имена местами, чтобы слабая нижняя трапециевидная красилась внизу, а не у шеи
   const ord = meta.order.slice(), iu = ord.indexOf('upper_trap'), il = ord.indexOf('lower_trap');
   if (iu >= 0 && il >= 0 && meta.blobs[1 + iu * 2] && meta.blobs[1 + il * 2] && meta.blobs[1 + iu * 2][2] < meta.blobs[1 + il * 2][2]) { ord[iu] = 'lower_trap'; ord[il] = 'upper_trap'; }
-  mesh3d = { pos, nrm, grp, idx, meta: { ...meta, order: ord }, nv };
+  // Разметка сетки проверена по сводке групп (scripts/fetch-assets.mjs → data/body3d-stats.json):
+  // 1) в группу «ромбовидные» попала поперечная часть трапециевидной: ромбовидные идут от остистых отростков до медиального края лопатки
+  //    (не дальше ~85 мм от средней линии), а группа доходила до 167 мм, к акромиону. Все дальше 85 мм — нейтральная мышца;
+  // 2) у «нижней трапециевидной» верхняя часть (выше 1360 мм) — это средние, поперечные волокна: тоже нейтральная;
+  // 3) прямой мышцы живота в сетке нет отдельной группой: передняя полоса живота (|x| < 55 мм, спереди, 880–1260 мм) из групп «косые» и «пресс» становится rectus_abd.
+  const gOf = id => ord.indexOf(id), rh = gOf('rhomboid'), lt = gOf('lower_trap'), ob = gOf('obliques'), ab = gOf('abdominals');
+  const isG = (g, o) => o >= 0 && (g === 1 + o * 2 || g === 2 + o * 2);
+  let ra = -1; const blobs = { ...meta.blobs }, acc = { L: [0, 0, 0, 0], R: [0, 0, 0, 0] };
+  if (!ord.includes('rectus_abd') && 1 + ord.length * 2 + 1 < 255) { ord.push('rectus_abd'); ra = ord.length - 1; }
+  for (let i = 0; i < nv; i++) { const g = grp[i], x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
+    if (isG(g, rh) && Math.abs(x) > 85) grp[i] = 0;
+    else if (isG(g, lt) && z > 1360) grp[i] = 0;
+    else if (ra >= 0 && (isG(g, ob) || isG(g, ab)) && Math.abs(x) < 55 && y < -80 && z > 880 && z < 1260) { const s = x > 0 ? 'L' : 'R'; grp[i] = 1 + ra * 2 + (s === 'R' ? 1 : 0); const a = acc[s]; a[0] += x; a[1] += y; a[2] += z; a[3]++; } }
+  if (ra >= 0) for (const [s, a] of Object.entries(acc)) if (a[3]) blobs[1 + ra * 2 + (s === 'R' ? 1 : 0)] = [a[0] / a[3], a[1] / a[3], a[2] / a[3]];
+  // центры поправленных групп пересчитываем, чтобы маркеры и подсветка глубоких мышц стояли на месте
+  for (const o of [rh, lt]) if (o >= 0) for (const d of [0, 1]) { const g = 1 + o * 2 + d; let n = 0, c = [0, 0, 0];
+    for (let i = 0; i < nv; i++) if (grp[i] === g) { c[0] += pos[i * 3]; c[1] += pos[i * 3 + 1]; c[2] += pos[i * 3 + 2]; n++; } if (n) blobs[g] = c.map(v => v / n); }
+  mesh3d = { pos, nrm, grp, idx, meta: { ...meta, order: ord, blobs }, nv };
   return mesh3d;
 }
 /** Фоновая подгрузка 3D, пока человек смотрит карту: кнопка 3D потом открывается сразу. */

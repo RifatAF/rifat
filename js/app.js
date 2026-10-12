@@ -131,14 +131,14 @@ export const ntitle = s => { let t = s.ambiguous ? 'признаки проти�
   return `${C.muscles[s.id].name} ${sideWord(s.side)}: ${t}`; };
 // короткие названия для подписей на схеме: узнаваемые специалисту сокращения
 export const SHORT = { upper_trap: 'Верх. трапеция', levator: 'Подн. лопатку', suboccipital: 'Подзатылочные', lower_trap: 'Ниж. трапеция', rhomboid: 'Ромбовидные', erector: 'Разгиб. спины',
-  ql: 'Квадр. поясн.', glute_med: 'Ср. ягодичная', glute_max: 'Б. ягодичная', hamstrings: 'Задн. бедра', calf: 'Икроножная', scm: 'ГКС', scalene: 'Лестничные', deep_neck_flex: 'Глуб. сгибат.',
+  ql: 'Квадр. поясн.', glute_med: 'Ср. ягодичная', glute_max: 'Б. ягодичная', hamstrings: 'Задняя группа бедра', calf: 'Икроножная', scm: 'ГКС', scalene: 'Лестничные', deep_neck_flex: 'Глуб. сгибат.',
   pec_minor: 'М. грудная', obliques: 'Косые живота', iliopsoas: 'Илиопсоас', tfl: 'Напр. фасции', rectus_fem: 'Прямая бедра', adductors: 'Приводящие', pec_major: 'Б. грудная',
   lats: 'Широчайшая', serratus: 'Зубчатая', rectus_abd: 'Прямая живота', vmo: 'Вн. широкая', abdominals: 'Пресс', thoracic_ext: 'Грудн. разгиб.', tibialis: 'Большеберцовая',
   vastus_lat: 'Нар. широкая', triceps: 'Трицепс', biceps: 'Бицепс', deltoid: 'Дельтовидная', forearm_flex: 'Предплечье', peroneus: 'Малоберцовые' };
 export const tech = s => s.k === 'OK' ? C.muscles[s.id].name : `${TONE[s.k][4]} ${C.muscles[s.id].gen}`;
 const seen = (a, s) => [...new Set(a.findings.filter(f => f.muscles.some(m => m.id === s.id && (m.side === s.side || m.side === 'BOTH'))).map(f => f.observed))];
 export function zoneImg(id) { if (['suboccipital', 'scm', 'scalene', 'deep_neck_flex', 'levator'].includes(id)) return 'img_neck'; if (['upper_trap', 'lower_trap', 'rhomboid', 'lats', 'thoracic_ext', 'serratus', 'triceps', 'deltoid'].includes(id)) return 'img_muscles_back';
-  if (['pec_major', 'pec_minor', 'biceps'].includes(id)) return 'img_onb_skeleton'; if (['ql', 'erector', 'obliques', 'abdominals'].includes(id)) return 'img_back_pain'; return 'img_spine'; }
+  if (['pec_major', 'pec_minor', 'biceps'].includes(id)) return 'img_onb_skeleton'; if (['ql', 'erector', 'obliques', 'abdominals', 'rectus_abd'].includes(id)) return 'img_back_pain'; return 'img_spine'; }
 export function plan(top) { const ids = []; for (const s of top.slice(0, 3)) { const m = C.muscles[s.id], sk = s.side === 'RIGHT' ? 'right' : 'left';
   const pick = s.k === 'WEAK' ? ((m.plan && m.plan.isolate) || m.activate || [])[0] : (m.relax || [])[0]; const id = pick && pick.replace('{s}', sk); if (id && ex(id) && !ids.includes(id)) ids.push(id); } return ids.slice(0, 4); }
 // кабинет специалиста только после входа
@@ -388,11 +388,16 @@ function standCheck(fr) {
   const ys = fr.filter(x => x.w).map(x => yawOf(x.w)).sort((x, y) => x - y);
   return { sway, yaw: ys.length >= 5 ? ys[ys.length >> 1] : NaN };
 }
+// бета: кнопка «Пропустить» на экране камеры сразу отдает правдоподобный результат (кроме калибровки: там нужно живое движение)
 export async function runProtocol(protocol, opts = {}) {
+  let done; const fake = new Promise(r => done = r);
+  return Promise.race([runProtocol0(protocol, { ...opts, _skipAll: done }), fake]);
+}
+async function runProtocol0(protocol, opts = {}) {
   await voice.ensure(Object.values(SAY));
   const pre = opts.pre || {}; const units = sortUnits(protocol); const steps = rowsOf(units.filter(u => !pre[u] || pre[u].alt));
   go(`<div class="cam"><video playsinline muted></video><canvas id="sil"></canvas><canvas id="sk"></canvas><div class="count" id="cnt"></div>
-   <div class="top"><div class="segs">${steps.map(() => '<div><b></b></div>').join('')}</div><button class="round glass" id="x" aria-label="Закончить тест">${ic('x')}</button></div>
+   <div class="top"><div class="segs">${steps.map(() => '<div><b></b></div>').join('')}</div>${isBetaMode() && !(INV() || {}).cal ? '<button class="pill glass" id="betaSkip" style="margin-right:8px;color:#fff">Пропустить</button>' : ''}<button class="round glass" id="x" aria-label="Закончить тест">${ic('x')}</button></div>
    <div class="reps" id="reps" hidden><b id="ring">0</b><span id="repn">из 5</span></div>
    <div class="joint-tag" id="jt" hidden><small id="jtn">колено Л</small><b id="jtv">—</b></div>
    <div class="glass">
@@ -405,6 +410,7 @@ export async function runProtocol(protocol, opts = {}) {
   let stop = false, skip = false; const cancel = () => { track('test_cancel'); (opts.onCancel || prep)(); }; const limits = {};
   track('test_start', { n: units.length }, false); const tStart = Date.now();
   $('#x').onclick = () => { stop = true; try { saveRec(); } catch (e) {} stopCamera(); cancel(); }; $('#skipb').onclick = () => { skip = true; };
+  if ($('#betaSkip')) $('#betaSkip').onclick = () => { stop = true; stopCamera(); voice.say(''); track('beta_skip_test', { c: 'camera' }); opts._skipAll({ ...fakeResult(units), poses: {} }); };
   const video = app.querySelector('video'); const sk = $('#sk');
   try { if (!device.camera) throw new Error('no camera api'); await startCamera(video); } catch (e) { stop = true; return cameraHelp(); }
   // бета: тест пишется в видеофайл с камерой и скелетом, файл сохраняется в «Загрузки» по окончании или при выходе
@@ -581,7 +587,7 @@ export async function runProtocol(protocol, opts = {}) {
 // ---------- бета: пропустить видеотест ----------
 // Только в бета-режиме: правдоподобный результат без камеры, чтобы тестировщики могли смотреть карту, кабинет и отчеты сколько угодно раз.
 const isBetaMode = () => configSync().beta !== false;
-const skipBtn = () => isBetaMode() && !(INV() || {}).cal ? '<button class="link" id="skipTest" style="display:block;margin:10px auto 0;font-size:14px;color:var(--sub)">Бета: пропустить видеотест</button>' : '';
+const skipBtn = () => isBetaMode() && !(INV() || {}).cal ? '<button class="btn ghost" id="skipTest" style="margin-top:8px">Пропустить видеотест (бета)</button>' : '';
 function fakeResult(protocol) {
   const j = (v, k = 1) => Math.round((v + (Math.random() - .5) * 2 * k) * 10) / 10, p = Array.isArray(protocol) && protocol.length ? protocol : ['stand', 'ohs_front', 'sls', 'side'];
   return { date: Date.now(), protocol: p, full: true, quality: {}, limits: {}, setup: {}, beta: true,
