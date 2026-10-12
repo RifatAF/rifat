@@ -12,7 +12,7 @@ const STAND = { v: 'side', hx: 100, hy: 79, t: -90, hd: -90, aN1: 92, aN2: 92, a
 const FRONT = { ...STAND, v: 'front', aN1: 100, aN2: 95, aF1: 80, aF2: 85, lN1: 94, lN2: 90, lN3: 120, lF1: 86, lF2: 90, lF3: 60 };
 const SUPINE = { v: 'side', hx: 115, hy: 144, t: 180, hd: 180, aN1: 2, aN2: 0, aF1: 4, aF2: 2, lN1: -60, lN2: 70, lN3: 0, lF1: -56, lF2: 72, lF3: 0 };
 const PRONE = { v: 'side', face: 90, hx: 115, hy: 144, t: 180, hd: 182, aN1: 2, aN2: 0, aF1: 4, aF2: 2, lN1: 0, lN2: 0, lN3: 80, lF1: 2, lF2: 0, lF3: 80 };
-const SIDE = { v: 'side', hx: 120, hy: 146, t: 180, hd: 178, aN1: 60, aN2: 100, aF1: 182, aF2: 182, lN1: 0, lN2: 0, lN3: -90, lF1: 2, lF2: 0, lF3: -90 };
+const SIDE = { v: 'side', hx: 120, hy: 146, t: 180, hd: 178, aN1: 8, aN2: 12, aF1: 182, aF2: 182, lN1: 0, lN2: 0, lN3: -90, lF1: 2, lF2: 0, lF3: -90 };
 const QUAD = { v: 'side', hx: 82, hy: 112, t: -18, hd: -10, aN1: 90, aN2: 90, aF1: 88, aF2: 90, lN1: 90, lN2: 180, lN3: 180, lF1: 92, lF2: 180, lF3: 180 };
 
 // hl: подсветка рабочей зоны (сустав или середина сегмента); props: стена, валик, стул, полотенце, проем
@@ -25,7 +25,8 @@ const EX = {
   ex_glute_bridge: { a: { ...SUPINE, legAt: 1 }, b: { hy: 124, t: 154 }, hl: 'hip' },
   ex_side_plank_knees: { a: { ...SIDE, hx: 120, hy: 146, t: 208.6, hd: 205, aN1: 90, aN2: 180, aF1: 92, aF2: 182, lN1: 3, lN2: 160, kS: .35, lF1: 4, lF2: 160, lN3: 160, lF3: 160 },
     b: { hx: 121.6, hy: 137.2, t: 197.4, hd: 195, lN1: 17.4, lF1: 18.4 }, hl: 'side' },
-  ex_clamshell: { a: { ...SIDE, hy: 146, lN1: 28, lN2: 150, lN3: 180, lF1: 30, lF2: 152, lF3: 180, aN1: 60, aN2: 100, aF1: 182, aF2: 182 }, b: { lN1: -18, footN: 1 }, hl: 'hip' },
+  // ракушка: лежа на боку, колени согнуты, стопы вместе; верхнее колено поднимается, стопы не расходятся (вид спереди, бедра чуть в перспективе)
+  ex_clamshell: { a: { ...SIDE, hy: 146, kS: .8, lN1: -34, lN2: 42, lN3: 0, lF1: -34, lF2: 42, lF3: 0, aN1: 8, aN2: 12, aF1: 182, aF2: 182, footFree: 1 }, b: { lN1: -74, kT: .9 }, hl: 'hip' },
   ex_ankle_mob: { a: { ...STAND, hx: 92, hy: 110, lN1: -8, lN2: 80, lN3: 40, lF1: 2, lF2: 90, lF3: 0, aN1: 70, aN2: 20, aF1: 70, aF2: 20, props: ['chair'] }, b: { lN3: -30 }, hl: 'ankle' },
   ex_hip_flexor_stretch: { a: { ...STAND, hx: 90, hy: 113, lN1: 80, lN2: 105, lN3: 0, lF1: 108, lF2: 178, lF3: 175, footAt: [140, 149], aN1: 70, aN2: 30, aF1: 70, aF2: 30 },
     b: { hx: 101, hy: 118, lF1: 125 }, hl: 'hipfront' },
@@ -35,7 +36,7 @@ const EX = {
   ex_doorway_pec_stretch: { a: { ...STAND, hx: 92, aN1: 0, aN2: -90, aF1: 2, aF2: -88, props: ['door'] }, b: { hx: 100, t: -80, aN1: 25, aN2: -70 }, hl: 'chest' },
   ex_y_raise: { a: { ...FRONT }, b: { aN1: -120, aN2: -120, aF1: -60, aF2: -60 }, hl: 'upperback' },
   ex_hamstring_stretch: { a: { ...SUPINE, lF1: 0, lF2: 0, lF3: -90, aN1: -40, aN2: -10, props: ['towel'] }, b: { lN1: -82, lN2: -82, lN3: -170, aN1: -70, aN2: -75 }, hl: 'thighback' },
-  ex_cat_cow: { a: { ...QUAD, c: 7, hd: -45 }, b: { c: -9, hd: 115 }, hl: 'upperback' },
+  ex_cat_cow: { a: { ...QUAD, c: 7, hd: -40 }, b: { c: -9, hd: 72 }, hl: 'upperback' },
   ex_dead_bug: { a: { ...SUPINE, aN1: -90, aN2: -90, aF1: -88, aF2: -88, lN1: -90, lN2: 0, lF1: -88, lF2: 2, lN3: -90, lF3: -88 }, b: { aN1: 176, aN2: 176, lF1: -12, lF2: -12, lF3: -100 }, hl: 'core' },
   ex_side_lying_abduction: { a: { ...SIDE, lN3: -60, lF3: -60 }, b: { lN1: -28, lN2: -28, lN3: -88 }, hl: 'hip' },
   ex_wall_slide: { a: { ...FRONT, aN1: 200, aN2: -90, aF1: -20, aF2: -90 }, b: { aN1: -118, aN2: -114, aF1: -62, aF2: -66 }, hl: 'upperback' },
@@ -70,6 +71,8 @@ function joints(p, ref) {
   // фиксированные опоры из исходной позы: стопы на полу, кисти на стене
   if (ref && ref.legAt) { const fix = (h, r, s) => { const [k, an] = ik(h, r[2], L.th, L.sh, s); return [h, k, an, add(an, 0, L.ft)]; }; lN = fix(hN, ref.lN, -1); lF = fix(hF, ref.lF, -1); }
   if (ref && ref.footAt) { const [k, an] = ik(hN, ref.footAt, L.th, L.sh, -1); lN = [hN, k, an, add(an, 0, L.ft)]; }
+  // стопа стоит на месте, голень тянется за коленом (поворот бедра наружу в перспективе)
+  if (ref && ref.footFree) { const k = add(hN, p.lN1, L.th * kT), an = ref.lN[2]; lN = [hN, k, an, add(an, ref.lN3 ?? 0, L.ft)]; }
   if (ref && ref.footN) { const [k, an] = ik(hN, ref.lN[2], L.th, L.sh, 1); lN = [hN, k, an, add(an, ref.lN3 ?? 140, L.ft)]; }
   if (ref && ref.handAt) { const t = ref.handAt; const [e, w] = ik(sN, t, L.ua, L.fa, 1); aN = [sN, e, w]; const [e2, w2] = ik(sF, [t[0] - 2, t[1] + 4], L.ua, L.fa, 1); aF = [sF, e2, w2]; }
   return { H, S, hc, aN, aF, lN, lF, c: p.c || 0, nose: p.nose || 0, front, face: p.face ?? p.hd + 90 };
