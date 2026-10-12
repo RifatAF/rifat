@@ -127,6 +127,10 @@ export const Movement = {
       f.ohs_foot_out_r = median(bf.map(x => footOut(x.p, true))) - median(st.map(x => footOut(x.p, true)));
       f.ohs_shift = median(bf.map(x => shift(x.p))) - median(st.map(x => shift(x.p)));
       f.ohs_elbow_r = median(bf.map(x => elbow(x.p, true))); f.ohs_elbow_l = median(bf.map(x => elbow(x.p, false)));
+      // значения по каждому повтору: находка засчитывается, только если видна в большинстве повторов
+      const per = fn => b.map(i => median(around(fr, i).map(x => fn(x.p)))), s0 = median(st.map(x => shift(x.p)));
+      f.reps = { valgus_l: per(p => F.fppa(p, false)), valgus_r: per(p => F.fppa(p, true)), shift: per(p => shift(p) - s0),
+        foot_out_l: per(p => footOut(p, false) - median(st.map(x => footOut(x.p, false)))), foot_out_r: per(p => footOut(p, true) - median(st.map(x => footOut(x.p, true)))) };
     }
     Object.assign(f, overheadReach(fr));
     return res(f, b.length, vis(fr, LEGS));
@@ -171,6 +175,8 @@ export const Movement = {
       f.back_shift = median(bf.map(x => shift(x.p))) - median(st.map(x => shift(x.p)));
       f.back_valgus_l = median(bf.map(x => valgus(legs(x.p)[0], false))); f.back_valgus_r = median(bf.map(x => valgus(legs(x.p)[1], true)));
       f.back_pelvis_tilt = median(bf.map(x => tilt(x.p))) - median(st.map(x => tilt(x.p)));
+      const per = fn => b.map(i => median(around(fr, i).map(x => fn(x.p)))), s0 = median(st.map(x => shift(x.p))), t0 = median(st.map(x => tilt(x.p)));
+      f.reps = { valgus_l: per(p => valgus(legs(p)[0], false)), valgus_r: per(p => valgus(legs(p)[1], true)), shift: per(p => shift(p) - s0), pelvis: per(p => tilt(p) - t0) };
     }
     return res(f, b.length, vis(fr, LEGS));
   },
@@ -183,6 +189,8 @@ export const Movement = {
       f['sls_drop_' + k] = right ? -drop : drop;
       f['sls_trunk_' + k] = median(bf.map(x => F.trunkLateral(x.p))) * (right ? 1 : -1);
       f['sls_depth_' + k] = median(bf.map(x => F.kneeFlexion(x.p, right)));
+      const per = fn => b.map(i => median(around(fr, i).map(x => fn(x.p)))), d0 = median(st.map(x => F.pelvicTilt(x.p)));
+      f.reps = { ['sls_valgus_' + k]: per(p => F.fppa(p, right)), ['sls_drop_' + k]: per(p => (F.pelvicTilt(p) - d0) * (right ? -1 : 1)), ['sls_trunk_' + k]: per(p => F.trunkLateral(p) * (right ? 1 : -1)) };
     }
     return res(f, b.length, vis(fr, [P.L_HIP, P.R_HIP, right ? P.R_KNEE : P.L_KNEE, right ? P.R_ANKLE : P.L_ANKLE]));
   },
@@ -263,12 +271,18 @@ export function features(t) {
   if (t.side) { f.head_forward = t.side.headForwardDeg; f.knee_hyper = t.side.kneeHyperDeg; f.shoulder_shift = t.side.shoulderShift; f.hip_shift = t.side.hipShift; }
   const g = n => (t.moves[n] && t.moves[n].quality !== 'RETAKE') ? t.moves[n].f : {};
   const of = g('ohs_front'), os = g('ohs_side'), ob = g('ohs_back'), sr = g('sls_r'), sl = g('sls_l');
+  const reps = {}, views = {}; // значения по повторам и по ракурсам для проверки устойчивости находок
   const avg = (...v) => { const a = v.filter(x => Number.isFinite(x)); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : undefined; };
   const ok = v => Number.isFinite(v) && Math.abs(v) <= 35 ? v : undefined; // больше 35° — сбой трекинга, не берем
   const vr = avg(ok(of.ohs_valgus_r), ok(ob.back_valgus_r)), vl = avg(ok(of.ohs_valgus_l), ok(ob.back_valgus_l));
-  if (vr !== undefined && vl !== undefined) { f.valgus_max = Math.max(vr, vl); f.valgus_side = vr >= vl ? 1 : -1; }
-  const sh = avg(of.ohs_shift, ob.back_shift); if (sh !== undefined) f.sq_shift = sh;
-  if (Number.isFinite(of.ohs_foot_out_r) && Number.isFinite(of.ohs_foot_out_l)) { f.foot_out_max = Math.max(of.ohs_foot_out_r, of.ohs_foot_out_l); f.foot_out_side = of.ohs_foot_out_r >= of.ohs_foot_out_l ? 1 : -1; }
+  if (vr !== undefined && vl !== undefined) { f.valgus_max = Math.max(vr, vl); f.valgus_side = vr >= vl ? 1 : -1;
+    // по повторам и по ракурсам для той стороны, где колено уходит сильнее
+    const sd = vr >= vl ? 'r' : 'l', fr = (of.reps || {})['valgus_' + sd] || [], br = (ob.reps || {})['valgus_' + sd] || [];
+    reps.valgus_max = [...fr, ...br].filter(v => Number.isFinite(v) && Math.abs(v) <= 35);
+    const fv = ok(sd === 'r' ? of.ohs_valgus_r : of.ohs_valgus_l), bv = ok(sd === 'r' ? ob.back_valgus_r : ob.back_valgus_l); if (fv !== undefined && bv !== undefined) views.valgus_max = [fv, bv]; }
+  const sh = avg(of.ohs_shift, ob.back_shift); if (sh !== undefined) { f.sq_shift = sh; reps.sq_shift = [...((of.reps || {}).shift || []), ...((ob.reps || {}).shift || [])]; if (Number.isFinite(of.ohs_shift) && Number.isFinite(ob.back_shift)) views.sq_shift = [of.ohs_shift, ob.back_shift]; }
+  if (Number.isFinite(of.ohs_foot_out_r) && Number.isFinite(of.ohs_foot_out_l)) { f.foot_out_max = Math.max(of.ohs_foot_out_r, of.ohs_foot_out_l); f.foot_out_side = of.ohs_foot_out_r >= of.ohs_foot_out_l ? 1 : -1;
+    reps.foot_out_max = (of.reps || {})['foot_out_' + (f.foot_out_side > 0 ? 'r' : 'l')] || []; }
   const put = (k, v) => { if (Number.isFinite(v)) f[k] = v; };
   // длинное бедро относительно голени само по себе дает больший наклон корпуса в приседе: вычитаем ожидаемую часть (не больше 8°), чтобы не винить мышцы
   const ft = t.side && Number.isFinite(t.side.femurTibia) ? t.side.femurTibia : null; if (ft) f.femur_tibia = ft;
@@ -279,8 +293,9 @@ export function features(t) {
   // руки вверх: недостача сгибания плеча, худшая рука и ее сторона (по виду спереди; если его нет — по виду сбоку)
   const rr = Number.isFinite(of.oh_reach_r) ? of.oh_reach_r : os.oh_reach_r, rl = Number.isFinite(of.oh_reach_l) ? of.oh_reach_l : os.oh_reach_l;
   if (Number.isFinite(rr) || Number.isFinite(rl)) { const a = Number.isFinite(rr) ? rr : -1, b = Number.isFinite(rl) ? rl : -1; f.oh_reach = Math.max(a, b); f.oh_reach_side = Math.abs(a - b) < 8 || a < 0 || b < 0 ? 0 : a > b ? 1 : -1; f.sym_reach = Number.isFinite(rr) && Number.isFinite(rl) ? [rl, rr] : undefined; if (!f.sym_reach) delete f.sym_reach; }
-  for (const k of ['sls_valgus_r', 'sls_drop_r', 'sls_trunk_r']) put(k, k.includes('valgus') ? ok(sr[k]) : sr[k]);
-  for (const k of ['sls_valgus_l', 'sls_drop_l', 'sls_trunk_l']) put(k, k.includes('valgus') ? ok(sl[k]) : sl[k]);
+  for (const k of ['sls_valgus_r', 'sls_drop_r', 'sls_trunk_r']) { put(k, k.includes('valgus') ? ok(sr[k]) : sr[k]); if (sr.reps && sr.reps[k]) reps[k] = sr.reps[k]; }
+  for (const k of ['sls_valgus_l', 'sls_drop_l', 'sls_trunk_l']) { put(k, k.includes('valgus') ? ok(sl[k]) : sl[k]); if (sl.reps && sl.reps[k]) reps[k] = sl.reps[k]; }
+  if (ob.reps && ob.reps.pelvis) reps.sq_pelvis = ob.reps.pelvis;
   const th = g('t_hold'), sb = g('side_bend'), cr = g('calf_r'), cl = g('calf_l');
   // дельтовидная: насколько рука опустилась к концу удержания; плюс = правая опустилась сильнее
   if (Number.isFinite(th.t_end_r)) { const dr = th.t_start_r - th.t_end_r, dl = th.t_start_l - th.t_end_l; put('asym_delt', (dr - dl) + (th.t_end_l - th.t_end_r) * .5); f.sym_delt = [th.t_end_l, th.t_end_r]; }
@@ -300,6 +315,7 @@ export function features(t) {
     sls_r: ['sls_valgus_r', 'sls_drop_r', 'sls_trunk_r', 'asym_quad'], sls_l: ['sls_valgus_l', 'sls_drop_l', 'sls_trunk_l', 'asym_quad'], t_hold: ['asym_delt'], bends: ['asym_bend', 'bend_sum'], calf_r: ['asym_calf', 'calf_reps_r'], calf_l: ['asym_calf', 'calf_reps_l'] };
   const lowq = {}; for (const [k, fs] of Object.entries(LQ)) if (low(k)) for (const x of fs) lowq[x] = true;
   if (Object.keys(lowq).length) f.lowq = lowq;
+  if (Object.keys(reps).length) f._reps = reps; if (Object.keys(views).length) f._views = views;
   return f;
 }
 
@@ -324,15 +340,21 @@ export function findings(rules, f) {
     // разница с порогом меньше погрешности измерения — «на границе нормы»: слабее и с пометкой, чтобы повторные тесты не «прыгали»
     const thr = r.absGreater != null ? r.absGreater : r.greater != null ? r.greater : r.less != null ? r.less : null, at = thr != null ? Math.abs(thr) : 0;
     const unit = at < 1 ? .03 : at >= 12 ? 3 : 1.5, gap = r.absGreater != null ? Math.abs(v) - thr : r.greater != null ? v - thr : thr != null ? thr - v : 0;
-    const borderline = thr != null && gap < Math.max(unit, at * .12);
+    let borderline = thr != null && gap < Math.max(unit, at * .12);
     // плохая съемка: находки на границе или с порогом до 5° (уровень погрешности одной камеры) скорее шум
     if (f.lowq && f.lowq[r.feature] && (borderline || at <= 5)) continue;
+    // голосование по повторам: признак должен быть виден в большинстве повторов (от 3 повторов). Меньше 40% — шум, 40–60% — на границе
+    const passV = x => (r.absGreater == null || Math.abs(x) > r.absGreater) && (r.greater == null || x > r.greater) && (r.less == null || x < r.less);
+    const rv = f._reps && f._reps[r.feature] && f._reps[r.feature].filter(Number.isFinite);
+    let vote = null; if (rv && rv.length >= 3) { vote = rv.filter(passV).length / rv.length; if (vote < .4) continue; if (vote < .6) borderline = true; }
+    // два ракурса (спереди и сзади): если один показывает признак, а другой нет даже наполовину порога — на границе
+    const vw = f._views && f._views[r.feature]; if (vw && thr != null && !(passV(vw[0]) && passV(vw[1])) && Math.min(Math.abs(vw[0]), Math.abs(vw[1])) < at * .5) borderline = true;
     let side = 'BOTH';
     if (r.sideFrom) { const sv = f[r.sideFrom]; if (sv === undefined) continue; const sg = Math.sign(sv) * (r.sideNegate ? -1 : 1); side = sg > 0 ? 'RIGHT' : sg < 0 ? 'LEFT' : 'BOTH'; }
     // w: вклад мышцы в признак по данным литературы (1 — основная причина, меньше — второстепенная)
     const muscles = r.muscles.map(m => ({ id: m.id, state: m.state, w: Number.isFinite(m.w) ? m.w : 1, side: m.side === 'same' ? side : m.side === 'opposite' ? opp(side) : 'BOTH' }));
     const ex = r.exercises.map(e => e.split('{side}').join(side === 'BOTH' ? 'left' : sideWord(side, 'key')).split('{opp}').join(side === 'BOTH' ? 'right' : sideWord(opp(side), 'key')));
-    out.push({ rule: r, value: v, side, borderline, observed: render(r.observed, side, v) + (borderline ? ' (на границе нормы)' : ''), meaning: render(r.meaning, side, v), muscles, exercises: ex });
+    out.push({ rule: r, value: v, side, borderline, vote, observed: render(r.observed, side, v) + (borderline ? ' (на границе нормы)' : ''), meaning: render(r.meaning, side, v), muscles, exercises: ex });
   }
   return out.sort((a, b) => (b.rule.priority || 0) - (a.rule.priority || 0));
 }
