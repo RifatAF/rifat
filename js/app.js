@@ -1,6 +1,6 @@
 // BodyPassport web: тот же поток, тексты и дизайн, что в Android-версии.
 import { P, F, G, Movement, sideView, levelled, analyze, fmt, standSnapshot, sideSnapshot, features } from './analysis.js';
-import { track, vasSave, vasLog, vasStats, vasDelta, channel, screenView } from './track.js';
+import { track, vasSave, vasLog, vasStats, vasDelta, channel, screenView, deviceInfo } from './track.js';
 import { bugSheet, rateCard, bindRate, installCard, bindInstall, installNow, canInstall, feedbackSheet, shareApp, appLink, mountBugTab, mountBetaBar, exitSurvey, testSurvey } from './grow.js';
 import { proHome, motionViewer, consumerPoses, canSwitchMode } from './pro.js';
 import { seal } from './core.js';
@@ -379,6 +379,14 @@ const retakeOf = (u, moves) => (RETAKE_KEYS[u] || []).some(k => moves[k] && move
 function sendNorms(r) { try { if (localStorage.getItem('bp_noev') === '1') return; const f = features(r), qv = Object.values(r.quality || {});
   delete f.lowq; const body = JSON.stringify({ f, q: qv.length ? Math.min(...qv) : null, r: localStorage.getItem('bp_mode') === 'pro' ? 'pro' : 'client', v: C.bodymap && C.bodymap.version });
   fetch('/api/norms', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {}); } catch (e) {} }
+/** Стойка: раскачка (разброс наклона таза и плеч по кадрам, °) и разворот корпуса к камере (по 3D-точкам плеч и таза, °). */
+function standCheck(fr) {
+  const sd = a => { const v = a.filter(Number.isFinite); if (v.length < 5) return 0; const m = v.reduce((x, y) => x + y, 0) / v.length; return Math.sqrt(v.reduce((x, y) => x + (y - m) ** 2, 0) / v.length); };
+  const sway = Math.max(sd(fr.map(x => F.pelvicTilt(x.p))), sd(fr.map(x => F.shoulderTilt(x.p))));
+  const yawOf = w => { const a = (l, r) => Math.abs(Math.atan2(w[r].z - w[l].z, w[r].x - w[l].x) * 180 / Math.PI); const fold = v => Math.min(v, 180 - v); return (fold(a(11, 12)) + fold(a(23, 24))) / 2; };
+  const ys = fr.filter(x => x.w).map(x => yawOf(x.w)).sort((x, y) => x - y);
+  return { sway, yaw: ys.length >= 5 ? ys[ys.length >> 1] : NaN };
+}
 export async function runProtocol(protocol, opts = {}) {
   await voice.ensure(Object.values(SAY));
   const pre = opts.pre || {}; const units = sortUnits(protocol); const steps = rowsOf(units.filter(u => !pre[u] || pre[u].alt));
@@ -497,8 +505,14 @@ export async function runProtocol(protocol, opts = {}) {
     app.querySelector('.cam').appendChild(d); d.querySelector('#rta').onclick = () => { d.remove(); res(true); }; d.querySelector('#rts').onclick = () => { d.remove(); res(false); }; });
   const runUnit = async u => {
     if (u === 'stand') { await face('front'); step(k, 'Стой ровно', 'Руки вдоль тела, смотри прямо', FOC.stand); await say(SAY.standIntro); await say(SAY.freeze);
-      const st = await hold('stand', 5, 'Замри'); if (stop || skipped()) return;
-      snapshot = standSnapshot(st);
+      let st = await hold('stand', 5, 'Замри'); if (stop || skipped()) return;
+      // стойка: качается ли человек и не развернут ли корпус к камере. Если да — подсказка и один повтор, берем более ровную попытку
+      let sq = standCheck(st);
+      if (sq.sway > 1.5 || sq.yaw > 15) { await say(sq.yaw > 15 ? SAY.frontTurn : SAY.freeze); if (sq.yaw > 15) await say(SAY.freeze);
+        const st2 = await hold('stand', 5, 'Замри'); if (stop || skipped()) return; const sq2 = standCheck(st2); if (sq2.sway + sq2.yaw / 8 < sq.sway + sq.yaw / 8) { st = st2; sq = sq2; } }
+      // разворот или раскачка остались: наклоны в стойке помечаем как неточные (слабые находки по ним не показываются)
+      if (sq.yaw > 15 || sq.sway > 2.5) quality.stand = Math.min(quality.stand ?? 100, 55);
+      snapshot = standSnapshot(st); snapshot.sway = Math.round(sq.sway * 10) / 10; if (Number.isFinite(sq.yaw)) snapshot.yaw = Math.round(sq.yaw);
       const f = cam.frame; setup = { bodyFrac: med(st.map(x => bodyFrac(x.p))) / (f ? f.h : 1), roll: phone.roll, pitch: phone.pitch ?? null, back: cam.back, w: f && f.w, h: f && f.h }; await say(SAY.good); k++; }
     if (u === 'ohs_front') { await face('front'); step(k, 'Присед с руками вверх', 'Руки вверх, пятки на полу, 5 раз', FOC.squat); await say(SAY.ohsIntro); if (skipped()) return; 
       moves.ohs_front = await goReps(SAY.ohsGo, 'ohs_front', fr => Movement.front(fr), .12, 5); if (skipped()) return; await say(SAY.stop); k++; }
@@ -1171,6 +1185,13 @@ function chanCard(d) { const ch = Object.entries(d.channels || {}).sort((a, b) =
   return `<div class="card" style="padding:14px 16px;overflow-x:auto"><b>Источники: откуда пришли и докуда дошли</b><table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px"><tr><th style="text-align:left;padding:4px">Канал</th>${cols.map(c => `<th style="padding:4px;font-weight:600">${c[1]}</th>`).join('')}</tr>
     ${ch.map(([k, v]) => `<tr><td style="padding:4px;border-top:1px solid var(--line-2)">${esc(CHAN_RU[k] || k)}</td>${cols.map(([e]) => { const n = v[e] || 0, base = v.app_open || 0; return `<td style="padding:4px;text-align:center;border-top:1px solid var(--line-2)">${n}${e !== 'app_open' && base ? `<small style="display:block;color:var(--sub)">${Math.round(n / base * 100)}%</small>` : ''}</td>`; }).join('')}</tr>`).join('')}</table>
     <p class="sub" style="font-size:12px;margin-top:6px">Каждая ссылка помечена своим каналом. Проценты от открывших.</p></div>`; }
+function devCard(d) { const dv = Object.entries(d.devices || {}).sort((a, b) => (b[1].app_open || 0) - (a[1].app_open || 0)); if (!dv.length) return '';
+  const cols = [['app_open', 'Открыли'], ['test_start', 'Начали'], ['test_done', 'Прошли'], ['pose_fail', 'Модель не загрузилась'], ['cam_err', 'Ошибка камеры']];
+  const models = Object.entries(d.models || {}).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  return `<div class="card" style="padding:14px 16px;overflow-x:auto"><b>Устройства</b><table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px"><tr><th style="text-align:left;padding:4px">Система · браузер</th>${cols.map(c => `<th style="padding:4px;font-weight:600">${c[1]}</th>`).join('')}<th style="padding:4px;font-weight:600">Кадров/с</th></tr>
+    ${dv.map(([k, v]) => `<tr><td style="padding:4px;border-top:1px solid var(--line-2)">${esc(k)}</td>${cols.map(([e]) => `<td style="padding:4px;text-align:center;border-top:1px solid var(--line-2);${(e === 'pose_fail' || e === 'cam_err') && v[e] ? 'color:var(--over-t);font-weight:600' : ''}">${v[e] || 0}</td>`).join('')}<td style="padding:4px;text-align:center;border-top:1px solid var(--line-2);${v.fps && v.fps < 15 ? 'color:var(--over-t);font-weight:600' : ''}">${v.fps ?? '—'}</td></tr>`).join('')}</table>
+    ${models.length ? `<p style="font-size:13px;margin-top:8px"><span class="sub">Модели:</span> ${models.map(([m, n]) => esc(m) + ' ' + n).join(', ')}</p>` : ''}
+    <p class="sub" style="font-size:12px;margin-top:6px">Меньше 15 кадров в секунду — тест на этом устройстве менее точен. На iPhone модель телефона браузер не сообщает.</p></div>`; }
 function screensCard(d) { const sc = Object.entries(d.screens || {}).filter(([, v]) => v.n >= 2); if (!sc.length) return '';
   // «тупят»: долго на экране, много нажатий мимо кнопок, часто уходят назад
   const score = v => (v.p50 || 0) / 30 + v.miss * 2 + v.back / Math.max(1, v.n) * 5; sc.sort((a, b) => score(b[1]) - score(a[1]));
@@ -1362,7 +1383,7 @@ export async function funnelScreen(days = 14) {
      <p class="sub" style="font-size:13px">Число вкладок, где шаг был хотя бы раз, сумма по дням. Процент от первого шага.</p>
      <div class="seg">${[7, 30, 90].map(n => `<button data-d="${n}" class="${n === days ? 'on' : ''}">${n} дней</button>`).join('')}</div>
      ${bugCard}
-     ${chanCard(d)}${screensCard(d)}
+     ${chanCard(d)}${devCard(d)}${screensCard(d)}
      ${exitCard}
      ${fb && fb.testN ? `<div class="card" style="padding:14px 16px"><b>Анкета после теста (${fb.testN})</b><div style="font-size:14px;margin-top:8px">Средняя оценка: <b>${String(fb.testAvg).replace('.', ',')}</b> из 5</div>
       ${Object.entries(fb.testIssues || {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<div class="row" style="font-size:13px;margin-top:6px"><span style="flex:1">${esc(k)}</span><b>${n}</b></div>`).join('')}
@@ -1394,6 +1415,8 @@ async function checkInvAlive() { const inv = INV(); if (!inv || !inv.i) return;
 // ---------- старт ----------
 (async () => {
   track('app_open', { r: REF, c: channel() });
+  // бета: с какого устройства зашли, чтобы потом оптимизировать под iPhone и Android
+  deviceInfo().then(d => track('device', { c: d.os + ' · ' + d.br, m: d.model || d.cls, n: d.mem || 0, r: d.pwa ? 'pwa' : 'web' })).catch(() => {});
   try { await loadContent(); } catch (e) { app.innerHTML = '<div class="scr pad" style="justify-content:center;gap:16px"><h1>Не удалось загрузить данные</h1><p class="sub">Проверь интернет и обнови страницу.</p><button class="btn" id="rl">Обновить</button></div>'; $('#rl').onclick = () => location.reload(); return; }
   mountBugTab(); await voice.init();
   await Promise.all([getMe(), config()]); claimLegacy(); mountBetaBar(); if (localStorage.getItem('bp_mode') !== 'pro') checkInvAlive();

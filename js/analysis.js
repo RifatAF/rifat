@@ -225,7 +225,12 @@ export function standSnapshot(st) {
 }
 export function sideSnapshot(sf) {
   if (!sf.length) return null; const sv = sf.map(f => sideView(f.p));
-  return { headForwardDeg: medF(sv.map(s => s.headForwardDeg)), hipShift: medF(sv.map(s => s.hipShift)), shoulderShift: medF(sv.map(s => s.shoulderShift)), kneeHyperDeg: medF(sv.map(s => s.kneeHyperDeg)) };
+  const out = { headForwardDeg: medF(sv.map(s => s.headForwardDeg)), hipShift: medF(sv.map(s => s.hipShift)), shoulderShift: medF(sv.map(s => s.shoulderShift)), kneeHyperDeg: medF(sv.map(s => s.kneeHyperDeg)) };
+  // антропометрия по 3D-точкам (метры модели): пропорции не зависят от расстояния до камеры. Бедро/голень объясняет наклон корпуса в приседе
+  const W = sf.filter(f => f.w), d = (w, a, b) => Math.hypot(w[a].x - w[b].x, w[a].y - w[b].y, w[a].z - w[b].z);
+  if (W.length >= 5) { const fem = medU(W.map(f => (d(f.w, 23, 25) + d(f.w, 24, 26)) / 2)), tib = medU(W.map(f => (d(f.w, 25, 27) + d(f.w, 26, 28)) / 2)), tr = medU(W.map(f => (d(f.w, 11, 23) + d(f.w, 12, 24)) / 2));
+    if (fem > 0 && tib > 0) { out.femurTibia = Math.round(fem / tib * 100) / 100; out.seg = { femur: Math.round(fem * 100), tibia: Math.round(tib * 100), trunk: tr ? Math.round(tr * 100) : null }; } }
+  return out;
 }
 const maxFlex = fr => fr.reduce((m, f) => Math.max(m, F.kneeFlexion(f.p, true), F.kneeFlexion(f.p, false)), 0);
 /**
@@ -265,7 +270,9 @@ export function features(t) {
   const sh = avg(of.ohs_shift, ob.back_shift); if (sh !== undefined) f.sq_shift = sh;
   if (Number.isFinite(of.ohs_foot_out_r) && Number.isFinite(of.ohs_foot_out_l)) { f.foot_out_max = Math.max(of.ohs_foot_out_r, of.ohs_foot_out_l); f.foot_out_side = of.ohs_foot_out_r >= of.ohs_foot_out_l ? 1 : -1; }
   const put = (k, v) => { if (Number.isFinite(v)) f[k] = v; };
-  put('sq_lean', os.ohs_lean_excess); put('sq_arms', os.ohs_arms_fwd); put('sq_heel', os.ohs_heel_lift); put('sq_pelvis', ob.back_pelvis_tilt);
+  // длинное бедро относительно голени само по себе дает больший наклон корпуса в приседе: вычитаем ожидаемую часть (не больше 8°), чтобы не винить мышцы
+  const ft = t.side && Number.isFinite(t.side.femurTibia) ? t.side.femurTibia : null; if (ft) f.femur_tibia = ft;
+  put('sq_lean', Number.isFinite(os.ohs_lean_excess) && ft ? os.ohs_lean_excess - Math.min(8, Math.max(0, (ft - 1.05) * 40)) : os.ohs_lean_excess); put('sq_arms', os.ohs_arms_fwd); put('sq_heel', os.ohs_heel_lift); put('sq_pelvis', ob.back_pelvis_tilt);
   put('sq_depth', Number.isFinite(of.max_knee_flex) && of.max_knee_flex > 0 ? of.max_knee_flex : of.ohs_depth);
   if (t.moves && t.moves.ohs_front && t.moves.ohs_front.alt) f.sq_assisted = 1;
   put('ohs_elbow_r', of.ohs_elbow_r); put('ohs_elbow_l', of.ohs_elbow_l);

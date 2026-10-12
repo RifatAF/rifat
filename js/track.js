@@ -10,7 +10,7 @@ const EVENTS = new Set(['app_open', 'onb_done', 'login_ok', 'safety_ok', 'safety
   'pro_click', 'vas_done', 'report_link', 'progress_sent',
   'paywall_view', 'limit_hit', 'trial_end', 'trial_end_view', 'balance_pay',
   // поведение: экран (сколько секунд, сколько нажатий, нажатия мимо кнопок), жест «назад»
-  'screen', 'back']);
+  'screen', 'back', 'device']);
 let sid; try { sid = sessionStorage.getItem('bp_sid'); if (!sid) { sid = Math.random().toString(36).slice(2, 12); sessionStorage.setItem('bp_sid', sid); } } catch (e) { sid = Math.random().toString(36).slice(2, 12); }
 const t0 = Date.now(), q = [], seen = new Set(); let errs = 0;
 const role = () => { try { return localStorage.getItem('bp_mode') === 'pro' ? 'pro' : 'client'; } catch (e) { return 'client'; } };
@@ -50,6 +50,14 @@ export function screenView(name) { const now = Date.now();
   if (!scr || scr.name !== name) scr = { name, t: now, taps: 0, miss: 0 }; }
 addEventListener('popstate', () => { if (scr) track('back', { c: scr.name }, false); });
 export const currentScreen = () => scr ? scr.name : '';
+// устройство (бета): система, браузер, класс экрана, установлено ли приложение, модель (Android Chrome отдает ее по запросу). Без серийных номеров
+export async function deviceInfo() { const n = navigator, ua = n.userAgent || '';
+  const os = /iPhone|iPad|iPod/.test(ua) ? 'iOS ' + ((ua.match(/OS (\d+)_/) || [])[1] || '') : /Android/.test(ua) ? 'Android ' + ((ua.match(/Android (\d+)/) || [])[1] || '') : /Windows/.test(ua) ? 'Windows' : /Mac OS/.test(ua) ? 'macOS' : 'другое';
+  const br = /YaBrowser/.test(ua) ? 'Yandex' : /Telegram/.test(ua) || (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) ? 'Telegram' : /SamsungBrowser/.test(ua) ? 'Samsung' : /CriOS|Chrome/.test(ua) ? 'Chrome' : /FxiOS|Firefox/.test(ua) ? 'Firefox' : /Safari/.test(ua) ? 'Safari' : 'другой';
+  let model = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : '';
+  try { if (n.userAgentData && n.userAgentData.getHighEntropyValues) { const h = await n.userAgentData.getHighEntropyValues(['model']); if (h.model) model = h.model; } } catch (e) {}
+  const sc = screen || {}, w = Math.min(sc.width || 0, sc.height || 0);
+  return { os: os.trim(), br, model: String(model).slice(0, 30), cls: w >= 600 ? 'планшет' : w >= 400 ? 'большой' : 'обычный', mem: n.deviceMemory || null, pwa: matchMedia('(display-mode: standalone)').matches || n.standalone === true }; }
 addEventListener('pagehide', () => { if (scr) { track('screen', { c: scr.name, d: Math.min(1800, (Date.now() - scr.t) / 1000), n: scr.taps, q: scr.miss }, false); scr = null; flush(); } });
 /** Сведения об устройстве и последних действиях для отчета о проблеме. Без имен и данных клиентов. */
 export function diagnostics(extra = {}) {
