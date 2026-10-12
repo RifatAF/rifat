@@ -1,4 +1,4 @@
-// Быстрый вход: Google (Google Identity Services) и Telegram (виджет на сайте или Mini App внутри Telegram).
+// Быстрый вход: Google (Google Identity Services), Telegram (виджет на сайте или Mini App внутри Telegram) и код на почту (подходит всем, в том числе iPhone без Google).
 import crypto from 'node:crypto';
 import { setSession, clearSession, sessionUid, loadUser, saveUser, deleteUser, allUsers, publicUser, isAdmin, effectivePlan, CONSENT_VERSION, maxClientSlots, ensureRefIndex, loadApp, saveApp, APP, creditReferral, startTrialIfNeeded, trialActive, PRO_PRICE } from './_session.js';
 
@@ -6,6 +6,10 @@ const GOOGLE_ID = process.env.GOOGLE_CLIENT_ID || '';
 const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TG_NAME = process.env.TELEGRAM_BOT_USERNAME || '';
 const ROLES = ['client', 'specialist'];
+// вход по коду на почту: письмо отправляет Resend (RESEND_API_KEY, отправитель MAIL_FROM с подтвержденным доменом)
+const MAIL_KEY = process.env.RESEND_API_KEY || '', MAIL_FROM = process.env.MAIL_FROM || 'BodyPassport <onboarding@resend.dev>';
+const EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]{2,}$/;
+const sha = s => crypto.createHash('sha256').update(String(s)).digest('hex');
 const clip = (v, n) => typeof v === 'string' ? v.replace(/[\u0000-\u001f<>]/g, '').slice(0, n) : '';
 const hex = (a, b) => { const x = Buffer.from(String(a), 'hex'), y = Buffer.from(String(b), 'hex'); return x.length === 32 && x.length === y.length && crypto.timingSafeEqual(x, y); };
 
@@ -52,6 +56,30 @@ async function widgetReady(host) {
   widgetCache.set(host, { ok, t: Date.now() }); return ok;
 }
 
+const codePath = e => `mailcode/${sha('mail:' + e)}.json`;
+async function readJson(p) { try { const { get } = await import('@vercel/blob'); const r = await get(p, { access: 'private', useCache: false }); if (!r || !r.stream) return null;
+  const ch = []; for await (const c of r.stream) ch.push(Buffer.from(c)); return JSON.parse(Buffer.concat(ch).toString('utf8')); } catch (e) { return null; } }
+async function writeJson(p, o) { const { put } = await import('@vercel/blob'); await put(p, JSON.stringify(o), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true }); }
+/** Код на почту: 6 цифр, 10 минут, 5 попыток; не чаще раза в минуту и не больше 5 писем в час на адрес. */
+async function sendMailCode(email) {
+  const e = String(email || '').trim().toLowerCase().slice(0, 120); if (!EMAIL.test(e)) return { status: 400, error: 'проверьте адрес почты' };
+  if (!MAIL_KEY) return { status: 503, error: 'вход по почте пока не подключен' };
+  const now = Date.now(), old = await readJson(codePath(e)), sent = ((old && old.sent) || []).filter(t => now - t < 3600e3);
+  if (sent.length && now - sent.at(-1) < 60e3) return { status: 429, error: 'код уже отправлен, подождите минуту' };
+  if (sent.length >= 5) return { status: 429, error: 'слишком много попыток, попробуйте через час' };
+  const code = String(crypto.randomInt(0, 1e6)).padStart(6, '0');
+  const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + MAIL_KEY, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8000),
+    body: JSON.stringify({ from: MAIL_FROM, to: [e], subject: `Код входа BodyPassport: ${code}`, text: `Ваш код для входа в BodyPassport: ${code}\n\nКод действует 10 минут. Если вы не входили, просто удалите это письмо.` }) }).catch(() => null);
+  if (!r || !r.ok) return { status: 502, error: 'не удалось отправить письмо, попробуйте позже' };
+  await writeJson(codePath(e), { h: sha(process.env.SESSION_SECRET + ':' + e + ':' + code), exp: now + 600e3, tries: 0, sent: [...sent, now] });
+  return { status: 200 }; }
+async function verifyMailCode(email, code) {
+  const e = String(email || '').trim().toLowerCase().slice(0, 120); if (!EMAIL.test(e) || !/^\d{6}$/.test(String(code || ''))) return null;
+  const rec = await readJson(codePath(e)); if (!rec || !rec.h || rec.exp < Date.now() || rec.tries >= 5) return null;
+  if (rec.h !== sha(process.env.SESSION_SECRET + ':' + e + ':' + code)) { rec.tries++; await writeJson(codePath(e), rec); return null; }
+  await writeJson(codePath(e), { sent: rec.sent || [] }); // код одноразовый
+  return { id: 'e_' + sha('uid:' + e).slice(0, 24), provider: 'email', name: clip(e.split('@')[0], 80), email: clip(e, 120) }; }
+
 async function signIn(req, res, ident) {
   if (!ident) return res.status(401).json({ error: 'не удалось подтвердить вход' });
   const b = req.body || {}; const old = await loadUser(ident.id);
@@ -73,7 +101,7 @@ export default async function handler(req, res) {
   try {
     if (!process.env.SESSION_SECRET) return res.status(503).json({ error: 'вход не настроен' });
     await loadApp();
-    if (req.method === 'GET' && a === 'config') return res.status(200).json({ beta: APP.beta, google: GOOGLE_ID || null, telegram: TG_TOKEN && TG_NAME ? TG_NAME : null, telegramWeb: await widgetReady(String(req.headers.host || '').split(':')[0]), telegramId: TG_TOKEN ? TG_TOKEN.split(':')[0] : null });
+    if (req.method === 'GET' && a === 'config') return res.status(200).json({ beta: APP.beta, google: GOOGLE_ID || null, email: !!MAIL_KEY, telegram: TG_TOKEN && TG_NAME ? TG_NAME : null, telegramWeb: await widgetReady(String(req.headers.host || '').split(':')[0]), telegramId: TG_TOKEN ? TG_TOKEN.split(':')[0] : null });
     if (req.method === 'GET' && a === 'me') { const uid = sessionUid(req); const u = uid && await loadUser(uid); if (!u) { if (uid) clearSession(res); return res.status(401).json({ user: null }); }
       if (!u.refCode && process.env.SESSION_SECRET) { await ensureRefIndex(u); await saveUser(u); } // код приглашения для тех, кто вошел до реферальной программы
       if (startTrialIfNeeded(u)) await saveUser(u);
@@ -85,6 +113,8 @@ export default async function handler(req, res) {
     const b = req.body || {};
     if (a === 'google') return signIn(req, res, await verifyGoogle(b.credential));
     if (a === 'telegram') return signIn(req, res, b.initData ? verifyTgInitData(b.initData) : verifyTgWidget(b.data));
+    if (a === 'mailcode') { const r = await sendMailCode(b.email); return res.status(r.status).json(r.status === 200 ? { ok: true } : { error: r.error }); }
+    if (a === 'mail') { const id = await verifyMailCode(b.email, b.code); if (!id) return res.status(401).json({ error: 'неверный или просроченный код' }); return signIn(req, res, id); }
     const uid = sessionUid(req); const u = uid && await loadUser(uid);
     if (!u) return res.status(401).json({ error: 'войдите заново' });
     if (a === 'role') { if (!ROLES.includes(b.role)) return res.status(400).json({ error: 'role' }); u.role = b.role; startTrialIfNeeded(u); await ensureRefIndex(u); await creditReferral(u, false).catch(e => console.error('ref', e)); await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
@@ -92,7 +122,7 @@ export default async function handler(req, res) {
       u.specialty = b.specialty; await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
     // оплата через lava.top: администратор включает Про после оплаты (вебхука пока нет)
     if (a === 'setplan') { if (!isAdmin(u)) return res.status(403).json({ error: 'forbidden' });
-      if (!/^[gt]_[A-Za-z0-9_.-]{1,80}$/.test(b.id || '') || !['start', 'pro', 'studio'].includes(b.plan)) return res.status(400).json({ error: 'bad' });
+      if (!/^[gte]_[A-Za-z0-9_.-]{1,80}$/.test(b.id || '') || !['start', 'pro', 'studio'].includes(b.plan)) return res.status(400).json({ error: 'bad' });
       const t = await loadUser(b.id); if (!t) return res.status(404).json({ error: 'нет такого пользователя' });
       const days = Number.isFinite(+b.days) && b.days !== '' && b.days != null ? Math.max(0, Math.min(400, +b.days)) : 30; t.plan = b.plan; t.planUntil = Math.max(Date.now(), t.planUntil || 0) + days * 864e5; if (b.plan === 'start') t.planUntil = 0;
       await saveUser(t); return res.status(200).json({ ok: true, plan: effectivePlan(t) }); }

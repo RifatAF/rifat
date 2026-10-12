@@ -327,3 +327,20 @@ test('удаление аккаунта: ящики клиентов, напом
   assert.ok([...store.keys()].some(k => k.startsWith(`relay/${other}/`)), 'чужие ящики целы');
   assert.ok(!store.has('remind/t_900.json') && !store.has('users/t_900.json'), 'напоминания и аккаунт удалены');
 });
+
+test('вход по коду на почту: код, неверный код, лимит, вход', async () => {
+  const mails = []; const f0 = globalThis.fetch; globalThis.fetch = async (u, o) => { if (String(u).includes('api.resend.com')) { mails.push(JSON.parse(o.body)); return { ok: true }; } return f0(u, o); };
+  const fresh = (await import(R + 'auth.js?mail=1')).default; // модуль читает ключ при загрузке
+  try {
+    assert.equal((await call(auth, { method: 'POST', query: { a: 'mailcode' }, body: { email: 'a@b.ru' } })).code, 503, 'без ключа выключено');
+    process.env.RESEND_API_KEY = 'k'; const h = (await import(R + 'auth.js?mail=2')).default;
+    assert.equal((await call(h, { method: 'POST', query: { a: 'mailcode' }, body: { email: 'плохо' } })).code, 400);
+    assert.equal((await call(h, { method: 'POST', query: { a: 'mailcode' }, body: { email: 'Anna@Mail.ru' } })).code, 200);
+    const code = /(\d{6})/.exec(mails.at(-1).subject)[1]; assert.deepEqual(mails.at(-1).to, ['anna@mail.ru']);
+    assert.equal((await call(h, { method: 'POST', query: { a: 'mailcode' }, body: { email: 'anna@mail.ru' } })).code, 429, 'не чаще раза в минуту');
+    assert.equal((await call(h, { method: 'POST', query: { a: 'mail' }, body: { email: 'anna@mail.ru', code: code === '000000' ? '111111' : '000000', consent: true, health: true } })).code, 401, 'неверный код');
+    const ok = await call(h, { method: 'POST', query: { a: 'mail' }, body: { email: 'anna@mail.ru', code, consent: true, health: true } });
+    assert.equal(ok.code, 200); assert.match(ok.j.user.id, /^e_[0-9a-f]{24}$/); assert.equal(ok.j.user.email, 'anna@mail.ru');
+    assert.equal((await call(h, { method: 'POST', query: { a: 'mail' }, body: { email: 'anna@mail.ru', code, consent: true, health: true } })).code, 401, 'код одноразовый');
+  } finally { globalThis.fetch = f0; delete process.env.RESEND_API_KEY; void fresh; }
+});
