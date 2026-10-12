@@ -94,6 +94,15 @@ const meta = async k => (await get('meta', k))?.v; const setMeta = (k, v) => put
 // ---------- шаблоны протоколов ----------
 // зона боли в пояснице по шаблону (ТЗ v2.1): LOW, MID, UPPER
 const LUMBAR = { low_back: 'LOW', low_back_mid: 'MID', low_back_up: 'UPPER' };
+// подстройка под специалиста: что он чаще делает, какие тесты и мышцы выбирает. Только на этом телефоне
+const USE = 'bp_use';
+const useGet = () => { try { return JSON.parse(localStorage.getItem(USE) || '{}'); } catch (e) { return {}; } };
+function useHit(kind, id) { const u = useGet(); u[kind] = u[kind] || {}; u[kind][id] = (u[kind][id] || 0) + 1; try { localStorage.setItem(USE, JSON.stringify(u)); } catch (e) {} }
+/** Упорядочить по частоте: пока меньше 3 выборов всего, порядок по умолчанию не трогаем, чтобы список не прыгал. */
+function byUse(kind, list, idOf = x => x) { const u = useGet()[kind] || {}, total = Object.values(u).reduce((x, y) => x + y, 0); if (total < 3) return list;
+  return list.map((x, i) => [x, i]).sort((a, b) => (u[idOf(b[0])] || 0) - (u[idOf(a[0])] || 0) || a[1] - b[1]).map(x => x[0]); }
+/** Тест по умолчанию: тот, что специалист выбирает чаще всего. */
+const favTpl = () => byUse('tpl', TEMPLATES, t => t[0])[0];
 export const TEMPLATES = [
   // шаблоны по жалобе сокращены до 3–4 тестов (ТЗ v2.1, раздел 5): каждая лишняя метрика добавляет шум
   ['knee', 'Колено', ['stand', 'ohs_front', 'sls', 'profile']],
@@ -298,14 +307,13 @@ export async function proHome(query = '', pulled = null) { if (device.webgl2) pr
   // одна кнопка «+»: все действия в одном списке, главный экран без лишних кнопок
   $('#new').onclick = () => { const d = document.createElement('div'); d.className = 'sheet';
     const it = (id, icon, t, sub) => `<button class="row-link" data-act="${id}">${ic(icon, 's')}<span style="flex:1;text-align:left"><b style="font-weight:600">${t}</b><br><small class="sub" style="font-size:13px">${sub}</small></span>${ic('chevron-right', 's chev')}</button>`;
-    d.innerHTML = `<div><h2>Что сделать?</h2><div class="group" style="margin-top:var(--s3)">
-      ${it('qs', 'camera', ({ trainer: 'Скрининг клиента', manual: 'До сеанса', sport: 'Спортивный тест' })[sp] || 'Новая оценка', 'Клиент рядом, тест на этом телефоне')}
-      ${it('join', 'mail', 'Тест по ссылке', 'Клиент пройдет тест дома')}
-      ${it('rtq', 'rotate-ccw', 'Ретест', 'Повторный тест того же клиента')}
-      ${it('repq', 'file-text', 'Отчёт клиенту', 'PDF, картинка или ссылка')}
-      ${it('cmpq', 'arrow-right-left', 'Было → стало', 'Сравнить два теста')}${isBeta() ? it('calq', 'star', 'Калибровка (бета)', 'Вы знаете проблему человека, он проходит тест, данные уходят на настройку') : ''}</div></div>`;
+    const acts = [['qs', 'camera', ({ trainer: 'Скрининг клиента', manual: 'До сеанса', sport: 'Спортивный тест' })[sp] || 'Новая оценка', 'Клиент рядом, тест на этом телефоне'],
+      ['join', 'mail', 'Тест по ссылке', 'Клиент пройдет тест дома'], ['rtq', 'rotate-ccw', 'Ретест', 'Повторный тест того же клиента'], ['repq', 'file-text', 'Отчёт клиенту', 'PDF, картинка или ссылка'],
+      ['cmpq', 'arrow-right-left', 'Было → стало', 'Сравнить два теста'], ...(isBeta() ? [['calq', 'star', 'Калибровка (бета)', 'Вы знаете проблему человека, он проходит тест, данные уходят на настройку']] : [])];
+    // чаще используемое наверху: список подстраивается под специалиста
+    d.innerHTML = `<div><h2>Что сделать?</h2><div class="group" style="margin-top:var(--s3)">${byUse('act', acts, x => x[0]).map(x => it(...x)).join('')}</div></div>`;
     document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
-    d.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { d.remove(); const k = b.dataset.act; if (k === 'qs') quickStart(); else if (k === 'calq') calibSheet(); else $('#' + k).click(); }); }; $('#join').onclick = sendJoin; $('#menu').onclick = proMenu; $('#hcal').onclick = calendarScreen; if ($('#bk')) $('#bk').onclick = backup; if ($('#bk2')) $('#bk2').onclick = backup;
+    d.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { d.remove(); const k = b.dataset.act; useHit('act', k); if (k === 'qs') quickStart(); else if (k === 'calq') calibSheet(); else $('#' + k).click(); }); }; $('#join').onclick = sendJoin; $('#menu').onclick = proMenu; $('#hcal').onclick = calendarScreen; if ($('#bk')) $('#bk').onclick = backup; if ($('#bk2')) $('#bk2').onclick = backup;
   // инструменты в одно касание: клиент один — сразу действие, иначе выбор из последних
   const lastTwo = id => asses.filter(a => a.clientId === id).sort((x, y) => x.date - y.date).slice(-2);
   const tool = (title, ok, act) => () => { const cs = sorted.filter(c => ok(lastTwo(c.id))); if (!cs.length) return toast('Пока нет подходящих клиентов'); if (cs.length === 1) return act(cs[0], lastTwo(cs[0].id)); pickClient(title, cs, c => act(c, lastTwo(c.id))); };
@@ -352,7 +360,7 @@ async function proMenu() {
       ${r('mbug', 'info', 'Сообщить о проблеме')}
       <a class="row-link" href="https://t.me/${DEV.tg}" target="_blank" rel="noopener"><img src="${DEV.photo}" alt="" width="22" height="22" style="border-radius:50%;object-fit:cover"><span>Написать разработчику</span>${ic('chevron-right', 's chev')}</a>
       ${r('mfb', 'message-square', 'Отзыв или идея')}
-      ${r('mexp', 'info', 'Мой опыт по признакам')}
+      ${r('mexp', 'info', 'Мои проверки: что подтверждается')}
       <a class="row-link" href="/privacy" target="_blank">${ic('shield-check', 's')}<span>Конфиденциальность</span>${ic('chevron-right', 's chev')}</a></div>
     ${h('Аккаунт')}<div class="group">
       ${u && u.admin ? r('mst', 'settings', 'Администрирование') : ''}
@@ -620,7 +628,7 @@ async function quickStart() {
   const clients = (await all('clients')).filter(c => !c.demo), asses = await all('assessments');
   const last = id => Math.max(0, ...asses.filter(a => a.clientId === id).map(a => a.date));
   const recent = clients.sort((x, y) => (last(y.id) || y.created) - (last(x.id) || x.created)).slice(0, 3);
-  let tpl = TEMPLATES[0], picked = null, pz = null, pzv = 5, pzs = null;
+  let tpl = favTpl(), picked = null, pz = null, pzv = 5, pzs = null;
   const stepsW = n => n + ' ' + (n % 10 === 1 && n % 100 !== 11 ? 'шаг' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'шага' : 'шагов');
   go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>Новая оценка</b></div></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s2)">
@@ -659,7 +667,7 @@ async function quickStart() {
 
 async function newAssessment(clientId, retestOf, opts = {}) {
   const c = await get('clients', clientId); const prev = retestOf ? await get('assessments', retestOf) : null;
-  let tpl = prev ? TEMPLATES.find(t => t[0] === prev.template) || ['custom', prev.templateName || 'Свой', prev.protocol] : opts.tpl || TEMPLATES[0]; let units = prev ? prev.protocol : tpl[2]; const pain = { ...(opts.pain || {}) }; const pre = {}; let expect = '', painSide = opts.painSide || (prev && prev.painSide) || null;
+  let tpl = prev ? TEMPLATES.find(t => t[0] === prev.template) || ['custom', prev.templateName || 'Свой', prev.protocol] : opts.tpl || favTpl(); let units = prev ? prev.protocol : tpl[2]; const pain = { ...(opts.pain || {}) }; const pre = {}; let expect = '', painSide = opts.painSide || (prev && prev.painSide) || null;
   const draw = () => { const rows = rowsOf(units);
     const session = prev && prev.template === 'posture' && Date.now() - prev.date < 12 * 3600e3; // массаж: «после сеанса» в тот же день
     const goalBtn = t => { const r = rowsOf(t[2]); return `<button class="list-item" data-t="${t[0]}" style="background:#fff;text-align:left;font:inherit;color:inherit;border:1.5px solid ${tpl[0] === t[0] ? 'var(--ink)' : 'transparent'}"><div style="flex:1"><b style="font-size:16px">${t[1]}</b><div style="font-size:13px;color:var(--sub)">${r.length} ${r.length === 1 ? 'шаг' : r.length < 5 ? 'шага' : 'шагов'} · ${mins(SETUP_SEC + secs(r))} мин</div></div>${tpl[0] === t[0] ? ic('check', 's') : ''}</button>`; };
@@ -683,7 +691,7 @@ async function newAssessment(clientId, retestOf, opts = {}) {
     $('#expect').oninput = e => { expect = e.target.value; };
     document.querySelectorAll('[data-ps]').forEach(b => b.onclick = () => { painSide = b.dataset.ps || null; document.querySelectorAll('[data-ps]').forEach(x => x.classList.toggle('on', x === b)); });
     $('#c0').onclick = () => { cam.back = false; localStorage.setItem('bp_back', '0'); draw(); }; $('#c1').onclick = () => { cam.back = true; localStorage.setItem('bp_back', '1'); draw(); };
-    $('#go').onclick = async () => { voice.unlock(); startMotion(); $('#go').textContent = 'Загружаю модель…';
+    $('#go').onclick = async () => { useHit('tpl', tpl[0]); voice.unlock(); startMotion(); $('#go').textContent = 'Загружаю модель…';
       try { await initPose(); } catch (e) { toast('Не удалось загрузить модель: ' + e.message); return draw(); }
       track('assess_start', { n: units.length }, false);
       const r = await runProtocol(units, { target: prev && prev.setup, onCancel: () => clientCard(clientId), pre }); if (!r) return;
@@ -743,21 +751,28 @@ function confSheet(sc, back) {
       <div class="row" style="min-height:56px"><b style="flex:1">Итого · ${BAND_NAMES[sc.band]}</b><b class="num">${p(sc.S)}</b></div></div>
     ${sc.labels.length ? `<p style="font-size:13px;color:var(--short-t);margin-top:var(--s3)">${sc.labels.map(l => esc(LABELS[l])).join('. ')}.</p>` : ''}
     <p class="sub" style="font-size:13px;margin-top:var(--s3)">Высокая уверенность невозможна без исследований: опыт и замер вместе дают не больше средней.</p>
-    <button class="btn line" id="cfe" style="margin-top:var(--s4)">Указать свой опыт по признакам</button><button class="btn" id="cfx" style="margin-top:var(--s2)">Понятно</button></div>`;
+    <button class="btn line" id="cfe" style="margin-top:var(--s4)">Мои проверки: что подтверждается</button><button class="btn" id="cfx" style="margin-top:var(--s2)">Понятно</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
   d.querySelector('#cfx').onclick = () => d.remove(); d.querySelector('#cfe').onclick = () => { d.remove(); experienceScreen(back); };
 }
-// профиль специалиста: доля клиентов, у которых он видит признак (e_exp). Хранится на телефоне, переносится резервной копией
+// опыт специалиста по признакам считается сам: как часто он подтверждает выводы каждого правила руками («Подтверждаю», «Убрать», своя правка).
+// Раньше проценты нужно было угадывать вручную, это было непонятно. От 3 проверок признак получает личную долю подтверждений (сглаженную).
+async function myExperience() { const st = {}, dir = k => k === 'WEAK' ? -1 : k === 'OK' ? 0 : 1;
+  for (const a of await all('assessments')) { const keys = new Set([...Object.keys(a.check || {}), ...Object.keys(a.hyp || {})]); if (!keys.size) continue;
+    let an; try { an = analyze(a, C); } catch (e) { continue; } const raw = spots(an);
+    for (const key of keys) { const [id, side] = key.split(':'), app = raw.find(x => x.key === key); const chk = (a.check || {})[key], ed = (a.hyp || {})[key];
+      const v = chk === 'yes' ? 1 : chk === 'no' ? -1 : ed && app && app.k !== 'OK' ? (dir(ed) === dir(app.k) ? 1 : -1) : 0; if (!v) continue;
+      for (const f of an.findings) if (f.muscles.some(m => m.id === id && (m.side === side || m.side === 'BOTH'))) { const o = st[f.rule.id] = st[f.rule.id] || { agree: 0, disagree: 0 }; if (v > 0) o.agree++; else o.disagree++; } } }
+  const prob = {}; for (const [r, o] of Object.entries(st)) if (o.agree + o.disagree >= 3) prob[r] = (o.agree + 1) / (o.agree + o.disagree + 2);
+  return { stats: st, prob }; }
 async function experienceScreen(back) {
-  const ev = (await meta('eexp')) || {};
-  go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>Мой опыт по признакам</b><small>влияет на уверенность выводов</small></div></div>
-   <div class="pad" style="padding-bottom:var(--s5)"><p class="sub" style="font-size:14px;margin:var(--s2) 0 var(--s4)">У какой доли ваших клиентов с таким признаком вывод о мышцах подтверждается на практике? Не знаете — оставьте пустым: вывод будет помечен «нужна оценка специалиста».</p>
-    <div class="group">${Object.entries(RULE_NAMES).map(([id, n]) => `<div class="row" style="min-height:64px;flex-wrap:wrap;gap:8px"><span style="flex:1 1 60%;font-size:15px">${n}${RESEARCH[id] ? `<small style="display:block;font-size:12px;color:var(--sub)">исследования: ${String(RESEARCH[id][0]).replace('.', ',')}</small>` : ''}</span>
-      <select class="field" data-ev="${id}" style="width:104px;height:44px;padding:0 8px;font-size:15px"><option value="">—</option>${[10, 20, 30, 40, 50, 60, 70, 80, 90, 95].map(v => `<option value="${v}" ${ev[id] != null && Math.round(ev[id] * 100) === v ? 'selected' : ''}>${v}%</option>`).join('')}</select></div>`).join('')}</div>
-    <button class="link" id="evr" style="margin-top:var(--s3);color:var(--over-t)">Сбросить всё</button></div></div>`);
+  const { stats } = await myExperience(), rows = Object.entries(stats).sort((x, y) => (y[1].agree + y[1].disagree) - (x[1].agree + x[1].disagree));
+  go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>Мои проверки</b><small>как часто подтверждаются выводы</small></div></div>
+   <div class="pad" style="padding-bottom:var(--s5)"><p class="sub" style="font-size:14px;line-height:1.4;margin:var(--s2) 0 var(--s4)">Считается само по вашим отметкам «Подтверждаю», «Убрать» и правкам мышц. Признаки, которые вы часто подтверждаете, приложение показывает увереннее, часто убираемые осторожнее. Работает от 3 проверок признака.</p>
+    ${rows.length ? `<div class="group">${rows.map(([id, o]) => { const n = o.agree + o.disagree, pct = Math.round(o.agree / n * 100);
+      return `<div class="row" style="min-height:56px;gap:8px"><span style="flex:1;font-size:15px;line-height:1.3">${esc(RULE_NAMES[id] || id)}<small style="display:block;font-size:12px;color:var(--sub)">подтвердили ${o.agree} из ${n}${n < 3 ? ' · пока мало проверок' : ''}</small></span><b class="num" style="color:${pct >= 60 ? 'var(--ok-t,#2E7D5B)' : pct < 40 ? 'var(--over-t)' : 'var(--text)'}">${pct}%</b></div>`; }).join('')}</div>`
+      : '<div class="card">Пока нет ваших проверок. Отмечайте «Подтверждаю» или «Убрать» у гипотез в разборе, и здесь появится статистика.</div>'}</div></div>`);
   $('#back').onclick = () => (back || proHome)();
-  document.querySelectorAll('[data-ev]').forEach(sl => sl.onchange = async () => { const v = sl.value ? +sl.value / 100 : null; if (v == null) delete ev[sl.dataset.ev]; else ev[sl.dataset.ev] = v; await setMeta('eexp', ev); toast('Сохранено'); });
-  $('#evr').onclick = async () => { if (!(await confirm2('Сбросить ваш опыт по всем признакам?', 'Сбросить'))) return; await setMeta('eexp', {}); experienceScreen(back); };
 }
 
 // ---------- результат: измерено, гипотеза, назначение ----------
@@ -773,8 +788,8 @@ const LEGEND = `<div class="row" style="justify-content:center;gap:14px;flex-wra
 function focusOf(a, sp = proSpots(a)) { const conf = a.check || {};
   const decided = sp.filter(s => s.k !== 'OK' && (conf[s.key] === 'yes' || s.edited)).sort(byTone);
   const top = sp.filter(s => s.k !== 'OK' && conf[s.key] !== 'no' && (!s.derived || s.edited || s.byChain)).sort(byTone);
-  // решения специалиста показываем все (до 12): это его вывод, а не черновик; без решений — по 2 главные гипотезы каждого типа
-  const base = decided.length ? decided : top, items = ['WEAK', 'SHORT', 'HYPER'].flatMap(k => base.filter(s => s.k === k && !s.ambiguous).slice(0, decided.length ? 12 : 2));
+  // решения специалиста показываем все (до 12): это его вывод, а не черновик; без решений — по 3 главные гипотезы каждого типа
+  const base = decided.length ? decided : top, items = ['WEAK', 'SHORT', 'HYPER'].flatMap(k => base.filter(s => s.k === k && !s.ambiguous).slice(0, decided.length ? 12 : 3));
   // упражнения: сначала по одному на каждую строку решения, потом остальные
   const lead = ['WEAK', 'SHORT', 'HYPER'].map(k => items.find(s => s.k === k)).filter(Boolean);
   return { base, decided, items, keys: new Set(items.map(s => s.key)), planSpots: [...lead, ...items.filter(s => !lead.includes(s))] }; }
@@ -785,7 +800,7 @@ export async function result(aid, view = 'measured') {
   const toPlan = view === 'plan'; if (toPlan) view = 'measured';
   if (RES_A && RES_A.id === aid && $('#pt')) await savePlan(RES_A); // перерисовка не теряет набранный комментарий
   const a = await get('assessments', aid); if (!a) return proHome(); RES_A = a; const c = await get('clients', a.clientId);
-  const an = analyze(a, C); const sp = proSpots(a); const evid = (await meta('eexp')) || {}; const top = sp.filter(s => s.k !== 'OK' && (!s.derived || s.edited || s.byChain)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
+  const an = analyze(a, C); const sp = proSpots(a); const evid = (await myExperience()).prob; const top = sp.filter(s => s.k !== 'OK' && (!s.derived || s.edited || s.byChain)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
   const q = Object.entries(a.quality || {}); const qa = q.length ? Math.round(q.reduce((x, [, v]) => x + v, 0) / q.length) : null;
   const facts = an.findings.slice(0, 3);
   const tab = (k, t) => `<button class="${view === k ? 'on' : ''}" data-v="${k}">${t}</button>`;
@@ -905,7 +920,8 @@ export async function result(aid, view = 'measured') {
     document.querySelectorAll('[data-card]').forEach(bindCard);
     $('#addm').onclick = () => { const d = document.createElement('div'); d.className = 'sheet';
       d.innerHTML = `<div><h2>Добавить мышцу</h2>
-        <select id="mm" class="field" style="margin-top:12px;padding:0 10px">${Object.entries(C.muscles).sort((x, y) => (x[1].zone || '').localeCompare(y[1].zone || '')).map(([id, m]) => `<option value="${id}">${m.zone || m.name} — ${m.name}</option>`).join('')}</select>
+        <select id="mm" class="field" style="margin-top:12px;padding:0 10px">${(() => { const all = Object.entries(C.muscles).sort((x, y) => (x[1].zone || '').localeCompare(y[1].zone || '')), fav = byUse('mus', all, x => x[0]).filter(x => (useGet().mus || {})[x[0]] >= 2).slice(0, 6);
+          return (fav.length ? `<optgroup label="Часто отмечаете">${fav.map(([id, m]) => `<option value="${id}">${m.name}</option>`).join('')}</optgroup><optgroup label="Все мышцы">` : '') + all.map(([id, m]) => `<option value="${id}">${m.zone || m.name} — ${m.name}</option>`).join('') + (fav.length ? '</optgroup>' : ''); })()}</select>
         <div class="seg" style="margin-top:10px"><button id="sl" class="on">Левая</button><button id="sr">Правая</button></div>
         <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">${STATES.filter(x => x[0] !== 'OK').map(([k, n], i) => `<button class="pill" data-ns="${k}" style="border:1.5px solid ${i ? 'transparent' : 'var(--ink)'}">${n}</button>`).join('')}</div>
         <button class="btn" id="ma" style="margin-top:14px">Добавить</button><button class="btn ghost" id="mx" style="margin-top:8px;border:0">Отмена</button></div>`;
@@ -914,7 +930,7 @@ export async function result(aid, view = 'measured') {
       d.querySelector('#sr').onclick = () => { side = 'RIGHT'; d.querySelector('#sr').classList.add('on'); d.querySelector('#sl').classList.remove('on'); };
       d.querySelectorAll('[data-ns]').forEach(b => b.onclick = () => { st = b.dataset.ns; d.querySelectorAll('[data-ns]').forEach(x => x.style.borderColor = x === b ? 'var(--ink)' : 'transparent'); });
       d.querySelector('#mx').onclick = () => d.remove();
-      d.querySelector('#ma').onclick = async () => { a.hyp = a.hyp || {}; a.hyp[d.querySelector('#mm').value + ':' + side] = st; await put('assessments', a); d.remove(); result(aid, 'hyp'); }; }; }
+      d.querySelector('#ma').onclick = async () => { a.hyp = a.hyp || {}; useHit('mus', d.querySelector('#mm').value); a.hyp[d.querySelector('#mm').value + ':' + side] = st; await put('assessments', a); d.remove(); result(aid, 'hyp'); }; }; }
   if (toPlan && $('#planh')) $('#planh').scrollIntoView({ block: 'start' });
   if (view === 'measured') { $('#dict').onclick = () => dictate($('#pt'), $('#dict'));
     // в списке видны только выбранные упражнения; остальные находятся поиском или кнопкой «Показать все»
@@ -1238,16 +1254,16 @@ async function inviteLink(c, units, date) {
 async function sendInvite(c) {
   if (!gate('invite')) return;
   if ((await byClient(c.id)).length && !(await canTrack(c))) return; // повторный тест из дома = ведение
-  const as = await byClient(c.id); const lastT = as.at(-1); let tpl = TEMPLATES.find(t => t[0] === (lastT && lastT.template)) || TEMPLATES[0];
+  const as = await byClient(c.id); const lastT = as.at(-1); let tpl = TEMPLATES.find(t => t[0] === (lastT && lastT.template)) || favTpl();
   const d = document.createElement('div'); d.className = 'sheet';
   const draw = () => { d.innerHTML = `<div><h2>Ссылка клиенту</h2><p class="sub" style="font-size:14px;margin-top:6px">${esc(c.name)} откроет ссылку, пройдет тест дома, и результат сам появится в его карточке. Клиент тоже видит свою карту.</p>
-    <div class="row" style="flex-wrap:wrap;gap:8px;margin-top:12px">${TEMPLATES.map(t => `<button class="pill" data-t="${t[0]}" style="border:1.5px solid ${tpl[0] === t[0] ? 'var(--ink)' : 'transparent'}">${t[1]}</button>`).join('')}</div>
+    <div class="eyebrow" style="margin-top:14px">Какой тест пройдет клиент</div><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px">${TEMPLATES.map(t => `<button class="pill" data-t="${t[0]}" style="border:1.5px solid ${tpl[0] === t[0] ? 'var(--ink)' : 'transparent'}">${t[1]}</button>`).join('')}</div>
     <p class="sub" style="font-size:13px;margin-top:8px">${rowsOf(tpl[2]).length} шагов · около ${mins(SETUP_SEC + secs(rowsOf(tpl[2])))} мин</p>
     <button class="btn" id="snd" style="margin-top:14px">Отправить ссылку</button><p style="font-size:12px;color:var(--sub);margin-top:8px">Результат шифруется на телефоне клиента. Ключ есть только у тебя и клиента.</p>
     <button class="btn ghost" id="cx" style="margin-top:8px;border:0">Отмена</button></div>`;
     d.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tpl = TEMPLATES.find(t => t[0] === b.dataset.t); draw(); });
     d.querySelector('#cx').onclick = () => d.remove();
-    d.querySelector('#snd').onclick = async () => { let url; try { url = await inviteLink(c, tpl[2]); } catch (e) { toast('Не удалось создать ссылку: ' + e.message); return; } track('invite_sent'); const text = `${c.name.split(' ')[0]}, здравствуйте! Пройдите, пожалуйста, тест движения по ссылке, это 2–4 минуты. Результат сразу придет мне.`;
+    d.querySelector('#snd').onclick = async () => { let url; try { url = await inviteLink(c, tpl[2]); } catch (e) { toast('Не удалось создать ссылку: ' + e.message); return; } track('invite_sent'); useHit('tpl', tpl[0]); const text = `${c.name.split(' ')[0]}, здравствуйте! Пройдите, пожалуйста, тест движения по ссылке, это 2–4 минуты. Результат сразу придет мне.`;
       if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url); toast('Ссылка скопирована'); } d.remove(); }; };
   draw(); document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
 }
@@ -1275,7 +1291,7 @@ async function addResult(c, r) {
 // и полный видеотест, результат с записью движения приходит в кабинет. Выгрузка сводит экспертную оценку, ответы и замеры в один файл.
 const CAL_STATES = [['HYPER', 'перегружена'], ['SHORT', 'укорочена'], ['WEAK', 'слабая']], CAL_SIDES = [['LEFT', 'Л'], ['RIGHT', 'П'], ['BOTH', 'обе']];
 async function calibSheet(edit) {
-  const d = document.createElement('div'); d.className = 'sheet'; const labels = edit ? edit.calib.labels.slice() : []; let side = 'BOTH', q = '';
+  const d = document.createElement('div'); d.className = 'sheet'; const labels = edit ? edit.calib.labels.slice() : []; let side = 'BOTH', q = '', tpl = TEMPLATES.find(t => t[0] === 'full') || TEMPLATES[0];
   const ms = Object.entries(C.muscles).map(([id, m]) => ({ id, name: m.name, zone: m.zone || '' }));
   const draw = () => { const list = ms.filter(m => !q || (m.name + ' ' + m.zone).toLowerCase().includes(q.toLowerCase())).slice(0, q ? 12 : 60);
     d.querySelector('#cl_sel').innerHTML = labels.length ? labels.map((l, i) => `<button class="pill" data-rm="${i}" style="font-size:13px">${esc(C.muscles[l.id].name)} · ${CAL_SIDES.find(x => x[0] === l.side)[1]} · ${CAL_STATES.find(x => x[0] === l.k)[1]} ×</button>`).join('') : '<span class="sub" style="font-size:13px">Пока ничего не отмечено</span>';
@@ -1288,10 +1304,12 @@ async function calibSheet(edit) {
     <div class="eyebrow" style="margin-top:14px">Ваша оценка</div><div class="row" id="cl_sel" style="flex-wrap:wrap;gap:6px;margin-top:8px"></div>
     <div class="row" style="gap:6px;margin-top:10px"><span class="sub" style="font-size:13px">Сторона следующей отметки:</span>${CAL_SIDES.map(([k, t]) => `<button class="pill" data-side="${k}" style="font-size:13px;min-height:30px;border:1.5px solid ${k === side ? 'var(--ink)' : 'transparent'}">${t}</button>`).join('')}</div>
     <input class="field" id="cl_q" type="search" placeholder="Найти мышцу" style="margin-top:8px;height:44px"><div id="cl_list" style="margin-top:6px;max-height:260px;overflow:auto"></div>
+    ${edit ? '' : `<div class="eyebrow" style="margin-top:14px">Какой тест пройдет человек</div><div class="row" id="cl_tpl" style="flex-wrap:wrap;gap:6px;margin-top:8px">${TEMPLATES.map(t => `<button class="pill" data-tp="${t[0]}" style="font-size:13px;border:1.5px solid ${tpl[0] === t[0] ? 'var(--ink)' : 'transparent'}">${t[1]}</button>`).join('')}</div><p class="sub" style="font-size:12px;margin-top:6px">Для калибровки лучше «Полный»: больше замеров для сравнения.</p>`}
     <textarea class="field" id="cl_note" rows="3" placeholder="Что еще знаете: история травм, жалобы, что делали" style="margin-top:12px;height:auto;padding:12px 16px;font-size:15px"></textarea>
     <button class="btn" id="cl_go" style="margin-top:14px">${edit ? 'Сохранить оценку' : 'Создать ссылку'}</button><button class="btn ghost" id="cl_x" style="margin-top:8px;border:0">Отмена</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; draw();
   d.querySelectorAll('[data-side]').forEach(b => b.onclick = () => { side = b.dataset.side; d.querySelectorAll('[data-side]').forEach(x => x.style.borderColor = x.dataset.side === side ? 'var(--ink)' : 'transparent'); });
+  d.querySelectorAll('[data-tp]').forEach(b => b.onclick = () => { tpl = TEMPLATES.find(t => t[0] === b.dataset.tp); d.querySelectorAll('[data-tp]').forEach(x => x.style.borderColor = x.dataset.tp === tpl[0] ? 'var(--ink)' : 'transparent'); });
   d.querySelector('#cl_q').oninput = e => { q = e.target.value.trim(); draw(); }; d.querySelector('#cl_x').onclick = () => d.remove();
   if (edit) d.querySelector('#cl_note').value = edit.calib.note || '';
   if (edit) { d.querySelector('#cl_go').onclick = async () => { edit.calib = { ...edit.calib, labels: labels.slice(), note: d.querySelector('#cl_note').value.trim().slice(0, 2000), editedAt: Date.now() };
@@ -1301,8 +1319,8 @@ async function calibSheet(edit) {
     try { const c = { id: uid(), created: Date.now(), name, notes: '', calib: { labels: labels.slice(), note: d.querySelector('#cl_note').value.trim().slice(0, 2000), at: Date.now() } };
       c.invite = await freshBox(null); await put('clients', c); track('calib_link', { n: labels.length }, false);
       const author = (await meta('profile')) || defaultAuthor();
-      const url = location.origin + '/#join=' + seal.pack({ i: c.invite.id, k: c.invite.key, s: author, p: Object.keys(UNITS), cal: 1 });
-      const text = `${name.split(' ')[0]}, здравствуйте! Помогите настроить тест движения: короткая анкета (где болит, что беспокоит) и полный тест перед камерой, около 7 минут. Результат придет мне, а без имени уйдет разработчику для настройки приложения.`;
+      const url = location.origin + '/#join=' + seal.pack({ i: c.invite.id, k: c.invite.key, s: author, p: tpl[2], cal: 1 });
+      const text = `${name.split(' ')[0]}, здравствуйте! Помогите настроить тест движения: короткая анкета (где болит, что беспокоит) и тест перед камерой, около ${mins(SETUP_SEC + secs(rowsOf(tpl[2])))} мин. Результат придет мне, а без имени уйдет разработчику для настройки приложения.`;
       d.remove(); if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url).catch(() => {}); toast('Ссылка скопирована'); }
       clientCard(c.id); }
     catch (e) { b.disabled = false; b.textContent = 'Создать ссылку'; toast('Не удалось создать ссылку: ' + e.message); } };
@@ -1338,14 +1356,14 @@ async function calibExport() {
 async function inbox() { const b = await meta('inbox'), f = await freshBox(b); if (f !== b) await setMeta('inbox', f); return f; }
 async function sendJoin() {
   if (!gate('invite')) return;
-  let tpl = TEMPLATES[0]; const d = document.createElement('div'); d.className = 'sheet';
+  let tpl = favTpl(); const d = document.createElement('div'); d.className = 'sheet';
   const draw = () => { d.innerHTML = `<div><h2>Ссылка новому клиенту</h2><p class="sub" style="font-size:14px;margin-top:6px">Клиент сам заполнит имя и анкету, пройдет тест, и у вас появится его карточка с результатом и записью движения. Одну ссылку можно отправлять разным людям.</p>
-    <div class="row" style="flex-wrap:wrap;gap:8px;margin-top:12px">${TEMPLATES.map(t => `<button class="pill" data-t="${t[0]}" style="border:1.5px solid ${tpl[0] === t[0] ? 'var(--ink)' : 'transparent'}">${t[1]}</button>`).join('')}</div>
+    <div class="eyebrow" style="margin-top:14px">Какой тест пройдет клиент</div><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px">${TEMPLATES.map(t => `<button class="pill" data-t="${t[0]}" style="border:1.5px solid ${tpl[0] === t[0] ? 'var(--ink)' : 'transparent'}">${t[1]}</button>`).join('')}</div>
     <p class="sub" style="font-size:13px;margin-top:8px">${rowsOf(tpl[2]).length} шагов · около ${mins(SETUP_SEC + secs(rowsOf(tpl[2])))} мин + анкета</p>
     <button class="btn" id="snd" style="margin-top:14px">Отправить ссылку</button><button class="btn ghost" id="cx" style="margin-top:8px;border:0">Отмена</button></div>`;
     d.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tpl = TEMPLATES.find(t => t[0] === b.dataset.t); draw(); });
     d.querySelector('#cx').onclick = () => d.remove();
-    d.querySelector('#snd').onclick = async () => { let bx; try { bx = await inbox(); } catch (e) { toast('Не удалось создать ссылку: ' + e.message); return; } track('join_sent'); const author = (await meta('profile')) || defaultAuthor();
+    d.querySelector('#snd').onclick = async () => { let bx; try { bx = await inbox(); } catch (e) { toast('Не удалось создать ссылку: ' + e.message); return; } track('join_sent'); useHit('tpl', tpl[0]); const author = (await meta('profile')) || defaultAuthor();
       const url = location.origin + '/' + (myRef() ? '?ref=' + myRef() : '') + '#join=' + seal.pack({ i: bx.id, k: bx.key, s: author, p: tpl[2] });
       const text = 'Здравствуйте! Пройдите, пожалуйста, тест движения по ссылке: короткая анкета и 2–4 минуты перед камерой. Результат сразу придет мне.';
       if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url); toast('Ссылка скопирована'); } d.remove(); }; };

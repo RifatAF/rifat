@@ -211,6 +211,29 @@ export function drawSkeleton(cv, frame, opts = {}) {
   const [fx, fy] = m(p[focus[0]]); return { focusXY: [fx / dpr, fy / dpr] };
 }
 
+// ---------- бета: запись видео теста (камера + скелет) ----------
+/** Записывает то, что видит камера, со скелетом поверх, в один видеофайл. Нужна, чтобы показать разработчику, как трясется скелет или где сбился тест:
+ *  системная запись экрана на части телефонов останавливается, пока камера занята. Возвращает { stop(): Promise<Blob|null> } или null, если браузер не умеет. */
+export function recordTest(video) {
+  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) return null;
+  const c = document.createElement('canvas'), x = c.getContext('2d'); let on = true, rec = null; const parts = [];
+  const draw = () => { if (!on) return; const w = video.videoWidth, h = video.videoHeight;
+    if (w && h) { const k = Math.min(1, 720 / Math.max(w, h)); if (c.width !== Math.round(w * k)) { c.width = Math.round(w * k); c.height = Math.round(h * k); }
+      const mir = !cam.back; x.save(); if (mir) { x.translate(c.width, 0); x.scale(-1, 1); } x.drawImage(video, 0, 0, c.width, c.height);
+      const p = cam.frame && cam.frame.pose; if (p) { x.strokeStyle = '#D4F25A'; x.lineWidth = 4; x.lineCap = 'round';
+        for (const [i, j] of BONES) if (p[i].visibility > .4 && p[j].visibility > .4) { x.beginPath(); x.moveTo(p[i].x * k, p[i].y * k); x.lineTo(p[j].x * k, p[j].y * k); x.stroke(); }
+        x.fillStyle = '#fff'; for (const i of [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]) if (p[i].visibility > .4) { x.beginPath(); x.arc(p[i].x * k, p[i].y * k, 5, 0, 7); x.fill(); } }
+      x.restore(); }
+    requestAnimationFrame(draw); };
+  draw();
+  try { const type = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp9', 'video/webm'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+    rec = new MediaRecorder(c.captureStream(24), type ? { mimeType: type, videoBitsPerSecond: 2.5e6 } : undefined); rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); }; rec.start(1000); }
+  catch (e) { on = false; return null; }
+  return { stop: () => new Promise(res => { on = false; if (!rec || rec.state === 'inactive') return res(null); rec.onstop = () => res(parts.length ? new Blob(parts, { type: rec.mimeType || 'video/webm' }) : null); rec.stop(); }) };
+}
+/** Сохранить файл на телефон (в «Загрузки»). */
+export function saveBlob(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000); }
+
 // ---------- контур «куда встать» (пунктир по центру кадра) ----------
 const SIL = 'M78 72 L122 72 Q140 74 144 92 L156 176 Q158 186 150 188 Q144 188 142 180 L132 112 L128 190 L130 268 L128 352 Q128 362 118 362 Q110 362 110 352 L104 210 L96 210 L90 352 Q90 362 82 362 Q72 362 72 352 L70 268 L72 190 L68 112 L58 180 Q56 188 50 188 Q42 186 44 176 L56 92 Q60 74 78 72 Z';
 export function drawSilhouette(cv, target = {}) {
