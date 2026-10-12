@@ -183,8 +183,8 @@ export function onboarding() {
     <div class="pad" style="margin-top:24px"><h1>Тест движения за 3 минуты</h1>
       <p class="sub" style="margin-top:12px">Встаньте перед камерой телефона и сделайте несколько простых движений. Вы увидите, какие мышцы перегружены, а какие работают слабо, и получите упражнения. Это оценка движения, а не диагноз.</p>
       ${INV() ? '' : `<div class="row" style="margin-top:20px"><img src="img/rifat.jpg" alt="Рифат Аюпов" width="44" height="44" style="border-radius:50%;object-fit:cover;flex:none"><div><b style="font-size:14px;font-weight:600;display:block">Методика Рифата Аюпова</b><span style="font-size:13px;color:var(--sub)">кинезиотерапевт, биомеханик</span></div></div>`}</div>
-    <div class="dock"><button class="btn" id="next">Начать тест <span class="meta">· бесплатно</span></button>${myReports().length || tests().length ? '<button class="btn line" id="mycab">Мой кабинет</button>' : ''}${localStorage.getItem('bp_inv') && !canSwitchMode() ? '' : `<button class="btn ghost" id="pro">Я специалист: вход в кабинет</button>`}${canInstall() ? `<button class="link" id="inst1" style="display:block;margin:4px auto 0;font-size:14px;color:var(--sub)">${ic('download', 's')} Установить приложение</button>` : ''}</div></div>`);
-  $('#next').onclick = () => { track('onb_done'); prep(); }; if ($('#pro')) $('#pro').onclick = () => openPro(); if ($('#mycab')) $('#mycab').onclick = clientHome; if ($('#inst1')) $('#inst1').onclick = () => installNow();
+    <div class="dock"><button class="btn" id="next">Начать тест <span class="meta">· бесплатно</span></button>${myReports().length || tests().length ? '<button class="btn line" id="mycab">Мой кабинет</button>' : ''}<button class="btn ghost" id="pro">Я специалист: вход в кабинет</button>${canInstall() ? `<button class="link" id="inst1" style="display:block;margin:4px auto 0;font-size:14px;color:var(--sub)">${ic('download', 's')} Установить приложение</button>` : ''}</div></div>`);
+  $('#next').onclick = () => { track('onb_done'); prep(); }; if ($('#pro')) $('#pro').onclick = () => localStorage.getItem('bp_inv') ? specSheet() : openPro(); if ($('#mycab')) $('#mycab').onclick = clientHome; if ($('#inst1')) $('#inst1').onclick = () => installNow();
 }
 
 // ---------- 2. подготовка ----------
@@ -698,22 +698,24 @@ const outbox = (() => { const open = () => new Promise((ok, no) => { const q = i
 try { const old = localStorage.getItem('bp_pending'); if (old) { outbox.set(JSON.parse(old)).then(() => localStorage.removeItem('bp_pending')).catch(() => {}); } } catch (e) {}
 async function sendResult(r) {
   const inv = INV(); if (!inv) return;
-  localStorage.setItem('bp_sent', 'sending');
+  localStorage.setItem('bp_sent', 'sending'); localStorage.setItem('bp_sent_at', String(Date.now()));
   try { const pr = PROFILE(); const payload = inv.join ? { type: 'join', token: pr && pr.token, profile: pr, result: r } : r;
     const body = await seal.encrypt(inv.k, payload); const res = await fetch('/api/relay?id=' + inv.i, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body });
     if (!res.ok) throw new Error(res.status); localStorage.setItem('bp_sent', 'ok'); track('result_sent'); outbox.clear().catch(() => {}); }
   catch (e) { localStorage.setItem('bp_sent', 'fail'); track('result_fail', { c: String(e.message || e) }); await outbox.set(r).catch(() => {}); }
-  const box = document.getElementById('sentbox'); if (box) box.outerHTML = sentBanner();
+  const box = document.getElementById('sentbox'); if (box) box.outerHTML = sentBanner(tests().at(-1));
 }
 // клиенту по ссылке специалиста: дата повторного теста и кнопка «в календарь телефона» с напоминанием за день
 // специалист открыл ссылку, присланную как клиенту (например, коллега показал приложение): объясняем и ведем в свой кабинет
 function specHint() { if (!canSwitchMode()) return ''; return '<div class="pad" style="padding-top:8px;text-align:center"><button class="link" id="iamsp" style="font-size:14px;color:var(--sub)">Вы специалист? Откройте свой кабинет</button></div>'; }
-function bindSpecHint() { const b = document.getElementById('iamsp'); if (!b) return; b.onclick = () => {
+function bindSpecHint() { const b = document.getElementById('iamsp'); if (!b) return; b.onclick = specSheet; }
+// на телефоне осталась ссылка клиента: объясняем и по согласию переводим в кабинет специалиста
+function specSheet() {
   const d = document.createElement('div'); d.className = 'sheet'; const who = (INV() || {}).s || 'Коллега';
   d.innerHTML = `<div><h2>Это тест для клиента</h2><p class="sub" style="margin-top:8px">${esc(who)} прислал ссылку, по которой клиент проходит тест и результат уходит специалисту. Чтобы работать со своими клиентами, откройте собственный кабинет: в нем ваши клиенты, отчеты с вашим именем и ссылки для ваших клиентов.</p>
     <button class="btn" id="spgo" style="margin-top:var(--s4)">Открыть кабинет специалиста</button><button class="btn ghost" id="spx" style="margin-top:8px">Я клиент, продолжить</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'spx') d.remove(); };
-  d.querySelector('#spgo').onclick = () => { d.remove(); track('inv_open', { c: 'specialist' }, false); localStorage.removeItem('bp_inv'); localStorage.setItem('bp_mode', 'pro'); openPro(); }; }; }
+  d.querySelector('#spgo').onclick = () => { d.remove(); track('inv_open', { c: 'specialist' }, false); localStorage.removeItem('bp_inv'); localStorage.removeItem('bp_sent'); localStorage.setItem('bp_mode', 'pro'); openPro(); }; }
 function addSpecHint() { const sc = app.querySelector('.scr'); if (sc && !document.getElementById('iamsp')) { sc.insertAdjacentHTML('beforeend', specHint()); bindSpecHint(); } }
 function retestCard() { const inv = INV(); if (!inv || !inv.d) return '';
   const days = Math.ceil((inv.d - Date.now()) / 864e5), date = new Date(inv.d).toLocaleDateString('ru', { day: 'numeric', month: 'long' });
@@ -733,7 +735,9 @@ function bindRetestCard() { const t = document.getElementById('rttg'); if (t) t.
     const z = n => String(n).padStart(2, '0'), d = new Date(inv.d), day = `${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}`, url = location.origin + '/';
     const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//BodyPassport//RU', 'BEGIN:VEVENT', 'UID:bp-retest-' + inv.i.slice(0, 12) + '@bodypassport', 'DTSTART;VALUE=DATE:' + day, 'SUMMARY:Повторный тест движения (BodyPassport)', 'DESCRIPTION:Откройте ' + url + ' и пройдите тест', 'BEGIN:VALARM', 'TRIGGER:-PT15H', 'ACTION:DISPLAY', 'DESCRIPTION:Завтра повторный тест движения', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' })); a.download = 'retest.ics'; a.click(); }; }
-function sentBanner() { const inv = INV(); if (!inv) return ''; const st = localStorage.getItem('bp_sent');
+// плашка об отправке только у теста, пройденного по этой ссылке; «отправляю» дольше 2 минут — значит, отправка прервалась
+function sentBanner(t) { const inv = INV(); if (!inv || (t && t.inv !== inv.i)) return ''; let st = localStorage.getItem('bp_sent'); if (!st) return '';
+  if (st === 'sending' && Date.now() - +(localStorage.getItem('bp_sent_at') || 0) > 120000) st = 'fail';
   return `<div class="pad" id="sentbox" style="padding-top:12px"><div class="card row" style="font-size:14px;gap:10px">${st === 'ok' ? `<span class="mark OK"></span><span style="flex:1">Результат отправлен: ${esc(inv.s)}${inv.cal ? '. Специалист сверит его со своей оценкой и отправит без вашего имени на настройку приложения' : ''}</span>` : st === 'fail' ? `<i class="dia" style="color:var(--short)"></i><span style="flex:1">Не удалось отправить результат</span><button class="pill" id="resend">Отправить снова</button>` : '<span class="spin" style="margin:0;width:16px;height:16px;border-width:2px"></span><span>Отправляю результат специалисту…</span>'}</div></div>`; }
 
 // ---------- 4. анализ: тёмный экран, фигура проявляется, три строки статуса ----------
@@ -771,7 +775,7 @@ export function map() {
   const nSteps = t.protocol ? rowsOf(t.protocol).length : Object.keys(t.moves || {}).length;
   const days = Math.floor((Date.now() - t.date) / 864e5);
   go(`<div class="scr fade">
-   ${!SHARED && INV() ? sentBanner() + retestCard() : ''}
+   ${!SHARED && INV() ? sentBanner(t) + retestCard() : ''}
    ${!SHARED && SHOW_T && tests().length && SHOW_T !== tests().at(-1).date ? `<div class="pad" style="padding-top:12px"><button class="card row" id="toLast" style="width:100%;border:0;font:inherit;font-size:14px;cursor:pointer;color:inherit">${ic('info', 's')}<span style="flex:1;text-align:left">Это тест из истории</span><b style="color:var(--brand)">К последнему</b></button></div>` : ''}
    ${SHARED ? `<div class="pad" style="padding-top:12px"><div class="card row" style="font-size:14px">${ic('info', 's')}<span>Это результат по ссылке. Ваши данные не меняются.</span></div></div>` : ''}
    <div class="pad row" style="padding-top:16px;align-items:flex-start"><div style="flex:1;min-width:0"><div class="eyebrow">${new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })} · ${nSteps} ${plural3(nSteps, 'шаг', 'шага', 'шагов')}${qa != null ? ' · качество ' + qa : ''}</div><h1 style="margin-top:6px">${SHARED ? 'Карта тела' : 'Ваша карта тела'}</h1></div>${SHARED ? '' : '<button class="pill" id="cab" style="margin-right:8px">Мой кабинет</button>'}<button class="round" id="set" aria-label="Настройки">${ic('settings')}</button></div>
