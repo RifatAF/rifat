@@ -6,7 +6,7 @@ import { npsCard, bindNps, installCard, bindInstall, installNow, canInstall, fee
 import { meSync, logout, getMe } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
 import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS } from './plans.js';
-import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast, preload3D } from './core.js';
+import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast, preload3D, saveBlob } from './core.js';
 import { cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen } from './app.js';
 
 // активные клиенты занимают слоты; пример и закрытые (пришли сверх лимита) не считаются
@@ -290,7 +290,7 @@ export async function proHome(query = '', pulled = null) { syncAutoCalib().catch
     <div class="pad tools" id="toolsH" hidden><button class="tool" id="join">${ic('mail')}Тест по ссылке</button><button class="tool" id="rtq">${ic('rotate-ccw')}Ретест</button><button class="tool" id="repq">${ic('file-text')}Отчёт</button><button class="tool" id="cmpq">${ic('arrow-right-left')}Было→стало</button></div>
     ${review.length ? h3('Нужно посмотреть', review.length) + `<div class="pad"><div class="group">${review.map(a => `<div class="list-item" data-a="${a.id}" style="border-radius:0;padding:var(--s3) 0;background:transparent"><span class="dot"></span><div style="flex:1;min-width:0"><b>${esc(byId[a.clientId].name)}</b><div style="font-size:13px;color:var(--sub)">${a.source === 'home' ? 'прошёл тест по ссылке' : 'гипотеза не подтверждена'} · ${esc(a.templateName || 'оценка')} · ${fmtDate(a.date)}</div></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div></div>` : ''}
     ${soon.length ? h3('Ретесты', soon.length) + `<div class="pad"><div class="group">${soon.map(({ c, a }) => { const d = Math.ceil((a.nextDate - Date.now()) / DAY);
-      return `<div class="row" style="min-height:64px"><span class="step-n" style="width:56px;color:${d < 0 ? 'var(--over-t)' : 'var(--sub)'}">${d < 0 ? '−' + (-d) + ' дн.' : d === 0 ? 'сегодня' : '+' + d + ' дн.'}</span><div style="flex:1;min-width:0;cursor:pointer" data-id="${c.id}"><b>${esc(c.name)}</b><div style="font-size:13px;color:var(--sub)">${fmtDate(a.nextDate)}</div></div><button class="pill" data-msg="${c.id}">Напомнить</button></div>`; }).join('')}</div></div>` : ''}
+      return `<div class="row" style="min-height:64px"><span class="step-n" style="width:56px;color:${d < 0 ? 'var(--over-t)' : 'var(--sub)'}">${d < 0 ? '−' + (-d) + ' дн.' : d === 0 ? 'сегодня' : '+' + d + ' дн.'}</span><div style="flex:1;min-width:0;cursor:pointer" data-id="${c.id}"><b>${esc(c.name)}</b><div style="font-size:13px;color:var(--sub)">${fmtDate(a.nextDate)}</div></div><button class="pill" data-msg="${c.id}">${c.retestSent && c.retestSent > a.nextDate - 45 * DAY ? 'Еще раз' : 'Ссылка'}</button></div>`; }).join('')}</div></div>` : ''}
     ${consults.length ? h3('Консультации', consults.length) + `<div class="pad"><div class="group">${consults.map(({ c, v }) => `<div class="row" style="min-height:60px;cursor:pointer" data-id="${c.id}"><span class="step-n" style="width:72px;color:var(--sub)">${new Date(v.t).toLocaleDateString('ru', { day: 'numeric', month: 'short' })}${new Date(v.t).getHours() ? '<br>' + new Date(v.t).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }) : ''}</span><b style="flex:1">${esc(c.name)}</b><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div></div>` : ''}
     ${h3(q ? 'Поиск' : 'Последние клиенты', clients.length > list.length && !q ? 'из ' + clients.length : '')}
     ${clients.length > 6 || q ? `<div class="pad" style="margin-bottom:var(--s2)"><input id="q" class="field" style="height:48px" value="${esc(query)}" placeholder="Найти клиента"></div>` : ''}
@@ -324,7 +324,7 @@ export async function proHome(query = '', pulled = null) { syncAutoCalib().catch
   if ($('#allc')) $('#allc').onclick = () => allClients();
   if ($('#q')) $('#q').oninput = e => { clearTimeout(window._qt); window._qt = setTimeout(() => proHome(e.target.value).then(() => { const i = $('#q'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }), 250); };
   document.querySelectorAll('[data-id]').forEach(el => el.onclick = () => clientCard(el.dataset.id));
-  document.querySelectorAll('[data-msg]').forEach(el => el.onclick = () => { const x = soon.find(y => y.c.id === el.dataset.msg); if (x) messageClient(x.c, x.a.nextDate); });
+  document.querySelectorAll('[data-msg]').forEach(el => el.onclick = async () => { const x = soon.find(y => y.c.id === el.dataset.msg); if (x && await retestInvite(x.c, x.a)) proHome(); });
   document.querySelectorAll('.list-item[data-a]').forEach(el => el.onclick = () => result(el.dataset.a));
 }
 // шторка выбора клиента для инструментов «Сегодня»: 5 последних и поиск
@@ -508,8 +508,8 @@ export async function clientCard(id) {
    ${homeBlock(c)}
    <div class="pad" style="margin-top:12px"><div class="card"><div class="eyebrow">Следующие шаги</div>
      <div class="row" style="margin-top:10px;align-items:flex-start"><span style="color:var(--sub);padding-top:2px">${ic('rotate-ccw', 's')}</span><div style="flex:1;min-width:0"><b>Повторный тест</b><div style="font-size:14px;color:${rdays != null && rdays <= 0 ? 'var(--over-t)' : 'var(--sub)'}">${rd ? fmtDate(rd) + (rdays < 0 ? ', просрочен' : rdays === 0 ? ', сегодня' : `, через ${rdays} дн.`) : 'дата не назначена'}</div>
-       ${c.retestSent ? `<div style="font-size:13px;color:var(--ok-t)">Ссылка отправлена ${new Date(c.retestSent).toLocaleDateString('ru', { day: 'numeric', month: 'long' })}</div>` : ''}</div><button class="pill" id="rdate">Дата</button></div>
-     <button class="btn" id="rinv" style="margin-top:10px;height:48px">Пригласить на повторный тест</button>
+       ${c.retestSent ? `<div style="font-size:13px;color:var(--ok-t)">Ссылка отправлена ${new Date(c.retestSent).toLocaleDateString('ru', { day: 'numeric', month: 'long' })}</div>` : ''}</div><button class="pill" id="rdate">${rd ? 'Изменить' : 'Назначить'}</button></div>
+     ${rd ? `<button class="btn${c.retestSent && c.retestSent > rd - 45 * DAY ? ' line' : ''}" id="rinv" style="margin-top:10px;height:48px">${c.retestSent && c.retestSent > rd - 45 * DAY ? 'Отправить ссылку еще раз' : 'Отправить клиенту ссылку'}</button>` : `<button class="btn" id="rset" style="margin-top:10px;height:48px">Назначить и отправить ссылку</button>`}
      <div class="row" style="margin-top:14px;align-items:flex-start;border-top:1px solid var(--line-2);padding-top:12px"><span style="color:var(--sub);padding-top:2px">${ic('calendar', 's')}</span><div style="flex:1;min-width:0"><b>Консультация</b><div style="font-size:14px;color:var(--sub)">${next ? when(next.t) : 'не запланирована'}${done.length ? ` · прошло: ${done.length}` : ''}</div></div><button class="pill" id="vadd">${next ? 'Изменить' : 'Назначить'}</button></div>
      ${pending.map(v => `<div class="row" style="margin-top:8px;font-size:14px;background:var(--surface);border-radius:12px;padding:8px 10px"><span style="flex:1">${when(v.t)}: консультация состоялась?</span><button class="pill" data-vy="${v.id}">Да</button><button class="pill" data-vn="${v.id}" style="margin-left:6px">Нет</button></div>`).join('')}
      ${next ? `<button class="btn line" id="vinv" style="margin-top:10px;height:44px">Отправить клиенту приглашение</button>` : ''}
@@ -538,9 +538,8 @@ export async function clientCard(id) {
   if ($('#cmp')) $('#cmp').onclick = () => compare(as.at(-2).id, last.id);
   if ($('#rel')) $('#rel').onclick = () => repeatability(as.slice(-3), id);
   $('#inv').onclick = () => sendInvite(c);
-  $('#rinv').onclick = () => retestInvite(c, last);
-  $('#rdate').onclick = async () => { const t = await datePick('Дата повторного теста', rd || now + 28 * DAY, false); if (!t) return;
-    if (last) { last.nextDate = t; await put('assessments', last); } else { c.plannedRetest = t; await put('clients', c); } syncReminders().catch(() => {}); clientCard(id); };
+  if ($('#rinv')) $('#rinv').onclick = async () => { if (await retestInvite(c, last)) clientCard(id); };
+  $('#rdate').onclick = async () => { if (await retestSheet(c, last)) clientCard(id); }; if ($('#rset')) $('#rset').onclick = $('#rdate').onclick;
   $('#vadd').onclick = async () => { const t = await datePick('Консультация', next ? next.t : now + 7 * DAY, true); if (!t) return;
     c.visits = (c.visits || []).filter(v => v !== next && !(next && v.id === next.id)); c.visits.push({ id: uid(), t, done: false }); await put('clients', c); syncReminders().catch(() => {}); clientCard(id); };
   if ($('#vinv')) $('#vinv').onclick = () => { const text = `${c.name.split(' ')[0]}, здравствуйте! Напоминаю о консультации ${when(next.t)}. Если время не подходит, напишите мне.`;
@@ -568,14 +567,20 @@ async function calendarScreen() {
   const dayKey = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
   const groups = {}; for (const e of ev) { const k = e.t < today.getTime() ? 'over' : String(dayKey(e.t)); (groups[k] ||= []).push(e); }
   const title = k => k === 'over' ? 'Просрочено' : +k === today.getTime() ? 'Сегодня' : +k === today.getTime() + DAY ? 'Завтра' : new Date(+k).toLocaleDateString('ru', { weekday: 'long', day: 'numeric', month: 'long' });
-  const row = e => `<div class="list-item" data-cc="${e.c.id}" style="background:#fff"><span style="color:${e.k === 'retest' ? 'var(--short-t)' : 'var(--sub)'}">${ic(e.k === 'retest' ? 'rotate-ccw' : 'calendar', 's')}</span><div style="flex:1;min-width:0"><b>${esc(e.c.name)}</b><div style="font-size:13px;color:var(--sub)">${e.k === 'retest' ? 'Повторный тест' : 'Консультация'}${e.k === 'consult' && (new Date(e.t).getHours() || new Date(e.t).getMinutes()) ? ' · ' + new Date(e.t).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }) : ''}${e.k === 'retest' && e.c.retestSent ? ' · ссылка отправлена' : ''}</div></div><span class="chev">›</span></div>`;
+  const row = e => `<div class="list-item" data-cc="${e.c.id}" style="background:#fff"><span style="color:${e.k === 'retest' ? 'var(--short-t)' : 'var(--sub)'}">${ic(e.k === 'retest' ? 'rotate-ccw' : 'calendar', 's')}</span><div style="flex:1;min-width:0"><b>${esc(e.c.name)}</b><div style="font-size:13px;color:var(--sub)">${e.k === 'retest' ? 'Повторный тест' : 'Консультация'}${e.k === 'consult' && (new Date(e.t).getHours() || new Date(e.t).getMinutes()) ? ' · ' + new Date(e.t).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }) : ''}${e.k === 'retest' && e.c.retestSent ? ' · ссылка отправлена' : ''}</div></div><button class="pill" data-ca="${e.k}|${e.c.id}|${e.t}" style="flex:none">${e.k === 'retest' ? (e.c.retestSent && e.c.retestSent > e.t - 45 * DAY ? 'Еще раз' : 'Ссылка') : 'Напомнить'}</button></div>`;
   const keys = Object.keys(groups).sort((a, b) => (a === 'over' ? -1 : b === 'over' ? 1 : +a - +b));
   go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:18px;flex:1">Календарь</b><button class="pill" id="cics">В календарь телефона</button></div>
     <div class="pad" style="display:flex;flex-direction:column;gap:8px;padding-bottom:32px">${keys.length ? keys.map(k => `<h3 style="margin:14px 0 4px;font-size:16px;${k === 'over' ? 'color:var(--over-t)' : ''}">${title(k)[0].toUpperCase() + title(k).slice(1)}</h3>${groups[k].map(row).join('')}`).join('')
       : '<div class="card empty">' + ic('calendar') + '<b>На ближайшие 2 месяца ничего не запланировано</b><span class="sub" style="font-size:14px">Дату повторного теста и консультации назначают в карточке клиента.</span></div>'}
     <p class="sub" style="font-size:12px;margin-top:12px">${remindLine()}</p></div></div>`);
   $('#back').onclick = () => proHome();
-  document.querySelectorAll('[data-cc]').forEach(el => el.onclick = () => clientCard(el.dataset.cc));
+  document.querySelectorAll('[data-cc]').forEach(el => el.onclick = e => { if (!e.target.closest('[data-ca]')) clientCard(el.dataset.cc); });
+  // действие прямо из календаря, без захода в карточку
+  document.querySelectorAll('[data-ca]').forEach(b => b.onclick = async () => { const [k, cid, t] = b.dataset.ca.split('|'), x = ev.find(y => y.c.id === cid && y.k === k && y.t === +t); if (!x) return;
+    if (k === 'retest') { const l = (await byClient(cid)).at(-1); if (await retestInvite(x.c, l, x.t)) calendarScreen(); }
+    else { const tm = new Date(x.t), w = tm.toLocaleDateString('ru', { day: 'numeric', month: 'long' }) + (tm.getHours() || tm.getMinutes() ? ', ' + tm.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }) : '');
+      const text = `${x.c.name.split(' ')[0]}, здравствуйте! Напоминаю о консультации ${w}. Если время не подходит, напишите мне.`;
+      if (navigator.share) navigator.share({ text }).catch(() => {}); else { navigator.clipboard && navigator.clipboard.writeText(text); toast('Текст скопирован'); } } });
   $('#cics').onclick = () => { if (!ev.length) return toast('Нечего добавлять'); icsDownload(ev.filter(e => e.t > now).map(e => ({ t: e.t, title: `${e.k === 'retest' ? 'Повторный тест' : 'Консультация'}: ${e.c.name}`, id: e.c.id + '-' + e.k + '-' + e.t, timed: e.k === 'consult' }))); };
 }
 // события в календарь телефона одним файлом .ics, с напоминанием за день
@@ -639,22 +644,53 @@ function datePick(title, t0, withTime) {
   return new Promise(res => { const d0 = new Date(t0), pad = n => String(n).padStart(2, '0');
     const dv = `${d0.getFullYear()}-${pad(d0.getMonth() + 1)}-${pad(d0.getDate())}`, tv = withTime ? `${pad(d0.getHours() || 10)}:${pad(d0.getMinutes())}` : '';
     const d = document.createElement('div'); d.className = 'sheet';
-    d.innerHTML = `<div><h2>${title}</h2><input type="date" id="dpd" class="field" value="${dv}" style="margin-top:var(--s4)">${withTime ? `<input type="time" id="dpt" class="field" value="${tv}" style="margin-top:8px">` : ''}
+    // быстрые варианты: одно касание вместо прокрутки календаря
+    const t0d = new Date(); t0d.setHours(0, 0, 0, 0); const iso = t => { const x = new Date(t); return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`; };
+    const quick = withTime ? [[1, 'Завтра'], [3, 'Через 3 дня'], [7, 'Через неделю'], [14, 'Через 2 недели']] : [[14, '2 недели'], [28, '4 недели'], [42, '6 недель'], [56, '8 недель']];
+    d.innerHTML = `<div><h2>${title}</h2><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:var(--s3)">${quick.map(([n, l]) => `<button class="pill" data-qd="${n}">${l}</button>`).join('')}</div>
+      ${withTime ? `<div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px">${['09:00', '12:00', '15:00', '18:00'].map(x => `<button class="pill" data-qt="${x}">${x}</button>`).join('')}</div>` : ''}
+      <input type="date" id="dpd" class="field" value="${dv}" style="margin-top:var(--s3)">${withTime ? `<input type="time" id="dpt" class="field" value="${tv}" style="margin-top:8px">` : ''}
       <button class="btn" id="dpok" style="margin-top:var(--s4)">Сохранить</button><button class="btn ghost" id="dpx" style="margin-top:8px">Отмена</button></div>`;
     document.body.appendChild(d); const close = v => { d.remove(); res(v); };
     d.onclick = e => { if (e.target === d) close(null); }; d.querySelector('#dpx').onclick = () => close(null);
+    const mark = (sel, b) => d.querySelectorAll(sel).forEach(x => x.style.border = x === b ? '1.5px solid var(--ink)' : '');
+    d.querySelectorAll('[data-qd]').forEach(b => b.onclick = () => { d.querySelector('#dpd').value = iso(t0d.getTime() + +b.dataset.qd * DAY); mark('[data-qd]', b); if (!withTime) d.querySelector('#dpok').click(); });
+    d.querySelectorAll('[data-qt]').forEach(b => b.onclick = () => { d.querySelector('#dpt').value = b.dataset.qt; mark('[data-qt]', b); });
     d.querySelector('#dpok').onclick = () => { const v = d.querySelector('#dpd').value; if (!v) return; const [y, m, dd] = v.split('-').map(Number); let h = 10, mi = 0;
       if (withTime) { const tt = d.querySelector('#dpt').value || '10:00'; [h, mi] = tt.split(':').map(Number); } close(new Date(y, m - 1, dd, withTime ? h : 0, withTime ? mi : 0).getTime()); }; });
 }
 // приглашение на ретест в одно касание: ссылка с тем же протоколом, что в прошлый раз, и датой ретеста
-async function retestInvite(c, last) {
-  if (!(await canTrack(c))) return;
+async function retestInvite(c, last, date) {
+  if (!(await canTrack(c))) return; date = date || (last && last.nextDate) || c.plannedRetest;
   const tpl = TEMPLATES.find(t => t[0] === (last && last.template)) || TEMPLATES[0]; let url;
-  try { url = await inviteLink(c, tpl[2], last && last.nextDate); } catch (e) { return toast('Не удалось создать ссылку: ' + e.message); }
+  try { url = await inviteLink(c, tpl[2], date); } catch (e) { return toast('Не удалось создать ссылку: ' + e.message); }
   track('invite_sent', { c: 'retest' }, false);
-  const text = `${c.name.split(' ')[0]}, здравствуйте! Пора повторить тест движения, чтобы увидеть изменения. Это займет 2–4 минуты, результат сразу придет мне.`;
+  const soon = date && date - Date.now() > 2 * DAY;
+  const text = `${c.name.split(' ')[0]}, здравствуйте! ${soon ? `${fmtDate(date)} повторим тест движения, чтобы увидеть изменения. Ссылка ниже, можно открыть в этот день` : 'Пора повторить тест движения, чтобы увидеть изменения'}. Это займет 2–4 минуты, результат сразу придет мне.`;
   let ok = false; if (navigator.share) { try { await navigator.share({ text, url }); ok = true; } catch (e) {} } else { await navigator.clipboard.writeText(text + ' ' + url).catch(() => {}); toast('Ссылка скопирована'); ok = true; }
-  if (ok) { c.retestSent = Date.now(); await put('clients', c); clientCard(c.id); }
+  if (ok) { c.retestSent = Date.now(); await put('clients', c); }
+  return ok;
+}
+/** Ретест в одной шторке: срок одним касанием и сразу ссылка клиенту. Возвращает true, если что-то изменилось. */
+function retestSheet(c, last) {
+  return new Promise(res => { const d = document.createElement('div'); d.className = 'sheet'; const rd0 = (last && last.nextDate) || c.plannedRetest || null;
+    const t0 = new Date(); t0.setHours(0, 0, 0, 0); let t = rd0 || t0.getTime() + 28 * DAY, send = !c.retestSent || (rd0 && c.retestSent < rd0 - 45 * DAY);
+    const pad = n => String(n).padStart(2, '0'), iso = x => { const y = new Date(x); return `${y.getFullYear()}-${pad(y.getMonth() + 1)}-${pad(y.getDate())}`; };
+    const draw = () => { const n = Math.round((t - t0.getTime()) / DAY);
+      d.innerHTML = `<div><h2>Повторный тест</h2><p class="sub" style="font-size:14px;margin-top:4px">${esc(c.name)}${c.retestSent ? ' · ссылка отправлена ' + fmtDate(c.retestSent) : ''}</p>
+      <div class="row" style="flex-wrap:wrap;gap:8px;margin-top:12px">${[[14, '2 недели'], [28, '4 недели'], [42, '6 недель'], [56, '8 недель']].map(([k, l]) => `<button class="pill" data-n="${k}" style="border:1.5px solid ${n === k ? 'var(--ink)' : 'transparent'}">${l}</button>`).join('')}</div>
+      <input type="date" id="rsd" class="field" value="${iso(t)}" style="margin-top:10px">
+      <label class="row" style="gap:10px;margin-top:14px;font-size:15px;align-items:flex-start"><input type="checkbox" id="rss" style="width:20px;height:20px;flex:none" ${send ? 'checked' : ''}><span>Сразу отправить клиенту ссылку на тест<br><span class="sub" style="font-size:13px">В сообщении будет дата. Тест можно пройти в любой день, результат придет в карточку.</span></span></label>
+      <button class="btn" id="rsok" style="margin-top:14px">${send ? 'Сохранить и отправить' : 'Сохранить'}</button>${rd0 ? '<button class="btn ghost" id="rsdel" style="margin-top:8px">Убрать дату</button>' : ''}<button class="btn ghost" id="rsx" style="margin-top:8px;border:0">Отмена</button></div>`;
+      d.querySelectorAll('[data-n]').forEach(b => b.onclick = () => { t = t0.getTime() + +b.dataset.n * DAY; draw(); });
+      d.querySelector('#rsd').onchange = e => { const [y, m, dd] = e.target.value.split('-').map(Number); if (y) { t = new Date(y, m - 1, dd).getTime(); draw(); } };
+      d.querySelector('#rss').onchange = e => { send = e.target.checked; draw(); };
+      d.querySelector('#rsx').onclick = () => { d.remove(); res(false); };
+      if (d.querySelector('#rsdel')) d.querySelector('#rsdel').onclick = async () => { if (last) { delete last.nextDate; last.retestSet = false; await put('assessments', last); } delete c.plannedRetest; await put('clients', c); syncReminders().catch(() => {}); d.remove(); res(true); };
+      d.querySelector('#rsok').onclick = async () => { if (last) { last.nextDate = t; last.retestSet = true; last.draft = false; await put('assessments', last); } else { c.plannedRetest = t; await put('clients', c); }
+        track('retest_set', { n: Math.round((t - Date.now()) / DAY), s: send ? 1 : 0 }, false); syncReminders().catch(() => {}); d.remove();
+        if (send) await retestInvite(c, last, t); else toast('Ретест ' + fmtDate(t)); res(true); }; };
+    d.onclick = e => { if (e.target === d) { d.remove(); res(false); } }; draw(); document.body.appendChild(d); });
 }
 // строка о напоминаниях под «Следующими шагами»
 function remindLine() {
@@ -851,6 +887,14 @@ export async function result(aid, view = 'measured') {
   const toPlan = view === 'plan'; if (toPlan) view = 'measured';
   if (RES_A && RES_A.id === aid && $('#pt')) await savePlan(RES_A); // перерисовка не теряет набранный комментарий
   const a = await get('assessments', aid); if (!a) return proHome(); RES_A = a; const c = await get('clients', a.clientId);
+  // ретест: что изменилось с прошлого теста, прямо в «Итоге» (3 самых заметных сдвига и боль)
+  const pv = a.prevId ? await get('assessments', a.prevId) : null; let deltaCard = '';
+  if (pv) { const cmp = comparable(pv, a), ds = deltas(pv, a).filter(x => x.state !== 'same').sort((x, y) => Math.abs(y.d) - Math.abs(x.d)).slice(0, 3);
+    const pz = PAIN.filter(([z]) => (pv.pain || {})[z] > 0 || (a.pain || {})[z] > 0), r1 = v => Math.round(v * 10) / 10;
+    deltaCard = `<div class="card" style="padding:12px 14px"><div class="row"><div class="eyebrow" style="flex:1">С прошлого теста · ${fmtDate(pv.date)}</div><button class="link" id="dcmp" style="font-size:13px">Было → стало</button></div>
+      ${ds.length ? ds.map(x => `<div class="row" style="margin-top:8px;font-size:14px;gap:8px"><span style="flex:1">${esc(x.n)}</span><span class="sub">${r1(x.was)} → ${r1(x.now)}${esc(x.u || '')}</span><b style="color:${x.state === 'better' ? 'var(--ok-t)' : 'var(--over-t)'};width:62px;text-align:right">${x.state === 'better' ? 'лучше' : 'хуже'}</b></div>`).join('') : '<div style="font-size:14px;margin-top:8px">Замеры в пределах погрешности, заметных изменений нет</div>'}
+      ${pz.length ? `<div style="font-size:14px;margin-top:8px"><span class="sub">Боль:</span> ${pz.map(([z, n]) => `${n} ${(pv.pain || {})[z] || 0} → ${(a.pain || {})[z] || 0}`).join(' · ')}</div>` : ''}
+      ${cmp.ok ? '' : `<div style="font-size:12px;color:var(--short-t);margin-top:8px">${cmp.setupOk ? 'Съемка в одном из тестов хуже 60 из 100' : 'Телефон стоял на другом расстоянии'}: сравнение приблизительное</div>`}</div>`; }
   const an = analyze(a, C); const sp = proSpots(a); const evid = (await myExperience()).prob; const top = sp.filter(s => s.k !== 'OK' && (!s.derived || s.edited || s.byChain)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone));
   const q = Object.entries(a.quality || {}); const qa = q.length ? Math.round(q.reduce((x, [, v]) => x + v, 0) / q.length) : null;
   const facts = an.findings.slice(0, 3);
@@ -870,6 +914,7 @@ export async function result(aid, view = 'measured') {
     const isBefore = a.template === 'posture' && !a.prevId;
     body = `
     ${qa != null && qa < 60 ? `<div class="card" style="border:1px solid var(--over-t);padding:12px 14px;font-size:14px;line-height:1.4"><span class="edge">Съемка ${qa} из 100</span> Мало света, тело не целиком в кадре или телефон качался. Слабые находки скрыты, остальное приблизительно. Лучше переснять.</div>` : ''}
+    ${deltaCard}
     <div class="card"><div class="row" style="align-items:flex-start;gap:var(--s4)">
       <div style="width:92px;flex:none"><div class="seg" style="margin-bottom:6px;${hasBack ? '' : 'display:none'}"><button id="mf" class="on" style="min-height:32px;padding:0;font-size:12px">Пер.</button><button id="mb2" style="min-height:32px;padding:0;font-size:12px">Зад</button></div><canvas id="heat" style="width:92px;display:block"></canvas></div>
       <div style="flex:1;min-width:0"><span class="src">ИЗМЕРЕНО</span>${facts.length ? facts.map((f, i) => { const m = numOf(f.observed); return `<div class="mrow" style="margin-top:12px"><i>${i + 1}</i><span>${esc(plainObs(f.observed))}${/на границе нормы/.test(f.observed) ? ' <span class="edge">граница</span>' : ''}</span>${m ? `<b>${m[1]}${m[2]}</b>` : ''}</div>`; }).join('') + '<p style="font-size:11px;color:var(--faint);margin-top:10px">Одна камера: точность угла около ±5°</p>' : '<p class="sub" style="margin-top:8px;font-size:14px">Существенных отклонений нет</p>'}</div></div></div>
@@ -923,10 +968,11 @@ export async function result(aid, view = 'measured') {
     if ($('#mkplan')) $('#mkplan').onclick = async () => { await savePlan(a); a.plan = a.plan || { ex: [], text: '' }; a.plan.ex = [...new Set([...a.plan.ex, ...muscleRecs(a).flatMap(r => r.all)])].slice(0, 8); await put('assessments', a); result(aid, 'plan'); };
     if ($('#after')) $('#after').onclick = async () => { a.draft = false; await put('assessments', a); newAssessment(a.clientId, a.id); };
     $('#send').onclick = async () => { track('report_sent'); await savePlan(a); a.draft = false; await put('assessments', a); report(aid); };
-    $('#rt').onclick = async () => { track('retest_set'); a.nextDate = Date.now() + 30 * DAY; a.retestSet = true; a.draft = false; await put('assessments', a); $('#rt').innerHTML = ic('check'); $('#rt').setAttribute('aria-label', 'Ретест ' + fmtDate(a.nextDate) + ' назначен'); toast('Ретест ' + fmtDate(a.nextDate)); }; }
+    $('#rt').onclick = async () => { const c0 = await get('clients', a.clientId); if (!c0 || !(await retestSheet(c0, a)) || !a.nextDate) return; $('#rt').innerHTML = ic('check'); $('#rt').setAttribute('aria-label', 'Ретест ' + fmtDate(a.nextDate) + ' назначен'); }; }
   if ($('#mv')) $('#mv').onclick = async () => { const pp = await get('poses', aid); motionViewer(pp && pp.poses, a.setup, () => result(aid), `${c.name} · ${fmtDate(a.date)}`); };
   $('#back').onclick = async () => { await savePlan(a); clientCard(a.clientId); };
   $('#rep').onclick = async () => { await savePlan(a); a.draft = false; await put('assessments', a); report(aid); };
+  if ($('#dcmp')) $('#dcmp').onclick = () => $('#cmp') ? $('#cmp').click() : compare(a.prevId, aid);
   if ($('#cmp')) $('#cmp').onclick = async () => { await savePlan(a); a.draft = false; await put('assessments', a); compare(a.prevId, aid); };
   $('#fin').onclick = async () => { await savePlan(a); a.draft = false; await put('assessments', a); clientCard(a.clientId); };
   if ($('#vnote')) { let tm = 0; $('#vnote').oninput = e => { clearTimeout(tm); tm = setTimeout(async () => { a.note = e.target.value.slice(0, 1000); await put('assessments', a); }, 600); }; }
@@ -1090,7 +1136,7 @@ async function undoRestore() { const v = await snapLoad(); if (!v) return toast(
   indexedDB.deleteDatabase(snapName()); toast('Вернул как было'); proHome(); }
 
 // для автотестов
-export const _pro = { all, put, get, del, db, unpack: (...a) => unpack(...a), normalize: (...a) => normalize(...a), phaseRep: (...a) => phaseRep(...a) };
+export const _pro = { all, put, get, del, db, unpack: (...a) => unpack(...a), normalize: (...a) => normalize(...a), phaseRep: (...a) => phaseRep(...a), clientCard: (...a) => clientCard(...a), calendarScreen: (...a) => calendarScreen(...a), result: (...a) => result(...a), compare: (...a) => compare(...a) };
 
 // =================== Этап 2: «было → стало» и отчет клиенту ===================
 const BONES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28], [27, 31], [28, 32], [27, 29], [28, 30]];
@@ -1136,8 +1182,9 @@ function resample(fr, n) {
 const REP_TESTS = ['ohs_front', 'ohs_side', 'ohs_back', 'sls_r', 'sls_l'];
 const prepTrack = (pk, a, key) => { const fr = normalize(unpack(pk, a.setup && a.setup.w, a.setup && a.setup.h)); return REP_TESTS.includes(key) ? phaseRep(fr) : resample(fr, 120); };
 
-function drawPair(cv, ghost, cur, k) {
-  const ctx = cv.getContext('2d'), dpr = devicePixelRatio, W = cv.width = cv.clientWidth * dpr, H = cv.height = cv.clientHeight * dpr;
+function drawPair(cv, ghost, cur, k, fixed) {
+  // fixed: холст для видео с заданным размером (не на экране)
+  const ctx = cv.getContext('2d'), dpr = fixed ? cv.width / 360 : devicePixelRatio, W = fixed ? cv.width : (cv.width = cv.clientWidth * dpr), H = fixed ? cv.height : (cv.height = cv.clientHeight * dpr);
   ctx.clearRect(0, 0, W, H); const sc = H / 1.32, ox = W / 2, oy = H * .9;
   const P = l => [ox + l.x * sc, oy + l.y * sc];
   ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, oy); ctx.lineTo(W, oy); ctx.stroke();
@@ -1145,6 +1192,24 @@ function drawPair(cv, ghost, cur, k) {
     for (const [i, j] of BONES) { if (f.p[i].v < .3 || f.p[j].v < .3) continue; ctx.beginPath(); ctx.moveTo(...P(f.p[i])); ctx.lineTo(...P(f.p[j])); ctx.stroke(); }
     const h = P(f.p[0]); ctx.beginPath(); ctx.arc(h[0], h[1], sc * .045, 0, 7); ctx.stroke(); ctx.setLineDash([]); };
   sk(ghost, 'rgba(255,255,255,.3)', 3 * dpr, [4 * dpr, 5 * dpr]); sk(cur, '#D4F25A', 3.5 * dpr, []);
+}
+
+/** Видео «было → стало» для соцсетей и клиента: 10 с, вертикальное 720×1280, прошлый скелет пунктиром, сегодняшний ярко. */
+async function pairVideo(ghost, cur, top, bottom, legend) {
+  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) throw new Error('телефон не умеет записывать видео');
+  const W = 720, H = 1280, c = document.createElement('canvas'); c.width = W; c.height = H; const sub = document.createElement('canvas'); sub.width = 720; sub.height = 900;
+  const x = c.getContext('2d'), mime = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)) || '';
+  const rec = new MediaRecorder(c.captureStream(30), mime ? { mimeType: mime, videoBitsPerSecond: 2.5e6 } : {}), parts = []; rec.ondataavailable = e => e.data.size && parts.push(e.data);
+  const wrap = (t, y, size, color) => { x.fillStyle = color; x.font = `600 ${size}px system-ui,sans-serif`; x.textAlign = 'center'; let line = '', yy = y;
+    for (const w of String(t).split(' ')) { if (x.measureText(line + w).width > W - 80 && line) { x.fillText(line.trim(), W / 2, yy); line = ''; yy += size * 1.25; } line += w + ' '; } x.fillText(line.trim(), W / 2, yy); };
+  const frame = t => { x.fillStyle = '#0B1A20'; x.fillRect(0, 0, W, H); wrap(top, 110, 44, '#fff');
+    drawPair(sub, ghost, cur, (t / 3.3) % 1, true); x.drawImage(sub, 0, 190);
+    x.font = '500 26px system-ui,sans-serif'; x.textAlign = 'center'; x.fillStyle = 'rgba(255,255,255,.55)'; x.fillText(legend[0], W / 2 - 150, 1130); x.fillStyle = '#D4F25A'; x.fillText(legend[1], W / 2 + 150, 1130);
+    if (bottom) wrap(bottom, 1185, 32, '#D4F25A'); x.fillStyle = 'rgba(255,255,255,.4)'; x.font = '500 22px system-ui,sans-serif'; x.fillText('BodyPassport', W / 2, H - 28); };
+  frame(0); rec.start(500); const t0 = performance.now();
+  await new Promise(res => { const step = () => { const t = (performance.now() - t0) / 1000; frame(t); if (t < 10) requestAnimationFrame(step); else res(); }; step(); });
+  await new Promise(res => { rec.onstop = res; rec.stop(); });
+  return new Blob(parts, { type: (mime || 'video/webm').split(';')[0] });
 }
 
 // пороги «существенного изменения»: меньше — это погрешность съемки (до собственной валидации — консервативные значения).
@@ -1186,7 +1251,8 @@ export async function compare(prevId, curId) {
    ${keys.length ? `<div style="position:relative;height:260px;border-radius:var(--r-lg);background:var(--cam-bg);overflow:hidden"><canvas id="cv" style="width:100%;height:100%;display:block"></canvas>
        <span class="eyebrow" style="position:absolute;right:14px;top:12px;color:var(--cam-sub)">${REP_TESTS.includes(key) ? 'нижняя точка приседа' : esc(QNAMES[key] || key)}</span>
        <div style="position:absolute;left:14px;bottom:12px;font-size:12px;color:var(--cam-sub);display:flex;gap:12px"><span>— — ${new Date(pa.date).toLocaleDateString('ru', { day: 'numeric', month: 'short' })}</span><span style="color:var(--signal)">▬ сегодня</span></div>
-       <button class="round glass" id="pp" aria-label="Пауза" style="position:absolute;right:10px;bottom:8px;width:44px;height:44px">${ic('pause', 's')}</button></div>
+       <button class="round glass" id="pp" aria-label="Пауза" style="position:absolute;right:10px;bottom:8px;width:44px;height:44px">${ic('pause', 's')}</button>
+       <button class="pill" id="vid" style="position:absolute;left:10px;top:8px;background:rgba(255,255,255,.14);color:#fff">${ic('share', 's')}Видео</button></div>
      <input type="range" id="ph" min="0" max="1000" value="0" style="width:100%;accent-color:var(--ink)" aria-label="Фаза движения">
      ${keys.length > 1 ? `<div class="row" style="gap:6px;flex-wrap:wrap">${keys.map(x => `<button class="pill ${x === key ? 'on' : ''}" data-k="${esc(x)}">${esc(QNAMES[x] || x)}</button>`).join('')}</div>` : ''}` : ''}
    ${main ? `<div class="card"><div style="font-size:14px;color:var(--sub)">${main.n}</div><div class="row" style="margin-top:6px"><div class="delta" style="flex:1"><s>${fmt(main.was)}${main.u}</s><span style="color:var(--faint)">${ic('chevron-right', 's')}</span><b>${fmt(main.now)}${main.u}</b></div>${main.state === 'better' ? `<span style="color:var(--ok-t);display:flex;align-items:center;gap:4px;font-weight:600">${ic('check', 's')}лучше</span>` : badge(main.state)}</div></div>` : '<p class="sub">Нет общих показателей.</p>'}
@@ -1204,6 +1270,13 @@ export async function compare(prevId, curId) {
   const pbtn = () => { $('#pp').innerHTML = ic(playing ? 'pause' : 'play', 's'); $('#pp').setAttribute('aria-label', playing ? 'Пауза' : 'Продолжить'); };
   $('#pp').onclick = () => { playing = !playing; pbtn(); };
   $('#ph').oninput = e => { playing = false; pbtn(); k = e.target.value / 1000; };
+  $('#vid').onclick = async () => { const b = $('#vid'); if (b.disabled) return; b.disabled = true; b.textContent = 'Запись 10 с…';
+    const d1 = new Date(pa.date).toLocaleDateString('ru', { day: 'numeric', month: 'short' }), fmtM = m => m ? `${m.n}: ${fmt(m.was)}${m.u} → ${fmt(m.now)}${m.u}` : '';
+    try { const blob = await pairVideo(ghost, cur, `${c.name.split(' ')[0]}: было → стало`, main && main.state === 'better' ? fmtM(main) : '', ['- - ' + d1, '— сегодня']);
+      const file = new File([blob], `bodypassport-${new Date(ca.date).toISOString().slice(0, 10)}.${blob.type.includes('mp4') ? 'mp4' : 'webm'}`, { type: blob.type }); track('compare_video', {}, false);
+      if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file] }).catch(() => {}); else saveBlob(file, file.name); }
+    catch (e) { toast('Не получилось: ' + e.message); }
+    b.disabled = false; b.innerHTML = ic('share', 's') + 'Видео'; };
   document.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { key = b.dataset.k; load(); document.querySelectorAll('[data-k]').forEach(x => x.classList.toggle('on', x === b)); });
 }
 
@@ -1272,11 +1345,6 @@ async function reportLink(cv, info) {
   return location.origin + '/#rep=' + j.id + '.' + k;
 }
 
-// сообщение клиенту о ретесте: текст в мессенджер одним касанием
-function messageClient(c, date) {
-  const text = `${c.name.split(' ')[0]}, здравствуйте! ${fmtDate(date)} пора повторить тест движения, чтобы увидеть изменения. Когда вам удобно?`;
-  if (navigator.share) navigator.share({ text }).catch(() => {}); else { navigator.clipboard && navigator.clipboard.writeText(text); toast('Текст скопирован'); }
-}
 
 
 // =================== Ссылка клиенту: тест дома → результат сразу у специалиста ===================

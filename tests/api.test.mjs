@@ -295,3 +295,22 @@ test('статистика: устройства, каналы и экраны �
   const D = r.j.devices['Android 14 · Chrome']; assert.equal(D.test_done, 1); assert.equal(D.fps, 24); assert.equal(r.j.models['SM-A525F'], 1);
   assert.equal(r.j.channels.calib.test_done, 1); assert.equal(r.j.screens.prep.miss, 2);
 });
+
+test('remind: клиент подключает бота, напоминание за день, /stop', async () => {
+  const sent = []; const f0 = globalThis.fetch; globalThis.fetch = async (u, o) => { if (String(u).includes('api.telegram.org')) { sent.push(JSON.parse(o.body)); return { ok: true }; } return f0(u, o); };
+  try {
+    assert.equal((await call(remind, { method: 'POST', query: { a: 'client' }, body: { d: Date.now() + 864e5 } })).code, 503, 'бот не настроен');
+    process.env.TELEGRAM_BOT_TOKEN = 'tok'; process.env.TELEGRAM_BOT_USERNAME = '@bp_bot'; process.env.TG_WEBHOOK_SECRET = 'whs';
+    const r = await call(remind, { method: 'POST', query: { a: 'client' }, body: { d: Date.now() + 20 * 3600e3, n: 'Анна', s: 'Иван' } }); assert.equal(r.code, 200); assert.equal(r.j.bot, 'bp_bot'); assert.match(r.j.code, /^[a-z0-9]{20}$/);
+    assert.equal((await call(remind, { method: 'POST', query: { a: 'tg' }, body: { message: { chat: { id: 55 }, text: '/start c_' + r.j.code } } })).code, 401, 'вебхук без секрета');
+    const wh = { 'x-telegram-bot-api-secret-token': 'whs' };
+    await call(remind, { method: 'POST', query: { a: 'tg' }, headers: wh, body: { message: { chat: { id: 55 }, text: '/start c_' + r.j.code } } });
+    assert.equal(sent.at(-1).chat_id, 55); assert.match(sent.at(-1).text, /Анна[\s\S]*Иван/);
+    const again = await call(remind, { method: 'POST', query: { a: 'client' }, body: { code: r.j.code, d: Date.now() + 20 * 3600e3, n: 'Анна' } }); assert.equal(again.j.code, r.j.code); assert.equal(again.j.linked, true, 'тот же код, чат сохранен');
+    const n0 = sent.length; const cr = await call(remind, { query: { a: 'cron' }, headers: { authorization: 'Bearer cron' } });
+    assert.ok(sent.slice(n0).some(m => m.chat_id === 55 && /завтра повторный тест/i.test(m.text)), 'напоминание клиенту');
+    const n1 = sent.length; await call(remind, { query: { a: 'cron' }, headers: { authorization: 'Bearer cron' } }); assert.ok(!sent.slice(n1).some(m => m.chat_id === 55), 'второй раз не шлем');
+    await call(remind, { method: 'POST', query: { a: 'tg' }, headers: wh, body: { message: { chat: { id: 55 }, text: '/stop' } } });
+    assert.ok(!store.has(`remindc/${r.j.code}.json`), '/stop удаляет запись');
+  } finally { globalThis.fetch = f0; delete process.env.TELEGRAM_BOT_TOKEN; delete process.env.TELEGRAM_BOT_USERNAME; delete process.env.TG_WEBHOOK_SECRET; }
+});
