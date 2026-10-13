@@ -228,14 +228,22 @@ Movement.sideBend = fr => { fr = smooth(fr);
   return res({ bend_r: q(.97), bend_l: -q(.03) }, 2, vis(fr, [P.L_SHOULDER, P.R_SHOULDER, P.L_HIP, P.R_HIP]));
 };
 Movement.calfRaise = (fr, right) => { fr = smooth(fr);
-  // подъемы на носок одной ноги: число подъемов и средняя высота пятки (в долях длины ноги)
+  // подъемы на носок одной ноги: число подъемов и высота подъема (в долях длины ноги).
+  // Тело поднимается целиком, поэтому кроме пятки смотрим на плечи и нос: в широких штанах пятку почти не видно, и раньше 5 подъемов считались как 1
   if (fr.length < 30) return res({}, 0, 0);
   const leg = median(fr.slice(0, 10).map(x => Math.hypot(x.p[P.L_HIP].x - x.p[P.L_ANKLE].x, x.p[P.L_HIP].y - x.p[P.L_ANKLE].y))) || 1;
-  const h = fr.map(x => lift(x.p, right, leg)); const base = median(h.slice(0, 8));
-  const sm = h.map((_, i) => { let s = 0, n = 0; for (let j = Math.max(0, i - 2); j <= Math.min(h.length - 1, i + 2); j++) { s += h[j]; n++; } return s / n - base; });
-  const peaks = []; for (let i = 2; i < sm.length - 2; i++) if (sm[i] > .02 && sm[i] >= sm[i - 1] && sm[i] >= sm[i + 1] && (!peaks.length || fr[i].t - fr[peaks.at(-1)].t > .6)) peaks.push(i);
+  const heelOk = median(fr.map(x => Math.min(x.p[right ? P.R_HEEL : P.L_HEEL].visibility ?? 1, x.p[right ? P.R_ANKLE : P.L_ANKLE].visibility ?? 1))) > .6;
+  const up = x => -((x.p[P.L_SHOULDER].y + x.p[P.R_SHOULDER].y) / 2 * 2 + x.p[P.NOSE].y) / 3 / leg;
+  const h = fr.map(x => heelOk ? (lift(x.p, right, leg) + up(x)) / 2 : up(x));
+  const sm = h.map((_, i) => { let s = 0, n = 0; for (let j = Math.max(0, i - 2); j <= Math.min(h.length - 1, i + 2); j++) { s += h[j]; n++; } return s / n; });
+  const srt = [...sm].sort((x, y) => x - y), base = srt[Math.floor(srt.length * .15)], top = srt[Math.floor(srt.length * .9)], amp = top - base;
   const k = right ? 'r' : 'l';
-  return res({ ['calf_reps_' + k]: peaks.length, ['calf_h_' + k]: peaks.length ? median(peaks.map(i => sm[i])) : 0 }, peaks.length, vis(fr, [right ? P.R_ANKLE : P.L_ANKLE, right ? P.R_HEEL : P.L_HEEL]));
+  if (!(amp > .012)) return res({ ['calf_reps_' + k]: 0, ['calf_h_' + k]: 0 }, 0, vis(fr, [right ? P.R_ANKLE : P.L_ANKLE, right ? P.R_HEEL : P.L_HEEL]));
+  // гистерезис: подъем засчитан, когда сигнал прошел выше 55% размаха, следующий — только после опускания ниже 25%
+  const hi = base + amp * .55, lo = base + amp * .25, peaks = []; let isUp = false, best = -1;
+  for (let i = 0; i < sm.length; i++) { if (!isUp && sm[i] > hi) { isUp = true; best = i; } else if (isUp) { if (sm[i] > sm[best]) best = i; if (sm[i] < lo) { isUp = false; peaks.push(best); } } }
+  if (isUp && best >= 0) peaks.push(best);
+  return res({ ['calf_reps_' + k]: peaks.length, ['calf_h_' + k]: peaks.length ? median(peaks.map(i => sm[i] - base)) : 0 }, peaks.length, vis(fr, [right ? P.R_ANKLE : P.L_ANKLE, right ? P.R_HEEL : P.L_HEEL]));
 };
 
 // ---------- снимки стойки: одинаково при съемке и при пересчете по сохраненной записи ----------

@@ -7,8 +7,8 @@ import { npsCard, bindNps, installCard, bindInstall, installNow, canInstall, fee
 import { meSync, logout, getMe } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
 import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS } from './plans.js';
-import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast, preload3D, saveBlob } from './core.js';
-import { cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, mainOf, TONE_HELP, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen } from './app.js';
+import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast, preload3D, saveBlob , setBodySex } from './core.js';
+import { cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, mainOf, TONE_HELP, applyMain, fromMain, muscleInfo, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen } from './app.js';
 
 // активные клиенты занимают слоты; пример и закрытые (пришли сверх лимита) не считаются
 // ведение = ретест, ссылка на ретест или занятия дома за 30 дней. Первые тесты новых клиентов лимит не трогают
@@ -473,8 +473,10 @@ async function allClients(query = '', sort = 'recent') {
   app.querySelectorAll('[data-id]').forEach(el => el.onclick = () => clientCard(el.dataset.id));
   $('#aq').oninput = e => { clearTimeout(window._aq); window._aq = setTimeout(() => allClients(e.target.value, sort).then(() => { const i = $('#aq'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }), 250); };
 }
+// пол фигуры: из карточки, иначе из анкеты клиента; не указан — мужская
+const sexOf = c => (c && (c.sex || (c.selfReport && c.selfReport.sex))) || 'M';
 export async function clientCard(id) {
-  const c = await get('clients', id); if (!c) return proHome();
+  const c = await get('clients', id); if (!c) return proHome(); setBodySex(sexOf(c));
   if (c.locked) { delete c.locked; await put('clients', c); } // старые версии закрывали клиентов сверх лимита: теперь первые тесты без лимита
   const as = await byClient(id); const last = as.at(-1);
   const age = c.dob ? Math.floor((Date.now() - new Date(c.dob)) / (365.25 * DAY)) : null;
@@ -530,7 +532,7 @@ export async function clientCard(id) {
     const show = back => { if (v3) { v3.dispose(); v3 = null; } $('#cvis').style.height = ''; $('#cvis').innerHTML = '<canvas id="cheat" style="width:150px;display:block"></canvas>'; $('#cvis').style.width = '130px'; $('#cfind').style.display = ''; drawHeat($('#cheat'), onlyKeys(sp, mainKeys(last, sp)), back, null, cNum); ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === (back ? 'vb' : 'vf'))); };
     show(cNum.filter(l => (sp.find(x => x.key === l.key) || {}).back).length > cNum.length / 2); $('#vf').onclick = () => show(false); $('#vb').onclick = () => show(true);
     $('#v3').onclick = async () => { ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === 'v3')); $('#cvis').style.height = '340px'; $('#cvis').style.width = '100%'; $('#cfind').style.display = 'none'; $('#cvis').innerHTML = '';
-      try { v3 = await body3D($('#cvis'), onlyKeys(sp, mainKeys(last, sp)), () => {}); } catch (e) { toast('3D не загрузилось'); show(false); } };
+      try { v3 = await body3D($('#cvis'), onlyKeys(sp, mainKeys(last, sp)), key => muscleInfo(key, sp, analyze(last, C), { pro: true })); } catch (e) { toast('3D не загрузилось'); show(false); } };
     $('#open').onclick = () => result(last.id); $('#rep').onclick = () => report(last.id);
     $('#mvr').onclick = async () => { const pp = await get('poses', last.id); motionViewer(pp && pp.poses, last.setup, () => clientCard(id), `${c.name} · ${fmtDate(last.date)}`); }; }
   $('#na').onclick = async () => { if (last && !(await canTrack(c))) return; newAssessment(id, last ? last.id : null); }; if ($('#nb')) $('#nb').onclick = async () => { if (!(await canTrack(c))) return; newAssessment(id); };
@@ -781,7 +783,7 @@ async function newAssessment(clientId, retestOf, opts = {}) {
       try { await initPose(); } catch (e) { toast('Не удалось загрузить модель: ' + e.message); return draw(); }
       track('assess_start', { n: units.length }, false);
       const r = await runProtocol(units, { target: prev && prev.setup, onCancel: () => clientCard(clientId), pre }); if (!r) return;
-      const a = { id: uid(), clientId, date: r.date, template: tpl[0], templateName: session ? 'После сеанса' : tpl[0] === 'posture' && !prev ? 'До сеанса' : tpl[1], protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, tech: r.tech || null, limits: r.limits || {}, pain, painSide, lumbarZone: LUMBAR[tpl[0]] || (prev && prev.lumbarZone) || null, hyp: {}, plan: null, note: '', expect: expect.trim().slice(0, 500), nextDate: r.date + 30 * DAY, prevId: prev ? prev.id : null, draft: true };
+      const a = { id: uid(), clientId, date: r.date, template: tpl[0], templateName: session ? 'После сеанса' : tpl[0] === 'posture' && !prev ? 'До сеанса' : tpl[1], protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, ...(r.main ? { main: r.main } : {}), tech: r.tech || null, limits: r.limits || {}, pain, painSide, lumbarZone: LUMBAR[tpl[0]] || (prev && prev.lumbarZone) || null, hyp: {}, plan: null, note: '', expect: expect.trim().slice(0, 500), nextDate: r.date + 30 * DAY, prevId: prev ? prev.id : null, draft: true };
       await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); track('assess_done', { n: units.length }, false); if (prev) track('retest_done', { n: Math.round((r.date - prev.date) / DAY) }, false); if (prev) endTrialOnRetest(); result(a.id); }; };
   draw(); if (opts.autostart) $('#go').click();
 }
@@ -863,7 +865,7 @@ async function experienceScreen(back) {
 
 // ---------- результат: измерено, гипотеза, назначение ----------
 function proSpots(a) {
-  const base = spots(analyze(a, C));
+  const base = applyMain(spots(analyze(a, C)), a.main);
   return base.map(s => { const o = a.hyp && a.hyp[s.key]; if (!o) return s; const st = STATES.find(x => x[0] === o); return { ...s, k: o, tone: st[2], derived: false, edited: true }; });
 }
 // на схеме только главное: мышцы, подтвержденные специалистом, иначе самые выраженные гипотезы. Остальное серым, без шума.
@@ -875,7 +877,7 @@ function focusOf(a, sp = proSpots(a)) { const conf = a.check || {};
   const decided = sp.filter(s => s.k !== 'OK' && (conf[s.key] === 'yes' || s.edited)).sort(byTone);
   const top = sp.filter(s => s.k !== 'OK' && conf[s.key] !== 'no' && (!s.derived || s.edited || s.byChain)).sort(byTone);
   // решения специалиста показываем все (до 12): это его вывод, а не черновик; без решений — тот же список, что видит клиент (mainOf)
-  const base = decided.length ? decided : top, items = decided.length ? ['WEAK', 'SHORT', 'HYPER'].flatMap(k => decided.filter(s => s.k === k && !s.ambiguous).slice(0, 12)) : mainOf(sp, conf);
+  const base = decided.length ? decided : top, items = decided.length ? ['WEAK', 'SHORT', 'HYPER'].flatMap(k => decided.filter(s => s.k === k && !s.ambiguous).slice(0, 12)) : a.main ? fromMain(sp, a.main).filter(x => conf[x.key] !== 'no' && x.k !== 'OK') : mainOf(sp, conf);
   // упражнения: сначала по одному на каждую строку решения, потом остальные
   const lead = ['WEAK', 'SHORT', 'HYPER'].map(k => items.find(s => s.k === k)).filter(Boolean);
   return { base, decided, items, keys: new Set(items.map(s => s.key)), planSpots: [...lead, ...items.filter(s => !lead.includes(s))] }; }
@@ -885,7 +887,7 @@ export async function result(aid, view = 'measured') {
   // назначение теперь внизу «Итога»: старые ссылки на вкладку ведут туда же и прокручивают к нему
   const toPlan = view === 'plan'; if (toPlan) view = 'measured';
   if (RES_A && RES_A.id === aid && $('#pt')) await savePlan(RES_A); // перерисовка не теряет набранный комментарий
-  const a = await get('assessments', aid); if (!a) return proHome(); RES_A = a; const c = await get('clients', a.clientId);
+  const a = await get('assessments', aid); if (!a) return proHome(); RES_A = a; const c = await get('clients', a.clientId); setBodySex(sexOf(c));
   // ретест: что изменилось с прошлого теста, прямо в «Итоге» (3 самых заметных сдвига и боль)
   const pv = a.prevId ? await get('assessments', a.prevId) : null; let deltaCard = '';
   if (pv) { const cmp = comparable(pv, a), ds = deltas(pv, a).filter(x => x.state !== 'same').sort((x, y) => Math.abs(y.d) - Math.abs(x.d)).slice(0, 3);
@@ -990,7 +992,7 @@ export async function result(aid, view = 'measured') {
     // 3D-модель с той же картой (с правками специалиста); касание мышцы прокручивает к ее карточке
     if ($('#h3')) $('#h3').onclick = async () => { mode3 = !mode3; HYP3D = mode3; $('#hf').classList.toggle('on', !back); $('#hb').classList.toggle('on', back); $('#hz').style.display = mode3 ? 'flex' : 'none';
       if (!mode3) { if (v3) v3.dispose(); v3 = null; $('#hvis').style.height = ''; $('#hvis').innerHTML = '<canvas id="heat" style="width:100%;display:block"></canvas>'; draw2(); return; }
-      $('#hvis').style.height = '380px'; try { v3 = await body3D($('#hvis'), cur, key => { const el = document.querySelector(`[data-card="${key}"]`); if ($('#hdet')) $('#hdet').open = true; if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }); }
+      $('#hvis').style.height = '380px'; try { v3 = await body3D($('#hvis'), cur, key => muscleInfo(key, proSpots(a), analyze(a, C), { pro: true })); }
       catch (e) { toast('3D не загрузилось, показываю схему'); mode3 = false; $('#hz').style.display = 'none'; $('#hvis').style.height = ''; $('#hvis').innerHTML = '<canvas id="heat" style="width:100%;display:block"></canvas>'; return draw2(); }
       v3.turn(back); document.querySelectorAll('[data-z]').forEach(b => b.onclick = () => v3.focus(b.dataset.z)); };
     // визуализация: реалистичная 3D-модель по умолчанию (точные границы мышц); без WebGL остается схема
@@ -1405,7 +1407,7 @@ function cleanRemote(r) {
 }
 async function addResult(c, r) {
   r = cleanRemote(r); const prev = (await byClient(c.id)).at(-1); const tpl = TEMPLATES.find(t => t[2].join() === (r.protocol || []).join());
-  const a = { id: uid(), clientId: c.id, date: r.date || Date.now(), template: tpl ? tpl[0] : 'custom', templateName: 'По ссылке · ' + (tpl ? tpl[1] : 'свой протокол'), protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup,
+  const a = { id: uid(), clientId: c.id, date: r.date || Date.now(), template: tpl ? tpl[0] : 'custom', templateName: 'По ссылке · ' + (tpl ? tpl[1] : 'свой протокол'), protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, ...(r.main ? { main: r.main } : {}),
     limits: r.limits || {}, pain: r.pain || {}, clientNote: r.comment || '', hyp: {}, plan: null, note: '', nextDate: (r.date || Date.now()) + 30 * DAY, prevId: prev ? prev.id : null, draft: true, source: 'home' };
   await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses || {} });
   if (prev) endTrialOnRetest();

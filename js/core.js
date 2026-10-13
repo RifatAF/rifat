@@ -469,7 +469,24 @@ function meshIndex(m, spots) {
     if (h) hide[q] = 1; }
   const keep = []; for (let t = 0; t < m.idx.length; t += 3) { const a = m.idx[t], b = m.idx[t + 1], c = m.idx[t + 2]; if (hide[a] || hide[b] || hide[c]) continue; keep.push(a, b, c); }
   const out = new Uint32Array(keep); m.idxCache.set(key, out); return out; }
-async function loadMesh() {
+// Женская фигура: та же размеченная сетка мышц с женскими пропорциями (уже плечи и грудная клетка, шире таз,
+// полнее ягодицы, небольшой объем груди). Отдельной женской модели с разметкой мышц нет, поэтому меняем форму, а не мышцы.
+let bodySex = 'M', meshF = null;
+/** Пол фигуры для схем и 3D: 'F' — женская, иначе мужская. Вызывать перед отрисовкой экрана человека. */
+export function setBodySex(s) { const v = s === 'F' ? 'F' : 'M'; if (v === bodySex) return; bodySex = v; if (snap3) { try { snap3.renderer.dispose(); } catch (e) {} snap3 = null; } }
+const XS = [[0, 1], [.3, 1], [.42, 1.03], [.5, 1.08], [.56, 1.07], [.62, .93], [.7, .94], [.78, .9], [.82, .88], [.86, .9], [.9, .95], [1, .95]];
+const lerpT = (t, h) => { for (let i = 1; i < t.length; i++) if (h <= t[i][0]) { const [a, va] = t[i - 1], [b, vb] = t[i]; return va + (vb - va) * (h - a) / (b - a); } return t[t.length - 1][1]; };
+const gs = (v, c, w) => Math.exp(-(((v - c) / w) ** 2));
+function shapeF(x, y, z, zmin, H) { const h = (z - zmin) / H; x *= lerpT(XS, h);
+  if (y > 0) y *= 1 + .1 * gs(h, .52, .04); // ягодицы
+  else { const ax = Math.abs(x); y -= 22 * gs(h, .73, .03) * gs(ax, 85, 40); } // грудь
+  return [x, y, z]; }
+function femalize(b) { const zmin = b.meta.zmin, H = b.meta.zmax - b.meta.zmin, pos = new Float32Array(b.pos.length);
+  for (let i = 0; i < b.nv; i++) { const [x, y, z] = shapeF(b.pos[i * 3], b.pos[i * 3 + 1], b.pos[i * 3 + 2], zmin, H); pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z; }
+  const blobs = Object.fromEntries(Object.entries(b.meta.blobs).map(([g, c]) => [g, Array.isArray(c) ? shapeF(c[0], c[1], c[2], zmin, H) : c]));
+  return { ...b, pos, idxCache: new Map(), meta: { ...b.meta, blobs } }; }
+async function loadMesh() { const b = await loadMeshM(); if (bodySex !== 'F') return b; return meshF || (meshF = femalize(b)); }
+async function loadMeshM() {
   if (mesh3d) return mesh3d;
   const [buf, meta] = await Promise.all([fetch('data/body3d.bin').then(r => r.arrayBuffer()), fetch('data/body3d.json').then(r => r.json())]);
   const dv = new DataView(buf); const nv = dv.getInt32(4, true), ni = dv.getInt32(8, true);
