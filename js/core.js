@@ -16,54 +16,72 @@ export async function loadContent() {
   const [mus, bm, ch, ex] = await Promise.all([get('muscles'), get('bodymap'), get('chains'), get('exercises')]);
   C.muscles = mus.muscles; C.bodymap = bm; C.chains = ch.chains; C.exercises = Object.fromEntries(ex.exercises.map(e => [e.id, e])); C.booking = 'https://t.me/BodyPassport_bot';
   // веса «правило → мышца», выученные по калибровкам специалистов (Администрирование → Калибровки): без сети остаются исходные из базы
-  // не ждем ответа: запуск не замедляется, веса подхватятся к первому разбору
-  fetch('/api/calib?a=weights', { signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : null).then(j => { if (j && (j.w || j.t)) { applyRuleWeights(bm.rules, j.w, j.t); C.weightsAt = j.at || 0; C.thresholds = j.t || {}; } }).catch(() => {});
+  // ждем не дольше 2,5 с: иначе клиент и специалист разбирали один тест с разными весами и видели разные мышцы
+  const wq = fetch('/api/calib?a=weights', { signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : null).then(j => { if (j && (j.w || j.t)) { applyRuleWeights(bm.rules, j.w, j.t); C.weightsAt = j.at || 0; C.thresholds = j.t || {}; } }).catch(() => {});
+  await Promise.race([wq, sleep(2500)]);
   return C;
 }
 
 // ---------- голос: заранее записанный нейроголос, системный как запасной ----------
 let voiceIdx = {}, audio = null, unlocked = false;
+// Записи играем через WebAudio: встроенный браузер Telegram и другие WebView не дают играть <audio> без нажатия на каждый звук,
+// а AudioContext, разблокированный кнопкой «Начать тест», работает весь тест. <audio> остается запасным путем.
+const bufs = new Map();
+const ctxOk = () => voice._ac && voice._ac.state === 'running';
+async function decode(f) { if (bufs.has(f)) return bufs.get(f);
+  const p = fetch('voice/' + f).then(r => r.ok ? r.arrayBuffer() : Promise.reject(r.status)).then(ab => new Promise((ok, no) => voice._ac.decodeAudioData(ab, ok, no)));
+  bufs.set(f, p); p.catch(() => bufs.delete(f)); return p; }
+/** Проиграть запись: { done: Promise (true — проиграно, false — не удалось), stop(), dur }. */
+function playFile(f) { let stopped = false, src = null, el = null, res;
+  const h = { done: new Promise(r => res = r), dur: 0, stop() { stopped = true; try { src && src.stop(); } catch (e) {} if (el) el.pause(); res(true); } };
+  const viaEl = () => { if (stopped) return; el = new Audio('voice/' + f); el.onended = () => res(true); el.onerror = () => res(false);
+    el.onloadedmetadata = () => { if (isFinite(el.duration)) h.dur = el.duration; }; el.play().catch(() => res(false)); };
+  if (ctxOk()) decode(f).then(b => { if (stopped) return; h.dur = b.duration; src = voice._ac.createBufferSource(); src.buffer = b; src.connect(voice._ac.destination); src.onended = () => res(true); src.start(); }).catch(viaEl);
+  else viaEl();
+  return h; }
+// фразы без записи (новые подсказки) читаем голосом телефона: лучше другой голос, чем тишина
+function sysSay(text, done) { try { if (!window.speechSynthesis) return false; speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ru-RU'; const vs = speechSynthesis.getVoices().filter(v => v.lang.startsWith('ru'));
+  u.voice = vs.find(v => /dmitr|male|юр|макс/i.test(v.name)) || vs[0] || null; if (done) u.onend = done; speechSynthesis.speak(u); return true; } catch (e) { return false; } }
 export const voice = {
   async init() { voiceIdx = await fetch('voice/index.json', { cache: 'no-store' }).then(r => r.json()).catch(() => voiceIdx || {}); },
   /** Проверка перед тестом: все фразы есть в списке записей; если нет — перечитать список. */
   async ensure(texts) { if (texts.some(t => !voiceIdx[t.trim()])) await this.init(); return texts.filter(t => !voiceIdx[t.trim()]); },
   /** Есть ли запись этой фразы (тем же голосом, что в тесте). */
   has(text) { return !!voiceIdx[String(text || '').trim()]; },
-  unlock() { try { this._ac = this._ac || new (window.AudioContext || window.webkitAudioContext)(); this._ac.resume(); } catch (e) {} if (unlocked) return; unlocked = true; const a = new Audio(); a.muted = true; a.play().catch(() => {}); },
+  // вызывать из обработчика нажатия: разблокирует звук на весь тест
+  unlock() { try { this._ac = this._ac || new (window.AudioContext || window.webkitAudioContext)(); this._ac.resume();
+      const b = this._ac.createBuffer(1, 1, 22050), s = this._ac.createBufferSource(); s.buffer = b; s.connect(this._ac.destination); s.start(0); } catch (e) {}
+    try { if (window.speechSynthesis) speechSynthesis.speak(Object.assign(new SpeechSynthesisUtterance(' '), { volume: 0 })); } catch (e) {}
+    if (unlocked) return; unlocked = true; const a = new Audio(); a.muted = true; a.play().catch(() => {}); },
   muted: localStorage.getItem('bp_mute') === '1',
   // занят, пока звучит фраза; ограничено оценкой длины фразы, чтобы сбой или медленная загрузка звука не «вешали» тест
   until: 0, hardUntil: 0,
-  busy() { const now = Date.now(); if (now > this.hardUntil) return false; return !!(audio && !audio.paused && !audio.ended && !audio.error) || now < this.until; },
-  // заранее загружаем все фразы, чтобы голос звучал сразу, без пауз на загрузку
+  busy() { return Date.now() < Math.min(this.until, this.hardUntil); },
   // заранее грузим только фразы теста (около 1/3 записей), фразы упражнений грузятся, когда понадобятся
   preload(texts) { if (this._pre) return; this._pre = true; const files = [...new Set((texts || Object.keys(voiceIdx)).map(t => voiceIdx[t.trim()]).filter(Boolean))]; let i = 0;
-    const next = () => { const batch = files.slice(i, i + 6); i += 6; if (!batch.length) return; Promise.all(batch.map(f => fetch('voice/' + f).catch(() => {}))).then(next); }; next(); },
+    const next = () => { const batch = files.slice(i, i + 6); i += 6; if (!batch.length) return; Promise.all(batch.map(f => ctxOk() ? decode(f).catch(() => {}) : fetch('voice/' + f).catch(() => {}))).then(next); }; next(); },
+  /** После разблокировки звука: раскодировать записи теста заранее, чтобы первая фраза не ждала загрузки. */
+  warm(texts) { if (!ctxOk()) return; texts.map(t => voiceIdx[t.trim()]).filter(Boolean).forEach(f => decode(f).catch(() => {})); },
+  /** Сказать фразу, не дожидаясь конца (подсказки по ходу). Обрывает предыдущую. */
   say(text, cueEl) {
     if (cueEl) cueEl.textContent = text;
-    if (this.muted) return;
-    const f = voiceIdx[text.trim()];
-    if (audio) { audio.pause(); audio = null }
-    const est = 400 + text.length * 70; this.until = Date.now() + Math.min(est, 1500); this.hardUntil = Date.now() + est + 2500;
-    if (f) { const a = new Audio('voice/' + f); audio = a; a.onloadedmetadata = () => { if (isFinite(a.duration)) this.hardUntil = Date.now() + a.duration * 1000 + 800; };
-      a.onerror = () => { this.until = Date.now() + est * .9; }; a.play().catch(() => { this.until = Date.now() + est * .9; }); }
-    // фраз без записи не озвучиваем: системный голос в браузере часто женский и звучит иначе
+    if (this.muted || !text) { if (audio) { audio.stop(); audio = null; } return; }
+    const f = voiceIdx[text.trim()]; if (audio) { audio.stop(); audio = null; }
+    const est = 400 + text.length * 70; this.until = Date.now() + est; this.hardUntil = Date.now() + est + 2500;
+    if (f) { this.until = this.hardUntil = Date.now() + 15000; const h = playFile(f); audio = h; h.done.then(ok => { if (!ok && audio === h) sysSay(text); if (audio === h) this.until = 0; }); }
+    else sysSay(text, () => { this.until = 0; });
   },
-  // ждем конца фразы, но не дольше 15 с: если звук завис (без звука, ограничения браузера), тест не должен останавливаться
-  /** Сказать фразу целиком и дождаться конца. Не обрывается следующими фразами. */
+  /** Сказать фразу целиком и дождаться конца. Не обрывается следующими фразами; не дольше 15 с, чтобы сбой звука не останавливал тест. */
   speak(text, cueEl) {
     if (cueEl) cueEl.textContent = text;
-    return new Promise(res => { let done = false; const fin = () => { if (!done) { done = true; res(); } };
+    return new Promise(res => { let done = false; const fin = () => { if (!done) { done = true; this.until = 0; res(); } };
       const est = 500 + text.length * 75; if (this.muted) return setTimeout(fin, 200);
-      const f = voiceIdx[text.trim()]; if (audio) { audio.pause(); audio = null; }
-      if (!f) { try { const u = new SpeechSynthesisUtterance(text); u.lang = 'ru-RU'; const vs = speechSynthesis.getVoices().filter(v => v.lang.startsWith('ru'));
-          u.voice = vs.find(v => /dmitr|male|юр|макс/i.test(v.name)) || vs[0] || null; u.onend = () => setTimeout(fin, 150); speechSynthesis.speak(u); setTimeout(fin, est + 3000); } catch (e) { setTimeout(fin, est); } return; }
-      const a = new Audio('voice/' + f); audio = a; a.onended = () => setTimeout(fin, 150); let known = false;
-      // запись не проигралась (сеть, формат) — читаем системным голосом, чтобы не было тишины
-      const tts = () => { try { const u = new SpeechSynthesisUtterance(text); u.lang = 'ru-RU'; const vs = speechSynthesis.getVoices().filter(v => v.lang.startsWith('ru'));
-        u.voice = vs.find(v => /dmitr|male|юр|макс/i.test(v.name)) || vs[0] || null; u.onend = () => setTimeout(fin, 150); speechSynthesis.speak(u); } catch (e) {} setTimeout(fin, est + 1500); };
-      a.onerror = tts; a.onloadedmetadata = () => { if (isFinite(a.duration)) { known = true; setTimeout(fin, a.duration * 1000 + 600); } };
-      // запасной предел по оценке длины действует, только пока настоящая длина записи неизвестна: иначе длинная фраза обрывалась следующей
-      setTimeout(() => { if (!known) fin(); }, est + 2500); setTimeout(fin, 15000 + est); a.play().catch(tts); });
+      const f = voiceIdx[text.trim()]; if (audio) { audio.stop(); audio = null; }
+      this.until = Date.now() + est; this.hardUntil = Date.now() + est + 15000;
+      const tts = () => { if (!sysSay(text, () => setTimeout(fin, 150))) setTimeout(fin, est); else setTimeout(fin, est + 3000); };
+      if (!f) return tts();
+      const h = playFile(f); audio = h; h.done.then(ok => ok ? setTimeout(fin, 150) : tts());
+      setTimeout(() => { if (!h.dur) fin(); }, est + 4000); setTimeout(fin, 15000 + est); });
   },
   /** Звуковой сигнал: старт — один высокий, стоп — два коротких. Слышно, даже если человек стоит спиной. */
   beep(kind = 'start') { try { const ac = this._ac || (this._ac = new (window.AudioContext || window.webkitAudioContext)()); const t = ac.currentTime;
@@ -93,8 +111,11 @@ export const device = (() => {
   const inApp = /Instagram|FBAN|FBAV|Line\/|VKClient|TikTok|Snapchat/i.test(ua);
   const tg = !!(window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData);
   const weak = mem <= 3 || cores <= 4;
+  // встроенный браузер (Telegram, Android WebView): памяти меньше, чем у Chrome, и при тяжелой модели позы вкладку молча выгружало.
+  // Здесь облегченный режим: быстрая модель, камера 720p, без записи видео теста
+  const wv = tg || inApp || /Telegram|; wv\)/i.test(ua);
   let webgl2 = false; try { webgl2 = !!document.createElement('canvas').getContext('webgl2'); } catch (e) {}
-  return { ios, inApp, tg, weak, webgl2, camera: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) };
+  return { ios, inApp, tg, wv, weak, webgl2, camera: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) };
 })();
 
 // экран не гаснет во время теста и тренировки (телефон стоит на полу и его никто не трогает)
@@ -128,7 +149,7 @@ export async function initPose() {
 }
 // точная модель (heavy) только там, где прошлый тест на full шел быстро (от 26 кадров/с на видеокарте);
 // если на heavy кадров стало меньше 18, телефон возвращается на full. Слабые телефоны всегда на lite.
-function poseModel() { if (device.weak) return 'lite'; return localStorage.getItem('bp_heavy') === '1' ? 'heavy' : 'full'; }
+function poseModel() { if (device.weak || device.wv) return 'lite'; return localStorage.getItem('bp_heavy') === '1' ? 'heavy' : 'full'; }
 export function notePoseSpeed(fps) { if (!fps || poseInfo.deleg !== 'GPU') return;
   try { if (poseInfo.model === 'full' && fps >= 26 && localStorage.getItem('bp_heavy') == null) localStorage.setItem('bp_heavy', '1');
     if (poseInfo.model === 'heavy' && fps < 18) localStorage.setItem('bp_heavy', '0'); } catch (e) {} }
@@ -142,7 +163,7 @@ export const cam = { video: null, stream: null, back: localStorage.getItem('bp_b
 export async function startCamera(video) {
   stopCamera();
   cam.video = video;
-  try { cam.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: cam.back ? 'environment' : 'user', width: { ideal: device.weak ? 1280 : 1920 }, height: { ideal: device.weak ? 720 : 1080 } } }); }
+  try { cam.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: cam.back ? 'environment' : 'user', width: { ideal: device.weak || device.wv ? 1280 : 1920 }, height: { ideal: device.weak || device.wv ? 720 : 1080 } } }); }
   catch (e) { track('cam_err', { c: (e && e.name) || 'unknown' }, false); throw e; }
   // самый широкий угол, который позволяет камера (на части Android есть зум меньше 1)
   try { const tr = cam.stream.getVideoTracks()[0], caps = tr.getCapabilities ? tr.getCapabilities() : {};
@@ -184,7 +205,10 @@ function loop(gen = ++loopGen) {
   }
   requestAnimationFrame(() => loop(gen));
 }
-export function fullyVisible(p) { return p && [P.NOSE, P.L_ANKLE, P.R_ANKLE, P.L_SHOULDER, P.R_SHOULDER].every(i => p[i].visibility > .5); }
+// prof: человек боком или спиной; дальние плечо и стопа закрыты телом, поэтому достаточно одной точки из пары
+export function fullyVisible(p, prof) { if (!p) return false; const v = i => p[i].visibility > .5;
+  if (prof) return (v(P.NOSE) || v(P.L_EAR) || v(P.R_EAR)) && (v(P.L_SHOULDER) || v(P.R_SHOULDER)) && (v(P.L_ANKLE) || v(P.R_ANKLE));
+  return [P.NOSE, P.L_ANKLE, P.R_ANKLE, P.L_SHOULDER, P.R_SHOULDER].every(v); }
 
 // ---------- иконки (спрайт Lucide, icons/ui.svg) ----------
 export const ic = (n, cls = '') => '<svg class="ic ' + cls + '" aria-hidden="true"><use href="icons/ui.svg#i-' + n + '"/></svg>';
@@ -203,7 +227,7 @@ export function drawSkeleton(cv, frame, opts = {}) {
   const s = Math.min(W / frame.w, H / frame.h), ox = (W - frame.w * s) / 2, oy = (H - frame.h * s) / 2, mir = !cam.back;
   const a = .7; const p = frame.pose.map((l, i) => { const o = sm[i] || l; const n = { x: o.x + (l.x - o.x) * a, y: o.y + (l.y - o.y) * a, visibility: l.visibility }; sm[i] = n; return n; });
   const m = l => [ox + (mir ? frame.w - l.x : l.x) * s, oy + l.y * s];
-  const warn = opts.warn || !fullyVisible(frame.pose), bone = warn ? '#FFB547' : '#D4F25A';
+  const warn = opts.warn || !fullyVisible(frame.pose, opts.prof), bone = warn ? '#FFB547' : '#D4F25A';
   const bones = (q, w) => { for (const [i, j] of BONES) if (q[i].visibility > .4 && q[j].visibility > .4) { ctx.beginPath(); ctx.moveTo(...m(q[i])); ctx.lineTo(...m(q[j])); ctx.stroke(); } };
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   const useTrail = opts.trail && !device.weak && !reduceMotion();
