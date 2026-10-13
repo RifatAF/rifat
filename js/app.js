@@ -13,7 +13,7 @@ import { painWord, PAIN_SCALE } from './vas.js';
 import { recordTest, saveBlob } from './core.js';
 import { sayText } from './saytext.js';
 import { repCounter, repKind, targetReps, setsOf, REP_KINDS } from './repcount.js';
-import { ready3D, C, loadContent, voice, sleep, phone, startMotion, initPose, poseInfo, notePoseSpeed, prefetchPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, RAMP_CSS, body3D, preload3D, device, keepAwake, ic, toast, reduceMotion } from './core.js';
+import { ready3D, C, loadContent, voice, sleep, phone, startMotion, initPose, poseInfo, notePoseSpeed, prefetchPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, RAMP_CSS, body3D, preload3D, setBodySex, device, keepAwake, ic, toast, reduceMotion } from './core.js';
 export { ic, toast };
 
 const $ = s => document.querySelector(s);
@@ -130,9 +130,26 @@ export function spots(a) {
 /** Главные зоны: сначала измеренные, затем выведенные по подтвержденной цепи (с пометкой «возможно»).
  *  Раньше выведенные по цепи в списки не попадали вовсе, и, например, грудные при сутулости не показывались. */
 export const topOf = all => all.filter(s => s.k !== 'OK' && (!s.derived || s.byChain)).sort((x, y) => (!!x.derived - !!y.derived) || Math.abs(y.tone) - Math.abs(x.tone));
+// Список клиента — эталон: клиент считает разбор у себя и отправляет специалисту готовый список мышц (main).
+// Специалист показывает ровно его, пока сам ничего не поменял: так версия программы, веса правил или округление
+// на двух телефонах уже не могут дать разную картинку.
+const spotFor = (id, side) => { const m = C.muscles[id]; return m ? { id, side, tone: 0, k: 'OK', back: m.view === 'back', x: side === 'LEFT' ? m.xLeft : 1 - m.xLeft, y: m.y, key: id + ':' + side } : null; };
+export const MAIN_RE = /^[a-z_]{1,32}:(LEFT|RIGHT)$/;
+/** Применить эталонный список к пятнам: цвет и сила из списка, отсутствующие мышцы добавляются. */
+export function applyMain(all, main) { if (!Array.isArray(main)) return all; const by = new Map(main.map(m => [m.key, m]));
+  const out = all.map(x => { const m = by.get(x.key); return m ? { ...x, k: m.k, tone: m.tone, derived: !!m.d, byChain: m.c || null, ambiguous: false } : x; });
+  for (const m of main) if (!out.some(x => x.key === m.key)) { const [id, side] = m.key.split(':'), b = spotFor(id, side); if (b) out.push({ ...b, k: m.k, tone: m.tone, derived: !!m.d, byChain: m.c || null }); }
+  return out; }
+/** Главный список из эталона: в том же порядке, что считал клиент. */
+export const fromMain = (all, main) => main.map(m => all.find(x => x.key === m.key)).filter(Boolean);
+/** Поставить эталон в результат перед сохранением и отправкой. */
+export function stampMain(r) { try { r.main = mainOf(spots(analyze(r, C))).map(s => ({ key: s.key, k: s.k, tone: Math.round(s.tone * 100) / 100, ...(s.derived ? { d: 1 } : {}), ...(s.byChain ? { c: String(s.byChain).slice(0, 60) } : {}) })); r.rules = C.bodymap && C.bodymap.version; } catch (e) {} return r; }
+export const cleanMain = m => Array.isArray(m) ? m.slice(0, 24).filter(x => x && MAIN_RE.test(x.key) && ['WEAK', 'SHORT', 'HYPER'].includes(x.k) && Number.isFinite(x.tone)).map(x => ({ key: x.key, k: x.k, tone: Math.max(-1, Math.min(1, x.tone)), ...(x.d ? { d: 1 } : {}), ...(typeof x.c === 'string' ? { c: x.c.replace(/[<>&"'`]/g, '').slice(0, 60) } : {}) })) : undefined;
 /** Единый список «над чем работаем» для клиента и специалиста: строки итога, 2D-схема, 3D и упражнения берут ровно его.
  *  По 3 мышцы на состояние (укрепить, растянуть, расслабить); conf — отметки специалиста «нет» убирают мышцу. */
-export const mainOf = (all, conf = {}) => { const t = topOf(all.filter(s => conf[s.key] !== 'no')); return ['WEAK', 'SHORT', 'HYPER'].flatMap(k => t.filter(s => s.k === k && !s.ambiguous).slice(0, 3)); };
+// лимит считаем по мышцам, а не по сторонам: иначе одна мышца с двух сторон показывалась только слева
+export const mainOf = (all, conf = {}) => { const t = topOf(all.filter(s => conf[s.key] !== 'no'));
+  return ['WEAK', 'SHORT', 'HYPER'].flatMap(k => { const l = t.filter(s => s.k === k && !s.ambiguous), ids = [...new Set(l.map(s => s.id))].slice(0, 3); return l.filter(s => ids.includes(s.id)); }); };
 export const title = s => `${C.muscles[s.id].zone || C.muscles[s.id].name} ${sideWord(s.side)}: ${s.ambiguous ? 'признаки противоречат' : s.derived ? toneText(s, 3).replace('похоже', 'возможно') : toneText(s, 3)}`;
 // для специалиста: конкретная мышца вместо области тела («Средняя ягодичная справа: похоже, не включается»)
 const pluralName = id => /мышцы|^\S+(ые|ие|тели)(\s|$)/i.test(C.muscles[id].name + ' ');
@@ -145,6 +162,25 @@ export const SHORT = { upper_trap: 'Верх. трапеция', levator: 'По�
   lats: 'Широчайшая', serratus: 'Зубчатая', rectus_abd: 'Прямая живота', vmo: 'Вн. широкая', abdominals: 'Пресс', thoracic_ext: 'Грудн. разгиб.', tibialis: 'Большеберцовая',
   vastus_lat: 'Нар. широкая', triceps: 'Трицепс', biceps: 'Бицепс', deltoid: 'Дельтовидная', forearm_flex: 'Предплечье', peroneus: 'Малоберцовые' };
 export const tech = s => s.k === 'OK' ? C.muscles[s.id].name : `${TONE[s.k][4]} ${C.muscles[s.id].gen}`;
+const TONE_WHY = { HYPER: 'работает слишком много и не отдыхает даже в покое. Ее расслабляют.', SHORT: 'стала короче и не дает суставу двигаться полностью. Ее растягивают.', WEAK: 'плохо включается, ее работу забирают соседние. Ее укрепляют.' };
+/** Касание мышцы на 3D: шторка с названием, состоянием простыми словами, причиной из замера и проверкой руками.
+ *  pro — для специалиста (проверка специалистом вместо самопроверки), onWhat — кнопка «Что делать». */
+export function muscleInfo(key, all, a, { pro = false, onWhat } = {}) {
+  const [id, side] = String(key).split(':'), m = C.muscles[id]; if (!m) return;
+  const x = all.find(q => q.key === key) || { id, side, k: 'OK', tone: 0, key };
+  const why = a ? seen(a, x) : [], test = pro ? m.proTest : m.selfTest;
+  document.querySelectorAll('#minfo').forEach(e => e.remove());
+  const d = document.createElement('div'); d.className = 'sheet'; d.id = 'minfo';
+  d.innerHTML = `<div><div class="row" style="gap:8px"><span class="mark ${x.k}"></span><span style="font-size:13px;font-weight:600;color:${TONE[x.k][5]}">${x.k === 'OK' ? 'Без отклонений' : x.ambiguous ? 'Признаки противоречат' : TONE[x.k][0]}${x.derived ? ' · гипотеза' : ''}</span></div>
+    <h2 style="margin-top:6px">${esc(m.name)} ${side === 'RIGHT' ? 'справа' : 'слева'}</h2>${m.zone ? `<div class="sub" style="font-size:14px">${esc(m.zone)}</div>` : ''}
+    ${x.k !== 'OK' ? `<p style="font-size:15px;line-height:1.45;margin-top:10px">Мышца ${TONE_WHY[x.k]}</p>` : `<p class="sub" style="font-size:15px;margin-top:10px">По этому тесту с ней все в порядке.</p>`}
+    ${why.length ? `<div style="margin-top:10px;font-size:14px;line-height:1.45"><span class="src">ИЗМЕРЕНО</span> ${why.slice(0, 2).map(esc).join('; ')}</div>` : x.byChain ? `<div style="margin-top:10px;font-size:14px"><span class="src hyp">ГИПОТЕЗА</span> по цепи «${esc(x.byChain)}»</div>` : ''}
+    ${x.k !== 'OK' && m.benefit ? `<p class="sub" style="font-size:14px;line-height:1.45;margin-top:10px">${esc(m.benefit)}</p>` : ''}
+    ${test ? `<details style="margin-top:10px;font-size:14px;line-height:1.45"><summary style="cursor:pointer;font-weight:600">${pro ? 'Проверка руками' : 'Как проверить самому'}</summary><p style="margin-top:6px">${esc(test)}</p></details>` : ''}
+    ${x.k !== 'OK' && onWhat ? `<button class="btn" id="mi_what" style="margin-top:14px">Что делать</button>` : ''}<button class="btn ghost" id="mi_x" style="margin-top:8px">Закрыть</button></div>`;
+  document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; d.querySelector('#mi_x').onclick = () => d.remove();
+  if (d.querySelector('#mi_what')) d.querySelector('#mi_what').onclick = () => { d.remove(); onWhat(id); };
+}
 const seen = (a, s) => [...new Set(a.findings.filter(f => f.muscles.some(m => m.id === s.id && (m.side === s.side || m.side === 'BOTH'))).map(f => f.observed))];
 export function zoneImg(id) { if (['suboccipital', 'scm', 'scalene', 'deep_neck_flex', 'levator'].includes(id)) return 'img_neck'; if (['upper_trap', 'lower_trap', 'rhomboid', 'lats', 'thoracic_ext', 'serratus', 'triceps', 'deltoid'].includes(id)) return 'img_muscles_back';
   if (['pec_major', 'pec_minor', 'biceps'].includes(id)) return 'img_onb_skeleton'; if (['ql', 'erector', 'obliques', 'abdominals', 'rectus_abd'].includes(id)) return 'img_back_pain'; return 'img_spine'; }
@@ -184,7 +220,7 @@ export function cleanResult(o) {
     if (rp) { f.reps = {}; for (const [rk, arr] of Object.entries(rp).slice(0, 20)) if (/^[a-z_]{1,32}$/.test(rk) && Array.isArray(arr)) f.reps[rk] = arr.slice(0, 30).filter(x => num(x) !== undefined); }
     moves[k] = { f, reps: num(v.reps) || 0, quality: ['GOOD', 'DOUBTFUL', 'RETAKE'].includes(v.quality) ? v.quality : 'DOUBTFUL', ...(v.alt ? { alt: 'support' } : {}) }; }
   return { date: num(o.date) || Date.now(), full: !!o.full, snapshot: numObj(o.snapshot, ['shoulderTilt', 'pelvicTilt', 'headTilt', 'trunkLateral', 'handRotL', 'handRotR', 'sway', 'yaw']),
-    side: numObj(o.side, ['headForwardDeg', 'hipShift', 'shoulderShift', 'kneeHyperDeg', 'femurTibia']), quality: numObj(o.quality) || {}, moves };
+    side: numObj(o.side, ['headForwardDeg', 'hipShift', 'shoulderShift', 'kneeHyperDeg', 'femurTibia']), quality: numObj(o.quality) || {}, moves, ...(cleanMain(o.main) ? { main: cleanMain(o.main) } : {}) };
 }
 async function resultLink() { return location.origin + location.pathname + '#r=' + await packResult(currentAnalysis().t); }
 
@@ -646,13 +682,16 @@ function joinForm() {
      <p class="sub" style="margin-top:8px">${esc(inv.s)} получит анкету вместе с результатом теста. Это займет минуту.</p></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:12px;margin-top:16px;padding-bottom:12px">
     ${inp('fn', 'Имя *', pr.name)}${inp('ln', 'Фамилия (по желанию)', pr.surname)}
-    <div class="row" style="gap:10px"><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Дата рождения</div>${inp('dob', '', pr.dob, 'date')}</div><div style="width:120px"><div class="sub" style="font-size:12px;margin-bottom:4px">Пол</div>${sel('sex', [['', '—'], ['M', 'Муж'], ['F', 'Жен']], pr.sex)}</div></div>
-    <div class="row" style="gap:10px"><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Рост, см</div>${inp('ht', '', pr.height, 'number')}</div><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Ведущая сторона</div>${sel('hand', [['R', 'Правша'], ['L', 'Левша']], pr.hand || 'R')}</div></div>
+    <div class="row" style="gap:10px"><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Дата рождения *</div>${inp('dob', '', pr.dob, 'date')}</div><div style="width:120px"><div class="sub" style="font-size:12px;margin-bottom:4px">Пол *</div>${sel('sex', [['', '—'], ['M', 'Муж'], ['F', 'Жен']], pr.sex)}</div></div>
+    <div class="row" style="gap:10px"><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Рост, см *</div>${inp('ht', '', pr.height, 'number')}</div><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Ведущая сторона</div>${sel('hand', [['R', 'Правша'], ['L', 'Левша']], pr.hand || 'R')}</div></div>
     ${inp('act', 'Спорт или работа', pr.activity)}
     <textarea id="cmp" rows="3" placeholder="Что беспокоит" class="field" style="height:auto;padding:12px 16px">${esc(pr.complaints)}</textarea>
    </div><div class="pad" style="padding:8px 20px 24px"><button class="btn" id="nx">Дальше</button></div></div>`);
   $('#back').onclick = () => safetyScreen(inviteWelcome, () => linkConsent(inviteWelcome, (INV() || {}).s), bot());
-  $('#nx').onclick = () => { const v = n => $('#' + n).value.trim(); if (!v('fn')) { $('#fn').style.borderColor = 'var(--over)'; $('#fn').focus(); return; }
+  $('#nx').onclick = () => { const v = n => $('#' + n).value.trim();
+    // обязательные сведения: имя, пол, дата рождения, рост; незаполненное подсвечиваем
+    const miss = ['fn', 'sex', 'dob', 'ht'].filter(n => !v(n) || (n === 'ht' && !(+v(n) >= 100 && +v(n) <= 230)));
+    if (miss.length) { miss.forEach(n => { $('#' + n).style.borderColor = 'var(--over)'; }); $('#' + miss[0]).focus(); toast('Заполните имя, пол, дату рождения и рост'); return; }
     const token = pr.token || seal.rid();
     localStorage.setItem(K('bp_profile'), JSON.stringify({ token, name: v('fn'), surname: v('ln'), dob: v('dob'), sex: v('sex'), height: v('ht'), hand: v('hand'), activity: v('act'), complaints: v('cmp') }));
     inviteWelcome(); };
@@ -677,10 +716,11 @@ async function inviteWelcome() {
   if (!safetyOk()) { safetyScreen(inviteWelcome, () => linkConsent(inviteWelcome, (INV() || {}).s), bot()); return addSpecHint(); }
   voice.preload(Object.values(SAY));
   const inv = INV(); const rows = rowsOf(inv.p); const pain = PAINI;
-  if (inv.join && !PROFILE()) return joinForm();
-  if (inv.join) inv.n = PROFILE().name;
+  // анкета (имя, пол, дата рождения, рост) обязательна по общей ссылке и в калибровке: без нее данные калибровки не сравнить
+  const needPf = inv.join || inv.cal; if (needPf && !PROFILE()) return joinForm();
+  if (needPf) inv.n = PROFILE().name;
   go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button></div><div class="pad" style="padding-top:4px"><div class="eyebrow">Тест от специалиста</div>
-     <h1 style="margin-top:8px">${(inv.n || (PROFILE() || {}).name) ? esc(inv.n || PROFILE().name) + ', ' : ''}здравствуйте!</h1>${inv.join ? '<button class="pill" id="editpf" style="margin-top:8px">Изменить анкету</button>' : ''}<p class="sub" style="margin-top:8px">${esc(inv.s)} подготовил для вас тест движения. Результат сразу придет специалисту, а вы увидите свою карту тела.</p></div>
+     <h1 style="margin-top:8px">${(inv.n || (PROFILE() || {}).name) ? esc(inv.n || PROFILE().name) + ', ' : ''}здравствуйте!</h1>${inv.join || inv.cal ? '<button class="pill" id="editpf" style="margin-top:8px">Изменить анкету</button>' : ''}<p class="sub" style="margin-top:8px">${esc(inv.s)} подготовил для вас тест движения. Результат сразу придет специалисту, а вы увидите свою карту тела.</p></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
     <input type="checkbox" id="share_ok" checked hidden><!-- согласие на передачу уже дано на первом экране ссылки (linkConsent) -->
     <p class="sub" style="font-size:13px">Результат зашифруется и уйдет только специалисту: ${esc(inv.s)}.</p>
@@ -695,11 +735,11 @@ async function inviteWelcome() {
     <div class="eyebrow" style="margin-top:4px">Что будет в тесте</div>${stepList(inv.p, PREI)}
    </div></div>`);
   bindStepList(PREI, inviteWelcome);
-  $('#back').onclick = inv.join ? joinForm : () => safetyScreen(inviteWelcome, () => linkConsent(inviteWelcome, (INV() || {}).s), bot());
+  $('#back').onclick = inv.join || inv.cal ? joinForm : () => safetyScreen(inviteWelcome, () => linkConsent(inviteWelcome, (INV() || {}).s), bot());
   addSpecHint();
   if ($('#skipTest')) $('#skipTest').onclick = () => { if (!$('#share_ok').checked) { $('#share_ok').parentElement.style.outline = '2px solid var(--over)'; return; }
-    track('beta_skip_test'); const r = { ...fakeResult(inv.p), poses: {} }, { poses, ...light } = r; saveTest({ ...light, pain, inv: inv.i });
-    try { sendResult({ ...r, pain, comment: comment(), profile: inv.join ? PROFILE() : undefined }); } catch (e) {} analysisScreen(); };
+    track('beta_skip_test'); const r = stampMain({ ...fakeResult(inv.p), poses: {} }), { poses, ...light } = r; saveTest({ ...light, pain, inv: inv.i });
+    try { sendResult({ ...r, pain, comment: comment(), profile: inv.join || inv.cal ? PROFILE() : undefined }); } catch (e) {} analysisScreen(); };
   const drawPain = () => { $('#painsl').innerHTML = PAINZ.filter(([k]) => pain[k] > 0).map(([k, n]) => `<div class="row" style="background:var(--surface-2);border-radius:var(--r-md);padding:6px 14px;min-height:48px"><span style="width:110px;font-size:14px">${n}</span><input type="range" min="1" max="10" value="${pain[k]}" data-p="${k}" style="flex:1;accent-color:var(--brand)" aria-label="${n}, боль от 1 до 10"><b class="num" id="pv_${k}" style="width:28px;text-align:right">${pain[k]}</b></div><div id="pw_${k}" style="font-size:13px;color:var(--sub);margin:-2px 0 4px 14px">${painWord(pain[k])}</div>`).join('') + (PAINZ.some(([k]) => pain[k] > 0) ? `<div style="font-size:12px;color:var(--sub);line-height:1.4">${PAIN_SCALE}</div>` : '');
     app.querySelectorAll('[data-p]').forEach(r => r.oninput = () => { pain[r.dataset.p] = +r.value; $('#pv_' + r.dataset.p).textContent = r.value; $('#pw_' + r.dataset.p).textContent = painWord(r.value); }); };
   drawPain();
@@ -709,9 +749,9 @@ async function inviteWelcome() {
   const comment = () => String(($('#ccom') ? $('#ccom').value : (() => { try { return localStorage.getItem('bp_ccom_' + inv.i); } catch (e) { return ''; } })()) || '').trim().slice(0, 1000);
   if ($('#editpf')) $('#editpf').onclick = joinForm;
   $('#go').onclick = async () => { if (!$('#share_ok').checked) { $('#share_ok').parentElement.style.outline = '2px solid var(--over)'; return; } localStorage.setItem('bp_share_' + inv.i, String(Date.now())); voice.unlock(); startMotion(); $('#go').textContent = 'Загружаю модель…'; try { await initPose(); } catch (e) { inviteWelcome(); return startError(e, () => $('#go') && $('#go').click()); }
-    const r = await runProtocol(inv.p, { onCancel: inviteWelcome, pre: PREI }); if (!r) return;
+    const r = await runProtocol(inv.p, { onCancel: inviteWelcome, pre: PREI }); if (!r) return; stampMain(r);
     const { poses, ...light } = r; saveTest({ ...light, pain, inv: inv.i }); consumerPoses.save(poses).catch(() => {});
-    savePosesLocal(r); const cm = comment(); sendResult({ ...r, pain, comment: cm, profile: inv.join ? PROFILE() : undefined }); analysisScreen(); };
+    savePosesLocal(r); const cm = comment(); sendResult({ ...r, pain, comment: cm, profile: inv.join || inv.cal ? PROFILE() : undefined }); analysisScreen(); };
 }
 // запись скелета остается и у клиента (IndexedDB на его телефоне)
 function savePosesLocal(r) { try { const q = indexedDB.open('bodypassport-client', 1); q.onupgradeneeded = () => q.result.createObjectStore('poses', { keyPath: 'date' });
@@ -725,7 +765,7 @@ try { const old = localStorage.getItem('bp_pending'); if (old) { outbox.set(JSON
 async function sendResult(r) {
   const inv = INV(); if (!inv) return;
   localStorage.setItem('bp_sent', 'sending'); localStorage.setItem('bp_sent_at', String(Date.now()));
-  try { const pr = PROFILE(); const payload = inv.join ? { type: 'join', token: pr && pr.token, profile: pr, result: r } : r;
+  try { const pr = PROFILE(); const payload = inv.join || inv.cal ? { type: 'join', token: pr && pr.token, profile: pr, result: r } : r;
     const body = await seal.encrypt(inv.k, payload); const res = await fetch('/api/relay?id=' + inv.i, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body });
     if (!res.ok) throw new Error(res.status); localStorage.setItem('bp_sent', 'ok'); track('result_sent'); outbox.clear().catch(() => {}); }
   catch (e) { localStorage.setItem('bp_sent', 'fail'); track('result_fail', { c: String(e.message || e) }); await outbox.set(r).catch(() => {}); }
@@ -769,6 +809,7 @@ function sentBanner(t) { const inv = INV(); if (!inv || (t && t.inv !== inv.i)) 
 // ---------- 4. анализ: тёмный экран, фигура проявляется, три строки статуса ----------
 let REVEAL = false;
 async function analysisScreen() {
+  setBodySex((PROFILE() || {}).sex);
   SEL = null; MODE3D = false; REVEAL = true; SHOW_T = null;
   if (reduceMotion()) return map();
   const cur = currentAnalysis(); const all = cur ? spots(cur.a) : [];
@@ -792,8 +833,9 @@ function reasonsOf(ids, top) { const out = {};
     if (!out[id] && list.some(x => x.replace('{s}', sk) === id)) out[id] = { k: s.k, t: `${VERB_OF[s.k]} ${acc(lc(m.name))} ${sideWord(s.side)}` }; }
   return out; }
 export function map() {
+  setBodySex(SHARED ? 'M' : (PROFILE() || {}).sex);
   const cur = currentAnalysis(); if (!cur) return onboarding(); track('map_view');
-  const { t, a } = cur; const all = spots(a); const top = mainOf(all);
+  const { t, a } = cur; const all = applyMain(spots(a), cleanMain(t.main)); const top = t.main ? fromMain(all, cleanMain(t.main)) : mainOf(all);
   const reveal = REVEAL; REVEAL = false; if (reveal && top[0]) BACK = top[0].back;
   if (SEL && !all.some(s => s.key === SEL)) SEL = null;
   const pl = plan(top), why = reasonsOf(pl, top);
@@ -829,10 +871,12 @@ export function map() {
         <div class="why" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:13px;color:var(--sub)">${seen(a, x)[0] ? `<span class="src">ИЗМЕРЕНО</span><span>${esc(seen(a, x)[0].replace(' (на границе нормы)', ''))}</span>${/на границе нормы/.test(seen(a, x)[0]) ? '<span class="edge">на границе нормы</span>' : ''}` : x.k === 'OK' ? 'Здесь все в порядке' : '<span class="src hyp">ГИПОТЕЗА</span><span>Напрямую не измерено</span>'}</div>
         ${x.k !== 'OK' ? `<button class="btn line" id="what" style="height:48px;margin-top:12px">Что делать ${ic('chevron-right', 's')}</button>` : ''}</div>` : '';
     const w = $('#what'); if (w) w.onclick = () => muscle(SEL); };
-  const pick = k => { SEL = k; const x = all.find(q => q.key === k); if (x && x.back !== BACK && !MODE3D) { BACK = x.back; setView(); } draw2d(); renderSel(); };
+  const pick = (k, from3d) => { SEL = k; if (!all.some(q => q.key === k)) { const [id, sd] = k.split(':'), b = spotFor(id, sd); if (b) all.push(b); }
+    const x = all.find(q => q.key === k); if (x && x.back !== BACK && !MODE3D) { BACK = x.back; setView(); } draw2d(); renderSel();
+    if (from3d) muscleInfo(k, all, a, { onWhat: () => muscle(k) }); };
   const setView = () => { $('#vf').classList.toggle('on', !BACK && !MODE3D); $('#vb').classList.toggle('on', BACK && !MODE3D); if (view3d) view3d.turn(BACK); draw2d(); };
   if (!MODE3D) { draw2d(); $('#heat').onclick = e => { const x = h2d && h2d.hit(e.clientX, e.clientY); if (x) pick(x.key); }; }
-  else body3D($('#vis'), focus(), k => pick(k), { reveal: true }).then(v => { view3d = v; v.turn(BACK); app.querySelectorAll('[data-z]').forEach(b => b.onclick = () => v.focus(b.dataset.z)); });
+  else body3D($('#vis'), focus(), k => pick(k, true), { reveal: true }).then(v => { view3d = v; v.turn(BACK); app.querySelectorAll('[data-z]').forEach(b => b.onclick = () => v.focus(b.dataset.z)); });
   renderSel();
   $('#vf').onclick = () => { if (MODE3D) { MODE3D = false; BACK = false; return map(); } BACK = false; setView(); };
   $('#vb').onclick = () => { if (MODE3D) { MODE3D = false; BACK = true; return map(); } BACK = true; setView(); };
@@ -970,7 +1014,7 @@ export async function passportImage({ eyebrow, name, date, sp, sections = [], de
   return new Promise(r => out.toBlob(r, 'image/png'));
 }
 async function resultImage() {
-  const { t, a } = currentAnalysis(); const all = spots(a); const top = mainOf(all);
+  const { t, a } = currentAnalysis(); const all = applyMain(spots(a), cleanMain(t.main)); const top = t.main ? fromMain(all, cleanMain(t.main)) : mainOf(all);
   const v = verdict(top, a.findings), pl = plan(top);
   return passportImage({ eyebrow: 'КАРТА ТЕЛА', name: 'Моя карта тела', date: new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' }), sp: all,
     sections: [{ h: 'Что делаем', rows: v.map(x => ({ k: x.k, text: `${x.verb} ${x.what}` })) }, { h: 'Комплекс', rows: pl.slice(0, 4).map(id => ({ text: '• ' + exLabel(ex(id)) })) }],
