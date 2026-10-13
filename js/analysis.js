@@ -192,9 +192,24 @@ export const Movement = {
       const per = fn => b.map(i => median(around(fr, i).map(x => fn(x.p)))), d0 = median(st.map(x => F.pelvicTilt(x.p)));
       f.reps = { ['sls_valgus_' + k]: per(p => F.fppa(p, right)), ['sls_drop_' + k]: per(p => (F.pelvicTilt(p) - d0) * (right ? -1 : 1)), ['sls_trunk_' + k]: per(p => F.trunkLateral(p) * (right ? 1 : -1)) };
     }
+    Object.assign(f, balance(fr, right, k));
     return res(f, b.length, vis(fr, [P.L_HIP, P.R_HIP, right ? P.R_KNEE : P.L_KNEE, right ? P.R_ANKLE : P.L_ANKLE]));
   },
 };
+/** Равновесие на одной ноге за всю запись: раскачка таза (% ширины плеч), доля кадров с руками в стороны (%),
+ * сколько раз свободная нога касалась пола. Все это компенсации слабой опоры: средней ягодичной, стопы, мышц корпуса. */
+function balance(fr, right, k) {
+  if (fr.length < 20) return {};
+  const shw = median(fr.map(x => Math.abs(x.p[P.L_SHOULDER].x - x.p[P.R_SHOULDER].x))) || 1;
+  const cx = fr.map(x => (x.p[P.L_HIP].x + x.p[P.R_HIP].x) / 2), m = cx.reduce((a, b) => a + b, 0) / cx.length;
+  const sway = Math.sqrt(cx.reduce((a, b) => a + (b - m) ** 2, 0) / cx.length) / shw * 100;
+  const out = x => [[P.L_SHOULDER, P.L_WRIST], [P.R_SHOULDER, P.R_WRIST]].some(([s, w]) => Math.abs(x.p[w].x - x.p[s].x) > shw * .55 && x.p[w].y > x.p[s].y - shw);
+  const arms = fr.filter(out).length / fr.length * 100;
+  const leg = median(fr.map(x => Math.abs(x.p[right ? P.R_ANKLE : P.L_ANKLE].y - x.p[right ? P.R_HIP : P.L_HIP].y))) || 1;
+  const free = right ? P.L_ANKLE : P.R_ANKLE, stand = right ? P.R_ANKLE : P.L_ANKLE; let touch = 0, down = false, sinceUp = 0;
+  for (const x of fr) { const d = (x.p[stand].y - x.p[free].y) / leg; if (!down && d < .05 && sinceUp > 8) { down = true; touch++; } else if (d > .12) { down = false; sinceUp++; } }
+  return { ['sls_sway_' + k]: Math.round(sway * 10) / 10, ['sls_arms_' + k]: Math.round(arms), ['sls_touch_' + k]: touch };
+}
 
 // ---------- сила и симметрия: левая против правой ----------
 const lift = (p, r, leg) => { const heel = p[r ? P.R_HEEL : P.L_HEEL], ank = p[r ? P.R_ANKLE : P.L_ANKLE]; return -(heel.y + ank.y) / 2 / leg; };
@@ -293,6 +308,8 @@ export function features(t) {
   // руки вверх: недостача сгибания плеча, худшая рука и ее сторона (по виду спереди; если его нет — по виду сбоку)
   const rr = Number.isFinite(of.oh_reach_r) ? of.oh_reach_r : os.oh_reach_r, rl = Number.isFinite(of.oh_reach_l) ? of.oh_reach_l : os.oh_reach_l;
   if (Number.isFinite(rr) || Number.isFinite(rl)) { const a = Number.isFinite(rr) ? rr : -1, b = Number.isFinite(rl) ? rl : -1; f.oh_reach = Math.max(a, b); f.oh_reach_side = Math.abs(a - b) < 8 || a < 0 || b < 0 ? 0 : a > b ? 1 : -1; f.sym_reach = Number.isFinite(rr) && Number.isFinite(rl) ? [rl, rr] : undefined; if (!f.sym_reach) delete f.sym_reach; }
+  for (const k of ['sls_sway_r', 'sls_arms_r', 'sls_touch_r']) put(k, sr[k]);
+  for (const k of ['sls_sway_l', 'sls_arms_l', 'sls_touch_l']) put(k, sl[k]);
   for (const k of ['sls_valgus_r', 'sls_drop_r', 'sls_trunk_r']) { put(k, k.includes('valgus') ? ok(sr[k]) : sr[k]); if (sr.reps && sr.reps[k]) reps[k] = sr.reps[k]; }
   for (const k of ['sls_valgus_l', 'sls_drop_l', 'sls_trunk_l']) { put(k, k.includes('valgus') ? ok(sl[k]) : sl[k]); if (sl.reps && sl.reps[k]) reps[k] = sl.reps[k]; }
   if (ob.reps && ob.reps.pelvis) reps.sq_pelvis = ob.reps.pelvis;
@@ -312,7 +329,7 @@ export function features(t) {
   const Q = t.quality || {}, low = k => (Q[k] != null && Q[k] < 60) || (t.moves && t.moves[k] && t.moves[k].quality === 'DOUBTFUL');
   const LQ = { stand: ['shoulder_tilt', 'pelvic_tilt', 'head_tilt', 'trunk_lateral', 'hand_rot'], side_stand: ['head_forward', 'knee_hyper', 'shoulder_shift', 'hip_shift'],
     ohs_front: ['valgus_max', 'sq_shift', 'foot_out_max', 'sq_depth', 'oh_reach'], ohs_back: ['valgus_max', 'sq_shift', 'sq_pelvis'], ohs_side: ['sq_lean', 'sq_arms', 'sq_heel'],
-    sls_r: ['sls_valgus_r', 'sls_drop_r', 'sls_trunk_r', 'asym_quad'], sls_l: ['sls_valgus_l', 'sls_drop_l', 'sls_trunk_l', 'asym_quad'], t_hold: ['asym_delt'], bends: ['asym_bend', 'bend_sum'], calf_r: ['asym_calf', 'calf_reps_r'], calf_l: ['asym_calf', 'calf_reps_l'] };
+    sls_r: ['sls_valgus_r', 'sls_drop_r', 'sls_trunk_r', 'sls_sway_r', 'sls_arms_r', 'sls_touch_r', 'asym_quad'], sls_l: ['sls_valgus_l', 'sls_drop_l', 'sls_trunk_l', 'sls_sway_l', 'sls_arms_l', 'sls_touch_l', 'asym_quad'], t_hold: ['asym_delt'], bends: ['asym_bend', 'bend_sum'], calf_r: ['asym_calf', 'calf_reps_r'], calf_l: ['asym_calf', 'calf_reps_l'] };
   const lowq = {}; for (const [k, fs] of Object.entries(LQ)) if (low(k)) for (const x of fs) lowq[x] = true;
   if (Object.keys(lowq).length) f.lowq = lowq;
   if (Object.keys(reps).length) f._reps = reps; if (Object.keys(views).length) f._views = views;
@@ -342,7 +359,8 @@ export function findings(rules, f) {
     const unit = at < 1 ? .03 : at >= 12 ? 3 : 1.5, gap = r.absGreater != null ? Math.abs(v) - thr : r.greater != null ? v - thr : thr != null ? thr - v : 0;
     let borderline = thr != null && gap < Math.max(unit, at * .12);
     // плохая съемка: находки на границе или с порогом до 5° (уровень погрешности одной камеры) скорее шум
-    if (f.lowq && f.lowq[r.feature] && (borderline || at <= 5)) continue;
+    // плохая съемка: находка на границе отбрасывается, а с малым порогом (до 5°, уровень погрешности камеры) остается, но с пометкой «на границе»
+    if (f.lowq && f.lowq[r.feature]) { if (borderline) continue; if (at <= 5) borderline = true; }
     // голосование по повторам: признак должен быть виден в большинстве повторов (от 3 повторов). Меньше 40% — шум, 40–60% — на границе
     const passV = x => (r.absGreater == null || Math.abs(x) > r.absGreater) && (r.greater == null || x > r.greater) && (r.less == null || x < r.less);
     const rv = f._reps && f._reps[r.feature] && f._reps[r.feature].filter(Number.isFinite);
@@ -367,7 +385,7 @@ export function tones(fds, catalog, antagonists) {
   // прямой тест мышцы (подъемы на носок для икры) важнее косвенных признаков из приседа: они не могут перевернуть его вывод
   const dPos = new Set(), dNeg = new Set();
   // ослабление слабых и пограничных признаков было слишком сильным (×0,6 и ×0,5, вместе ×0,3): одиночный признак пропадал с карты
-  for (const fd of fds) { const s = strength(fd) * (fd.rule.weak ? .75 : 1) * (fd.borderline ? .7 : 1);
+  for (const fd of fds) { const s = strength(fd) * (fd.rule.weak ? .85 : 1) * (fd.borderline ? .85 : 1);
     for (const m of fd.muscles) for (const sd of (m.side === 'BOTH' ? ['LEFT', 'RIGHT'] : [m.side])) { const k = key(m.id, sd), sm = s * (m.w ?? 1);
       // источник: какие независимые признаки (правила) указали на мышцу; пограничные в доказательства цепей не идут
       if (!fd.borderline) { if (!src.has(k)) src.set(k, new Set()); src.get(k).add(fd.rule.id + (fd.rule.feature || '')); }

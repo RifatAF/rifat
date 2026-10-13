@@ -70,8 +70,12 @@ export default async function handler(req, res) {
   const revoked = async id => { try { const { blobs } = await list({ prefix: `relayrevoked/${id}`, limit: 1 }); return blobs.length > 0; } catch (e) { return false; } };
   try {
     // жива ли ссылка: специалист мог удалить клиента и закрыть доступ (ответ без данных, только да/нет)
-    if (req.method === 'GET' && a === 'alive') { const id = String(req.query.id || ''); if (!ID.test(id)) return res.status(400).json({ error: 'bad id' }); return res.status(200).json({ alive: !(await revoked(id)) }); }
-    if (req.method === 'POST' && a !== 'new' && a !== 'revoke') {
+    // жива ли ссылка и какой тест сейчас назначен (специалист мог сменить тест после отправки; это только названия шагов, без данных клиента)
+    if (req.method === 'GET' && a === 'alive') { const id = String(req.query.id || ''); if (!ID.test(id)) return res.status(400).json({ error: 'bad id' });
+      const pr = await get(`relayproto/${id}.json`, { access: 'private', useCache: false }).catch(() => null); let p = null;
+      if (pr && pr.stream) { try { p = JSON.parse(await readAll(pr.stream)).p; } catch (e) {} }
+      return res.status(200).json({ alive: !(await revoked(id)), ...(Array.isArray(p) ? { p } : {}) }); }
+    if (req.method === 'POST' && a !== 'new' && a !== 'revoke' && a !== 'proto') {
       const id = String(req.query.id || '');
       if (!ID.test(id)) return res.status(400).json({ error: 'bad id' });
       if (!parse(id) && !legacyOk()) return res.status(410).json({ error: 'link expired' });
@@ -96,6 +100,14 @@ export default async function handler(req, res) {
       if (!owns(u, id)) return res.status(403).json({ error: 'forbidden' });
       await put(`relayrevoked/${id}.json`, JSON.stringify({ at: Date.now() }), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true });
       const { blobs } = await list({ prefix: `relay/${id}/`, limit: 100 }); if (blobs.length) await del(blobs.map(b => b.url));
+      return res.status(200).json({ ok: true }); }
+    // смена теста по уже отправленной ссылке: только владелец ящика
+    if (req.method === 'POST' && a === 'proto') { const id = String(req.query.id || ''); if (!ID.test(id)) return res.status(400).json({ error: 'bad id' });
+      if (!owns(u, id)) return res.status(403).json({ error: 'forbidden' });
+      let b = req.body; if (typeof b === 'string') { try { b = JSON.parse(b); } catch (e) { b = null; } }
+      const p = b && Array.isArray(b.p) ? [...new Set(b.p.filter(x => typeof x === 'string' && /^[a-z_]{1,20}$/.test(x)))].slice(0, 12) : [];
+      if (!p.length) return res.status(400).json({ error: 'bad protocol' });
+      await put(`relayproto/${id}.json`, JSON.stringify({ p, at: Date.now() }), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true });
       return res.status(200).json({ ok: true }); }
     if (req.method === 'POST') { // a === 'new': новый подписанный ящик
       if (!SECRET) return res.status(503).json({ error: 'not configured' });

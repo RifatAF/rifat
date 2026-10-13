@@ -2,12 +2,13 @@
 // Все данные в IndexedDB на телефоне специалиста; на сервер ничего не уходит.
 import { analyze, fmt, recompute } from './analysis.js';
 import { track, vasStats } from './track.js';
+import { painWord, PAIN_SCALE } from './vas.js';
 import { npsCard, bindNps, installCard, bindInstall, installNow, canInstall, feedbackSheet, referralSheet, myRef, bugSheet, DEV, exitSurvey } from './grow.js';
 import { meSync, logout, getMe } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
 import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS } from './plans.js';
 import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast, preload3D, saveBlob } from './core.js';
-import { cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen } from './app.js';
+import { cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, mainOf, TONE_HELP, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen } from './app.js';
 
 // активные клиенты занимают слоты; пример и закрытые (пришли сверх лимита) не считаются
 // ведение = ретест, ссылка на ретест или занятия дома за 30 дней. Первые тесты новых клиентов лимит не трогают
@@ -500,7 +501,7 @@ export async function clientCard(id) {
      <div class="row" style="flex-wrap:wrap;gap:8px"><b style="flex:1 1 160px">Карта тела · ${fmtDate(last.date)}</b><div class="seg" style="width:auto"><button id="vf" class="on" style="min-height:32px;padding:0 10px;font-size:13px">Спереди</button><button id="vb" style="min-height:32px;padding:0 10px;font-size:13px">Сзади</button><button id="v3" style="min-height:32px;padding:0 10px;font-size:13px">3D</button></div></div>
      <div class="row" style="align-items:flex-start;gap:12px;margin-top:8px"><div id="cvis" style="flex:none;width:130px;display:flex;justify-content:center"><canvas id="cheat" style="width:130px;display:block"></canvas></div>
        <ol id="cfind" style="list-style:none;margin:0;padding:0;flex:1;min-width:0;display:flex;flex-direction:column;gap:10px">${cFacts.length ? cFacts.map((f, i) => `<li class="row" style="gap:8px;align-items:flex-start;font-size:14px;line-height:1.35"><span class="num" style="flex:none;width:20px;height:20px;border-radius:50%;background:var(--ink);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">${i + 1}</span><span>${esc(f)}</span></li>`).join('') : '<li class="sub" style="font-size:14px">Значимых отклонений нет</li>'}</ol></div>
-     ${LEGEND}
+     ${LEGEND}${TONE_HELP}
      <button class="btn" id="rep" style="margin-top:12px;height:48px">${ic('share', 's')}Отправить отчет клиенту</button>
      <div class="row" style="justify-content:center;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:14px"><button class="link" id="open">Подробный разбор</button><button class="link" id="mvr">Запись движения</button>${as.length >= 2 ? '<button class="link" id="cmp">Было → стало</button>' : ''}</div></div></div>` : ''}
    ${homeBlock(c)}
@@ -723,7 +724,7 @@ async function quickStart() {
     <div class="group" id="goals">${TEMPLATES.map(t => { const r = rowsOf(t[2]); return `<label class="row" style="min-height:60px;cursor:pointer" data-t="${t[0]}"><input type="radio" name="tpl" class="check" style="width:20px;height:20px" ${t === tpl ? 'checked' : ''}><b style="flex:1;font-size:15px">${t[1]}</b><span class="step-n">${stepsW(r.length)} · ${mins(SETUP_SEC + secs(r))} мин</span></label>`; }).join('')}</div>
     <div class="eyebrow" style="margin-top:var(--s3)">Боль сейчас</div>
     <div class="card" style="padding:12px 14px"><div class="row" style="flex-wrap:wrap;gap:6px" id="pz">${[['', 'Нет'], ...PAIN].map(([k, n]) => `<button class="pill" data-pz="${k}">${n}</button>`).join('')}</div>
-      <div id="pzd" hidden><div class="row" style="margin-top:12px;gap:10px"><input type="range" min="0" max="10" value="5" id="pzv" style="flex:1;accent-color:var(--ink)" aria-label="Боль от 0 до 10"><b class="num" id="pzn" style="width:44px;text-align:right">5/10</b></div>
+      <div id="pzd" hidden><div class="row" style="margin-top:12px;gap:10px"><input type="range" min="0" max="10" value="5" id="pzv" style="flex:1;accent-color:var(--ink)" aria-label="Боль от 0 до 10"><b class="num" id="pzn" style="width:44px;text-align:right">5/10</b></div><div id="pzw" style="font-size:13px;color:var(--sub);margin-top:2px">${painWord(5)}</div><div style="font-size:12px;color:var(--sub);margin-top:4px;line-height:1.4">${PAIN_SCALE}</div>
       <div class="seg" style="margin-top:10px">${[['LEFT', 'Слева'], ['RIGHT', 'Справа'], ['BOTH', 'С двух']].map(([k, n]) => `<button data-pzs="${k}">${n}</button>`).join('')}</div></div></div>
     <button class="row-link" id="adv" style="color:var(--focus);font-weight:600"><span>Моя гипотеза, камера, шаги</span>${ic('chevron-right', 's')}</button>
    </div><div class="dock"><button class="btn" id="go" disabled>Начать · ${mins(SETUP_SEC + secs(rowsOf(tpl[2])))} мин</button></div></div>`);
@@ -738,7 +739,7 @@ async function quickStart() {
   // боль одной строкой: зона, 0–10 и сторона; без нее «Было → стало» не покажет главного для клиента
   const pzSet = k => { pz = k || null; document.querySelectorAll('[data-pz]').forEach(x => x.classList.toggle('on', x.dataset.pz === (k || ''))); $('#pzd').hidden = !pz; };
   document.querySelectorAll('[data-pz]').forEach(b => b.onclick = () => pzSet(b.dataset.pz));
-  $('#pzv').oninput = e => { pzv = +e.target.value; $('#pzn').textContent = pzv + '/10'; };
+  $('#pzv').oninput = e => { pzv = +e.target.value; $('#pzn').textContent = pzv + '/10'; $('#pzw').textContent = painWord(pzv); };
   document.querySelectorAll('[data-pzs]').forEach(b => b.onclick = () => { pzs = pzs === b.dataset.pzs ? null : b.dataset.pzs; document.querySelectorAll('[data-pzs]').forEach(x => x.classList.toggle('on', x.dataset.pzs === pzs)); });
   const painOpts = () => pz ? { pain: { [pz]: pzv }, painSide: pzs } : {};
   // клиент из поля создается один раз (gate — единственное место про тариф), потом сразу камера
@@ -765,7 +766,7 @@ async function newAssessment(clientId, retestOf, opts = {}) {
         <div style="margin-top:10px">${stepList(units, pre)}</div>
         <div class="row" style="flex-wrap:wrap;gap:6px;margin-top:10px">${Object.keys(UNITS).map(u => `<label style="display:flex;align-items:center;gap:6px;font-size:14px;background:var(--bg);border-radius:99px;padding:6px 12px"><input type="checkbox" data-u="${u}" ${units.includes(u) ? 'checked' : ''} ${u === 'stand' ? 'disabled' : ''}>${UNIT_NAMES[u]}</label>`).join('')}</div>
         <div style="margin-top:14px"><b style="font-size:14px">Сторона боли</b><div class="seg" style="margin-top:6px">${[['LEFT', 'Слева'], ['RIGHT', 'Справа'], ['BOTH', 'С двух'], ['', 'Нет']].map(([k, n]) => `<button data-ps="${k}" class="${(painSide || '') === k ? 'on' : ''}">${n}</button>`).join('')}</div></div>
-        <div style="margin-top:14px"><b style="font-size:14px">Боль сейчас, 0–10</b><div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">${PAIN.map(([k, n]) => `<div class="row" style="background:var(--bg);border-radius:12px;padding:6px 12px"><span style="width:110px;font-size:14px">${n}</span><input type="range" min="0" max="10" value="${pain[k] || 0}" data-p="${k}" style="flex:1;accent-color:var(--ink)"><b style="width:24px;text-align:right" id="pv_${k}">${pain[k] || 0}</b></div>`).join('')}</div></div>
+        <div style="margin-top:14px"><b style="font-size:14px">Боль сейчас, 0–10</b><div style="font-size:12px;color:var(--sub);margin-top:2px;line-height:1.4">${PAIN_SCALE}</div><div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">${PAIN.map(([k, n]) => `<div class="row" style="background:var(--bg);border-radius:12px;padding:6px 12px"><span style="width:110px;font-size:14px">${n}</span><input type="range" min="0" max="10" value="${pain[k] || 0}" data-p="${k}" style="flex:1;accent-color:var(--ink)"><b style="width:24px;text-align:right" id="pv_${k}">${pain[k] || 0}</b></div>`).join('')}</div></div>
         <div style="margin-top:14px"><b style="font-size:14px">Камера</b><div class="seg" style="margin-top:6px"><button id="c0" class="${cam.back ? '' : 'on'}">Фронтальная</button><button id="c1" class="${cam.back ? 'on' : ''}">Основная</button></div></div>
       </details>
      </div><div class="pad" style="padding-bottom:24px"><button class="btn" id="go">Начать · ${rows.length} ${rows.length === 1 ? 'шаг' : rows.length < 5 ? 'шага' : 'шагов'}, ${mins(SETUP_SEC + secs(rows))} мин</button></div></div>`);
@@ -873,8 +874,8 @@ const LEGEND = `<div class="row" style="justify-content:center;gap:14px;flex-wra
 function focusOf(a, sp = proSpots(a)) { const conf = a.check || {};
   const decided = sp.filter(s => s.k !== 'OK' && (conf[s.key] === 'yes' || s.edited)).sort(byTone);
   const top = sp.filter(s => s.k !== 'OK' && conf[s.key] !== 'no' && (!s.derived || s.edited || s.byChain)).sort(byTone);
-  // решения специалиста показываем все (до 12): это его вывод, а не черновик; без решений — по 3 главные гипотезы каждого типа
-  const base = decided.length ? decided : top, items = ['WEAK', 'SHORT', 'HYPER'].flatMap(k => base.filter(s => s.k === k && !s.ambiguous).slice(0, decided.length ? 12 : 3));
+  // решения специалиста показываем все (до 12): это его вывод, а не черновик; без решений — тот же список, что видит клиент (mainOf)
+  const base = decided.length ? decided : top, items = decided.length ? ['WEAK', 'SHORT', 'HYPER'].flatMap(k => decided.filter(s => s.k === k && !s.ambiguous).slice(0, 12)) : mainOf(sp, conf);
   // упражнения: сначала по одному на каждую строку решения, потом остальные
   const lead = ['WEAK', 'SHORT', 'HYPER'].map(k => items.find(s => s.k === k)).filter(Boolean);
   return { base, decided, items, keys: new Set(items.map(s => s.key)), planSpots: [...lead, ...items.filter(s => !lead.includes(s))] }; }
@@ -922,7 +923,7 @@ export async function result(aid, view = 'measured') {
       ${sideClash(a, s) ? '<div style="font-size:13px;color:var(--short-t);margin-top:8px">Боль с другой стороны: проверьте обе стороны руками</div>' : ''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s2);margin-top:var(--s3)"><button class="btn${conf[s.key] === 'yes' ? '' : ' line'}" data-chk="${s.key}" data-v="yes" style="height:48px;border-radius:var(--r-sm);font-size:15px">${conf[s.key] === 'yes' ? ic('check', 's') + 'Подтверждено' : 'Подтверждаю'}</button><button class="btn line" data-chk="${s.key}" data-v="no" style="height:48px;border-radius:var(--r-sm);font-size:15px">${conf[s.key] === 'no' ? 'Убрано' : 'Убрать'}</button></div>
       <button class="link" id="tohyp">${hypMore > 0 && hypMore < 10 ? `Проверка руками и ещё ${hypMore} ${hypMore === 1 ? 'гипотеза' : hypMore < 5 ? 'гипотезы' : 'гипотез'}` : 'Проверка руками и все гипотезы'}</button></div>`; }).join('')}
-    <div><div class="eyebrow" style="color:${decided.length ? 'var(--ink)' : 'var(--short-t)'}">${decided.length ? 'Решение специалиста' : 'Решение · черновик'}</div><div style="margin-top:8px">${verdictCard(focusOf(a, sp).base, an.findings, undefined, facts.map(f => f.observed.replace(' (на границе нормы)', '')))}</div>${(a.plan && a.plan.ex && a.plan.ex.length) ? `<button class="link" id="toplan">Назначение: ${a.plan.ex.length} упр.</button>` : '<button class="link" id="mkplan">Собрать упражнения по решению</button>'}</div>
+    <div><div class="eyebrow" style="color:${decided.length ? 'var(--ink)' : 'var(--short-t)'}">${decided.length ? 'Решение специалиста' : 'Решение · черновик'}</div><div style="margin-top:8px">${verdictCard(focusOf(a, sp).items, an.findings, undefined, facts.map(f => f.observed.replace(' (на границе нормы)', '')))}</div>${(a.plan && a.plan.ex && a.plan.ex.length) ? `<button class="link" id="toplan">Назначение: ${a.plan.ex.length} упр.</button>` : '<button class="link" id="mkplan">Собрать упражнения по решению</button>'}</div>
     <div class="card" style="padding:12px 14px"><div class="eyebrow">Заметка к визиту</div><textarea id="vnote" rows="2" maxlength="1000" placeholder="Что нашли руками, что сказал клиент. Видите только вы" style="width:100%;margin-top:8px;border:0;background:transparent;font:15px Onest;resize:vertical;color:var(--text)">${esc(a.note || '')}</textarea></div>
     ${isBefore ? `<button class="btn line" id="after">${ic('camera', 's')}После сеанса: снять снова</button>` : ''}
     <details class="card"><summary style="font-weight:600">Подробнее: запись, качество, все показатели</summary><div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
@@ -940,7 +941,7 @@ export async function result(aid, view = 'measured') {
     body = `
     <div class="card" style="padding:12px 8px"><div class="seg" style="margin:0 4px"><button id="hf" class="on">Спереди</button><button id="hb">Сзади</button>${device.webgl2 ? '<button id="h3" style="display:none">3D</button>' : ''}</div>
       <div id="hvis" style="width:100%;max-width:360px;margin:8px auto 0"><canvas id="heat" style="width:100%;display:block"></canvas></div>
-      <div id="hz" class="row" style="display:none;gap:6px;flex-wrap:wrap;justify-content:center;margin:8px 8px 0">${[['all', 'Всё тело'], ['head', 'Шея'], ['shoulders', 'Плечи'], ['back', 'Спина'], ['pelvis', 'Таз'], ['knees', 'Колени'], ['feet', 'Стопы']].map(([z, n]) => `<button class="pill" data-z="${z}">${n}</button>`).join('')}</div>${LEGEND}</div>
+      <div id="hz" class="row" style="display:none;gap:6px;flex-wrap:wrap;justify-content:center;margin:8px 8px 0">${[['all', 'Всё тело'], ['head', 'Шея'], ['shoulders', 'Плечи'], ['back', 'Спина'], ['pelvis', 'Таз'], ['knees', 'Колени'], ['feet', 'Стопы']].map(([z, n]) => `<button class="pill" data-z="${z}">${n}</button>`).join('')}</div>${LEGEND}${TONE_HELP}</div>
     <details class="card" id="hdet" style="padding:14px 16px"${HYPOPEN ? ' open' : ''}><summary style="font-weight:600;cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px"><span style="flex:1">Проверка руками · ${list.length} ${list.length % 10 === 1 && list.length % 100 !== 11 ? 'мышца' : [2, 3, 4].includes(list.length % 10) && ![12, 13, 14].includes(list.length % 100) ? 'мышцы' : 'мышц'}</span>${ic('chevron-down', 's')}</summary>
       <p class="sub" style="font-size:13px;margin-top:6px">Черновик по замеру. В отчёт пойдёт ваша версия.</p>
       <div id="hlist" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s3)">${list.map((s, i) => hypCard(a, an, s, i === list.findIndex(x => C.muscles[x.id] && C.muscles[x.id].proTest && !chk[x.key]), evid)).join('')}</div></details>`;
@@ -982,7 +983,7 @@ export async function result(aid, view = 'measured') {
     await put('assessments', a); const y = scrollY; await result(aid, view); scrollTo(0, y); });
   if (view === 'hyp') { let back = false; const lab = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 4)).map(s => ({ key: s.key, title: (SHORT[s.id] || C.muscles[s.id].name) + (s.side === 'RIGHT' ? ' · П' : ' · Л'), sub: toneText(s, 0).toLowerCase(), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
     // гипотеза: видны только мышцы из списка ниже (до 5) и те, что специалист отметил сам
-    const hk = () => new Set([...top.slice(0, 5).map(x => x.key), ...proSpots(a).filter(x => x.edited).map(x => x.key)]);
+    const hk = () => { const all = proSpots(a); return new Set([...mainKeys(a, all), ...all.filter(x => x.edited).map(x => x.key)]); };
     let v3 = null, mode3 = false, cur = onlyKeys(sp, hk());
     const draw2 = () => { if (mode3) { if (v3) v3.turn(back); return; } drawHeat($('#heat'), cur, back, null, lab); }; draw2();
     $('#hf').onclick = async () => { if (mode3) await $('#h3').onclick(); back = false; $('#hf').classList.add('on'); $('#hb').classList.remove('on'); draw2(); }; $('#hb').onclick = async () => { if (mode3) await $('#h3').onclick(); back = true; $('#hb').classList.add('on'); $('#hf').classList.remove('on'); draw2(); };
@@ -1286,7 +1287,7 @@ async function report(aid) {
   const plain = t => t.replace(/ \(на границе нормы\)/, '').replace(/\s*на\s*[\d,.]+\s*°.*$/, '').replace(/:\s*$/, '');
   const same = prev && Math.abs(a.date - prev.date) < 12 * 3600e3;
   const conf = a.check || {}, decided = sp.filter(s => s.k !== 'OK' && (conf[s.key] === 'yes' || s.edited)).sort((x, y2) => Math.abs(y2.tone) - Math.abs(x.tone));
-  const fo = focusOf(a, sp), v = verdict(fo.base, an.findings), pl = a.plan || { ex: plan(fo.planSpots), text: '' };
+  const fo = focusOf(a, sp), v = verdict(fo.items, an.findings), pl = a.plan || { ex: plan(fo.planSpots), text: '' };
   // отчет для клиента: три наблюдения, упражнения на дом, над чем работаем; на схеме только главное
   const exs = pl.ex.slice(0, 4).map(id => C.exercises[id]).filter(Boolean);
   const sections = [{ h: 'Что мы заметили', rows: an.findings.slice(0, 3).map((f, i) => ({ text: `${i + 1}. ${plain(f.observed)}` })) },
@@ -1368,6 +1369,10 @@ async function inviteLink(c, units, date) {
   const author = (await meta('profile')) || defaultAuthor();
   return location.origin + '/?src=inv' + (myRef() ? '&ref=' + myRef() : '') + '#inv=' + seal.pack({ i: c.invite.id, k: c.invite.key, n: c.name.split(' ')[0], s: author, p: units, ...(date ? { d: date } : {}) });
 }
+/** Какой тест пройдет клиент по ссылке: хранится на сервере у ящика, поэтому тест можно сменить после отправки. */
+async function setInviteTest(c, units) { if (!c.invite || !c.invite.id) return false;
+  const r = await fetch('/api/relay?a=proto&id=' + encodeURIComponent(c.invite.id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ p: units }) }).catch(() => null);
+  if (r && r.ok) { c.invite.sent = Date.now(); c.invite.p = units; await put('clients', c); return true; } return false; }
 async function sendInvite(c) {
   if (!gate('invite')) return;
   if ((await byClient(c.id)).length && !(await canTrack(c))) return; // повторный тест из дома = ведение
@@ -1376,11 +1381,13 @@ async function sendInvite(c) {
   const draw = () => { d.innerHTML = `<div><h2>Ссылка клиенту</h2><p class="sub" style="font-size:14px;margin-top:6px">${esc(c.name)} откроет ссылку, пройдет тест дома, и результат сам появится в его карточке. Клиент тоже видит свою карту.</p>
     <div class="eyebrow" style="margin-top:14px">Какой тест пройдет клиент</div><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px">${TEMPLATES.map(t => `<button class="pill" data-t="${t[0]}" style="border:1.5px solid ${tpl[0] === t[0] ? 'var(--ink)' : 'transparent'}">${t[1]}</button>`).join('')}</div>
     <p class="sub" style="font-size:13px;margin-top:8px">${rowsOf(tpl[2]).length} шагов · около ${mins(SETUP_SEC + secs(rowsOf(tpl[2])))} мин</p>
-    <button class="btn" id="snd" style="margin-top:14px">Отправить ссылку</button><p style="font-size:12px;color:var(--sub);margin-top:8px">Результат шифруется на телефоне клиента. Ключ есть только у тебя и клиента.</p>
+    ${c.invite && c.invite.id ? `<button class="btn" id="chg" style="margin-top:14px">Сменить тест по отправленной ссылке</button><p style="font-size:12px;color:var(--sub);margin-top:6px">Клиент откроет ту же ссылку и пройдет выбранный тест. Новую ссылку отправлять не нужно.</p>` : ''}
+    <button class="btn${c.invite && c.invite.id ? ' line' : ''}" id="snd" style="margin-top:14px">${c.invite && c.invite.id ? 'Отправить ссылку заново' : 'Отправить ссылку'}</button><p style="font-size:12px;color:var(--sub);margin-top:8px">Результат шифруется на телефоне клиента. Ключ есть только у тебя и клиента.</p>
     <button class="btn ghost" id="cx" style="margin-top:8px;border:0">Отмена</button></div>`;
     d.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tpl = TEMPLATES.find(t => t[0] === b.dataset.t); draw(); });
     d.querySelector('#cx').onclick = () => d.remove();
-    d.querySelector('#snd').onclick = async () => { let url; try { url = await inviteLink(c, tpl[2]); } catch (e) { toast('Не удалось создать ссылку: ' + e.message); return; } track('invite_sent'); useHit('tpl', tpl[0]); const text = `${c.name.split(' ')[0]}, здравствуйте! Пройдите, пожалуйста, тест движения по ссылке, это 2–4 минуты. Результат сразу придет мне.`;
+    if (d.querySelector('#chg')) d.querySelector('#chg').onclick = async () => { const ok = await setInviteTest(c, tpl[2]); toast(ok ? `Тест изменен: ${tpl[1]}. Клиент увидит его по прежней ссылке` : 'Не удалось изменить тест, проверьте интернет'); if (ok) d.remove(); };
+    d.querySelector('#snd').onclick = async () => { let url; try { url = await inviteLink(c, tpl[2]); } catch (e) { toast('Не удалось создать ссылку: ' + e.message); return; } setInviteTest(c, tpl[2]); track('invite_sent'); useHit('tpl', tpl[0]); const text = `${c.name.split(' ')[0]}, здравствуйте! Пройдите, пожалуйста, тест движения по ссылке, это 2–4 минуты. Результат сразу придет мне.`;
       if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url); toast('Ссылка скопирована'); } d.remove(); }; };
   draw(); document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
 }
@@ -1497,7 +1504,8 @@ async function sendJoin() {
   const draw = () => { d.innerHTML = `<div><h2>Ссылка новому клиенту</h2><p class="sub" style="font-size:14px;margin-top:6px">Клиент сам заполнит имя и анкету, пройдет тест, и у вас появится его карточка с результатом и записью движения. Одну ссылку можно отправлять разным людям.</p>
     <div class="eyebrow" style="margin-top:14px">Какой тест пройдет клиент</div><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px">${TEMPLATES.map(t => `<button class="pill" data-t="${t[0]}" style="border:1.5px solid ${tpl[0] === t[0] ? 'var(--ink)' : 'transparent'}">${t[1]}</button>`).join('')}</div>
     <p class="sub" style="font-size:13px;margin-top:8px">${rowsOf(tpl[2]).length} шагов · около ${mins(SETUP_SEC + secs(rowsOf(tpl[2])))} мин + анкета</p>
-    <button class="btn" id="snd" style="margin-top:14px">Отправить ссылку</button><button class="btn ghost" id="cx" style="margin-top:8px;border:0">Отмена</button></div>`;
+    ${c.invite && c.invite.id ? `<button class="btn" id="chg" style="margin-top:14px">Сменить тест по отправленной ссылке</button><p style="font-size:12px;color:var(--sub);margin-top:6px">Клиент откроет ту же ссылку и пройдет выбранный тест. Новую ссылку отправлять не нужно.</p>` : ''}
+    <button class="btn${c.invite && c.invite.id ? ' line' : ''}" id="snd" style="margin-top:14px">${c.invite && c.invite.id ? 'Отправить ссылку заново' : 'Отправить ссылку'}</button><button class="btn ghost" id="cx" style="margin-top:8px;border:0">Отмена</button></div>`;
     d.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tpl = TEMPLATES.find(t => t[0] === b.dataset.t); draw(); });
     d.querySelector('#cx').onclick = () => d.remove();
     d.querySelector('#snd').onclick = async () => { let bx; try { bx = await inbox(); } catch (e) { toast('Не удалось создать ссылку: ' + e.message); return; } track('join_sent'); useHit('tpl', tpl[0]); const author = (await meta('profile')) || defaultAuthor();

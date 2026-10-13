@@ -14,3 +14,6 @@ export function vasStats(list, days = 7, now = Date.now()) {
   const avg = f => paired.length ? Math.round(paired.reduce((x, r) => x + f(r), 0) / paired.length * 10) / 10 : null;
   return { days, sessions: L.length, activeDays: dn, compliance: Math.round(Math.min(1, dn / days) * 100), avgPre: avg(r => r.pre), avgPost: avg(r => r.post), avgDelta: avg(r => r.pre - r.post) };
 }
+/** Шкала боли словами: человек видит, что значит его число. */
+export const painWord = v => (v = +v) <= 0 ? 'нет боли' : v <= 3 ? 'слабая, не мешает' : v <= 6 ? 'заметная, мешает делам' : v <= 8 ? 'сильная' : 'нестерпимая';
+export const PAIN_SCALE = '0 — нет боли · 1–3 — слабая, не мешает · 4–6 — мешает делам · 7–8 — сильная · 9–10 — нестерпимая';
