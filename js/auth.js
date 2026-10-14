@@ -172,7 +172,6 @@ export function safetyScreen(cont, back, booking) {
   show(`<div class="scr fade"><div class="top-bar">${back ? `<button class="round" id="sback" aria-label="Назад">${ic('chevron-left')}</button>` : '<div style="height:48px"></div>'}<span style="flex:1"></span></div>
    <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:var(--s3)">
     <div class="eyebrow">Перед тестом</div><h1 style="font-size:26px">Есть ли у вас сейчас что-то из этого?</h1>
-    <p class="sub" style="font-size:14px">В тесте приседания и стойка на одной ноге. Если что-то из списка есть, сначала нужен врач.</p>
     <div class="group">${FLAGS.map(([k, t]) => `<label class="chk-row" data-k="${k}"><input type="checkbox" class="check"><span>${t}</span></label>`).join('')}</div>
    </div><div class="dock"><p style="font-size:13px;color:var(--sub);text-align:center">Спросим снова через ${RF_DAYS} дней</p><button class="btn" id="sok">Ничего из этого нет</button></div></div>`);
   if (back) document.getElementById('sback').onclick = back;
