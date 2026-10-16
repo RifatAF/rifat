@@ -279,9 +279,11 @@ export async function prep() {
       <svg width="40" height="76" viewBox="0 0 200 380" aria-hidden="true"><circle cx="100" cy="44" r="24" fill="var(--figure)" stroke="var(--faint)" stroke-width="5"/><path d="M78 72 L122 72 Q140 74 144 92 L156 176 Q158 186 150 188 Q144 188 142 180 L132 112 L128 190 L130 268 L128 352 Q128 362 118 362 Q110 362 110 352 L104 210 L96 210 L90 352 Q90 362 82 362 Q72 362 72 352 L70 268 L72 190 L68 112 L58 180 Q56 188 50 188 Q42 186 44 176 L56 92 Q60 74 78 72 Z" fill="var(--figure)" stroke="var(--faint)" stroke-width="5"/></svg></div>
       ${[['Поставьте телефон вертикально: на штатив на уровне пояса или на пол у стены'], ['Отойдите на 2–4 метра, чтобы в кадре вы были целиком, от головы до стоп'], ['Лучше всего облегающая одежда: леггинсы или короткие шорты и футболка по фигуре, босиком. В широкой одежде камера хуже видит суставы, и точность падает'], ['Встаньте лицом к свету, окно не должно быть за спиной'], ['Дальше подсказывает голос, смотреть в экран не обязательно']].map(([t], i) => `<div class="row" style="align-items:flex-start;padding:10px 0;border-top:1px solid var(--line-2)"><span class="step-n" style="width:20px;padding-top:2px">${i + 1}</span><span style="flex:1;font-size:15px;line-height:1.4">${t}</span></div>`).join('')}</div>
     <div class="group"><div class="row" style="min-height:64px"><div style="flex:1;min-width:0"><b style="font-size:15px">${FULL ? 'Точный · с поворотами' : 'Быстрый · лицом и боком'}</b><div style="font-size:13px;color:var(--sub)">${cam.back ? 'Основная камера' : 'Фронтальная камера'}${FULL && STRENGTH ? ' · сила и симметрия' : ''} · ${steps.length} ${plural3(steps.length, 'шаг', 'шага', 'шагов')}</div></div><button class="link" id="chg">Изменить</button></div></div>
+    <div class="group" id="compo"><div class="eyebrow" style="padding:14px 0 6px">Состав теста</div>${sortUnits(consumerProtocol()).flatMap(u => UNITS[u] || []).map((r, k) => `<div class="row" style="padding:6px 0"><span class="step-n" style="width:22px;flex:none">${String(k + 1).padStart(2, '0')}</span><span style="flex:1;font-size:15px">${r[0]}</span><span style="font-size:12px;color:var(--sub)">${r[2]} с</span></div>`).join('')}
+      <button class="link" id="cant" style="min-height:44px;font-size:14px">Не могу выполнить некоторые движения</button></div>
     ${device.inApp ? `<div class="card row" style="align-items:flex-start">${ic('info')}<span style="font-size:14px;line-height:1.4">Ссылка открыта внутри приложения соцсети, здесь камера может не работать. Откройте ее в браузере: меню «⋯» → «Открыть в браузере».</span></div>` : ''}
    </div>
-   <div class="dock"><button class="btn" id="start">${ic('shield-check', 's')}Начать тест</button><button class="btn ghost" id="cant">Не могу выполнить некоторые движения</button>${skipBtn()}</div></div>`);
+   <div class="dock"><button class="btn" id="start">${ic('shield-check', 's')}Начать тест</button>${skipBtn()}</div></div>`);
   $('#back').onclick = () => tests().length ? map() : onboarding();
   $('#chg').onclick = () => prepSheet(); $('#cant').onclick = () => prepSheet(true);
   if ($('#skipTest')) $('#skipTest').onclick = () => { track('beta_skip_test'); saveTest(fakeResult(consumerProtocol())); analysisScreen(); };
@@ -686,9 +688,9 @@ function joinForm() {
     ${inp('fn', 'Имя *', pr.name)}${inp('ln', 'Фамилия (по желанию)', pr.surname)}${inp('em', 'Email (по желанию)', pr.email, 'email')}
     <div class="row" style="gap:10px"><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Дата рождения *</div>${inp('dob', '', pr.dob, 'date')}</div><div style="width:120px"><div class="sub" style="font-size:12px;margin-bottom:4px">Пол *</div>${sel('sex', [['', '—'], ['M', 'Муж'], ['F', 'Жен']], pr.sex)}</div></div>
     <div class="row" style="gap:10px"><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Рост, см *</div>${inp('ht', '', pr.height, 'number')}</div><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Ведущая сторона</div>${sel('hand', [['R', 'Правша'], ['L', 'Левша']], pr.hand || 'R')}</div></div>
-    ${inp('act', 'Спорт или работа', pr.activity)}
+    ${inp('act', 'Спорт или работа', pr.activity)}${TIP_ACT}
     <textarea id="cmp" rows="3" placeholder="Что беспокоит" class="field" style="height:auto;padding:12px 16px">${esc(pr.complaints)}</textarea>
-   </div><div class="pad" style="padding:8px 20px 24px"><button class="btn" id="nx">Дальше</button></div></div>`);
+   </div><div class="dock"><button class="btn" id="nx">Сохранить и начать</button></div></div>`);
   $('#back').onclick = () => safetyScreen(inviteWelcome, () => linkConsent(inviteWelcome, (INV() || {}).s), bot());
   $('#nx').onclick = () => { const v = n => $('#' + n).value.trim();
     // обязательные сведения: имя, пол, дата рождения, рост; незаполненное подсвечиваем
@@ -698,6 +700,7 @@ function joinForm() {
     localStorage.setItem(K('bp_profile'), JSON.stringify({ token, name: v('fn'), surname: v('ln'), email: v('em'), dob: v('dob'), sex: v('sex'), height: v('ht'), hand: v('hand'), activity: v('act'), complaints: v('cmp') }));
     inviteWelcome(); };
 }
+export const TIP_ACT = `<details class="tip"><summary aria-label="Подсказка">?</summary><div>Укажите ваш вид активности (например, «офис 8 часов» или «бег 3 раза в неделю»), это поможет точнее подобрать нагрузки.</div></details>`;
 const PREI = {}, PAINI = {};
 
 /** Понятная причина, если тест не запустился, и кнопка «Повторить» вместо сырого текста ошибки. */
@@ -735,8 +738,13 @@ async function inviteWelcome() {
       <div id="painsl" style="display:flex;flex-direction:column;gap:6px"></div>
       <textarea id="ccom" rows="3" maxlength="1000" class="field" placeholder="Комментарий для специалиста: что беспокоит, когда болит, что пробовали" style="height:auto;padding:12px 14px;font-size:15px">${esc(localStorage.getItem('bp_ccom_' + inv.i) || (inv.join && PROFILE() && PROFILE().complaints) || '')}</textarea></div>
     <div class="eyebrow" style="margin-top:4px">Что будет в тесте</div>${stepList(inv.p, PREI)}
-   </div></div>`);
+   </div><div class="dock" id="sdock" style="display:none"><button class="btn" id="go2">Начать тест</button></div></div>`);
   bindStepList(PREI, inviteWelcome);
+  // плавающая кнопка внизу: появляется, когда верхняя «Начать тест» уехала за экран, чтобы не листать вверх
+  if ('IntersectionObserver' in window) new IntersectionObserver(([e]) => { if ($('#sdock')) $('#sdock').style.display = e.isIntersecting ? 'none' : ''; }).observe($('#go'));
+  const dirty = () => { if ($('#go2')) $('#go2').textContent = 'Сохранить и начать тест'; };
+  if (!app._dirty) { app._dirty = 1; app.addEventListener('input', dirty); app.addEventListener('change', dirty); }
+  $('#go2').onclick = () => $('#go').click();
   $('#back').onclick = inv.join || inv.cal ? joinForm : () => safetyScreen(inviteWelcome, () => linkConsent(inviteWelcome, (INV() || {}).s), bot());
   addSpecHint();
   if ($('#skipTest')) $('#skipTest').onclick = () => { if (!$('#share_ok').checked) { $('#share_ok').parentElement.style.outline = '2px solid var(--over)'; return; }

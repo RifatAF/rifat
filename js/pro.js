@@ -8,7 +8,7 @@ import { meSync, logout, getMe } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
 import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS } from './plans.js';
 import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast, preload3D, saveBlob , setBodySex } from './core.js';
-import { cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, mainOf, TONE_HELP, applyMain, fromMain, muscleInfo, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen } from './app.js';
+import { cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, mainOf, TONE_HELP, applyMain, fromMain, muscleInfo, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen, TIP_ACT } from './app.js';
 
 // активные клиенты занимают слоты; пример и закрытые (пришли сверх лимита) не считаются
 // ведение = ретест, ссылка на ретест или занятия дома за 30 дней. Первые тесты новых клиентов лимит не трогают
@@ -431,7 +431,7 @@ async function clientForm(id, thenAssess) {
     <div class="row" style="gap:10px"><div style="flex:1">${inp('first', 'Имя *', c.first ?? (c.name || '').split(' ')[0])}</div><div style="flex:1">${inp('last', 'Фамилия', c.last ?? (c.name || '').split(' ').slice(1).join(' '))}</div></div>
     <div class="row" style="gap:10px"><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Дата рождения</div>${inp('dob', '', c.dob, 'date')}</div><div style="width:110px"><div class="sub" style="font-size:12px;margin-bottom:4px">Пол</div>${sel('sex', [['', '—'], ['M', 'Муж'], ['F', 'Жен']], c.sex)}</div></div>
     <div class="row" style="gap:10px"><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Рост, см</div>${inp('height', '', c.height, 'number')}</div><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Ведущая сторона</div>${sel('hand', [['R', 'Правша'], ['L', 'Левша']], c.hand)}</div></div>
-    ${inp('activity', 'Спорт или работа', c.activity)}
+    ${inp('activity', 'Спорт или работа', c.activity)}${TIP_ACT}
     <textarea id="complaints" placeholder="Жалобы, травмы" rows="3" class="field" style="height:auto;padding:12px 16px">${esc(c.complaints)}</textarea>
     <textarea id="notes" placeholder="Заметки" rows="3" class="field" style="height:auto;padding:12px 16px">${esc(c.notes)}</textarea>
     <button class="btn line" id="dict" style="height:48px">${ic('mic', 's')}Надиктовать</button>
