@@ -102,7 +102,7 @@ export async function creditReferral(u, isNew) {
 // версия политики и согласий: при смене версии вошедших просим согласиться заново
 export const CONSENT_VERSION = '2026-10-v3';
 export const publicUser = u => { if (!u) return u; const p = effectivePlan(u);
-  return { id: u.id, provider: u.provider, name: u.name, email: u.email || null, photo: u.photo || null, role: u.role || null, specialty: u.specialty || null, admin: isAdmin(u), plan: p.plan, planUntil: p.until, planBeta: p.beta, consentOk: u.consentVersion === CONSENT_VERSION,
+  return { id: u.id, provider: u.provider, name: u.name, givenName: u.givenName || null, familyName: u.familyName || null, email: u.email || null, photo: u.photo || null, role: u.role || null, specialty: u.specialty || null, admin: isAdmin(u), plan: p.plan, planUntil: p.until, planBeta: p.beta, consentOk: u.consentVersion === CONSENT_VERSION,
     refCode: u.refCode || null, invited: u.invited || 0, invitedPro: u.invitedPro || 0, invitedColleagues: u.invitedPro || 0, maxClientSlots: maxClientSlots(u), isPro: p.plan !== 'start', planBeta: p.beta, payEmail: u.payEmail || null,
     trial: !!p.trial, trialUntil: u.trialUntil || null, trialEndedBy: u.trialEndedBy || null, trialEndSeen: !!u.trialEndSeen, paidEver: !!u.paidEver,
     balance: u.balance || 0, balanceLog: (u.balanceLog || []).slice(-20) }; };

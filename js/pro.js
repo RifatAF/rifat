@@ -1543,12 +1543,12 @@ export async function pullResults() {
   if (bx) for (const item of boxes(bx).flatMap(id => data[id] || [])) {
     let m; try { m = await seal.decrypt(bx.key, item.data); } catch (e) { done(item.p); continue; }
     if (m && m.type === 'progress') { const c = typeof m.token === 'string' && m.token.length >= 16 && (await all('clients')).find(x => x.remoteToken === m.token); if (c) await saveProgress(c, m.vas); done(item.p); continue; }
-    try { const p0 = m.profile && typeof m.profile === 'object' ? m.profile : {}, pr = { name: str(p0.name, 40), surname: str(p0.surname, 60), dob: /^\d{4}-\d{2}-\d{2}$/.test(p0.dob) ? p0.dob : '', sex: ['M', 'F'].includes(p0.sex) ? p0.sex : '', height: /^\d{2,3}$/.test(p0.height) ? p0.height : '', hand: ['R', 'L'].includes(p0.hand) ? p0.hand : '', activity: str(p0.activity, 120), complaints: str(p0.complaints, 1000) };
+    try { const p0 = m.profile && typeof m.profile === 'object' ? m.profile : {}, pr = { name: str(p0.name, 40), surname: str(p0.surname, 60), email: /^[^\s@<>]{1,64}@[^\s@<>]{1,120}$/.test(p0.email || '') ? p0.email : '', dob: /^\d{4}-\d{2}-\d{2}$/.test(p0.dob) ? p0.dob : '', sex: ['M', 'F'].includes(p0.sex) ? p0.sex : '', height: /^\d{2,3}$/.test(p0.height) ? p0.height : '', hand: ['R', 'L'].includes(p0.hand) ? p0.hand : '', activity: str(p0.activity, 120), complaints: str(p0.complaints, 1000) };
       if (typeof m.token !== 'string' || !/^[A-Za-z0-9_-]{16,64}$/.test(m.token)) m.token = null;
       // тот же человек по общей ссылке повторно — в ту же карточку
       let c = m.token && (await all('clients')).find(x => x.remoteToken && x.remoteToken === m.token);
             if (!c) c = { id: uid(), created: Date.now(), remoteToken: m.token, notes: '' };
-      Object.assign(c, { name: [pr.name, pr.surname].filter(Boolean).join(' ') || 'Без имени', dob: pr.dob || c.dob || '', sex: pr.sex || c.sex || '', height: pr.height || c.height || '', hand: pr.hand || c.hand || 'R', leg: pr.hand || c.leg || 'R', activity: pr.activity || c.activity || '', complaints: pr.complaints || c.complaints || '' });
+      Object.assign(c, { name: [pr.name, pr.surname].filter(Boolean).join(' ') || 'Без имени', dob: pr.dob || c.dob || '', sex: pr.sex || c.sex || '', height: pr.height || c.height || '', hand: pr.hand || c.hand || 'R', leg: pr.hand || c.leg || 'R', activity: pr.activity || c.activity || '', email: pr.email || c.email || '', complaints: pr.complaints || c.complaints || '' });
       if (!m.result || typeof m.result !== 'object') throw new Error('no result');
       await put('clients', c); await addResult(c, m.result); got.push(c.name); done(item.p); } catch (e) { console.warn('inbox item', e); } }
   if (got.length) track('result_pulled', { n: got.length }, false);

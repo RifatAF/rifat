@@ -18,7 +18,7 @@ async function verifyGoogle(credential) {
   const r = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential));
   if (!r.ok) return null; const t = await r.json();
   if (t.aud !== GOOGLE_ID || !['accounts.google.com', 'https://accounts.google.com'].includes(t.iss) || +t.exp * 1000 < Date.now() || String(t.email_verified) !== 'true') return null;
-  return { id: 'g_' + t.sub, provider: 'google', name: clip(t.name || t.email, 80), email: clip(t.email, 120), photo: clip(t.picture, 300) };
+  return { id: 'g_' + t.sub, provider: 'google', name: clip(t.name || t.email, 80), givenName: clip(t.given_name, 60), familyName: clip(t.family_name, 60), email: clip(t.email, 120), photo: clip(t.picture, 300) };
 }
 
 // виджет Telegram Login: secret = SHA256(токен бота)

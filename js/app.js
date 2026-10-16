@@ -675,13 +675,15 @@ const INV = () => { try { const o = JSON.parse(localStorage.getItem('bp_inv') ||
 const PAINZ = [['neck', 'Шея'], ['shoulder', 'Плечо'], ['upper_back', 'Грудной отдел'], ['low_back', 'Поясница'], ['hip', 'Таз, бедро'], ['knee', 'Колено'], ['foot', 'Стопа']];
 const PROFILE = () => { try { return JSON.parse(localStorage.getItem(K('bp_profile')) || 'null'); } catch (e) { return null; } };
 function joinForm() {
-  const inv = INV(), acc = meSync(), pr = PROFILE() || (acc ? { name: (acc.name || '').split(' ')[0], surname: (acc.name || '').split(' ').slice(1).join(' ') } : {});
+  const inv = INV(), acc = meSync(), pr = { ...(PROFILE() || {}) };
+  // имя, фамилию и почту из аккаунта (Google, Telegram, почта) подставляем только в пустые поля
+  if (acc) { const parts = (acc.name || '').split(' '); pr.name = pr.name || acc.givenName || parts[0] || ''; pr.surname = pr.surname || acc.familyName || parts.slice(1).join(' '); pr.email = pr.email || acc.email || ''; }
   const inp = (n, ph, v, type = 'text') => `<input id="${n}" type="${type}" value="${esc(v)}" placeholder="${ph}" class="field">`;
   const sel = (n, opts, v) => `<select id="${n}" class="field" style="padding:0 10px">${opts.map(([k, t]) => `<option value="${k}" ${v === k ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
   go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button></div><div class="pad" style="padding-top:4px"><div class="eyebrow">Тест от специалиста</div><h1 style="margin-top:8px">Расскажите о себе</h1>
      <p class="sub" style="margin-top:8px">${esc(inv.s)} получит анкету вместе с результатом теста. Это займет минуту.</p></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:12px;margin-top:16px;padding-bottom:12px">
-    ${inp('fn', 'Имя *', pr.name)}${inp('ln', 'Фамилия (по желанию)', pr.surname)}
+    ${inp('fn', 'Имя *', pr.name)}${inp('ln', 'Фамилия (по желанию)', pr.surname)}${inp('em', 'Email (по желанию)', pr.email, 'email')}
     <div class="row" style="gap:10px"><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Дата рождения *</div>${inp('dob', '', pr.dob, 'date')}</div><div style="width:120px"><div class="sub" style="font-size:12px;margin-bottom:4px">Пол *</div>${sel('sex', [['', '—'], ['M', 'Муж'], ['F', 'Жен']], pr.sex)}</div></div>
     <div class="row" style="gap:10px"><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Рост, см *</div>${inp('ht', '', pr.height, 'number')}</div><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Ведущая сторона</div>${sel('hand', [['R', 'Правша'], ['L', 'Левша']], pr.hand || 'R')}</div></div>
     ${inp('act', 'Спорт или работа', pr.activity)}
@@ -693,7 +695,7 @@ function joinForm() {
     const miss = ['fn', 'sex', 'dob', 'ht'].filter(n => !v(n) || (n === 'ht' && !(+v(n) >= 100 && +v(n) <= 230)));
     if (miss.length) { miss.forEach(n => { $('#' + n).style.borderColor = 'var(--over)'; }); $('#' + miss[0]).focus(); toast('Заполните имя, пол, дату рождения и рост'); return; }
     const token = pr.token || seal.rid();
-    localStorage.setItem(K('bp_profile'), JSON.stringify({ token, name: v('fn'), surname: v('ln'), dob: v('dob'), sex: v('sex'), height: v('ht'), hand: v('hand'), activity: v('act'), complaints: v('cmp') }));
+    localStorage.setItem(K('bp_profile'), JSON.stringify({ token, name: v('fn'), surname: v('ln'), email: v('em'), dob: v('dob'), sex: v('sex'), height: v('ht'), hand: v('hand'), activity: v('act'), complaints: v('cmp') }));
     inviteWelcome(); };
 }
 const PREI = {}, PAINI = {};
