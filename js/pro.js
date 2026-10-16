@@ -1,5 +1,6 @@
 import { backupSoon, pickRestore } from './backup.js';
 import { drawGhost } from './biomechanics-engine.js';
+import { cleanCns, cnsScore, cnsScoreCard, cnsDetail } from './cns-report.js';
 import { clinicalSection, vectorSection } from './white-label-pdf.js';
 import { setSession, MODES, aiRecsOn } from './session-controller.js';
 import { releaseFor, massageAllowed } from './biomechanics-engine.js';
@@ -540,7 +541,7 @@ export async function clientCard(id) {
     const show = back => { if (v3) { v3.dispose(); v3 = null; } $('#cvis').style.height = ''; $('#cvis').innerHTML = '<canvas id="cheat" style="width:150px;display:block"></canvas>'; $('#cvis').style.width = '130px'; $('#cfind').style.display = ''; drawHeat($('#cheat'), onlyKeys(sp, mainKeys(last, sp)), back, null, cNum); ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === (back ? 'vb' : 'vf'))); };
     show(cNum.filter(l => (sp.find(x => x.key === l.key) || {}).back).length > cNum.length / 2); $('#vf').onclick = () => show(false); $('#vb').onclick = () => show(true);
     $('#v3').onclick = async () => { ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === 'v3')); $('#cvis').style.height = '340px'; $('#cvis').style.width = '100%'; $('#cfind').style.display = 'none'; $('#cvis').innerHTML = '';
-      try { v3 = await body3D($('#cvis'), onlyKeys(sp, mainKeys(last, sp)), key => muscleInfo(key, sp, analyze(last, C), { pro: true })); } catch (e) { toast('3D не загрузилось'); show(false); } };
+      try { v3 = await body3D($('#cvis'), onlyKeys(sp, mainKeys(last, sp)), key => muscleInfo(key, sp, analyze(last, C), { pro: true }), { arrows: true }); } catch (e) { toast('3D не загрузилось'); show(false); } };
     $('#open').onclick = () => result(last.id); $('#rep').onclick = () => report(last.id);
     $('#mvr').onclick = async () => { const pp = await get('poses', last.id); motionViewer(pp && pp.poses, last.setup, () => clientCard(id), `${c.name} · ${fmtDate(last.date)}`); }; }
   $('#na').onclick = async () => { if (last && !(await canTrack(c))) return; newAssessment(id, last ? last.id : null); }; if ($('#nb')) $('#nb').onclick = async () => { if (!(await canTrack(c))) return; newAssessment(id); };
@@ -934,6 +935,7 @@ export async function result(aid, view = 'measured') {
       ${sideClash(a, s) ? '<div style="font-size:13px;color:var(--short-t);margin-top:8px">Боль с другой стороны: проверьте обе стороны руками</div>' : ''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s2);margin-top:var(--s3)"><button class="btn${conf[s.key] === 'yes' ? '' : ' line'}" data-chk="${s.key}" data-v="yes" style="height:48px;border-radius:var(--r-sm);font-size:15px">${conf[s.key] === 'yes' ? ic('check', 's') + 'Подтверждено' : 'Подтверждаю'}</button><button class="btn line" data-chk="${s.key}" data-v="no" style="height:48px;border-radius:var(--r-sm);font-size:15px">${conf[s.key] === 'no' ? 'Убрано' : 'Убрать'}</button></div>
       <button class="link" id="tohyp">${hypMore > 0 && hypMore < 10 ? `Проверка руками и ещё ${hypMore} ${hypMore === 1 ? 'гипотеза' : hypMore < 5 ? 'гипотезы' : 'гипотез'}` : 'Проверка руками и все гипотезы'}</button></div>`; }).join('')}
+    ${cnsScore(a) ? `<div class="card">${cnsScoreCard(a)}${isBeta() ? `<details class="acc" style="margin-top:12px"><summary style="font-weight:600;min-height:40px">Подробно (бета): почему, развесовка, что делать</summary><div style="margin-top:8px">${cnsDetail(a, an.findings, sp, proSpots({ ...a, vns: null, touch: null }))}</div></details>` : ''}</div>` : ''}
     <div><div class="eyebrow" style="color:${decided.length ? 'var(--ink)' : 'var(--short-t)'}">${decided.length ? 'Решение специалиста' : 'Решение · черновик'}</div><div style="margin-top:8px">${verdictCard(focusOf(a, sp).items, an.findings, undefined, facts.map(f => f.observed.replace(' (на границе нормы)', '')))}</div>${(a.plan && a.plan.ex && a.plan.ex.length) ? `<button class="link" id="toplan">Назначение: ${a.plan.ex.length} упр.</button>` : '<button class="link" id="mkplan">Собрать упражнения по решению</button>'}</div>
     <div class="card" style="padding:12px 14px"><div class="eyebrow">Заметка к визиту</div><textarea id="vnote" rows="2" maxlength="1000" placeholder="Что нашли руками, что сказал клиент. Видите только вы" style="width:100%;margin-top:8px;border:0;background:transparent;font:15px Onest;resize:vertical;color:var(--text)">${esc(a.note || '')}</textarea></div>
     ${isBefore ? `<button class="btn line" id="after">${ic('camera', 's')}После сеанса: снять снова</button>` : ''}
@@ -1001,7 +1003,7 @@ export async function result(aid, view = 'measured') {
     // 3D-модель с той же картой (с правками специалиста); касание мышцы прокручивает к ее карточке
     if ($('#h3')) $('#h3').onclick = async () => { mode3 = !mode3; HYP3D = mode3; $('#hf').classList.toggle('on', !back); $('#hb').classList.toggle('on', back); $('#hz').style.display = mode3 ? 'flex' : 'none';
       if (!mode3) { if (v3) v3.dispose(); v3 = null; $('#hvis').style.height = ''; $('#hvis').innerHTML = '<canvas id="heat" style="width:100%;display:block"></canvas>'; draw2(); return; }
-      $('#hvis').style.height = '380px'; try { v3 = await body3D($('#hvis'), cur, key => muscleInfo(key, proSpots(a), analyze(a, C), { pro: true })); }
+      $('#hvis').style.height = '380px'; try { v3 = await body3D($('#hvis'), cur, key => muscleInfo(key, proSpots(a), analyze(a, C), { pro: true }), { arrows: true, onTurn: b => { back = b; $('#hf').classList.toggle('on', !b); $('#hb').classList.toggle('on', b); } }); }
       catch (e) { toast('3D не загрузилось, показываю схему'); mode3 = false; $('#hz').style.display = 'none'; $('#hvis').style.height = ''; $('#hvis').innerHTML = '<canvas id="heat" style="width:100%;display:block"></canvas>'; return draw2(); }
       v3.turn(back); document.querySelectorAll('[data-z]').forEach(b => b.onclick = () => v3.focus(b.dataset.z)); };
     // визуализация: реалистичная 3D-модель по умолчанию (точные границы мышц); без WebGL остается схема
@@ -1416,12 +1418,12 @@ function cleanRemote(r) {
   const limits = pick(r.limits, l => l && typeof l === 'object' ? { reasons: Array.isArray(l.reasons) ? l.reasons.slice(0, 8).map(x => str(x, 60)).filter(Boolean) : [], level: str(l.level, 80) || null, side: ['LEFT', 'RIGHT', 'BOTH'].includes(l.side) ? l.side : null, ...(l.alt ? { alt: 'support' } : {}) } : undefined);
   const poses = pick(r.poses, p => p && typeof p === 'object' && Number.isInteger(p.n) && p.n > 0 && p.n < 20000 && typeof p.t === 'string' && typeof p.d === 'string' ? { n: p.n, t: p.t, d: p.d, w: typeof p.w === 'string' ? p.w : null } : undefined);
   const setup = r.setup && typeof r.setup === 'object' ? { bodyFrac: n(r.setup.bodyFrac), w: n(r.setup.w), h: n(r.setup.h), back: !!r.setup.back } : {};
-  return { ...base, protocol, comment: str(r.comment, 1000), quality: pick(r.quality, v => n(v) !== undefined ? Math.max(0, Math.min(100, Math.round(v))) : undefined), limits, pain: pick(r.pain, v => n(v) !== undefined ? Math.max(0, Math.min(10, Math.round(v))) : undefined), poses, setup };
+  return { ...base, ...cleanCns(r.vns, r.touch), protocol, comment: str(r.comment, 1000), quality: pick(r.quality, v => n(v) !== undefined ? Math.max(0, Math.min(100, Math.round(v))) : undefined), limits, pain: pick(r.pain, v => n(v) !== undefined ? Math.max(0, Math.min(10, Math.round(v))) : undefined), poses, setup };
 }
 async function addResult(c, r) {
   r = cleanRemote(r); const prev = (await byClient(c.id)).at(-1); const tpl = TEMPLATES.find(t => t[2].join() === (r.protocol || []).join());
   const a = { id: uid(), clientId: c.id, date: r.date || Date.now(), template: tpl ? tpl[0] : 'custom', templateName: 'По ссылке · ' + (tpl ? tpl[1] : 'свой протокол'), protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, ...(r.main ? { main: r.main } : {}),
-    limits: r.limits || {}, pain: r.pain || {}, clientNote: r.comment || '', hyp: {}, plan: null, note: '', nextDate: (r.date || Date.now()) + 30 * DAY, prevId: prev ? prev.id : null, draft: true, source: 'home' };
+    limits: r.limits || {}, pain: r.pain || {}, clientNote: r.comment || '', hyp: {}, plan: null, note: '', nextDate: (r.date || Date.now()) + 30 * DAY, prevId: prev ? prev.id : null, draft: true, source: 'home', ...(r.vns ? { vns: r.vns } : {}), ...(r.touch ? { touch: r.touch } : {}) };
   await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses || {} });
   if (prev) endTrialOnRetest();
 }
