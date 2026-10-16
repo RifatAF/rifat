@@ -12,6 +12,13 @@ import { exFigure, hasFigure } from './exfig.js';
 import { painWord, PAIN_SCALE } from './vas.js';
 import { recordTest, saveBlob } from './core.js';
 import { sayText } from './saytext.js';
+import { BATTERY_UNITS, forwardBend, singleBalance, thoracicRotation, overheadReach, chairStand, retroGait, autoScale } from './test-battery.js';
+import { mountPacing, falseStart, matchScore, PHASE, SHORT_CMD, GO_WORD, COUNT_WORDS, ZERO_CLICK } from './pacing-guard.js';
+import { pinhole, fpsGuard, flushGL } from './hardware-adapter.js';
+import { setSession, MODES, passiveOn } from './session-controller.js';
+import { trackTouch, touchSummary, resetTouch } from './touch-tracker.js';
+import { runOculomotor } from './vns-phenotype.js';
+import { ribFlare, apicalRise, buttWink } from './biomechanics-engine.js';
 import { STATES, NT_TEXT, releaseFor, massageAllowed, measuredIds, ACTION_NAMES, LAYERS, LAYER_NAMES, layerOf } from './biomechanics-engine.js';
 import { repCounter, repKind, targetReps, setsOf, REP_KINDS } from './repcount.js';
 import { ready3D, C, loadContent, voice, sleep, phone, startMotion, initPose, poseInfo, notePoseSpeed, prefetchPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, RAMP_CSS, body3D, preload3D, setBodySex, device, keepAwake, ic, toast, reduceMotion } from './core.js';
@@ -285,14 +292,21 @@ export const UNITS = {
   // стойка боком без приседа: без нее не видно сутулость, вынос головы, таз вперед и переразгибание колен
   profile: [['Боком: стой ровно', 'Правое плечо к камере', 20]],
   back: [['Спиной: 3 приседа', 'Спиной к камере', 38]],
+  // батарея v2.0 (6 этапов, 2 мин 15 с): наклон вперед, баланс на одной ноге, ротация корпуса, руки вверх
+  fwd: [['Наклон вперед', 'Медленно тянитесь руками к полу', 18]],
+  slb: [['Баланс на одной ноге', 'По 6 секунд на каждой', 22]],
+  trot: [['Повороты корпуса', 'Руки скрещены на груди, вправо и влево', 18]],
+  reach: [['Руки вверх', '2 раза, медленно', 18]],
+  // Safety Gate: безопасная замена при боли
+  chair: [['Вставание со стула', '30 секунд', 40]],
 };
-export const ORDER = ['stand', 'ohs_front', 'sls', 'thold', 'bends', 'calf', 'profile', 'side', 'back'];
+export const ORDER = ['stand', 'ohs_front', 'fwd', 'slb', 'sls', 'trot', 'reach', 'thold', 'bends', 'calf', 'profile', 'side', 'back', 'chair'];
 // «боком» уже включает стойку боком: отдельная стойка не нужна
 export const sortUnits = u => ORDER.filter(x => u.includes(x) && !(x === 'profile' && u.includes('side')));
-const consumerProtocol = () => sortUnits(['stand', 'ohs_front', 'sls', FULL ? 'side' : 'profile', ...(FULL ? ['back'] : []), ...(FULL && STRENGTH ? ['thold', 'bends', 'calf'] : [])]);
+const consumerProtocol = () => FULL ? sortUnits(['stand', 'ohs_front', 'sls', 'side', 'back', ...(STRENGTH ? ['thold', 'bends', 'calf'] : [])]) : sortUnits(BATTERY_UNITS);
 // быстрый тест: 4 теста (стойка, присед, одна нога, стойка боком) без поворотов и силового блока; сила и симметрия только в точном
 export const rowsOf = p => sortUnits(p).flatMap(u => UNITS[u]);
-const QUICK = rowsOf(['stand', 'ohs_front', 'sls', 'profile']), FULLS = rowsOf(['stand', 'ohs_front', 'sls', 'side', 'back']), STR = rowsOf(['thold', 'bends', 'calf']);
+const QUICK = rowsOf(BATTERY_UNITS), FULLS = rowsOf(['stand', 'ohs_front', 'sls', 'side', 'back']), STR = rowsOf(['thold', 'bends', 'calf']);
 export const SETUP_SEC = 36;
 export const secs = l => l.reduce((x, s) => x + s[2], 0);
 export const mins = sec => (Math.ceil(sec / 30) / 2).toString().replace('.', ',');
@@ -408,7 +422,7 @@ const V = {
   sideMore: 'Ещё немного. Правым плечом ко мне', turnMore: 'Повернись полностью', finish: 'Тест закончен. Можно подойти к телефону',
   go: 'Поехали', n1: '1', n2: '2', n3: '3',
 };
-export const LIMIT_NAMES = { profile: 'Стойка боком', stand: 'Стойка', ohs_front: 'Присед', sls: 'На одной ноге', thold: 'Руки в стороны', bends: 'Наклоны', calf: 'На носок', side: 'Боком', back: 'Спиной' };
+export const LIMIT_NAMES = { fwd: 'Наклон вперед', slb: 'Баланс на одной ноге', trot: 'Повороты корпуса', reach: 'Руки вверх', chair: 'Вставание со стула', profile: 'Стойка боком', stand: 'Стойка', ohs_front: 'Присед', sls: 'На одной ноге', thold: 'Руки в стороны', bends: 'Наклоны', calf: 'На носок', side: 'Боком', back: 'Спиной' };
 const CANT = {
   ohs_front: { q: 'Что мешает присесть?', side: false, opts: ['Боль в спине', 'Боль в колене', 'Боль в тазу или бедре', 'Не хватает сил', 'Теряю равновесие', 'Страшно'], lvl: ['Совсем не могу', 'Только с опорой', 'Немного, неглубоко'] },
   sls: { q: 'Что мешает стоять на одной ноге?', side: true, opts: ['Боль', 'Теряю равновесие', 'Не хватает сил'], lvl: ['Не могу постоять 10 секунд', 'Только с опорой', 'Могу, но не приседать'] },
@@ -419,6 +433,11 @@ const CANT = {
   back: { q: 'Что мешает?', side: false, opts: ['Боль', 'Не хватает места'], lvl: ['Пропустить этот шаг'] },
   profile: { q: 'Что мешает?', side: false, opts: ['Боль', 'Кружится голова'], lvl: ['Пропустить этот шаг'] },
   stand: { q: 'Что мешает?', side: false, opts: ['Боль', 'Кружится голова'], lvl: ['Не могу стоять ровно'] },
+  fwd: { q: 'Что мешает наклониться?', side: false, opts: ['Боль в спине', 'Тянет сзади бедра', 'Кружится голова'], lvl: ['Совсем не могу', 'Только немного'] },
+  slb: { q: 'Что мешает стоять на одной ноге?', side: true, opts: ['Боль', 'Теряю равновесие'], lvl: ['Не могу поднять ногу', 'Держусь за опору'] },
+  trot: { q: 'Что мешает поворачиваться?', side: true, opts: ['Боль в спине', 'Боль в шее'], lvl: ['Совсем не могу', 'Только немного'] },
+  reach: { q: 'Что мешает поднять руки?', side: true, opts: ['Боль в плече', 'Боль в шее'], lvl: ['Не поднимаю до плеч', 'Поднимаю не до конца'] },
+  chair: { q: 'Что мешает?', side: false, opts: ['Боль', 'Нет стула рядом'], lvl: ['Пропустить этот шаг'] },
 };
 // упаковка движения скелета: 33 точки × (x, y, видимость) в Int16, координаты в долях кадра ×10000
 function packPoses(fr, w, h) {
@@ -459,7 +478,7 @@ const SAY = {
   goLeft: 'Сделай шаг влево', goRight: 'Сделай шаг вправо', tilt: 'Телефон стоит криво. Выровняй его', dark: 'Мало света. Встань лицом к окну или включи свет',
 };
 
-const RETAKE_KEYS = { ohs_front: ['ohs_front'], sls: ['sls_r', 'sls_l'], side: ['ohs_side'], back: ['ohs_back'] };
+const RETAKE_KEYS = { ohs_front: ['ohs_front'], sls: ['sls_r', 'sls_l'], side: ['ohs_side'], back: ['ohs_back'], fwd: ['fwd'], slb: ['slb'], trot: ['trot'], reach: ['reach'] };
 const retakeOf = (u, moves) => (RETAKE_KEYS[u] || []).some(k => moves[k] && moves[k].quality === 'RETAKE');
 /** Нормы по базе: только числа замеров, без имени, аккаунта и записи движения. Чем больше тестов, тем точнее пороги (Администрирование → Нормы). */
 function sendNorms(r) { try { if (localStorage.getItem('bp_noev') === '1') return; const f = features(r), qv = Object.values(r.quality || {});
@@ -479,9 +498,14 @@ export async function runProtocol(protocol, opts = {}) {
   return Promise.race([runProtocol0(protocol, { ...opts, _skipAll: done }), fake]);
 }
 async function runProtocol0(protocol, opts = {}) {
+  setSession(opts.specialist ? MODES.SPEC : MODES.SELF);
+  // Safety Gate: острая боль до старта. 7 и выше — вместо батареи безопасный Chair Stand Test
+  const acute = opts.noSafety ? 0 : await vasSheet('Есть ли острая боль прямо сейчас? (0–10)', 0, 'Боли нет', true);
+  if (acute === undefined) return (opts.onCancel || prep)();
+  if (acute >= 7) { toast('При сильной боли сделаем только безопасный тест: вставание со стула'); protocol = ['chair']; }
   await voice.ensure(Object.values(SAY)); voice.warm(Object.values(SAY));
-  const pre = opts.pre || {}; const units = sortUnits(protocol); const steps = rowsOf(units.filter(u => !pre[u] || pre[u].alt)); const startedAt = Date.now();
-  go(`<div class="cam"><video playsinline muted></video><canvas id="sil"></canvas><canvas id="sk"></canvas><div class="count" id="cnt"></div>
+  const pre = opts.pre || {}; const units = sortUnits(protocol); const BAT = units.includes('fwd'); const steps = rowsOf(units.filter(u => !pre[u] || pre[u].alt)); const startedAt = Date.now();
+  go(`<div class="cam"><video playsinline muted autoplay></video><canvas id="sil"></canvas><canvas id="sk"></canvas><div class="count" id="cnt"></div>
    <div class="top"><div class="segs">${steps.map(() => '<div><b></b></div>').join('')}</div>${isBetaMode() && !(INV() || {}).cal ? '<button class="pill glass" id="betaSkip" style="margin-right:8px;color:#fff">Пропустить</button>' : ''}<button class="round glass" id="x" aria-label="Закончить тест">${ic('x')}</button></div>
    <div class="reps" id="reps" hidden><b id="ring">0</b><span id="repn">из 5</span></div>
    <div class="joint-tag" id="jt" hidden><small id="jtn">колено Л</small><b id="jtv">—</b></div>
@@ -490,11 +514,13 @@ async function runProtocol0(protocol, opts = {}) {
     <div class="cam-title" id="tt"></div>
     <div class="cam-sub">${ic('volume-2', 's')}<span id="cue"></span></div>
     <div class="row"><div class="cam-bar"><b id="pbf"></b></div><button type="button" class="cam-btn" id="skipb">Не могу</button></div>
+    <button type="button" class="cam-btn pain" id="painb">⚡ БОЛЬНО / СТОП</button>
     <span id="pbt" class="sr-only" aria-live="polite"></span>
    </div></div>`);
   let stop = false, skip = false; const cancel = () => { track('test_cancel'); (opts.onCancel || prep)(); }; const limits = {};
   track('test_start', { n: units.length }, false); const tStart = Date.now();
   $('#x').onclick = () => { stop = true; try { saveRec(); } catch (e) {} stopCamera(); cancel(); }; $('#skipb').onclick = () => { skip = true; };
+  let painStop = false; $('#painb').onclick = () => { painStop = true; skip = true; voice.say(''); track('step_skip', { c: 'pain' }, false); };
   if ($('#betaSkip')) $('#betaSkip').onclick = () => { stop = true; stopCamera(); voice.say(''); track('beta_skip_test', { c: 'camera' }); opts._skipAll({ ...fakeResult(units), poses: {} }); };
   const video = app.querySelector('video'); const sk = $('#sk');
   try { if (!device.camera) throw new Error('no camera api'); await startCamera(video); } catch (e) { stop = true; return cameraHelp(); }
@@ -502,6 +528,10 @@ async function runProtocol0(protocol, opts = {}) {
   const rec = isBetaMode() && !device.wv && localStorage.getItem('bp_rec') !== '0' ? recordTest(video) : null;
   const saveRec = async () => { if (!rec) return; const b = await rec.stop(); if (b && b.size > 1e4) { saveBlob(b, `bodypassport-test-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.${/mp4/.test(b.type) ? 'mp4' : 'webm'}`); toast('Видео теста сохранено в «Загрузки»'); } };
   const corr = () => (cam.back ? -1 : 1) * phone.roll;
+  // v2.0: светофор, фальстарт, FPS-Guard, коррекция перспективы при съемке с пола
+  const pg = mountPacing(app.querySelector('.cam')), fs = falseStart(); let fsAt = 0, fsOff = false, gaitFr = [];
+  const fg = fpsGuard(() => cam.fps, st => track('fps_mode', { c: st.mode }, false));
+  const lev = f => pinhole(levelled(f.pose, f.w, f.h, corr()), f.h, phone.ok ? phone.pitch : 0);
   const lc = document.createElement('canvas'); lc.width = 32; lc.height = 32; const lx = lc.getContext('2d', { willReadFrequently: true }); let light = 128, lastL = 0;
   const bodyFrac = p => (Math.max(p[P.L_ANKLE].y, p[P.R_ANKLE].y) - p[P.NOSE].y);
   let prof = false, level = true, setupDone = false, focus = null, stepLabel = '', lastStatus = '', lastIssue = '';
@@ -510,7 +540,10 @@ async function runProtocol0(protocol, opts = {}) {
   cam.onFrame = f => { const ok = fullyVisible(f.pose, prof);
     if (performance.now() - lastL > 1000) { lastL = performance.now(); try { lx.drawImage(video, 0, 0, 32, 32); const d = lx.getImageData(0, 0, 32, 32).data; let s = 0; for (let i = 0; i < d.length; i += 4) s += (d[i] + d[i + 1] + d[i + 2]) / 3; light = s / 1024; } catch (e) {} }
     level = !phone.ok || Math.abs(phone.roll) <= 5;
-    const lv = f.pose ? levelled(f.pose, f.w, f.h, corr()) : null, fo = setupDone && focus && lv ? focus(lv) : null;
+    const lv = f.pose ? levelled(f.pose, f.w, f.h, corr()) : null;
+    if (setupDone && !fsOff && pg.phase === PHASE.INSTR && lv && fs.feed(lv) && Date.now() - fsAt > 4000) { fsAt = Date.now(); voice.say(SHORT_CMD.wait); $('#cue').textContent = SHORT_CMD.wait; }
+    if (!setupDone && f.pose) gaitFr.push({ t: f.t, p: f.pose });
+    const fo = setupDone && focus && lv ? focus(lv) : null;
     const r = drawSkeleton(sk, f, { focus: fo ? fo.j : null, trail: setupDone, warn: !ok, prof });
     // одна подсказка за раз: первая проблема, иначе шаг или «в контуре»
     let warn = !ok ? 'Не видно всё тело' : !level ? `Наклон телефона ${fmt(phone.roll)}°` : light < 45 ? 'Мало света' : null, good = setupDone ? stepLabel : 'В контуре';
@@ -527,46 +560,46 @@ async function runProtocol0(protocol, opts = {}) {
     bend: p => ({ j: [P.L_SHOULDER, P.R_SHOULDER], n: 'корпус', v: fmt(Math.abs(F.trunkLateral(p))) + '°' }) };
   // ---- экран и голос ----
   const segs = [...app.querySelectorAll('.segs b')]; let si = -1;
-  const step = (i, title, sub, fc) => { if (i !== null) { si = i; segs.forEach((b, k) => b.style.width = k < i ? '100%' : k === i ? '8%' : '0'); stepLabel = `Шаг ${i + 1} из ${steps.length}`; lastStatus = ''; } if (fc !== undefined) focus = fc; $('#tt').textContent = title; $('#cue').textContent = sub || ''; bar(0, ''); $('#reps').hidden = true; };
+  const step = (i, title, sub, fc) => { pg.instr(); fs.reset(); if (i !== null) { si = i; segs.forEach((b, k) => b.style.width = k < i ? '100%' : k === i ? '8%' : '0'); stepLabel = `Шаг ${i + 1} из ${steps.length}`; lastStatus = ''; } if (fc !== undefined) focus = fc; $('#tt').textContent = title; $('#cue').textContent = sub || ''; bar(0, ''); $('#reps').hidden = true; };
   const bar = (frac, label) => { $('#pbf').style.width = Math.max(0, Math.min(1, frac)) * 100 + '%'; if (label !== undefined) $('#pbt').textContent = label; if (segs[si]) segs[si].style.width = Math.max(8, frac * 100) + '%'; };
   const say = async text => { if (stop) return; $('#cue').textContent = text; await voice.speak(text); };
   let lastHint = '', lastHintAt = 0, hints = 0; const fpsS = [];
   const hint = (text, gap = 4000) => { const now = Date.now(); if (now - lastHintAt < gap || (text === lastHint && now - lastHintAt < 7000)) return; lastHint = text; lastHintAt = now; hints++; lastIssue = text; $('#cue').textContent = text; voice.say(text); };
   // ---- запись ----
-  const grab = (fr, rolls) => { const f = cam.frame; if (f && f.pose && (!fr.length || fr.at(-1).t !== f.t)) { fr.push({ t: f.t, p: levelled(f.pose, f.w, f.h, corr()), w: f.world }); rolls.push(phone.roll); } };
+  const grab = (fr, rolls) => { const f = cam.frame; if (f && f.pose && (!fr.length || fr.at(-1).t !== f.t)) { if (fg.state.skip && fr.length % (fg.state.skip + 1)) { fr.push(fr.at(-1)); return; } fr.push({ t: f.t, p: lev(f), w: f.world }); rolls.push(phone.roll); } };
   const poses = {}, quality = {}; let W = 1, H = 1;
   const keep = (key, fr, rolls, vis) => { const f = cam.frame; if (f) { W = f.w; H = f.h; } if (cam.fps) fpsS.push(cam.fps); if (!fr.length) return; poses[key] = packPoses(fr, W, H);
     const m = rolls.reduce((a, b) => a + b, 0) / rolls.length, sd = Math.sqrt(rolls.reduce((a, b) => a + (b - m) ** 2, 0) / rolls.length) || 0;
     quality[key] = Math.round(100 * Math.min(1, (vis ?? .9) / .9) * Math.min(1, (cam.fps || 20) / 20) * (light < 45 ? .7 : 1) * (sd > 2 ? .8 : 1)); };
   // удержание позы заданное время: полоса показывает, сколько осталось; extra(p, left) — подсказки по ходу
-  const hold = async (key, sec, label, extra) => { voice.beep('start'); const fr = [], rolls = []; const t0 = Date.now(); const said = {};
+  const hold = async (key, sec, label, extra) => { if (pg.phase !== PHASE.REC) { voice.beep('start'); pg.rec(); } const fr = [], rolls = []; const t0 = Date.now(); const said = {};
     while (!stop && !skip) { const el = (Date.now() - t0) / 1000, left = Math.ceil(sec - el); if (el >= sec) break; grab(fr, rolls); bar(el / sec, `${label}: ${left} с`); $('#reps').hidden = false; $('#ring').textContent = left; $('#repn').textContent = 'сек';
       if (sec >= 12 && left === 10 && !said[10]) { said[10] = 1; hint(SAY.hold10, 0); } if (sec >= 9 && left === 5 && !said[5]) { said[5] = 1; hint(SAY.hold5, 0); }
-      if (left <= 3 && !said['c' + left]) { said['c' + left] = 1; voice.say(String(left)); }
       if (extra && fr.length) extra(fr, left); await sleep(30); }
     bar(1, ''); voice.beep('stop'); if (key) keep(key, fr, rolls); return fr; };
   // повторы: считаем по движению таза; полоса = сделанные повторы из трех
-  const reps = async (key, an, deep = .12, N = 3, quiet = false) => { if (!quiet) voice.beep('start'); const fr = [], rolls = []; if (skip) return { f: {}, reps: 0, quality: 'RETAKE' };
-    let n = 0, down = false, base = null, leg = null, maxFlex = 0, downAt = 0, countAt = 0; const hys = []; const t0 = Date.now(); let lastMove = Date.now(); bar(0, `Повторы: 0 из ${N}`); $('#reps').hidden = false; $('#ring').textContent = 0; $('#repn').textContent = `из ${N}`;
-    while (!stop && !skip && n < N && Date.now() - t0 < 60000) { grab(fr, rolls); const p = fr.length && fr.at(-1).p;
+  const reps = async (key, an, deep = .12, N = 3, quiet = false, maxMs = 60000) => { if (!quiet) voice.beep('start'); pg.rec(); const fr = [], rolls = []; if (skip) return { f: {}, reps: 0, quality: 'RETAKE' };
+    let n = 0, down = false, base = null, leg = null, maxFlex = 0, downAt = 0, countAt = 0, peak = 0, counted = false; const hys = []; const t0 = Date.now(); let lastMove = Date.now(); bar(0, `Повторы: 0 из ${N}`); $('#reps').hidden = false; $('#ring').textContent = 0; $('#repn').textContent = `из ${N}`;
+    while (!stop && !skip && n < N && Date.now() - t0 < maxMs) { grab(fr, rolls); const p = fr.length && fr.at(-1).p;
       // высота таза по медиане последних кадров: дрожание точек не считается повтором
       if (p) { hys.push((p[P.L_HIP].y + p[P.R_HIP].y) / 2); if (hys.length > 5) hys.shift(); const hy = hys.slice().sort((x, y) => x - y)[hys.length >> 1]; if (leg == null) leg = Math.max(1, Math.abs(((p[P.L_ANKLE].y + p[P.R_ANKLE].y) / 2) - hy));
         base = base == null ? hy : Math.min(base, hy * .02 + base * .98, base); const dy = (hy - base) / leg;
         const fl = Math.max(F.kneeFlexion(p, true), F.kneeFlexion(p, false)); if (fl > maxFlex) maxFlex = fl;
-        if (!down && dy > deep) { down = true; downAt = Date.now(); lastMove = Date.now(); }
+        if (!down && dy > deep) { down = true; downAt = Date.now(); lastMove = Date.now(); peak = dy; counted = false; }
+        // счет голосом строго в нижней точке: движение развернулось вверх после не меньше чем 250 мс внизу
+        if (down) { if (dy > peak) peak = dy; if (!counted && dy < peak - deep * .25 && Date.now() - downAt >= 250 && Date.now() - countAt >= 500) { counted = true; n++; countAt = Date.now(); lastMove = Date.now(); $('#ring').textContent = n; bar(n / N, `Повторы: ${n} из ${N}`); voice.say(COUNT_WORDS[n - 1] || String(n)); } }
         // повтор засчитывается, если внизу были не меньше четверти секунды и с прошлого прошло больше полсекунды;
         // вместо слова короткий сигнал: слова запаздывали и обрывали друг друга
-        if (down && dy < deep * .35) { down = false; if (Date.now() - downAt >= 250 && Date.now() - countAt >= 500) { n++; countAt = Date.now(); lastMove = Date.now(); $('#ring').textContent = n; bar(n / N, `Повторы: ${n} из ${N}`); voice.beep('tick'); } } }
+        if (down && dy < deep * .35) { down = false; if (!counted && Date.now() - downAt >= 250 && Date.now() - countAt >= 500) { n++; countAt = Date.now(); lastMove = Date.now(); $('#ring').textContent = n; bar(n / N, `Повторы: ${n} из ${N}`); voice.say(COUNT_WORDS[n - 1] || String(n)); } } }
       if (!down && Date.now() - lastMove > 6000) { lastMove = Date.now(); hint(SAY.repWait, 0); }
       await sleep(30); }
     const r = fr.length > 10 ? an(fr) : { f: {}, reps: 0, quality: 'RETAKE' }; if (r.f) r.f.max_knee_flex = maxFlex; keep(key, fr, rolls, r.visibility);
     if (n === 0 && !skip && !stop) r.quality = 'RETAKE'; await sleep(700); voice.beep('stop'); return r; };
   // счет идет с первого слова команды: люди начинают приседать на «Приседай», и раньше, пока голос договаривал, первые повторы терялись, а лишние засчитывались после
   // четкий старт: крупный отсчет 3-2-1 голосом и на экране, затем сигнал. Движение начинается только после сигнала
-  const countdown = async () => { if (stop || skip) return; demo(null); $('#reps').hidden = false; $('#repn').textContent = 'старт';
-    for (const [n, w] of [[3, SAY.c3], [2, SAY.c2], [1, SAY.c1]]) { if (stop || skip) return; $('#ring').textContent = n; $('#cue').textContent = 'Приготовьтесь: ' + n; voice.say(w); await sleep(950); }
-    $('#ring').textContent = '▶'; voice.beep('start'); };
-  const goReps = async (phrase, key, an, deep, N) => { await countdown(); if (stop || skip) return { f: {}, reps: 0, quality: 'RETAKE' }; const sp = say(phrase); const r = await reps(key, an, deep, N, true); await sp; return r; };
+  // Pacing Guard: без счета «3-2-1». Инструкция (желтая рамка) → сигнал «Пип» и зеленый экран с глаголом → запись
+  const countdown = async (word = GO_WORD.hold) => { if (stop || skip) return; demo(null); await pg.signal(word, () => voice.beep('start')); };
+  const goReps = async (phrase, key, an, deep, N) => { await countdown(GO_WORD.squat); if (stop || skip) return { f: {}, reps: 0, quality: 'RETAKE' }; const sp = say(phrase); const r = await reps(key, an, deep, N, true); await sp; return r; };
   // схема движения крупно на экране, пока звучит объяснение: видно, как встать и насколько садиться
   const demo = id => { const old = app.querySelector('.cam .demo'); if (old) old.remove(); if (!id) return; const d = document.createElement('div'); d.className = 'demo';
     d.style.cssText = 'position:absolute;left:50%;top:18%;transform:translateX(-50%);width:min(78vw,340px);background:rgba(255,255,255,.94);border-radius:20px;padding:10px;z-index:5;pointer-events:none';
@@ -576,20 +609,24 @@ async function runProtocol0(protocol, opts = {}) {
   const face = async want => { if (facing === want) return; prof = want !== 'front'; step(null, want === 'side' ? 'Повернись правым боком' : want === 'back' ? 'Повернись спиной' : 'Повернись лицом', '');
     await say(want === 'side' ? SAY.sideTurn : want === 'back' ? SAY.backTurn : SAY.frontTurn);
     const t0 = Date.now(); while (!stop && Date.now() - t0 < 4000) { bar((Date.now() - t0) / 4000, 'Поворачивайся'); await sleep(50); } facing = want; };
+  // ---- фаза 1 (телефон в руках): окуломоторный блок 2,3 с, только при самостоятельном тесте на фронтальную камеру ----
+  let vns = null; if (passiveOn() && !cam.back && !opts.noVns && !units.every(u => u === 'chair')) { step(null, 'Следите глазами за шариком', 'Телефон в руках, 30–40 см от лица'); await say('Следите глазами за шариком'); vns = await runOculomotor(app.querySelector('.cam'), () => cam.frame, video).catch(() => null); }
   // ---- 0. в кадр ----
-  step(null, 'Поставьте телефон и отойдите', 'Не торопитесь: тест начнется сам, когда вы будете целиком в кадре'); await say(SAY.setup);
+  step(null, 'Поставьте телефон и отойдите', 'Не торопитесь: тест начнется сам, когда вы будете целиком в кадре'); pg.pos(false); await say(SAY.setup);
   const issue = () => { const f = cam.frame, p = f && f.pose; if (!level) return SAY.tilt; if (phone.ok && Math.abs(phone.pitch) > 18) return SAY.vertical; if (light < 45) return SAY.dark; if (!p) return SAY.farther;
     if (p[P.L_ANKLE].visibility < .5 || p[P.R_ANKLE].visibility < .5 || Math.max(p[P.L_ANKLE].y, p[P.R_ANKLE].y) > f.h * .97) return SAY.noFeet;
     if (p[P.NOSE].visibility < .5 || p[P.NOSE].y < f.h * .03) return SAY.noHead;
     const cx = (p[P.L_HIP].x + p[P.R_HIP].x) / 2 / f.w; if (cx < .28) return SAY.goLeft; if (cx > .72) return SAY.goRight;
     const hf = (Math.max(p[P.L_ANKLE].y, p[P.R_ANKLE].y) - p[P.NOSE].y) / f.h; if (hf < .45) return SAY.closer; if (hf > .9) return SAY.farther; return null; };
+  const shortOf = t => { for (const k of Object.keys(SHORT_CMD)) if (SAY[k] === t) return SHORT_CMD[k]; return t; };
   { let okSince = 0; const t0 = Date.now();
     while (!stop) { const bad = issue();
       // время на установку: не раньше 8 с от включения камеры и 2,5 с ровно в кадре, иначе тест стартовал, пока человек еще отходил
-      if (!bad && fullyVisible(cam.frame && cam.frame.pose)) { if (!okSince) okSince = Date.now(); bar((Date.now() - okSince) / 2500, 'Стой на месте'); if (Date.now() - okSince > 2500 && Date.now() - t0 > 8000) break; }
-      else { okSince = 0; bar(0, bad || ''); hint(bad || SAY.farther, 3500); }
+      const fr0 = cam.frame, ms = fr0 && fr0.pose ? matchScore(fr0.pose, fr0.w, fr0.h) : 0, good = !bad && fullyVisible(fr0 && fr0.pose) && ms >= ZERO_CLICK; pg.pos(good);
+      if (good) { if (!okSince) { okSince = Date.now(); voice.say(SHORT_CMD.ok); } bar((Date.now() - okSince) / 2500, 'Замрите'); if (Date.now() - okSince > 2500 && Date.now() - t0 > 8000) break; }
+      else { okSince = 0; bar(0, bad || ''); hint(shortOf(bad || SAY.farther), 3500); }
       if (Date.now() - t0 > 120000) { stop = true; stopCamera(); return cancel(); } await sleep(150); }
-    if (stop) return; track('setup', { d: (Date.now() - t0) / 1000, n: hints }, false); setupDone = true; sil.style.transition = 'opacity .32s'; sil.style.opacity = 0; await say(SAY.seen); }
+    if (stop) return; track('setup', { d: (Date.now() - t0) / 1000, n: hints }, false); setupDone = true; pg.instr(); var gait = retroGait(gaitFr); gaitFr = null; sil.style.transition = 'opacity .32s'; sil.style.opacity = 0; await say(SAY.seen); }
   // ---- тесты ----
   const med = a => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v[v.length >> 1] ?? 0; };
   let snapshot = null, side = null, setup = null; const moves = {}; let k = 0;
@@ -614,9 +651,12 @@ async function runProtocol0(protocol, opts = {}) {
       // разворот или раскачка остались: наклоны в стойке помечаем как неточные (слабые находки по ним не показываются)
       if (sq.yaw > 15 || sq.sway > 2.5) quality.stand = Math.min(quality.stand ?? 100, 55);
       snapshot = standSnapshot(st); snapshot.sway = Math.round(sq.sway * 10) / 10; if (Number.isFinite(sq.yaw)) snapshot.yaw = Math.round(sq.yaw);
-      const f = cam.frame; setup = { bodyFrac: med(st.map(x => bodyFrac(x.p))) / (f ? f.h : 1), roll: phone.roll, pitch: phone.pitch ?? null, back: cam.back, w: f && f.w, h: f && f.h }; await say(SAY.good); k++; }
+      const f = cam.frame; setup = { bodyFrac: med(st.map(x => bodyFrac(x.p))) / (f ? f.h : 1), roll: phone.roll, pitch: phone.pitch ?? null, back: cam.back, w: f && f.w, h: f && f.h, scale: autoScale(st, (PROFILE() || {}).height), retroGait: gait || null };
+      // ВБД в статике: расхождение плоскостей грудной клетки и таза, подъем плеч на вдохе (мм по шкале)
+      moves.iap = { quality: 'GOOD', f: { rib_flare: Math.round(med(st.map(x => ribFlare(x.p))) * 10) / 10, ...(setup.scale ? { apical_mm: Math.round(apicalRise(st, setup.scale.cmPerPx)) } : {}) } };
+      await say(SAY.good); k++; }
     if (u === 'ohs_front') { await face('front'); step(k, 'Присед с руками вверх', 'Стопы чуть шире плеч, руки вверх, пятки на полу. Садитесь как можно глубже без боли, 5 раз', FOC.squat); demo('test_squat'); await say(SAY.wide); await say(SAY.ohsIntro); if (skipped()) return; 
-      moves.ohs_front = await goReps(SAY.ohsGo, 'ohs_front', fr => Movement.front(fr), .12, 5); if (skipped()) return; await say(SAY.stop); k++; }
+      moves.ohs_front = await goReps(SAY.ohsGo, 'ohs_front', fr => Movement.front(fr), .12, BAT ? 3 : 5); if (skipped()) return; await say(SAY.stop); k++; }
     if (u === 'sls') { await face('front');
       step(k, 'Стоя на правой ноге', 'Левую ногу согните в колене и отведите стопу назад. Руки на поясе. Присядьте на правой 3 раза: колено вперед на 10–15 см, как будто садитесь на высокий стул', FOC.kneeR); demo('test_sls'); await say(SAY.slsRIntro); if (skipped()) return; 
       moves.sls_r = await goReps(SAY.slsRGo, 'sls_r', fr => Movement.singleLeg(fr, true), .06); if (skipped()) return; await say(SAY.footDown); k++;
@@ -641,10 +681,23 @@ async function runProtocol0(protocol, opts = {}) {
     if (u === 'side') { await face('side'); step(k, 'Боком: стой ровно', 'Правое плечо к телефону', null); await say(SAY.freeze);
       const sf = await hold('side_stand', 5, 'Замри'); if (skipped()) return; side = sideSnapshot(sf);
       step(k, 'Боком: присед', 'Стопы чуть шире плеч, руки вверх, 3 раза'); demo('test_squat'); await say(SAY.wide); await say(SAY.armsOverhead); 
-      moves.ohs_side = await goReps(SAY.squatGo, 'ohs_side', fr => Movement.side(fr), .12, 3); if (skipped()) return; await say(SAY.stop); k++; }
+      const osFr = []; moves.ohs_side = await goReps(SAY.squatGo, 'ohs_side', fr => { osFr.push(...fr); return Movement.side(fr); }, .12, 3);
+      { const w = buttWink(osFr); if (Number.isFinite(w)) moves.iap = { quality: 'GOOD', f: { ...((moves.iap || {}).f || {}), butt_wink: Math.round(w * 10) / 10 } }; } if (skipped()) return; await say(SAY.stop); k++; }
     if (u === 'profile') { await face('side'); step(k, 'Боком: стой ровно', 'Руки вдоль тела, смотри прямо', null); await say(SAY.freeze);
       const sf = await hold('side_stand', 5, 'Замри'); if (stop || skipped()) return; side = sideSnapshot(sf);
       await say(SAY.good); k++; }
+    if (u === 'fwd') { await face('front'); step(k, 'Наклон вперед', 'Ноги прямые, медленно тянитесь руками к полу и вернитесь', FOC.bend); await say('Наклонитесь вперед. Колени прямые, руки тянутся к полу.'); if (skipped()) return;
+      await countdown(GO_WORD.bend); const fr = await hold('fwd', 10, 'Наклон'); if (skipped()) return; moves.fwd = forwardBend(fr); await say(SAY.ret); k++; }
+    if (u === 'slb') { await face('front'); step(k, 'Баланс на одной ноге', 'Руки на поясе. Сначала на правой, потом на левой, по 6 секунд', FOC.stand); await say('Руки на поясе. Встаньте на правую ногу, левую согните назад.'); if (skipped()) return;
+      await countdown(GO_WORD.balance); const fR = await hold('slb_r', 6, 'Правая нога'); if (skipped()) return; await say('Смена ноги. Теперь на левой.'); await countdown(GO_WORD.balance); const fL = await hold('slb_l', 6, 'Левая нога'); if (skipped()) return;
+      moves.slb = singleBalance(fR, fL); await say(SAY.footDown); k++; }
+    if (u === 'trot') { await face('front'); step(k, 'Повороты корпуса', 'Руки скрещены на груди, таз на месте. Поворот вправо, потом влево', FOC.stand); await say('Скрестите руки на груди. Таз не двигается. Поворачивайте корпус.'); if (skipped()) return;
+      await countdown(GO_WORD.rotate); await say('Вправо'); const fR = await hold('trot_r', 5, 'Вправо'); if (skipped()) return; await say('Влево'); const fL = await hold('trot_l', 5, 'Влево'); if (skipped()) return;
+      moves.trot = thoracicRotation(fR, fL); await say(SAY.good); k++; }
+    if (u === 'reach') { await face('front'); step(k, 'Руки вверх', 'Медленно поднимите прямые руки вверх и опустите, 2 раза', FOC.arms); await say('Медленно поднимите прямые руки над головой и опустите. Два раза.'); if (skipped()) return;
+      await countdown(GO_WORD.reach); const fr = await hold('reach', 10, 'Руки вверх'); if (skipped()) return; moves.reach = overheadReach(fr); await say(SAY.armsDown); k++; }
+    if (u === 'chair') { await face('front'); fsOff = true; step(k, 'Вставание со стула', 'Сядьте на стул боком к камере, руки на груди. Вставайте и садитесь 30 секунд'); await say('Сядьте на стул, руки скрестите на груди. По сигналу вставайте и садитесь, сколько сможете за тридцать секунд.'); if (skipped()) return;
+      await countdown(GO_WORD.chair); moves.chair = await reps('chair', fr => chairStand(fr), .1, 99, true, 30000); moves.chair.quality = moves.chair.reps ? 'GOOD' : 'RETAKE'; await say(SAY.good); k++; fsOff = false; }
     if (u === 'back') { await face('back'); step(k, 'Спиной: присед', 'Стопы чуть шире плеч, руки вверх, 3 раза', FOC.squat); await say(SAY.wide); await say(SAY.armsOverhead); if (skipped()) return; 
       moves.ohs_back = await goReps(SAY.squatGo, 'ohs_back', fr => Movement.back(fr), .12, 3); if (skipped()) return; await say(SAY.stop); k++; }
   };
@@ -662,10 +715,13 @@ async function runProtocol0(protocol, opts = {}) {
       if (bad) { track('retake', { c: u, r: lastIssue || 'нет движения' }, false); const again = await retakeScreen(lastIssue, light >= 45, level, fullyVisible(cam.frame && cam.frame.pose, prof)); if (stop) return;
         if (again) { k = k0; lastIssue = ''; await runUnit(u); } else skip = true; }
       else if (k > k0) await okFlash(steps[k - 1] ? steps[k - 1][0] : '', k); }
+    flushGL(app);
+    if (painStop && !stop) { limits[u] = { level: 'Боль', reasons: ['Нажата кнопка «Больно»'] }; for (const r of units.slice(units.indexOf(u) + 1)) limits[r] = { level: 'Не выполнялось', reasons: ['Тест остановлен из-за боли'] };
+      skip = false; painStop = false; if (u !== 'chair') { await say('Останавливаемся. Сделаем безопасный тест со стулом.'); await runUnit('chair'); } break; }
     if (skip && !stop) { track('step_skip', { c: u }, false); voice.beep('stop'); step(null, 'Не получается? Ничего страшного', 'Ответь на пару вопросов'); limits[u] = await cantSheet(u); skip = false;
       if (/опор|неглуб/i.test(limits[u].level || '') && (u === 'ohs_front' || u === 'sls')) { limits[u].alt = 'support'; await runAlt(u); } else k = k0 + (UNITS[u] || []).length; }
   }
-  if (stop) return;
+  if (stop) return; fg.stop(); pg.off();
   step(null, 'Готово', 'Считаю результат'); bar(1, ''); cam.onFrame = null; await say(SAY.finish); await saveRec(); stopCamera();
   track('test_done', { n: units.length, d: Math.round((Date.now() - tStart) / 1000) }, false);
   const fpsMed = fpsS.length ? [...fpsS].sort((a, b) => a - b)[fpsS.length >> 1] : null, qv = Object.values(quality);
@@ -673,7 +729,7 @@ async function runProtocol0(protocol, opts = {}) {
   track('cam_q', { n: fpsMed || 0, q: qv.length ? Math.min(...qv) : 0, c: `${poseInfo.deleg} ${poseInfo.model}` }, false);
   // техника съемки: без нее ретест на другом телефоне нельзя отличить от изменения у человека
   const tech = { model: poseInfo.model, deleg: poseInfo.deleg, fps: fpsMed && Math.round(fpsMed), pitch: phone.ok && Number.isFinite(phone.pitch) ? Math.round(phone.pitch) : null, rules: C.bodymap && C.bodymap.version };
-  const res = { date: Date.now(), started: startedAt, kind: testKind(units), protocol: units, full: units.includes('side') || units.includes('profile'), snapshot, side, moves, poses, quality, limits, setup, tech };
+  const res = { date: Date.now(), started: startedAt, kind: testKind(units), session: opts.specialist ? MODES.SPEC : MODES.SELF, vns, touch: passiveOn() ? touchSummary() : null, protocol: units, full: units.includes('side') || units.includes('profile'), snapshot, side, moves, poses, quality, limits, setup, tech };
   sendNorms(res); return res;
 }
 
@@ -684,9 +740,10 @@ const isBetaMode = () => configSync().beta !== false;
 const skipBtn = () => isBetaMode() && !(INV() || {}).cal ? '<button class="btn ghost" id="skipTest" style="margin-top:8px">Пропустить видеотест (бета)</button>' : '';
 function fakeResult(protocol) {
   const j = (v, k = 1) => Math.round((v + (Math.random() - .5) * 2 * k) * 10) / 10, p = Array.isArray(protocol) && protocol.length ? protocol : ['stand', 'ohs_front', 'sls', 'side'];
-  return { date: Date.now(), protocol: p, full: true, quality: {}, limits: {}, setup: {}, beta: true,
+  const v2 = p.includes('fwd') ? { fwd: { quality: 'GOOD', f: { fwd_reach: j(.6, .2), fwd_asym: j(3, 2), fwd_asym_side: 1 } }, slb: { quality: 'GOOD', f: { slb_drop_r: j(4, 2), slb_drop_l: j(1.5, 1), slb_sway_r: j(3, 1), slb_sway_l: j(2, 1) } }, trot: { quality: 'GOOD', f: { trot_r: j(38, 6), trot_l: j(45, 6), trot_asym: j(-7, 4) } }, reach: { quality: 'GOOD', f: { reach_r: j(165, 6), reach_l: j(170, 5), reach_asym: j(5, 3), reach_shrug: j(.07, .03), reach_shrug_side: 1 } }, iap: { quality: 'GOOD', f: { rib_flare: j(8, 4), apical_mm: j(9, 4) } } } : {};
+  return { date: Date.now(), protocol: p, full: true, quality: {}, limits: {}, setup: {}, beta: true, kind: testKind(p),
     snapshot: { shoulderTilt: j(4, 2), pelvicTilt: j(-3.5, 2), headTilt: j(1, .5), trunkLateral: j(1.2, .6) }, side: { headForwardDeg: j(16, 6), kneeHyperDeg: j(2, 1), shoulderShift: .01, hipShift: 0 },
-    moves: { ohs_front: { quality: 'GOOD', f: { ohs_valgus_r: j(12, 4), ohs_valgus_l: j(5, 2) } }, sls_r: { quality: 'GOOD', f: { sls_drop_r: j(5, 2), sls_valgus_r: j(11, 4), sls_trunk_r: j(3, 1) } }, sls_l: { quality: 'GOOD', f: { sls_drop_l: j(1.5, 1), sls_valgus_l: j(4, 2), sls_trunk_l: j(1, .5) } } } };
+    moves: { ...v2, ohs_front: { quality: 'GOOD', f: { ohs_valgus_r: j(12, 4), ohs_valgus_l: j(5, 2) } }, sls_r: { quality: 'GOOD', f: { sls_drop_r: j(5, 2), sls_valgus_r: j(11, 4), sls_trunk_r: j(3, 1) } }, sls_l: { quality: 'GOOD', f: { sls_drop_l: j(1.5, 1), sls_valgus_l: j(4, 2), sls_trunk_l: j(1, .5) } } } };
 }
 async function runTest() {
   const r = await runProtocol(consumerProtocol(), { pre: PRE }); if (!r) return;
@@ -876,7 +933,7 @@ function reasonsOf(ids, top) { const out = {};
     if (!out[id] && list.some(x => x.replace('{s}', sk) === id)) out[id] = { k: s.k, t: `${VERB_OF[s.k]} ${acc(lc(m.name))} ${sideWord(s.side)}` }; }
   return out; }
 export function map() {
-  setBodySex(SHARED ? 'M' : (PROFILE() || {}).sex);
+  setBodySex(SHARED ? 'M' : (PROFILE() || {}).sex); setSession(MODES.SELF);
   const cur = currentAnalysis(); if (!cur) return onboarding(); track('map_view');
   const { t, a } = cur; const all = applyMain(spots(a), cleanMain(t.main)); const top = t.main ? fromMain(all, cleanMain(t.main)) : mainOf(all);
   const reveal = REVEAL; REVEAL = false; if (reveal && top[0]) BACK = top[0].back;
@@ -1137,7 +1194,7 @@ function vasSheet(title, init = 0, skip = 'Пропустить', cancel = false
       <div class="row" style="gap:12px;margin-top:16px"><input type="range" id="vs" min="0" max="10" value="${init}" style="flex:1;accent-color:var(--ink)" aria-label="${title}"><b id="vsv" class="num" style="font-size:32px;width:44px;text-align:right">${init}</b></div><div id="vsw" style="font-size:15px;font-weight:600;margin-top:4px">${painWord(init)}</div>
       <div class="row" style="justify-content:space-between;font-size:12px;color:var(--sub)"><span>нет боли</span><span>сильнейшая</span></div>
       <button class="btn" id="vok" style="margin-top:16px">Готово</button><button class="btn ghost" id="vno" style="margin-top:8px;border:0">${skip}</button></div>`;
-    document.body.appendChild(d); const r = d.querySelector('#vs'); r.oninput = () => { d.querySelector('#vsv').textContent = r.value; d.querySelector('#vsw').textContent = painWord(r.value); };
+    document.body.appendChild(d); trackTouch(d); const r = d.querySelector('#vs'); r.oninput = () => { d.querySelector('#vsv').textContent = r.value; d.querySelector('#vsw').textContent = painWord(r.value); };
     d.querySelector('#vok').onclick = () => { d.remove(); res(+r.value); }; d.querySelector('#vno').onclick = () => { d.remove(); res(null); };
     d.addEventListener('bp-close', () => res(cancel ? undefined : null)); if (cancel) d.querySelector('#vno').insertAdjacentHTML('afterend', '<button class="btn ghost" id="vcx" style="margin-top:4px;border:0;color:var(--sub)">Отмена</button>'), d.querySelector('#vcx').onclick = () => { d.remove(); res(undefined); }; });
 }

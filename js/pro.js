@@ -1,3 +1,4 @@
+import { setSession, MODES, aiRecsOn } from './session-controller.js';
 import { releaseFor, massageAllowed } from './biomechanics-engine.js';
 // Кабинет специалиста: клиенты, оценки по протоколам, три слоя результата, резервная копия.
 // Все данные в IndexedDB на телефоне специалиста; на сервер ничего не уходит.
@@ -237,7 +238,7 @@ function slotWidget(s) {
     <div style="height:6px;border-radius:3px;background:var(--surface);margin-top:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${full ? 'var(--over)' : 'var(--ink)'}"></div></div>
     ${full ? '<div style="font-size:13px;margin-top:8px">Новых клиентов тестируйте свободно. Ретест еще одного клиента откроется в PRO или когда закончится 30 дней ведения у кого-то из текущих.</div>' : ''}</div></div>`;
 }
-export async function proHome(query = '', pulled = null) { syncAutoCalib().catch(() => {}); if (device.webgl2) preload3D(); // схемы в карточках и отчетах рисуются по 3D-модели
+export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC); syncAutoCalib().catch(() => {}); if (device.webgl2) preload3D(); // схемы в карточках и отчетах рисуются по 3D-модели
   track('pro_open');
   localStorage.setItem('bp_mode', 'pro');
   const lc = await legacyCount().catch(() => 0);
@@ -783,7 +784,7 @@ async function newAssessment(clientId, retestOf, opts = {}) {
     $('#go').onclick = async () => { useHit('tpl', tpl[0]); voice.unlock(); startMotion(); $('#go').textContent = 'Загружаю модель…';
       try { await initPose(); } catch (e) { toast('Не удалось загрузить модель: ' + e.message); return draw(); }
       track('assess_start', { n: units.length }, false);
-      const r = await runProtocol(units, { target: prev && prev.setup, onCancel: () => clientCard(clientId), pre }); if (!r) return;
+      const r = await runProtocol(units, { target: prev && prev.setup, onCancel: () => clientCard(clientId), pre, specialist: true }); if (!r) return;
       const a = { id: uid(), clientId, date: r.date, template: tpl[0], templateName: session ? 'После сеанса' : tpl[0] === 'posture' && !prev ? 'До сеанса' : tpl[1], protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, ...(r.main ? { main: r.main } : {}), tech: r.tech || null, limits: r.limits || {}, pain, painSide, lumbarZone: LUMBAR[tpl[0]] || (prev && prev.lumbarZone) || null, hyp: {}, plan: null, note: '', expect: expect.trim().slice(0, 500), nextDate: r.date + 30 * DAY, prevId: prev ? prev.id : null, draft: true };
       await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); track('assess_done', { n: units.length }, false); if (prev) track('retest_done', { n: Math.round((r.date - prev.date) / DAY) }, false); if (prev) endTrialOnRetest(); result(a.id); }; };
   draw(); if (opts.autostart) $('#go').click();
@@ -949,8 +950,8 @@ export async function result(aid, view = 'measured') {
       <p class="sub" style="font-size:13px;margin-top:6px">Черновик по замеру. В отчёт пойдёт ваша версия.</p>
       <div id="hlist" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s3)">${list.map((s, i) => hypCard(a, an, s, i === list.findIndex(x => C.muscles[x.id] && C.muscles[x.id].proTest && !chk[x.key]), evid)).join('')}</div></details>`;
     dock = `<div class="dock bar"><div style="flex:1;font-size:14px;align-self:center">Проверено руками <b class="num" id="hcnt">${testable.filter(s => chk[s.key] || s.edited).length} из ${testable.length}</b></div><button class="btn line" id="addm" style="width:auto;padding:0 18px">${ic('plus', 's')}Мышца</button></div>`; }
-  if (view === 'measured') { const pl = a.plan || { ex: plan(focusOf(a, sp).planSpots), text: '' }; const recs = muscleRecs(a);
-    body += `<h2 id="planh" style="font-size:20px;margin-top:var(--s4)">Назначение</h2><div class="card"><div class="row"><div class="eyebrow" style="flex:1">Рекомендации по мышцам</div>${recs.length ? '<button class="pill" id="addall" style="font-size:12px">Добавить все</button>' : ''}</div>
+  if (view === 'measured') { const pl = a.plan || { ex: plan(focusOf(a, sp).planSpots), text: '' }; const recs = aiRecsOn() || localStorage.getItem('bp_ai_hints') === '1' ? muscleRecs(a) : [];
+    body += `<h2 id="planh" style="font-size:20px;margin-top:var(--s4)">Назначение</h2><div class="card"><div class="row"><div class="eyebrow" style="flex:1">Рекомендации по мышцам</div>${recs.length ? '<button class="pill" id="addall" style="font-size:12px">Добавить все</button>' : '<button class="pill" id="aihints" style="font-size:12px">Показать справочные подсказки</button>'}</div>${recs.length ? '' : '<p class="sub" style="font-size:13px;margin-top:8px">Сессия под руководством специалиста: автоматические назначения выключены, решение за вами.</p>'}
       ${recs.length ? recs.map((r, i) => `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line-2)"><div class="row"><i class="bar" style="background:${TONE_HEX[r.s.k]};height:22px"></i><b style="flex:1;font-size:15px">${r.head}</b>${r.all.length ? `<button class="pill" data-add="${i}" style="font-size:12px">Добавить</button>` : ''}</div>
         ${r.out.map(([h, t]) => `<div style="font-size:14px;margin-top:6px;line-height:1.4"><b>${h}:</b> ${t}</div>`).join('')}</div>`).join('') : '<p class="sub" style="margin-top:8px">Значимых отклонений нет.</p>'}</div>
     <div class="card"><div class="eyebrow">Упражнения</div><input id="exq" class="field" type="search" placeholder="Найти упражнение или мышцу" style="margin-top:8px;height:44px" aria-label="Поиск упражнения">${Object.values(C.exercises).filter(e => !e.id.endsWith('_right') || pl.ex.includes(e.id)).sort((x, y) => (pl.ex.includes(y.id) - pl.ex.includes(x.id)) || x.title.localeCompare(y.title)).map(e => `<label class="row" data-exq="${esc([e.title, e.goal, e.category].filter(Boolean).join(' ').toLowerCase())}"${pl.ex.includes(e.id) ? '' : ' hidden'} style="margin-top:8px;font-size:15px"><input type="checkbox" data-e="${e.id}" ${pl.ex.includes(e.id) ? 'checked' : ''} style="width:20px;height:20px;accent-color:var(--ink)"><span style="flex:1">${e.title.split(' (')[0]}${e.id.endsWith('_right') ? ' (правая)' : e.id.endsWith('_left') ? ' (левая)' : ''}</span><span style="font-size:12px;color:var(--sub)">${e.dose || ''}</span></label>`).join('')}<button class="link" id="exall" style="margin-top:10px;font-size:14px">Показать все упражнения</button></div>
@@ -1037,7 +1038,8 @@ export async function result(aid, view = 'measured') {
     $('#exq').oninput = exShow; $('#exall').onclick = () => { exAll = !exAll; exShow(); };
     const recs = muscleRecs(a); const addIds = async list => { await savePlan(a); a.plan = a.plan || { ex: [], text: '' }; a.plan.ex = [...new Set([...a.plan.ex, ...list])]; await put('assessments', a); const y = scrollY; await result(aid, 'plan'); scrollTo(0, y); };
     document.querySelectorAll('[data-add]').forEach(b => b.onclick = () => addIds(recs[+b.dataset.add].all));
-    if ($('#addall')) $('#addall').onclick = () => addIds(recs.flatMap(r => r.all)); }
+    if ($('#addall')) $('#addall').onclick = () => addIds(recs.flatMap(r => r.all));
+    if ($('#aihints')) $('#aihints').onclick = () => { localStorage.setItem('bp_ai_hints', '1'); result(aid, view); }; }
 }
 /** Пересчет по сохраненной записи скелета; исходный расчет хранится, чтобы можно было вернуться. Повторное нажатие возвращает исходный. */
 async function recalc(a) {
