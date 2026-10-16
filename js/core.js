@@ -669,7 +669,7 @@ export async function body3D(container, spots0, onPick, opts = {}) {
     const now = performance.now(); if (parts.length && !normOn && now - lastArrow > (device.weak ? 66 : 33)) { lastArrow = now; if (!reduceMotion() || !arrows.userData.done) { stepArrows(reduceMotion() ? 900 : now); arrows.userData.done = true; dirty = true; } }
     ctl.update(); if (dirty) { dirty = false; renderer.render(scene, camera); placeMarks(); } requestAnimationFrame(anim); }
   let isBack = false;
-  const api = { turn(back) { isBack = back; const d = camera.position.distanceTo(ctl.target); flyTo(ctl.target, d, back); },
+  const api = { turn(back) { isBack = back; const d = camera.position.distanceTo(ctl.target); flyTo(ctl.target, d, back); if (opts.onTurn) opts.onTurn(back); },
     focus(zone) { const [y, d] = ZONES[zone] || ZONES.all; flyTo(new THREE.Vector3(0, y, 0), d, isBack); },
     /** Новая раскраска и маркеры (правка специалиста) без пересоздания сцены и сброса камеры. */
     /** Слой мышц: ids — набор видимых и кликабельных мышц, null — все слои. */

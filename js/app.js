@@ -20,6 +20,7 @@ import { setSession, MODES, passiveOn } from './session-controller.js';
 import { touchSummary, resetTouch, startPassive, rememberBaseline } from './touch-tracker.js';
 import { runLoader, vnsSummary } from './vns-phenotype.js';
 import { ribFlare, apicalBreath, buttWink } from './biomechanics-engine.js';
+import { cnsScore, cnsScoreCard, cnsDetail } from './cns-report.js';
 import { STATES, NT_TEXT, releaseFor, massageAllowed, measuredIds, ACTION_NAMES, LAYERS, LAYER_NAMES, layerOf } from './biomechanics-engine.js';
 import { repCounter, repKind, targetReps, setsOf, REP_KINDS } from './repcount.js';
 import { ready3D, C, loadContent, voice, sleep, phone, startMotion, initPose, poseInfo, notePoseSpeed, prefetchPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, RAMP_CSS, body3D, preload3D, setBodySex, device, keepAwake, ic, toast, reduceMotion } from './core.js';
@@ -1065,20 +1066,13 @@ function balanceCard(all) {
       return `<span class="row" style="gap:8px"><span class="mark sm ${k}"></span>${n}</span><span class="lr" aria-label="слева ${x.L}%, справа ${x.R}%"><i><b style="width:${x.L}%;background:${c}"></b></i><i><b style="width:${x.R}%;background:${c}"></b></i></span><span class="v">${x.all}%</span>
         <small><span>Л ${x.L}%</span><span>${Math.abs(x.asym) >= 10 ? `перекос ${x.asym > 0 ? 'вправо' : 'влево'} ${Math.abs(x.asym)}%` : 'стороны ровно'}</span><span>П ${x.R}%</span></small>`; }).join('')}</div></div>`;
 }
-// бета: что добавили к карте фоновые замеры ЦНС (анкета, касания, глаза, пульс)
+// бета: оценка ЦНС по фоновым замерам (глаза, касания, набор) и подробная расшифровка: причины, развесовка по мышцам, что делать
 function cnsCard(t, a) {
   if (SHARED || !isBetaMode() || !(t.vns || t.touch)) return '';
-  // глаза (слежение, саккады) и касания с набором идут в карту; пульс по камере не учитывается
-  const fired = a.findings.filter(f => f.rule.source === 'cns'), d = cnsDelta(spots(a), spots(analyze({ ...t, vns: null, touch: null }, C)));
-  const EYE_WHY = { no_face: 'лицо не было в кадре', iris_conf: 'камера плохо видела глаза (свет, очки)', gaze_angle: 'взгляд уходил от экрана', model: 'не загрузилась модель лица' };
-  const eyes = t.vns && t.vns.status !== 'OK' ? [`Глаза: не измерено, ${EYE_WHY[(t.vns.reasons || [])[0]] || 'мало данных'}`] : [];
-  const raw = [...eyes, ...(t.touch && t.touch.holdMs ? [`Касание ${t.touch.holdMs} мс`] : []), ...(t.touch && t.touch.typing ? [`Набор ${t.touch.typing.ikiMs} мс${t.touch.typing.rel ? ` (×${String(t.touch.typing.rel).replace('.', ',')} к обычному)` : ''}`] : []), ...(vnsSummary(t.vns) || [])];
-  const delta = [['SHORT', 'гипертонус'], ['HYPER', 'перерастяжение'], ['WEAK', 'слабость']].filter(([k]) => d.scores[k]).map(([k, n]) => `<span style="font-weight:600;color:${TONE[k][5]}">${d.scores[k] > 0 ? '+' : ''}${d.scores[k]}% ${n}</span>`).join('');
-  return `<div class="pad" style="margin-top:12px"><details class="acc card"><summary style="font-weight:600;min-height:32px"><span class="eyebrow" style="margin-right:8px">бета</span>Влияние ЦНС</summary>
-    <div style="margin-top:10px;font-size:14px;line-height:1.45">${fired.length ? `<div class="row" style="gap:14px;flex-wrap:wrap">${delta || '<span style="color:var(--sub)">На проценты не повлияло</span>'}</div>
-      <div style="margin-top:10px">${fired.map(f => `<div style="margin-top:4px">• ${esc(f.observed)}</div>`).join('')}</div>
-      ${d.muscles.length ? `<div style="margin-top:10px;font-size:13px;color:var(--sub)">${d.muscles.slice(0, 2).map(x => `${esc(C.muscles[x.id].name)} ${sideWord(x.side)} ${x.d > 0 ? '+' : ''}${x.d}%`).join(' · ')}</div>` : ''}` : '<div style="color:var(--sub)">Замеры в норме, карта не изменилась</div>'}
-      ${raw.length ? `<div style="margin-top:8px;font-size:12px;color:var(--sub)">${raw.map(esc).join(' · ')}</div>` : ''}</div></details></div>`;
+  const s = cnsScore(t); if (!s) return '';
+  return `<div class="pad" style="margin-top:12px"><div class="card">${cnsScoreCard(t, { title: 'Оценка ЦНС · бета' })}
+    <details class="acc" style="margin-top:12px"><summary style="font-weight:600;min-height:40px">Подробно: почему, развесовка, что делать</summary>
+      <div style="margin-top:8px">${cnsDetail(t, a.findings, spots(a), spots(analyze({ ...t, vns: null, touch: null }, C)))}</div></details></div></div>`;
 }
 export function map() {
   setBodySex(SHARED ? 'M' : (PROFILE() || {}).sex); setSession(MODES.SELF);
@@ -1129,7 +1123,7 @@ export function map() {
     if (from3d) muscleInfo(k, all, a, { onWhat: () => muscle(k) }); };
   const setView = () => { $('#vf').classList.toggle('on', !BACK && !MODE3D); $('#vb').classList.toggle('on', BACK && !MODE3D); if (view3d) view3d.turn(BACK); draw2d(); };
   if (!MODE3D) { draw2d(); $('#heat').onclick = e => { const x = h2d && h2d.hit(e.clientX, e.clientY); if (x) pick(x.key); }; }
-  else body3D($('#vis'), focus(), k => pick(k, true), { reveal: true, arrows: true }).then(v => { view3d = v; v.turn(BACK); app.querySelectorAll('[data-z]').forEach(b => b.onclick = () => v.focus(b.dataset.z));
+  else body3D($('#vis'), focus(), k => pick(k, true), { reveal: true, arrows: true, onTurn: b => { BACK = b; } }).then(v => { view3d = v; v.turn(BACK); app.querySelectorAll('[data-z]').forEach(b => b.onclick = () => v.focus(b.dataset.z));
     app.querySelectorAll('#lay [data-l]').forEach(b => b.onclick = () => { app.querySelectorAll('#lay [data-l]').forEach(x => x.classList.toggle('on', x === b)); v.only(b.dataset.l ? new Set(LAYERS[b.dataset.l]) : null); }); });
   renderSel();
   $('#vf').onclick = () => { if (MODE3D) { MODE3D = false; BACK = false; return map(); } BACK = false; setView(); };
