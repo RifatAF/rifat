@@ -176,7 +176,7 @@ export function muscleInfo(key, all, a, { pro = false, onWhat } = {}) {
     ${x.k !== 'OK' ? `<p style="font-size:15px;line-height:1.45;margin-top:10px">Мышца ${TONE_WHY[x.k]}</p>` : `<p class="sub" style="font-size:15px;margin-top:10px">По этому тесту с ней все в порядке.</p>`}
     ${why.length ? `<div style="margin-top:10px;font-size:14px;line-height:1.45"><span class="src">ИЗМЕРЕНО</span> ${why.slice(0, 2).map(esc).join('; ')}</div>` : x.byChain ? `<div style="margin-top:10px;font-size:14px"><span class="src hyp">ГИПОТЕЗА</span> по цепи «${esc(x.byChain)}»</div>` : ''}
     ${x.k !== 'OK' && m.benefit ? `<p class="sub" style="font-size:14px;line-height:1.45;margin-top:10px">${esc(m.benefit)}</p>` : ''}
-    ${test ? `<details style="margin-top:10px;font-size:14px;line-height:1.45"><summary style="cursor:pointer;font-weight:600">${pro ? 'Проверка руками' : 'Как проверить самому'}</summary><p style="margin-top:6px">${esc(test)}</p></details>` : ''}
+    ${test ? `<details class="acc" style="margin-top:10px;font-size:14px;line-height:1.45"><summary style="font-weight:600">${pro ? 'Проверка руками' : 'Как проверить самому'}</summary><p style="margin-top:6px">${esc(test)}</p></details>` : ''}
     ${x.k !== 'OK' && onWhat ? `<button class="btn" id="mi_what" style="margin-top:14px">Что делать</button>` : ''}<button class="btn ghost" id="mi_x" style="margin-top:8px">Закрыть</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; d.querySelector('#mi_x').onclick = () => d.remove();
   if (d.querySelector('#mi_what')) d.querySelector('#mi_what').onclick = () => { d.remove(); onWhat(id); };
@@ -867,7 +867,7 @@ export function map() {
      <div id="selbox" style="margin:8px 4px 0"></div></div>
      <div class="row" style="justify-content:space-between;margin:8px 4px 0;gap:8px;flex-wrap:wrap"><span class="ondevice">${ic('cpu', 's')}Посчитано на телефоне</span><span style="font-size:12px;color:var(--sub)">Оценка движения, не медицинское заключение</span></div></div>
    <div class="pad" style="margin-top:16px">${verdictCard(top, a.findings, 'Сильных перекосов не видно')}</div>
-   <div class="dock">${pl.length ? `<button class="btn" id="plan">${ic('play', 's')}Комплекс на сегодня · ${totalMin(pl.map(ex))} мин</button>` : `<button class="btn" id="again">${ic('rotate-ccw', 's')}${SHARED ? 'Пройти свой тест' : 'Пройти тест заново'}</button>`}<button class="btn ghost" id="more">Подробнее: лево/право, запись, поделиться</button></div></div>`);
+   <div class="dock">${pl.length ? `<button class="btn" id="plan">${ic('play', 's')}Комплекс на сегодня · ${totalMin(pl.map(ex))} мин</button>` : `<button class="btn" id="again">${ic('rotate-ccw', 's')}${SHARED ? 'Пройти свой тест' : 'Пройти тест заново'}</button>`}<nav class="bnav">${[['more', 'file-text', 'Обзор'], ['lrs', 'arrow-right-left', 'Стороны'], ...(SHARED ? [] : [['rec', 'play', 'Запись']]), ['shr', 'share', 'Поделиться']].map(([id, i, n]) => `<button id="${id}">${ic(i, 's')}<span>${n}</span></button>`).join('')}</nav></div></div>`);
   if (device.webgl2 && !device.weak && !device.wv) preload3D();
   // подписи: зона и короткий замер цветом состояния
   const labels = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 4)).map(s => ({ key: s.key, title: C.muscles[s.id].zone + (s.side === 'RIGHT' ? ' · П' : ' · Л'), sub: toneText(s, 3).replace('похоже, ', ''), value: shortVal(seen(a, s)[0]), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
@@ -895,13 +895,13 @@ export function map() {
   if ($('#again')) $('#again').onclick = again;
   if ($('#re')) $('#re').onclick = () => { FULL = false; prep(); };
   if ($('#resend')) $('#resend').onclick = async () => { const p = await outbox.get().catch(() => null); if (p) sendResult(p); }; bindRetestCard(); if (!SHARED && INV()) addSpecHint();
-  $('#set').onclick = settings; $('#more').onclick = () => moreSheet(cur, top, !!pl.length); if ($('#cab')) $('#cab').onclick = () => { SHOW_T = null; clientHome(); }; if ($('#toLast')) $('#toLast').onclick = () => { SHOW_T = null; map(); };
+  $('#set').onclick = settings; $('#more').onclick = () => moreSheet(cur, top, !!pl.length); $('#lrs').onclick = () => moreSheet(cur, top, !!pl.length, 'lr'); $('#shr').onclick = shareResult; if ($('#rec')) $('#rec').onclick = async () => { const p = await consumerPoses.get(); motionViewer(p, t.setup, map, 'Тест ' + new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })); }; if ($('#cab')) $('#cab').onclick = () => { SHOW_T = null; clientHome(); }; if ($('#toLast')) $('#toLast').onclick = () => { SHOW_T = null; map(); };
   // бета и калибровка: сразу после свежего теста короткая анкета «как прошло, что мешало» (один раз на тест)
   if (!SHARED && reveal && Date.now() - t.date < 30 * 60e3 && (isBetaMode() || (INV() || {}).cal)) setTimeout(() => { if (document.getElementById('heat') || document.getElementById('vis')) testSurvey(String(t.date), { cal: !!(INV() || {}).cal, steps: (t.protocol || []).length }); }, 2500);
 }
 function again() { if (!SHARED && INV()) return INV().join ? joinForm() : inviteWelcome(); if (SHARED) { SHARED = null; history.replaceState(null, '', location.pathname); } FULL = false; tests().length || SHARED ? prep() : onboarding(); }
 // всё, что не нужно для решения «что делать сегодня», живет в шторке «Подробнее»
-function moreSheet({ t, a }, top, hasPlan) {
+function moreSheet({ t, a }, top, hasPlan, only) {
   const all_t = SHARED ? [] : tests().filter(x => x.snapshot), first = all_t[0];
   const benefits = [...new Set(top.map(s => C.muscles[s.id].benefit).filter(Boolean))].slice(0, 3);
   const sec = (h, body) => `<div class="card" style="margin-top:var(--s3)"><div class="eyebrow">${h}</div>${body}</div>`;
@@ -916,7 +916,8 @@ function moreSheet({ t, a }, top, hasPlan) {
   const zones = top.length ? sec(`Все зоны · ${top.length}`, `<div class="stack" style="margin-top:8px">${top.map(s => `<div class="list-item" data-k="${s.key}" style="background:var(--bg);min-height:56px"><span class="mark ${s.k}"></span><div style="flex:1;min-width:0"><b style="font-size:15px">${title(s)}</b><div style="font-size:12px;color:var(--sub)">${tech(s)}</div></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div>`) : '';
   const goal = benefits.length ? sec('К чему стремимся', benefits.map(b => `<div class="row" style="margin-top:10px;align-items:flex-start"><span class="mark OK" style="margin-top:3px"></span><span style="font-size:15px;line-height:1.4">${b}</span></div>`).join('') + '<p class="sub" style="font-size:14px;margin-top:12px">Делай комплекс 2 недели и пройди тест снова. Сравните карты до и после.</p>') : '';
   const d = document.createElement('div'); d.className = 'sheet';
-  d.innerHTML = `<div><h2>Подробнее</h2>${lr}${ba}${lim}${zones}${goal}
+  if (only === 'lr') { d.innerHTML = `<div><h2>Анализ сторон</h2>${lr || '<p class="sub" style="margin-top:12px">В этом тесте не было упражнений, где сравниваются левая и правая сторона.</p>'}<button class="btn" id="mx" style="margin-top:var(--s4)">Закрыть</button></div>`; document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; d.querySelector('#mx').onclick = () => d.remove(); return; }
+  d.innerHTML = `<div><h2>Обзор</h2>${lr}${ba}${lim}${zones}${goal}
     <div class="group" style="margin-top:var(--s3)">
       ${SHARED ? '' : `<button class="row-link" id="myrec">${ic('play', 's')}<span>Моя запись: скелет и 3D-фигура</span>${ic('chevron-right', 's chev')}</button>`}
       <button class="row-link" id="shareRes">${ic('share', 's')}<span>Поделиться: ссылка или картинка</span>${ic('chevron-right', 's chev')}</button>

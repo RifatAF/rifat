@@ -203,11 +203,11 @@ export function testSurvey(key, ctx = {}) {
     <p class="sub" style="font-size:14px;margin-top:6px">30 секунд. Все замечания читает разработчик и правит приложение.</p>
     <b style="display:block;margin-top:16px">Оценка</b><div class="row" style="gap:6px;margin-top:8px">${[1, 2, 3, 4, 5].map(n => `<button class="pill" data-s="${n}" style="flex:1;min-height:48px;font-size:18px">${n}</button>`).join('')}</div>
     <div class="row" style="justify-content:space-between;font-size:12px;color:var(--sub);margin:4px 4px 0"><span>плохо</span><span>отлично</span></div>
-    <b style="display:block;margin-top:16px">Что пошло не так?</b><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px">${TEST_ISSUES.map(t => `<button class="pill" data-i="${t}">${t}</button>`).join('')}</div>
+    <details id="tsiss" style="margin-top:12px"><summary style="font-weight:700">Что пошло не так?</summary><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px">${TEST_ISSUES.map(t => `<button class="pill" data-i="${t}">${t}</button>`).join('')}</div></details>
     <textarea id="tst" class="field" rows="3" maxlength="2000" placeholder="На каком шаге и что именно? Любые мелочи важны" style="height:auto;padding:12px 16px;margin-top:14px"></textarea>
     <p id="tse" style="font-size:13px;color:var(--over-t);min-height:18px"></p>
     <button class="btn" id="tsok">Отправить</button><button class="btn ghost" id="tsno" style="margin-top:8px;border:0">Пропустить</button>`);
-  d.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { pick.s = +b.dataset.s; d.querySelectorAll('[data-s]').forEach(x => { const on = +x.dataset.s <= pick.s; x.style.background = on ? 'var(--ink)' : ''; x.style.color = on ? '#fff' : ''; }); });
+  d.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { pick.s = +b.dataset.s; d.querySelectorAll('[data-s]').forEach(x => { const on = +x.dataset.s <= pick.s; x.style.background = on ? 'var(--ink)' : ''; x.style.color = on ? '#fff' : ''; }); d.querySelector('#tsiss').open = pick.s < 4; });
   d.querySelectorAll('[data-i]').forEach(b => b.onclick = () => { const t = b.dataset.i, on = !pick.issues.includes(t); pick.issues = on ? [...pick.issues, t] : pick.issues.filter(x => x !== t); b.classList.toggle('on', on); });
   d.querySelector('#tsno').onclick = () => { track('fb_sent', { c: 'test_skip' }, false); d.remove(); };
   d.querySelector('#tsok').onclick = async () => { if (!pick.s) { d.querySelector('#tse').textContent = 'Поставьте оценку от 1 до 5'; return; }

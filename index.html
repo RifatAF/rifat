@@ -262,7 +262,10 @@ body:has(.cam) #bugtab,body:has(.sheet) #bugtab{display:none}
 .sheet-x{position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;border:0;background:var(--surface,#fff);color:var(--sub);font-size:17px;line-height:1;cursor:pointer;z-index:2}
 .sheet>div>h2:first-of-type{padding-right:40px}
 .tip{position:relative;margin-top:-6px}.tip>summary{list-style:none;position:absolute;right:12px;top:-44px;width:30px;height:30px;border-radius:50%;background:var(--surface,#eee);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:var(--sub);cursor:pointer}
-.tip>summary::-webkit-details-marker{display:none}.tip>div{margin-top:8px;background:#fff;border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.4;color:var(--sub);border:1px solid var(--line)}
+.tip>summary::-webkit-details-marker{display:none}
+details:not(.tip)>summary:not(:has(svg))::after{content:'▼';margin-left:auto;padding-left:10px;font-size:11px;color:var(--sub);transition:transform .2s}details[open]:not(.tip)>summary:not(:has(svg))::after{transform:rotate(180deg)}
+details.acc{background:var(--surface-2,#f3f2ee);border:1px solid var(--line-2);border-radius:12px;padding:0 14px}details.acc[open]{padding-bottom:12px}
+.bnav{display:flex;gap:4px;margin-top:var(--s1)}.bnav>button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-height:52px;border:0;background:none;font:inherit;font-size:12px;font-weight:600;color:var(--sub);cursor:pointer;border-radius:12px}.bnav>button:active{background:var(--line-2)}.tip>div{margin-top:8px;background:#fff;border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.4;color:var(--sub);border:1px solid var(--line)}
 </style>
 </head>
 <body>
