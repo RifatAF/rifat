@@ -630,3 +630,25 @@ export const seal = {
   pack: obj => b64u(new TextEncoder().encode(JSON.stringify(obj))),
   unpack: s => JSON.parse(new TextDecoder().decode(ub64u(s))),
 };
+
+// ---------- любое всплывающее окно (.sheet): крестик, тап по затемнению и свайп вниз закрывают его ----------
+// Порядок закрытия: событие 'bp-close' (окно с ожиданием ответа отвечает «отмена»), затем собственный обработчик
+// тапа по фону, если он есть, и только потом простое удаление. data-locked="1" — окно закрыть нельзя (идет запись).
+export function closeSheet(o) {
+  if (!o.isConnected || o._closing) return; o._closing = true;
+  o.dispatchEvent(new Event('bp-close')); if (o.isConnected) o.click(); if (o.isConnected) o.remove();
+}
+function armSheet(o) {
+  const box = o.firstElementChild; if (!box || o.dataset.armed || o.dataset.locked) return; o.dataset.armed = '1';
+  if (getComputedStyle(box).position === 'static') box.style.position = 'relative';
+  const x = document.createElement('button'); x.className = 'sheet-x'; x.setAttribute('aria-label', 'Закрыть'); x.textContent = '✕';
+  x.onclick = e => { e.stopPropagation(); closeSheet(o); }; box.prepend(x);
+  o.addEventListener('click', e => { if (e.target === o && !o._closing) closeSheet(o); });
+  let y0 = null, dy = 0;
+  box.addEventListener('touchstart', e => { y0 = box.scrollTop <= 0 && !e.target.closest('input[type=range]') ? e.touches[0].clientY : null; dy = 0; }, { passive: true });
+  box.addEventListener('touchmove', e => { if (y0 === null) return; dy = Math.max(0, e.touches[0].clientY - y0); box.style.transform = dy ? `translateY(${dy}px)` : ''; }, { passive: true });
+  box.addEventListener('touchend', () => { if (y0 === null) return; y0 = null; if (dy > 90) return closeSheet(o);
+    box.style.transition = 'transform .2s'; box.style.transform = ''; setTimeout(() => { box.style.transition = ''; }, 220); });
+}
+if (typeof document !== 'undefined' && document.body) new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1 && n.classList.contains('sheet')) armSheet(n); })
+  .observe(document.body, { childList: true });

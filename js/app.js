@@ -344,7 +344,7 @@ export function cantSheet(u) {
     o.innerHTML = `<div><h2>${c.q}</h2><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:12px">${c.opts.map((t, i) => `<button class="pill" data-r="${i}" style="min-height:44px">${t}</button>`).join('')}</div>
       ${c.side ? `<b style="display:block;margin-top:16px">Где</b><div class="seg" style="margin-top:8px"><button data-s="LEFT">Слева</button><button data-s="RIGHT">Справа</button><button data-s="BOTH" class="on">С обеих</button></div>` : ''}
       <b style="display:block;margin-top:16px">Как получается</b><div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">${c.lvl.map((t, i) => `<button class="btn line" data-l="${i}" style="height:48px">${t}</button>`).join('')}</div></div>`;
-    document.body.appendChild(o); pick.side = c.side ? 'BOTH' : null;
+    document.body.appendChild(o); pick.side = c.side ? 'BOTH' : null; o.addEventListener('bp-close', () => res({ ...pick, cancelled: true }));
     o.querySelectorAll('[data-r]').forEach(b => b.onclick = () => { const t = c.opts[+b.dataset.r]; const on = !pick.reasons.includes(t); pick.reasons = on ? [...pick.reasons, t] : pick.reasons.filter(x => x !== t); b.classList.toggle('on', on); });
     o.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { pick.side = b.dataset.s; o.querySelectorAll('[data-s]').forEach(x => x.classList.toggle('on', x === b)); });
     o.querySelectorAll('[data-l]').forEach(b => b.onclick = () => { pick.level = c.lvl[+b.dataset.l]; o.remove(); res(pick); }); });
@@ -359,7 +359,7 @@ export function stepList(units, pre) {
         : `<button data-cant="${u}" class="link" style="min-height:44px;font-size:14px">Не могу это сделать</button>`}</div>`; }).join('')}</div>`;
 }
 export function bindStepList(pre, redraw) {
-  document.querySelectorAll('[data-cant]').forEach(b => b.onclick = async () => { const u = b.dataset.cant; const a = await cantSheet(u); if (/опор|неглуб/i.test(a.level || '') && (u === 'ohs_front' || u === 'sls')) a.alt = 'support'; pre[u] = a; redraw(); });
+  document.querySelectorAll('[data-cant]').forEach(b => b.onclick = async () => { const u = b.dataset.cant; const a = await cantSheet(u); if (a.cancelled) return; if (/опор|неглуб/i.test(a.level || '') && (u === 'ohs_front' || u === 'sls')) a.alt = 'support'; pre[u] = a; redraw(); });
   document.querySelectorAll('[data-undo]').forEach(b => b.onclick = () => { delete pre[b.dataset.undo]; redraw(); });
 }
 
@@ -1076,17 +1076,20 @@ export function muscle(key) {
 
 // ---------- 7. тренировка ----------
 // шкала боли 0–10: один ползунок в шторке. Возвращает число или null (пропустили)
-function vasSheet(title, init = 0, skip = 'Пропустить') {
+// cancel: окно можно закрыть без ответа (вернет undefined), например чтобы не начинать тренировку
+function vasSheet(title, init = 0, skip = 'Пропустить', cancel = false) {
   return new Promise(res => { const d = document.createElement('div'); d.className = 'sheet';
     d.innerHTML = `<div><h2 style="font-size:21px">${title}</h2><p class="sub" style="font-size:14px;margin-top:6px">${PAIN_SCALE}</p>
       <div class="row" style="gap:12px;margin-top:16px"><input type="range" id="vs" min="0" max="10" value="${init}" style="flex:1;accent-color:var(--ink)" aria-label="${title}"><b id="vsv" class="num" style="font-size:32px;width:44px;text-align:right">${init}</b></div><div id="vsw" style="font-size:15px;font-weight:600;margin-top:4px">${painWord(init)}</div>
       <div class="row" style="justify-content:space-between;font-size:12px;color:var(--sub)"><span>нет боли</span><span>сильнейшая</span></div>
       <button class="btn" id="vok" style="margin-top:16px">Готово</button><button class="btn ghost" id="vno" style="margin-top:8px;border:0">${skip}</button></div>`;
     document.body.appendChild(d); const r = d.querySelector('#vs'); r.oninput = () => { d.querySelector('#vsv').textContent = r.value; d.querySelector('#vsw').textContent = painWord(r.value); };
-    d.querySelector('#vok').onclick = () => { d.remove(); res(+r.value); }; d.querySelector('#vno').onclick = () => { d.remove(); res(null); }; });
+    d.querySelector('#vok').onclick = () => { d.remove(); res(+r.value); }; d.querySelector('#vno').onclick = () => { d.remove(); res(null); };
+    d.addEventListener('bp-close', () => res(cancel ? undefined : null)); if (cancel) d.querySelector('#vno').insertAdjacentHTML('afterend', '<button class="btn ghost" id="vcx" style="margin-top:4px;border:0;color:var(--sub)">Отмена</button>'), d.querySelector('#vcx').onclick = () => { d.remove(); res(undefined); }; });
 }
 export async function workout(ids, reasons = {}) {
-  const pre = await vasSheet('Оцените уровень боли или дискомфорта прямо сейчас (0–10)', 0, 'Пропустить и начать');
+  const pre = await vasSheet('Оцените уровень боли или дискомфорта прямо сейчас (0–10)', 0, 'Пропустить и начать', true);
+  if (pre === undefined) return; // закрыли окно: остаемся на экране, тренировка не начинается
   const list = ids.map(ex).filter(Boolean); let i = 0, closed = false, doneN = 0; voice.unlock(); keepAwake(true);
   const finish = () => done(list, pre, doneN);
   const run = async () => {

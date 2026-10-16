@@ -178,7 +178,7 @@ async function photoEditor(src, set0) {
     cv.onwheel = e => { e.preventDefault(); st.zoom = Math.max(1, Math.min(4, st.zoom * (e.deltaY < 0 ? 1.06 : 1 / 1.06))); d.querySelector('#pz').value = st.zoom; draw(); };
     d.querySelector('#pz').oninput = e => { st.zoom = +e.target.value; draw(); }; d.querySelector('#pb').oninput = e => { st.bright = +e.target.value; draw(); };
     d.querySelector('#prs').onclick = () => { Object.assign(st, { zoom: 1, dx: 0, dy: 0, bright: 1 }); d.querySelector('#pz').value = 1; d.querySelector('#pb').value = 1; draw(); };
-    const done = v => { d.remove(); res(v); }; d.querySelector('#pcx').onclick = () => done(null);
+    const done = v => { d.remove(); res(v); }; d.addEventListener('bp-close', () => res(null)); d.querySelector('#pcx').onclick = () => done(null);
     d.querySelector('#pok').onclick = () => { const c = document.createElement('canvas'); c.width = 360; c.height = 360; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 360, 360);
       const f = fit(360); x.filter = `brightness(${st.bright})`; x.drawImage(img, f.x, f.y, f.w, f.h);
       done({ photo: c.toDataURL('image/jpeg', .88), src: small, set: { zoom: st.zoom, dx: st.dx, dy: st.dy, bright: st.bright } }); }; });
@@ -686,7 +686,7 @@ function retestSheet(c, last) {
       d.querySelectorAll('[data-n]').forEach(b => b.onclick = () => { t = t0.getTime() + +b.dataset.n * DAY; draw(); });
       d.querySelector('#rsd').onchange = e => { const [y, m, dd] = e.target.value.split('-').map(Number); if (y) { t = new Date(y, m - 1, dd).getTime(); draw(); } };
       d.querySelector('#rss').onchange = e => { send = e.target.checked; draw(); };
-      d.querySelector('#rsx').onclick = () => { d.remove(); res(false); };
+      d.querySelector('#rsx').onclick = () => { d.remove(); res(false); }; d.addEventListener('bp-close', () => res(false));
       if (d.querySelector('#rsdel')) d.querySelector('#rsdel').onclick = async () => { if (last) { delete last.nextDate; last.retestSet = false; await put('assessments', last); } delete c.plannedRetest; await put('clients', c); syncReminders().catch(() => {}); d.remove(); res(true); };
       d.querySelector('#rsok').onclick = async () => { if (last) { last.nextDate = t; last.retestSet = true; last.draft = false; await put('assessments', last); } else { c.plannedRetest = t; await put('clients', c); }
         track('retest_set', { n: Math.round((t - Date.now()) / DAY), s: send ? 1 : 0 }, false); syncReminders().catch(() => {}); d.remove();
@@ -818,7 +818,7 @@ function whySheet(text) {
       <input class="field" id="wt" placeholder="Или своими словами" maxlength="140" style="margin-top:var(--s3);height:48px">
       <button class="btn" id="wok" style="margin-top:var(--s4)">Сохранить правку</button><button class="btn ghost" id="wx" style="margin-top:var(--s2)">Отмена</button></div>`;
     document.body.appendChild(d); let pick = '';
-    const done = v => { d.remove(); res(v); };
+    const done = v => { d.remove(); res(v); }; d.addEventListener('bp-close', () => res(null));
     // готовая причина сохраняется одним касанием; последняя причина подсвечена и подставляется кнопкой «Сохранить»
     pick = lastWhy; d.querySelectorAll('[data-w]').forEach(b => { b.classList.toggle('on', b.dataset.w === lastWhy); b.onclick = () => { lastWhy = b.dataset.w; done(b.dataset.w); }; });
     d.querySelector('#wok').onclick = () => { const t = (d.querySelector('#wt').value.trim() || pick).slice(0, 140); if (!t) { d.querySelector('#wt').focus(); return toast('Выберите причину'); } lastWhy = t; done(t); };
@@ -1089,7 +1089,7 @@ function pwSheet(title, text, twice) {
       ${twice ? '<input class="field" id="pw2" type="password" autocomplete="new-password" placeholder="Повторите пароль" style="margin-top:var(--s2);height:48px">' : ''}
       <p id="pwe" class="sub" style="font-size:13px;min-height:18px;margin-top:6px;color:var(--over-t)"></p>
       <button class="btn" id="pwok">${twice ? 'Зашифровать и сохранить' : 'Открыть копию'}</button><button class="btn ghost" id="pwx" style="margin-top:var(--s2)">Отмена</button></div>`;
-    document.body.appendChild(d); const done = v => { d.remove(); res(v); }; setTimeout(() => d.querySelector('#pw1').focus(), 50);
+    document.body.appendChild(d); const done = v => { d.remove(); res(v); }; d.addEventListener('bp-close', () => res(null)); setTimeout(() => d.querySelector('#pw1').focus(), 50);
     d.querySelector('#pwok').onclick = () => { const a = d.querySelector('#pw1').value, b = twice ? d.querySelector('#pw2').value : a;
       if (a.length < 6) return d.querySelector('#pwe').textContent = 'Нужно хотя бы 6 символов'; if (a !== b) return d.querySelector('#pwe').textContent = 'Пароли не совпадают'; done(a); };
     d.querySelector('#pwx').onclick = () => done(null); }); }
@@ -1124,7 +1124,7 @@ async function restore(file) {
 function confirm2(text, ok = 'Да', danger = true) {
   return new Promise(res => { const d = document.createElement('div'); d.className = 'sheet';
     d.innerHTML = `<div><h2 style="font-size:20px;line-height:1.3">${esc(text)}</h2><button class="btn" id="cfy" style="margin-top:var(--s5);${danger ? 'background:var(--over-t)' : ''}">${esc(ok)}</button><button class="btn ghost" id="cfn" style="margin-top:var(--s2)">Отмена</button></div>`;
-    document.body.appendChild(d); const done = v => { d.remove(); res(v); };
+    document.body.appendChild(d); const done = v => { d.remove(); res(v); }; d.addEventListener('bp-close', () => res(false));
     d.querySelector('#cfy').onclick = () => done(true); d.querySelector('#cfn').onclick = () => done(false); d.onclick = e => { if (e.target === d) done(false); }; }); }
 // снимок в отдельной базе этого аккаунта
 const snapName = () => nameFor() + '-snap';
