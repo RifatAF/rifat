@@ -115,6 +115,9 @@ export default async function handler(req, res) {
       if (!u.refCode && process.env.SESSION_SECRET) { await ensureRefIndex(u); await saveUser(u); } // код приглашения для тех, кто вошел до реферальной программы
       if (startTrialIfNeeded(u)) await saveUser(u);
       return res.status(200).json({ user: publicUser(u) }); }
+    // резервная копия данных телефона в аккаунте: после удаления приложения тесты, анкета и занятия возвращаются при входе
+    if (req.method === 'GET' && a === 'backup') { const uid = sessionUid(req); if (!uid) return res.status(401).json({ error: 'войдите' });
+      const bk = await readJson(`backups/${uid}.json`); return res.status(200).json({ backup: bk || null }); }
     if (req.method !== 'POST') return res.status(405).json({ error: 'method' });
     // защита от отправки формы с чужого сайта: запрос должен прийти с нашего адреса
     const origin = req.headers.origin; let oh = null; try { oh = origin ? new URL(origin).host : null; } catch (e) { oh = '?'; }
@@ -127,6 +130,9 @@ export default async function handler(req, res) {
       req.body = { ...b, ...(v.consent ? { consent: true, health: true } : {}), role: b.role || v.role }; return signIn(req, res, v.ident); }
     const uid = sessionUid(req); const u = uid && await loadUser(uid);
     if (!u) return res.status(401).json({ error: 'войдите заново' });
+    if (a === 'backup') { const d = b.data; if (!d || typeof d !== 'object' || Array.isArray(d)) return res.status(400).json({ error: 'data' });
+      const raw = JSON.stringify(d); if (raw.length > 3.5e6) return res.status(413).json({ error: 'слишком большая копия' });
+      await writeJson(`backups/${u.id}.json`, { at: Date.now(), v: 1, data: d }); return res.status(200).json({ ok: true, at: Date.now() }); }
     if (a === 'role') { if (!ROLES.includes(b.role)) return res.status(400).json({ error: 'role' }); u.role = b.role; startTrialIfNeeded(u); await ensureRefIndex(u); await creditReferral(u, false).catch(e => console.error('ref', e)); await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
     if (a === 'profile') { const sp = ['kinesio', 'trainer', 'manual', 'sport', 'studio']; if (!sp.includes(b.specialty)) return res.status(400).json({ error: 'specialty' });
       u.specialty = b.specialty; await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
@@ -152,7 +158,7 @@ export default async function handler(req, res) {
     if (a === 'logout') { clearSession(res); return res.status(200).json({ ok: true }); }
     if (a === 'delete') { // аккаунт, расписание напоминаний и ящики с результатами клиентов
       const { purgeOwner } = await import('./relay.js'); const { del } = await import('@vercel/blob');
-      await purgeOwner(u.id).catch(e => console.error('purge', e)); await del(`remind/${u.id}.json`).catch(() => {});
+      await purgeOwner(u.id).catch(e => console.error('purge', e)); await del(`remind/${u.id}.json`).catch(() => {}); await del(`backups/${u.id}.json`).catch(() => {});
       await deleteUser(u.id); clearSession(res); return res.status(200).json({ ok: true }); }
     if (a === 'users') { if (!isAdmin(u)) return res.status(403).json({ error: 'forbidden' });
       const all = (await allUsers()).sort((x, y) => (y.created || 0) - (x.created || 0));

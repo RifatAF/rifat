@@ -1,3 +1,4 @@
+import { backupSoon, pickRestore } from './backup.js';
 import { drawGhost } from './biomechanics-engine.js';
 import { clinicalSection, vectorSection } from './white-label-pdf.js';
 import { setSession, MODES, aiRecsOn } from './session-controller.js';
@@ -391,7 +392,7 @@ async function proMenu() {
       <label class="row-link">${ic('upload', 's')}<span>Восстановить из копии</span>${ic('chevron-right', 's chev')}<input type="file" id="mr" accept=".json,.bpbackup,application/json" style="display:none"></label>
       ${hasSnap ? r('mund', 'rotate-ccw', 'Отменить последнее восстановление') : ''}</div>
     ${h('Помощь')}<div class="group">
-      ${canInstall() ? r('minst', 'download', 'Установить приложение на телефон') : ''}
+      ${canInstall() ? r('minst', 'download', 'Установить приложение на телефон') : ''}${r('mrsf', 'upload', 'Восстановить клиентов из файла')}
       ${r('demo2', 'file-text', 'Пример оценки')}
       ${r('mfb', 'message-square', 'Обратная связь: ошибка, идея, оценка')}
       ${r('mexp', 'info', 'Мои проверки: что подтверждается')}
@@ -412,6 +413,7 @@ async function proMenu() {
   d.querySelector('#mexp').onclick = () => { d.remove(); experienceScreen(); };
   d.querySelector('#demo2').onclick = () => { d.remove(); openDemo(); };
   if (d.querySelector('#minst')) d.querySelector('#minst').onclick = () => { d.remove(); installNow(); };
+  d.querySelector('#mrsf').onclick = () => pickRestore(n => { d.remove(); if (n) proHome(); });
   d.querySelector('#mfb').onclick = () => { d.remove(); feedbackHub(); };
   d.querySelector('#msp').onclick = () => { d.remove(); specialtyScreen(proHome); };
   d.querySelector('#mr').onchange = e => { const f = e.target.files[0]; d.remove(); if (f) restore(f); };
@@ -788,7 +790,7 @@ async function newAssessment(clientId, retestOf, opts = {}) {
       track('assess_start', { n: units.length }, false);
       const r = await runProtocol(units, { target: prev && prev.setup, onCancel: () => clientCard(clientId), pre, specialist: true }); if (!r) return;
       const a = { id: uid(), clientId, date: r.date, template: tpl[0], templateName: session ? 'После сеанса' : tpl[0] === 'posture' && !prev ? 'До сеанса' : tpl[1], protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, ...(r.main ? { main: r.main } : {}), tech: r.tech || null, limits: r.limits || {}, pain, painSide, lumbarZone: LUMBAR[tpl[0]] || (prev && prev.lumbarZone) || null, hyp: {}, plan: null, note: '', expect: expect.trim().slice(0, 500), nextDate: r.date + 30 * DAY, prevId: prev ? prev.id : null, draft: true };
-      await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); track('assess_done', { n: units.length }, false); if (prev) track('retest_done', { n: Math.round((r.date - prev.date) / DAY) }, false); if (prev) endTrialOnRetest(); result(a.id); }; };
+      await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); backupSoon(); track('assess_done', { n: units.length }, false); if (prev) track('retest_done', { n: Math.round((r.date - prev.date) / DAY) }, false); if (prev) endTrialOnRetest(); result(a.id); }; };
   draw(); if (opts.autostart) $('#go').click();
 }
 
@@ -1514,8 +1516,7 @@ async function sendJoin() {
   const draw = () => { d.innerHTML = `<div><h2>Ссылка новому клиенту</h2><p class="sub" style="font-size:14px;margin-top:6px">Клиент сам заполнит имя и анкету, пройдет тест, и у вас появится его карточка с результатом и записью движения. Одну ссылку можно отправлять разным людям.</p>
     <div class="eyebrow" style="margin-top:14px">Какой тест пройдет клиент</div><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px">${TEMPLATES.map(t => `<button class="pill" data-t="${t[0]}" style="border:1.5px solid ${tpl[0] === t[0] ? 'var(--ink)' : 'transparent'}">${t[1]}</button>`).join('')}</div>
     <p class="sub" style="font-size:13px;margin-top:8px">${rowsOf(tpl[2]).length} шагов · около ${mins(SETUP_SEC + secs(rowsOf(tpl[2])))} мин + анкета</p>
-    ${c.invite && c.invite.id ? `<button class="btn" id="chg" style="margin-top:14px">Сменить тест по отправленной ссылке</button><p style="font-size:12px;color:var(--sub);margin-top:6px">Клиент откроет ту же ссылку и пройдет выбранный тест. Новую ссылку отправлять не нужно.</p>` : ''}
-    <button class="btn${c.invite && c.invite.id ? ' line' : ''}" id="snd" style="margin-top:14px">${c.invite && c.invite.id ? 'Отправить ссылку заново' : 'Отправить ссылку'}</button><button class="btn ghost" id="cx" style="margin-top:8px;border:0">Отмена</button></div>`;
+    <button class="btn" id="snd" style="margin-top:14px">Отправить ссылку</button><button class="btn ghost" id="cx" style="margin-top:8px;border:0">Отмена</button></div>`;
     d.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tpl = TEMPLATES.find(t => t[0] === b.dataset.t); draw(); });
     d.querySelector('#cx').onclick = () => d.remove();
     d.querySelector('#snd').onclick = async () => { let bx; try { bx = await inbox(); } catch (e) { toast('Не удалось создать ссылку: ' + e.message); return; } track('join_sent'); useHit('tpl', tpl[0]); const author = (await meta('profile')) || defaultAuthor();
