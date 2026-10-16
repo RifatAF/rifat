@@ -20,6 +20,8 @@ export const RECIP = {
   tfl: [['glute_med', 'WEAK', 'sherr']],
   adductors: [['glute_med', 'WEAK', 'sherr']],
   calf: [['tibialis', 'WEAK', 'sherr']],
+  soleus: [['tibialis', 'WEAK', 'sherr']],
+  piriformis: [['glute_med', 'WEAK', 'sherr']],
   vastus_lat: [['vmo', 'WEAK', 'sherr']],
   biceps: [['triceps', 'WEAK', 'sherr']],
   ql: [['ql', 'HYPER', 'myers', 'opp']],
@@ -27,13 +29,13 @@ export const RECIP = {
 };
 /** Слабый сегмент → соседи, которые берут защитный спазм (Шарман). */
 export const PROTECT = {
-  abdominals: ['erector', 'iliopsoas'], obliques: ['ql'], glute_med: ['tfl', 'ql'], glute_max: ['hamstrings', 'erector'],
+  abdominals: ['erector', 'iliopsoas'], obliques: ['ql'], glute_med: ['tfl', 'ql', 'piriformis'], glute_max: ['hamstrings', 'erector'],
   deep_neck_flex: ['scm', 'scalene'], lower_trap: ['upper_trap', 'levator'], serratus: ['pec_minor'], rhomboid: ['pec_minor'],
-  vmo: ['vastus_lat'], tibialis: ['calf'], triceps: ['biceps'],
+  vmo: ['vastus_lat'], tibialis: ['calf', 'soleus'], triceps: ['biceps'], supraspinatus: ['upper_trap'],
 };
 /** Янда: тонические мышцы (склонны к гипертонусу) и фазические (склонны к слабости). */
-export const TONIC = new Set(['upper_trap', 'levator', 'scm', 'scalene', 'suboccipital', 'pec_major', 'pec_minor', 'erector', 'ql', 'iliopsoas', 'rectus_fem', 'tfl', 'adductors', 'hamstrings', 'calf', 'biceps', 'forearm_flex']);
-export const PHASIC = new Set(['deep_neck_flex', 'lower_trap', 'rhomboid', 'serratus', 'glute_max', 'glute_med', 'abdominals', 'obliques', 'rectus_abd', 'vmo', 'tibialis', 'triceps', 'thoracic_ext', 'peroneus']);
+export const TONIC = new Set(['upper_trap', 'levator', 'scm', 'scalene', 'suboccipital', 'pec_major', 'pec_minor', 'erector', 'ql', 'iliopsoas', 'rectus_fem', 'tfl', 'adductors', 'hamstrings', 'calf', 'biceps', 'forearm_flex', 'piriformis', 'soleus']);
+export const PHASIC = new Set(['deep_neck_flex', 'lower_trap', 'rhomboid', 'serratus', 'glute_max', 'glute_med', 'abdominals', 'obliques', 'rectus_abd', 'vmo', 'tibialis', 'triceps', 'thoracic_ext', 'peroneus', 'supraspinatus']);
 export const LAW = { sherr: 'Шеррингтон', myers: 'Майерс', sahr: 'Шарман', kolar: 'Коларж' };
 /** Короткое объяснение причины для клиента: «из-за гипертонуса грудной справа». */
 export const LAW_WHY = { sherr: 'тормозится напряженным антагонистом', myers: 'растянута напряженным антагонистом', sahr: 'защищает слабого соседа', kolar: 'грудная клетка раскрыта, давление в животе не держится' };

@@ -8,7 +8,7 @@ export const BATTERY = [
   { unit: 'fwd', sec: 10, what: 'Натяжение задней цепи, тест Адамса' },
   { unit: 'slb', sec: 12, what: 'Тест Тренделенбурга, спад средней ягодичной' },
   { unit: 'trot', sec: 10, what: 'Скручивание в горизонтальной плоскости' },
-  { unit: 'reach', sec: 10, reps: 2, what: 'Плече-лопаточный ритм, крыловидность лопаток' },
+  { unit: 'reach', sec: 15, reps: 3, what: 'Плече-лопаточный ритм, крыловидность лопаток' },
 ];
 export const BATTERY_UNITS = BATTERY.map(x => x.unit);
 export const BATTERY_SEC = 135;
@@ -47,6 +47,15 @@ export function thoracicRotation(frR, frL) {
     return Math.acos(Math.max(0, Math.min(1, wmin / w0))) * RAD; };
   const r = rot(frR), l = rot(frL); if (!Number.isFinite(r) || !Number.isFinite(l)) return res({}, 0);
   return res({ trot_r: r1(r), trot_l: r1(l), trot_asym: r1(r - l) });
+}
+/** Повороты туда-сюда за одну запись: угол поворота по сужению плеч (ширина в нейтрали — 90-й перцентиль),
+ *  сторона по глубине плеч (какое плечо ближе к камере). Те же признаки, что у раздельной записи. */
+export function trotSweep(fr) {
+  const v = fr.filter(ok); if (v.length < 15) return res({}, 0);
+  const wd = x => Math.abs(x.p[11].x - x.p[12].x), ws = v.map(wd).sort((a, b) => a - b), w0 = ws[Math.floor(ws.length * .9)] || 1;
+  const z = x => { const q = x.w && x.w[11] && x.w[12] ? x.w : x.p; return (q[11].z || 0) - (q[12].z || 0); };
+  let r = 0, l = 0; for (const x of v) { const a = Math.acos(Math.max(0, Math.min(1, wd(x) / w0))) * RAD; if (z(x) < 0) r = Math.max(r, a); else l = Math.max(l, a); }
+  if (!r || !l) return res({}, 0); return res({ trot_r: r1(r), trot_l: r1(l), trot_asym: r1(r - l) });
 }
 /** Руки вверх 2 раза: максимальный угол в плече и подъем надплечья к уху (ритм лопатки), по сторонам. */
 export function overheadReach(fr) {

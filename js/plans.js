@@ -29,11 +29,11 @@ export const SPECIALTIES = [
 ];
 // порядок шаблонов протокола под специализацию: первый открывается по умолчанию
 export const TEMPLATE_ORDER = {
-  kinesio: ['knee', 'low_back', 'low_back_mid', 'low_back_up', 'neck', 'full', 'screen', 'posture'],
-  trainer: ['screen', 'full', 'knee', 'low_back', 'low_back_mid', 'low_back_up', 'neck', 'posture'],
-  manual: ['posture', 'neck', 'low_back', 'low_back_mid', 'low_back_up', 'knee', 'screen', 'full'],
-  sport: ['screen', 'knee', 'full', 'low_back', 'low_back_mid', 'low_back_up', 'neck', 'posture'],
-  studio: ['screen', 'full', 'knee', 'low_back', 'low_back_mid', 'low_back_up', 'neck', 'posture'],
+  kinesio: ['screen', 'full', 'posture', 'knee', 'low_back', 'neck'],
+  trainer: ['screen', 'full', 'posture', 'knee', 'low_back', 'neck'],
+  manual: ['posture', 'screen', 'full', 'neck', 'low_back', 'knee'],
+  sport: ['screen', 'full', 'posture', 'knee', 'low_back', 'neck'],
+  studio: ['screen', 'full', 'posture', 'knee', 'low_back', 'neck'],
 };
 
 export function plan() {

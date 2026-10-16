@@ -99,7 +99,7 @@ const meta = async k => (await get('meta', k))?.v; const setMeta = (k, v) => put
 
 // ---------- шаблоны протоколов ----------
 // зона боли в пояснице по шаблону (ТЗ v2.1): LOW, MID, UPPER
-const LUMBAR = { low_back: 'LOW', low_back_mid: 'MID', low_back_up: 'UPPER' };
+const LUMBAR = { low_back: 'LOW' };
 // подстройка под специалиста: что он чаще делает, какие тесты и мышцы выбирает. Только на этом телефоне
 const USE = 'bp_use';
 const useGet = () => { try { return JSON.parse(localStorage.getItem(USE) || '{}'); } catch (e) { return {}; } };
@@ -110,17 +110,19 @@ function byUse(kind, list, idOf = x => x) { const u = useGet()[kind] || {}, tota
 /** Тест по умолчанию: тот, что специалист выбирает чаще всего. */
 const favTpl = () => byUse('tpl', TEMPLATES, t => t[0])[0];
 export const TEMPLATES = [
-  // шаблоны по жалобе сокращены до 3–4 тестов (ТЗ v2.1, раздел 5): каждая лишняя метрика добавляет шум
-  ['knee', 'Колено', ['stand', 'ohs_front', 'sls', 'profile']],
-  ['low_back', 'Поясница, низ', ['stand', 'ohs_front', 'profile']],
-  ['low_back_mid', 'Поясница, середина', ['stand', 'ohs_front', 'profile', 'sls']],
-  ['low_back_up', 'Поясница, верх', ['stand', 'ohs_front', 'profile', 'bends']],
-  ['neck', 'Шея и плечи', ['stand', 'thold', 'profile']],
-  // шаблон «Бег» убран до появления анализа бега: стойка и присед не равны бегу (фокус-группа, тренер по бегу)
-  ['full', 'Полный', ['stand', 'ohs_front', 'sls', 'thold', 'bends', 'calf', 'side', 'back']],
-  ['screen', 'Первичный скрининг', ['stand', 'ohs_front', 'sls', 'side']],
-  ['posture', 'Осанка до и после сеанса, 1 мин', ['stand', 'bends', 'profile']],
+  // основные: те же тесты, что видит клиент (батарея v2: стойка с дыханием, присед, наклон, баланс, повороты, руки вверх)
+  ['screen', 'Быстрый', ['stand', 'ohs_front', 'fwd', 'slb', 'trot', 'reach']],
+  // полный: добавлены одна нога, присед боком (поясница, голова вперед) и спиной
+  ['full', 'Полный', ['stand', 'ohs_front', 'fwd', 'slb', 'sls', 'trot', 'reach', 'side', 'back']],
+  ['posture', 'Осанка до и после сеанса', ['stand', 'profile']],
+  // по жалобе: 3–4 теста под зону (z = в раскрывающемся списке)
+  ['knee', 'Колено', ['stand', 'ohs_front', 'sls', 'slb'], 'z'],
+  ['low_back', 'Поясница', ['stand', 'ohs_front', 'fwd', 'side'], 'z'],
+  ['neck', 'Шея и плечи', ['stand', 'reach', 'trot', 'profile'], 'z'],
 ];
+/** Выбор теста: основные кнопками, по жалобе в раскрывающемся списке. pill(t) рисует одну кнопку. */
+export const tplPicker = (tpl, pill) => `<div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px">${TEMPLATES.filter(t => !t[3]).map(pill).join('')}</div>
+  <details class="acc" style="margin-top:8px"${TEMPLATES.some(t => t[3] && t[0] === tpl[0]) ? ' open' : ''}><summary style="font-weight:600;font-size:15px">По жалобе</summary><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:6px">${TEMPLATES.filter(t => t[3]).map(pill).join('')}</div></details>`;
 // шаблоны в порядке, удобном для специализации: первый открывается по умолчанию
 function orderTemplates(sp) { const o = TEMPLATE_ORDER[sp]; if (o) TEMPLATES.sort((a, b) => o.indexOf(a[0]) - o.indexOf(b[0])); }
 // профиль специалиста: имя для шапки и отчетов, контакт для записи в отчете клиенту
@@ -378,30 +380,30 @@ async function proMenu() {
   const hasSnap = await snapLoad().then(Boolean).catch(() => false);
   const d = document.createElement('div'); d.className = 'sheet'; const p = tariff(), u = meSync();
   const r = (id, icon, t) => `<button class="row-link" id="${id}">${ic(icon, 's')}<span>${t}</span>${ic('chevron-right', 's chev')}</button>`;
-  const h = t => `<div class="eyebrow" style="margin:var(--s4) 0 var(--s2)">${t}</div>`, ntf = localStorage.getItem('bp_ntf') !== '0';
+  const h = (t, open) => `<details class="acc" style="margin-top:var(--s3)"${open ? ' open' : ''}><summary style="font-weight:600;font-size:16px">${t}</summary><div style="margin-top:4px">`, he = '</div></details>', ntf = localStorage.getItem('bp_ntf') !== '0';
   d.innerHTML = `<div><h2>Меню</h2>
     ${p.plan === 'start' && !isBeta() ? `<a class="row-link gopro" href="/pricing" style="margin-top:var(--s2)"><span style="color:var(--sub);font-size:14px">${planLine()}</span>${ic('chevron-right', 's chev')}</a>` : ''}
-    ${h('Работа')}<div class="group">
+    ${h('Работа', true)}<div class="group">
       ${r('mcal', 'calendar', 'Календарь: ретесты и консультации')}
       <div class="row-link" style="cursor:default">${ic('bell', 's')}<span>Напоминания</span><button class="pill" id="mntf">${ntf ? 'Вкл' : 'Выкл'}</button></div>
       ${r('mp', 'user-plus', 'Мой профиль и бренд')}
       ${r('msp', 'settings', 'Специализация: ' + esc(((SPECIALTIES.find(x => x[0] === localStorage.getItem('bp_sp')) || ['', 'не выбрана'])[1]).split(',')[0]))}
       ${r('mref', 'user-plus', isBeta() ? 'Пригласить коллегу' : 'Пригласить коллегу: 20% его оплат вам')}${isBeta() ? '' : r('mbal', 'download', 'Баланс: ' + ((u && u.balance) || 0).toLocaleString('ru') + ' ₽')}</div>
-    ${h('Данные')}<div class="group">
+    ${he}${h('Данные')}<div class="group">
       ${r('mb', 'download', 'Сохранить копию с паролем')}
       <label class="row-link">${ic('upload', 's')}<span>Восстановить из копии</span>${ic('chevron-right', 's chev')}<input type="file" id="mr" accept=".json,.bpbackup,application/json" style="display:none"></label>
       ${hasSnap ? r('mund', 'rotate-ccw', 'Отменить последнее восстановление') : ''}</div>
-    ${h('Помощь')}<div class="group">
+    ${he}${h('Помощь')}<div class="group">
       ${canInstall() ? r('minst', 'download', 'Установить приложение на телефон') : ''}${r('mrsf', 'upload', 'Восстановить клиентов из файла')}
       ${r('demo2', 'file-text', 'Пример оценки')}
       ${r('mfb', 'message-square', 'Обратная связь: ошибка, идея, оценка')}
       ${r('mexp', 'info', 'Мои проверки: что подтверждается')}
       <a class="row-link" href="/privacy" target="_blank">${ic('shield-check', 's')}<span>Конфиденциальность</span>${ic('chevron-right', 's chev')}</a></div>
-    ${h('Аккаунт')}<div class="group">
+    ${he}${h('Аккаунт')}<div class="group">
       ${u && u.admin ? r('mst', 'settings', 'Администрирование') : ''}
       ${u && u.admin ? r('mcal2', 'download', 'Калибровка: сохранить файл себе') : ''}
       ${canSwitchMode() ? r('mc', 'rotate-ccw', 'Перейти в режим клиента') : ''}
-      ${u ? `<button class="row-link" id="mo">${ic('log-out', 's')}<span>Выйти: ${esc(u.name)}</span></button>` : ''}</div>
+      ${u ? `<button class="row-link" id="mo">${ic('log-out', 's')}<span>Выйти: ${esc(u.name)}</span></button>` : ''}</div>${he}
     <details style="margin-top:var(--s4)"><summary class="sub" style="font-size:13px;cursor:pointer">Опасная зона</summary><div class="group" style="margin-top:var(--s2)"><button class="row-link" id="mwipe" style="color:var(--over-t)">${ic('x', 's')}<span>Удалить кабинет и всех клиентов</span></button></div></details>
     <button class="btn" id="mx" style="margin-top:var(--s4)">Закрыть</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
@@ -729,7 +731,8 @@ async function quickStart() {
     <input id="nm" class="field" placeholder="Имя клиента" autocomplete="off" aria-label="Имя клиента">
     ${recent.length ? `<div class="row" style="flex-wrap:wrap;gap:8px">${recent.map(c => `<button class="pill" data-c="${c.id}">${esc(c.name)}</button>`).join('')}${clients.length > 3 ? '<button class="pill" id="morec">Ещё…</button>' : ''}</div>` : ''}
     <div class="eyebrow" style="margin-top:var(--s3)">Цель</div>
-    <div class="group" id="goals">${TEMPLATES.map(t => { const r = rowsOf(t[2]); return `<label class="row" style="min-height:60px;cursor:pointer" data-t="${t[0]}"><input type="radio" name="tpl" class="check" style="width:20px;height:20px" ${t === tpl ? 'checked' : ''}><b style="flex:1;font-size:15px">${t[1]}</b><span class="step-n">${stepsW(r.length)} · ${mins(SETUP_SEC + secs(r))} мин</span></label>`; }).join('')}</div>
+    <div id="goals">${(() => { const lab = t => { const r = rowsOf(t[2]); return `<label class="row" style="min-height:60px;cursor:pointer" data-t="${t[0]}"><input type="radio" name="tpl" class="check" style="width:20px;height:20px" ${t === tpl ? 'checked' : ''}><b style="flex:1;font-size:15px">${t[1]}</b><span class="step-n">${stepsW(r.length)} · ${mins(SETUP_SEC + secs(r))} мин</span></label>`; };
+      return `<div class="group">${TEMPLATES.filter(t => !t[3]).map(lab).join('')}</div><details class="acc" style="margin-top:8px"${tpl[3] ? ' open' : ''}><summary style="font-weight:600;font-size:15px">По жалобе</summary><div class="group" style="margin-top:6px">${TEMPLATES.filter(t => t[3]).map(lab).join('')}</div></details>`; })()}</div>
     <div class="eyebrow" style="margin-top:var(--s3)">Боль сейчас</div>
     <div class="card" style="padding:12px 14px"><div class="row" style="flex-wrap:wrap;gap:6px" id="pz">${[['', 'Нет'], ...PAIN].map(([k, n]) => `<button class="pill" data-pz="${k}">${n}</button>`).join('')}</div>
       <div id="pzd" hidden><div class="row" style="margin-top:12px;gap:10px"><input type="range" min="0" max="10" value="5" id="pzv" style="flex:1;accent-color:var(--ink)" aria-label="Боль от 0 до 10"><b class="num" id="pzn" style="width:44px;text-align:right">5/10</b></div><div id="pzw" style="font-size:13px;color:var(--sub);margin-top:2px">${painWord(5)}</div><div style="font-size:12px;color:var(--sub);margin-top:4px;line-height:1.4">${PAIN_SCALE}</div>
@@ -768,7 +771,7 @@ async function newAssessment(clientId, retestOf, opts = {}) {
     go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div style="flex:1;min-width:0"><b style="font-size:18px">${session ? 'После сеанса' : prev ? 'Повторный тест' : 'Новая оценка'}</b><div style="font-size:13px;color:var(--sub)">${esc(c.name)}</div></div></div>
      <div class="pad" style="display:flex;flex-direction:column;gap:14px;padding-bottom:20px">
       ${prev ? `<div class="card row" style="font-size:14px;line-height:1.4;align-items:flex-start">${ic('info', 's')}<span>${session ? 'Тот же ракурс, что до сеанса.' : 'Тот же протокол, что ' + fmtDate(prev.date) + '.'} Поставьте телефон так же: подсказка в кадре покажет, ближе или дальше.</span></div>` : ''}
-      ${prev ? '' : `<div><b>Цель</b><div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">${TEMPLATES.map(goalBtn).join('')}</div></div>`}
+      ${prev ? '' : `<div><b>Цель</b><div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">${TEMPLATES.filter(t => !t[3]).map(goalBtn).join('')}</div><details class="acc" style="margin-top:8px"><summary style="font-weight:600">По жалобе</summary><div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">${TEMPLATES.filter(t => t[3]).map(goalBtn).join('')}</div></details></div>`}
       <div><b>Моя гипотеза</b> <span class="sub" style="font-size:13px">необязательно</span><textarea id="expect" rows="2" placeholder="Что вы ожидаете увидеть по осмотру руками" class="field" style="margin-top:8px;height:auto;padding:12px 16px;font-size:15px">${esc(expect)}</textarea></div>
       <details class="card" ${prev && Object.values(prev.pain || {}).some(v => v > 0) ? 'open' : ''}><summary style="font-weight:600">Шаги, боль, камера${prev && Object.values(prev.pain || {}).some(v => v > 0) ? ' · отметьте боль сейчас' : ''}</summary>
         <div style="margin-top:10px">${stepList(units, pre)}</div>
@@ -1391,7 +1394,7 @@ async function sendInvite(c) {
   const as = await byClient(c.id); const lastT = as.at(-1); let tpl = TEMPLATES.find(t => t[0] === (lastT && lastT.template)) || favTpl();
   const d = document.createElement('div'); d.className = 'sheet';
   const draw = () => { d.innerHTML = `<div><h2>Ссылка клиенту</h2><p class="sub" style="font-size:14px;margin-top:6px">${esc(c.name)} откроет ссылку, пройдет тест дома, и результат сам появится в его карточке. Клиент тоже видит свою карту.</p>
-    <div class="eyebrow" style="margin-top:14px">Какой тест пройдет клиент</div><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px">${TEMPLATES.map(t => `<button class="pill" data-t="${t[0]}" style="border:1.5px solid ${tpl[0] === t[0] ? 'var(--ink)' : 'transparent'}">${t[1]}</button>`).join('')}</div>
+    <div class="eyebrow" style="margin-top:14px">Какой тест пройдет клиент</div>${tplPicker(tpl, t => `<button class="pill" data-t="${t[0]}" style="border:1.5px solid ${tpl[0] === t[0] ? 'var(--ink)' : 'transparent'}">${t[1]}</button>`)}
     <p class="sub" style="font-size:13px;margin-top:8px">${rowsOf(tpl[2]).length} шагов · около ${mins(SETUP_SEC + secs(rowsOf(tpl[2])))} мин</p>
     ${c.invite && c.invite.id ? `<button class="btn" id="chg" style="margin-top:14px">Сменить тест по отправленной ссылке</button><p style="font-size:12px;color:var(--sub);margin-top:6px">Клиент откроет ту же ссылку и пройдет выбранный тест. Новую ссылку отправлять не нужно.</p>` : ''}
     <button class="btn${c.invite && c.invite.id ? ' line' : ''}" id="snd" style="margin-top:14px">${c.invite && c.invite.id ? 'Отправить ссылку заново' : 'Отправить ссылку'}</button><p style="font-size:12px;color:var(--sub);margin-top:8px">Результат шифруется на телефоне клиента. Ключ есть только у тебя и клиента.</p>
@@ -1440,7 +1443,7 @@ async function calibSheet(edit) {
     <div class="eyebrow" style="margin-top:14px">Ваша оценка</div><div class="row" id="cl_sel" style="flex-wrap:wrap;gap:6px;margin-top:8px"></div>
     <div class="row" style="gap:6px;margin-top:10px"><span class="sub" style="font-size:13px">Сторона следующей отметки:</span>${CAL_SIDES.map(([k, t]) => `<button class="pill" data-side="${k}" style="font-size:13px;min-height:30px;border:1.5px solid ${k === side ? 'var(--ink)' : 'transparent'}">${t}</button>`).join('')}</div>
     <input class="field" id="cl_q" type="search" placeholder="Найти мышцу" style="margin-top:8px;height:44px"><div id="cl_list" style="margin-top:6px;max-height:260px;overflow:auto"></div>
-    ${edit ? '' : `<div class="eyebrow" style="margin-top:14px">Какой тест пройдет человек</div><div class="row" id="cl_tpl" style="flex-wrap:wrap;gap:6px;margin-top:8px">${TEMPLATES.map(t => `<button class="pill" data-tp="${t[0]}" style="font-size:13px;border:1.5px solid ${tpl[0] === t[0] ? 'var(--ink)' : 'transparent'}">${t[1]}</button>`).join('')}</div><p class="sub" style="font-size:12px;margin-top:6px">Для калибровки лучше «Полный»: больше замеров для сравнения.</p>`}
+    ${edit ? '' : `<div class="eyebrow" style="margin-top:14px">Какой тест пройдет человек</div><div id="cl_tpl">${tplPicker(tpl, t => `<button class="pill" data-tp="${t[0]}" style="font-size:13px;border:1.5px solid ${tpl[0] === t[0] ? 'var(--ink)' : 'transparent'}">${t[1]}</button>`)}</div><p class="sub" style="font-size:12px;margin-top:6px">Для калибровки лучше «Полный»: больше замеров для сравнения.</p>`}
     <textarea class="field" id="cl_note" rows="3" placeholder="Что еще знаете: история травм, жалобы, что делали" style="margin-top:12px;height:auto;padding:12px 16px;font-size:15px"></textarea>
     <button class="btn" id="cl_go" style="margin-top:14px">${edit ? 'Сохранить оценку' : 'Создать ссылку'}</button><button class="btn ghost" id="cl_x" style="margin-top:8px;border:0">Отмена</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; draw();
@@ -1514,7 +1517,7 @@ async function sendJoin() {
   if (!gate('invite')) return;
   let tpl = favTpl(); const d = document.createElement('div'); d.className = 'sheet';
   const draw = () => { d.innerHTML = `<div><h2>Ссылка новому клиенту</h2><p class="sub" style="font-size:14px;margin-top:6px">Клиент сам заполнит имя и анкету, пройдет тест, и у вас появится его карточка с результатом и записью движения. Одну ссылку можно отправлять разным людям.</p>
-    <div class="eyebrow" style="margin-top:14px">Какой тест пройдет клиент</div><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px">${TEMPLATES.map(t => `<button class="pill" data-t="${t[0]}" style="border:1.5px solid ${tpl[0] === t[0] ? 'var(--ink)' : 'transparent'}">${t[1]}</button>`).join('')}</div>
+    <div class="eyebrow" style="margin-top:14px">Какой тест пройдет клиент</div>${tplPicker(tpl, t => `<button class="pill" data-t="${t[0]}" style="border:1.5px solid ${tpl[0] === t[0] ? 'var(--ink)' : 'transparent'}">${t[1]}</button>`)}
     <p class="sub" style="font-size:13px;margin-top:8px">${rowsOf(tpl[2]).length} шагов · около ${mins(SETUP_SEC + secs(rowsOf(tpl[2])))} мин + анкета</p>
     <button class="btn" id="snd" style="margin-top:14px">Отправить ссылку</button><button class="btn ghost" id="cx" style="margin-top:8px;border:0">Отмена</button></div>`;
     d.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tpl = TEMPLATES.find(t => t[0] === b.dataset.t); draw(); });
