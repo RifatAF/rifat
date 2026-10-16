@@ -560,17 +560,23 @@ export async function body3D(container, spots, onPick, opts = {}) {
   const W = container.clientWidth, H = container.clientHeight;
   const camera = new THREE.PerspectiveCamera(30, W / H, .1, 50); camera.position.set(0, 0, 4.2);
   const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(device.weak ? 1.25 : 1.75, devicePixelRatio)); renderer.setSize(W, H); container.innerHTML = ''; container.appendChild(renderer.domElement); if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
-  container.insertAdjacentHTML('beforeend', '<a href="/licenses" target="_blank" style="position:absolute;right:12px;bottom:6px;font-size:12px;color:#5A6872;text-decoration:none">3D: Z-Anatomy, CC BY-SA 4.0</a><div class="hint3d">Двумя пальцами: приблизить и повернуть</div>');
+  container.insertAdjacentHTML('beforeend', '<a href="/licenses" target="_blank" style="position:absolute;right:12px;bottom:6px;font-size:12px;color:#5A6872;text-decoration:none">3D: Z-Anatomy, CC BY-SA 4.0</a><div class="hint3d">Один палец: повернуть · два: приблизить</div><div class="ctl3d"><button data-c="in" aria-label="Приблизить">+</button><button data-c="out" aria-label="Отдалить">−</button><button data-c="turn" aria-label="Повернуть на 180°">↻</button><button data-c="home" aria-label="Все тело">⌂</button></div>');
   setTimeout(() => { const h = container.querySelector('.hint3d'); if (h) h.style.opacity = 0; }, 3000);
   // масштаб к точке под пальцами, сдвиг двумя пальцами: можно рассмотреть шею или стопу, а не только центр
   const ctl = new OrbitControls(camera, renderer.domElement); ctl.enablePan = true; ctl.screenSpacePanning = true; ctl.zoomToCursor = true;
-  ctl.minDistance = .35; ctl.maxDistance = 6; ctl.enableDamping = true; ctl.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+  ctl.minDistance = .35; ctl.maxDistance = 6; ctl.enableDamping = true; ctl.dampingFactor = .12; ctl.rotateSpeed = .7; ctl.zoomSpeed = .9; ctl.panSpeed = .7;
+  // фигура не переворачивается: наклон камеры ограничен, вращение в основном вокруг вертикальной оси, как на поворотном столе
+  ctl.minPolarAngle = Math.PI * .3; ctl.maxPolarAngle = Math.PI * .7; ctl.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+  renderer.domElement.style.touchAction = 'none';
   const ray = new THREE.Raycaster(); let down = null;
   // плавный перелет камеры к зоне
   let fly = null; const flyTo = (target, dist, back) => { const from = { t: ctl.target.clone(), p: camera.position.clone() };
     const dir = back === undefined ? camera.position.clone().sub(ctl.target).normalize() : new THREE.Vector3(0, 0, back ? -1 : 1);
     fly = { from, to: { t: target.clone(), p: target.clone().add(dir.multiplyScalar(dist)) }, k: 0 }; };
   const H0 = 2; // рост модели в сцене
+  container.querySelectorAll('.ctl3d [data-c]').forEach(b => b.onclick = e => { e.stopPropagation(); const c = b.dataset.c, d = camera.position.distanceTo(ctl.target);
+    if (c === 'in' || c === 'out') flyTo(ctl.target.clone(), Math.max(ctl.minDistance, Math.min(ctl.maxDistance, d * (c === 'in' ? .7 : 1.4))));
+    else if (c === 'turn') api.turn(!isBack); else api.focus('all'); });
   const ZONES = { all: [0, 4.2], head: [.82, 1.1], shoulders: [.62, 1.3], back: [.32, 1.5], pelvis: [.05, 1.4], knees: [-.45, 1.3], feet: [-.88, 1.0] };
   let tapT = 0; renderer.domElement.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY];
     // двойное касание: приблизиться к этой точке
@@ -620,7 +626,7 @@ export async function body3D(container, spots, onPick, opts = {}) {
     if (!opts.arrows) return;
     for (const s of spots) { if (!RGB[s.k] || order.indexOf(s.id) < 0 || (only && !only.has(s.id))) continue; const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0);
       if (!lanesBy.has(g)) lanesBy.set(g, lanesOf(g)); const L = lanesBy.get(g); if (!L) continue;
-      const n = s.k === 'WEAK' ? 14 : Math.round(18 + 22 * Math.min(1, Math.abs(s.tone))); // сильнее отклонение, гуще поток
+      const n = s.k === 'WEAK' ? 10 : Math.round(10 + 14 * Math.min(1, Math.abs(s.tone))); // сильнее отклонение, гуще поток
       for (let j = 0; j < n; j++) parts.push({ k: s.k, ln: L[j % L.length], half: j % 2, ph: Math.random(), sp: (s.k === 'WEAK' ? .05 : .32) * (.75 + Math.random() * .5), fl: Math.random() * 6.3, c: RGB[s.k] }); }
     if (!parts.length) return; const nv = parts.length * TAIL.length, geo2 = new THREE.BufferGeometry();
     geo2.setAttribute('position', new THREE.BufferAttribute(new Float32Array(nv * 3), 3)); geo2.setAttribute('aSize', new THREE.BufferAttribute(new Float32Array(nv), 1));
@@ -634,8 +640,8 @@ export async function body3D(container, spots, onPick, opts = {}) {
       if (p.k === 'WEAK') { f = .15 + .7 * ((p.fl * .13 + p.ph) % 1); dir = p.half ? 1 : -1; a = .25 + .45 * (.5 + .5 * Math.sin(now / 420 + p.fl)); }
       // гипертонус: от конца к центру; перерастяжение: от центра к концу. Половина частиц с одной стороны, половина с другой
       else { const r = p.k === 'SHORT' ? p.ph * .5 : .5 - p.ph * .5; f = p.half ? 1 - r : r; dir = ((p.k === 'SHORT') === !p.half) ? 1 : -1; a = Math.sin(Math.PI * p.ph) ** .7; }
-      for (let t = 0; t < TAIL.length; t++) { const ft = f - dir * t * (p.k === 'WEAK' ? .015 : .04), [q, nrm] = along(p.ln, ft), o = (i * TAIL.length + t);
-        q.addScaledVector(nrm, 5); P[o * 3] = q.x; P[o * 3 + 1] = q.y; P[o * 3 + 2] = q.z; S[o] = (p.k === 'WEAK' ? 18 : 24) * TAIL[t][0]; A[o] = a * TAIL[t][1]; } });
+      for (let t = 0; t < TAIL.length; t++) { const ft = f - dir * t * (p.k === 'WEAK' ? .012 : .03), [q, nrm] = along(p.ln, ft), o = (i * TAIL.length + t);
+        q.addScaledVector(nrm, 5); P[o * 3] = q.x; P[o * 3 + 1] = q.y; P[o * 3 + 2] = q.z; S[o] = (p.k === 'WEAK' ? 8 : 10) * TAIL[t][0]; A[o] = a * TAIL[t][1] * .75; } });
     pts.geometry.attributes.position.needsUpdate = true; pts.geometry.attributes.aSize.needsUpdate = true; pts.geometry.attributes.aAlpha.needsUpdate = true; };
   buildArrows(spots); let normOn = false, lastArrow = 0;
   const wv = new THREE.Vector3(), nv = new THREE.Vector3(), cv3 = new THREE.Vector3();

@@ -58,13 +58,16 @@ try {
   const need = [...new Set([...ex.map(sayText), ...extra, ...(regen ? Object.keys(idx) : [])])].filter(t => t && (regen || !idx[t]));
   if (need.length) {
     const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
-    const tts = new MsEdgeTTS(); await tts.setMetadata(voiceName, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-    let made = 0; const t0 = Date.now();
-    for (const text of need) { if (Date.now() - t0 > 240000) break;
-      try { const { audioStream } = tts.toStream(text); const ch = []; await new Promise((ok, bad) => { audioStream.on('data', c => ch.push(c)); audioStream.on('end', ok); audioStream.on('close', ok); audioStream.on('error', bad); });
-        const buf = Buffer.concat(ch); if (buf.length < 2000) continue;
-        const f = crypto.createHash('sha1').update(voiceName + text).digest('hex').slice(0, 16) + '.mp3'; await save(OUT + '/voice/' + f, buf); idx[text] = f; made++; } catch (e) { console.log('voice: не озвучено', text.slice(0, 40), e.message); } }
-    try { tts.close(); } catch (e) {}
+    // 4 соединения параллельно, до 15 минут на сборку: после смены адреса сервиса Microsoft (msedge-tts 2.1) озвучиваются все новые фразы за одну сборку
+    const conn = async () => { const t = new MsEdgeTTS(); await t.setMetadata(voiceName, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3); return t; };
+    const one = async (tts, text) => { const { audioStream } = tts.toStream(text); const ch = []; await new Promise((ok, bad) => { audioStream.on('data', c => ch.push(c)); audioStream.on('end', ok); audioStream.on('close', ok); audioStream.on('error', bad); }); return Buffer.concat(ch); };
+    let made = 0, fails = 0; const t0 = Date.now(), queue = need.slice();
+    await Promise.all(Array.from({ length: 4 }, async () => { let tts = await conn();
+      while (queue.length && Date.now() - t0 < 900000 && fails < 40) { const text = queue.shift();
+        for (let attempt = 0; attempt < 2; attempt++) { try { const buf = await one(tts, text); if (buf.length < 2000) throw new Error('пустой ответ');
+          const f = crypto.createHash('sha1').update(voiceName + text).digest('hex').slice(0, 16) + '.mp3'; await save(OUT + '/voice/' + f, buf); idx[text] = f; made++; break; }
+          catch (e) { fails++; try { tts.close(); } catch (x) {} tts = await conn().catch(() => tts); if (attempt) console.log('voice: не озвучено', text.slice(0, 40), e.message); } } }
+      try { tts.close(); } catch (e) {} }));
     await save(OUT + '/voice/index.json', JSON.stringify(idx)); console.log(`voice: озвучено ${made} из ${need.length} (${voiceName})`);
   }
 } catch (e) { console.log('voice: озвучка пропущена:', e.message); }

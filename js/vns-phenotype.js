@@ -219,8 +219,8 @@ export async function runLoader({ ready, video, mirror = true } = {}) {
 /** Короткая сводка для экрана. */
 export function vnsSummary(v) {
   if (!v || v.status !== 'OK') return null; const out = [];
-  if (v.ppg && v.ppg.valid) out.push(`Пульс ${v.ppg.hr}${v.ppg.hrv ? `, HRV ${v.ppg.hrv} мс` : ''}${v.ppg.rough ? ' (оценка)' : ''}`);
+  // пульс по камере (rPPG) не показываем: на телефонах он выходил неверным (HRV 1290 мс при норме 20–100)
   if (v.saccadeMs) out.push(`Реакция глаз ${v.saccadeMs} мс${v.saccadeMs < SACCADE_NORM[0] ? ' (быстрее нормы)' : v.saccadeMs > SACCADE_NORM[1] ? ' (медленнее нормы)' : ' (норма)'}`);
-  if (v.pursuit) out.push(`Плавность слежения ${Math.round(Math.max(0, v.pursuit.corr) * 100)}%${v.pursuit.catchUp > 2 ? ', рывки взгляда' : ''}`);
+  if (v.pursuit && v.pursuit.corr > .1) out.push(`Плавность слежения ${Math.round(Math.max(0, v.pursuit.corr) * 100)}%${v.pursuit.catchUp > 2 ? ', рывки взгляда' : ''}`);
   return out;
 }
