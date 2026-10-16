@@ -588,44 +588,55 @@ export async function body3D(container, spots, onPick, opts = {}) {
       const el = document.createElement('button'); el.className = 'mark3d'; el.setAttribute('aria-label', s.key); el.innerHTML = `<span class="mark ${s.k}"${s.derived && !s.edited ? ' style="opacity:.75"' : ''}></span>`;
       el.onclick = () => onPick && onPick(s.key); container.appendChild(el); return { el, local: new THREE.Vector3(c[0], c[2], -c[1]), vis: null }; }).filter(Boolean); };
   buildMarks(spots);
-  // Стрелки по волокнам: главная ось мышцы (PCA по ее наружной поверхности) ≈ направление волокон.
-  // Гипертонус: стрелки бегут с обоих концов к центру (мышца стягивается). Перерастяжение: от центра к концам (ее растягивают).
-  // Слабая: точки вдоль волокон медленно гаснут и загораются (мышца не включается). Стрелки лежат на коже, по нормали сетки.
+  // Поток частиц по волокнам, как ветер на погодной карте: главная ось мышцы (PCA по ее наружной поверхности) ≈ направление
+  // волокон, поперек оси несколько дорожек на всю ширину мышцы. Гипертонус: частицы стекаются с концов к центру и гаснут
+  // в нем (мышца стягивается). Перерастяжение: разбегаются от центра к краям (мышцу растягивают). Слабая: редкие тусклые
+  // частицы еле ползут и мерцают (мышца не включается). Частица — светящаяся точка с хвостом, лежит на коже по нормали сетки.
   const arrows = new THREE.Group(); obj.add(arrows); let arr = [];
-  const chevron = (() => { const sh = new THREE.Shape(); sh.moveTo(0, 9); sh.lineTo(7, -3); sh.lineTo(3.2, -3); sh.lineTo(0, 2.5); sh.lineTo(-3.2, -3); sh.lineTo(-7, -3); sh.closePath(); return new THREE.ShapeGeometry(sh); })();
-  const dot = new THREE.CircleGeometry(3.4, 12);
-  const pathOf = g => { const V = []; for (let v = 0; v < m.nv; v++) if (m.grp[v] === g && m.nrm[v * 3] * m.pos[v * 3] + m.nrm[v * 3 + 1] * m.pos[v * 3 + 1] > 0) V.push(v);
-    if (V.length < 12) return null; const c = [0, 0, 0]; for (const v of V) for (let q = 0; q < 3; q++) c[q] += m.pos[v * 3 + q] / V.length;
+  const lanesOf = g => { const V = []; for (let v = 0; v < m.nv; v++) if (m.grp[v] === g && m.nrm[v * 3] * m.pos[v * 3] + m.nrm[v * 3 + 1] * m.pos[v * 3 + 1] > 0) V.push(v);
+    if (V.length < 12) return null; const c = [0, 0, 0], nn = [0, 0, 0]; for (const v of V) for (let q = 0; q < 3; q++) { c[q] += m.pos[v * 3 + q] / V.length; nn[q] += m.nrm[v * 3 + q]; }
     const cv = [0, 0, 0, 0, 0, 0, 0, 0, 0]; for (const v of V) { const d = [0, 1, 2].map(q => m.pos[v * 3 + q] - c[q]); for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) cv[a * 3 + b] += d[a] * d[b]; }
     let u = [1, .7, .4]; for (let it = 0; it < 24; it++) { const w = [0, 1, 2].map(a => cv[a * 3] * u[0] + cv[a * 3 + 1] * u[1] + cv[a * 3 + 2] * u[2]), l = Math.hypot(...w) || 1; u = w.map(x => x / l); }
-    const pr = V.map(v => (m.pos[v * 3] - c[0]) * u[0] + (m.pos[v * 3 + 1] - c[1]) * u[1] + (m.pos[v * 3 + 2] - c[2]) * u[2]).sort((a, b) => a - b);
-    const t0 = pr[Math.floor(pr.length * .12)], t1 = pr[Math.floor(pr.length * .88)], K = 15, P = [], N = [];
-    for (let k = 0; k < K; k++) { const t = t0 + (t1 - t0) * k / (K - 1), q = [c[0] + u[0] * t, c[1] + u[1] * t, c[2] + u[2] * t]; let best = -1, bd = 1e18;
-      for (const v of V) { const d = (m.pos[v * 3] - q[0]) ** 2 + (m.pos[v * 3 + 1] - q[1]) ** 2 + (m.pos[v * 3 + 2] - q[2]) ** 2; if (d < bd) { bd = d; best = v; } }
-      // в координаты сцены: X = x, Y = z, Z = −y
-      P.push(new THREE.Vector3(m.pos[best * 3], m.pos[best * 3 + 2], -m.pos[best * 3 + 1])); N.push(new THREE.Vector3(m.nrm[best * 3], m.nrm[best * 3 + 2], -m.nrm[best * 3 + 1]).normalize()); }
-    return { P, N }; };
-  const paths = new Map(), HEX = { SHORT: 0xC8414A, HYPER: 0xD9822B, WEAK: 0x2F6BD8 };
-  const at = (pa, f) => { const x = Math.max(0, Math.min(pa.P.length - 1.001, f * (pa.P.length - 1))), i = Math.floor(x), k = x - i;
-    return { p: pa.P[i].clone().lerp(pa.P[i + 1], k), n: pa.N[i].clone().lerp(pa.N[i + 1], k).normalize(), d: pa.P[i + 1].clone().sub(pa.P[i]).normalize() }; };
-  const buildArrows = spots => { for (const a of arr) { arrows.remove(a.mesh); a.mesh.material.dispose(); } arr = [];
+    // поперечная ось: перпендикуляр к оси волокон в плоскости кожи
+    const nl = Math.hypot(...nn) || 1, n0 = nn.map(x => x / nl); let w = [u[1] * n0[2] - u[2] * n0[1], u[2] * n0[0] - u[0] * n0[2], u[0] * n0[1] - u[1] * n0[0]]; const wl = Math.hypot(...w) || 1; w = w.map(x => x / wl);
+    const pu = V.map(v => (m.pos[v * 3] - c[0]) * u[0] + (m.pos[v * 3 + 1] - c[1]) * u[1] + (m.pos[v * 3 + 2] - c[2]) * u[2]).sort((a, b) => a - b);
+    const pw = V.map(v => (m.pos[v * 3] - c[0]) * w[0] + (m.pos[v * 3 + 1] - c[1]) * w[1] + (m.pos[v * 3 + 2] - c[2]) * w[2]).sort((a, b) => a - b);
+    const t0 = pu[Math.floor(pu.length * .1)], t1 = pu[Math.floor(pu.length * .9)], o0 = pw[Math.floor(pw.length * .2)], o1 = pw[Math.floor(pw.length * .8)], K = 16, NL = 5, lanes = [];
+    for (let li = 0; li < NL; li++) { const o = o0 + (o1 - o0) * (NL === 1 ? .5 : li / (NL - 1)), P = [], N = []; let miss = 0;
+      for (let k = 0; k < K; k++) { const t = t0 + (t1 - t0) * k / (K - 1), q = [0, 1, 2].map(a => c[a] + u[a] * t + w[a] * o); let best = -1, bd = 1e18;
+        for (const v of V) { const d = (m.pos[v * 3] - q[0]) ** 2 + (m.pos[v * 3 + 1] - q[1]) ** 2 + (m.pos[v * 3 + 2] - q[2]) ** 2; if (d < bd) { bd = d; best = v; } }
+        if (bd > 900) miss++; // точка дорожки ушла с мышцы дальше 3 см
+        P.push(new THREE.Vector3(m.pos[best * 3], m.pos[best * 3 + 2], -m.pos[best * 3 + 1])); N.push(new THREE.Vector3(m.nrm[best * 3], m.nrm[best * 3 + 2], -m.nrm[best * 3 + 1]).normalize()); }
+      if (miss < K * .4) lanes.push({ P, N }); }
+    return lanes.length ? lanes : null; };
+  const lanesBy = new Map(), RGB = { SHORT: [.784, .255, .29], HYPER: [.851, .51, .169], WEAK: [.184, .42, .847] };
+  const TAIL = [[1, 1], [.8, .6], [.62, .34], [.46, .16]]; // размер и яркость головы и хвоста
+  const pmat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, uniforms: { uScale: { value: 1 } },
+    vertexShader: 'attribute float aSize; attribute float aAlpha; attribute vec3 aColor; uniform float uScale; varying float vA; varying vec3 vC; void main(){ vA = aAlpha; vC = aColor; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = aSize * uScale / -mv.z; gl_Position = projectionMatrix * mv; }',
+    fragmentShader: 'varying float vA; varying vec3 vC; void main(){ float d = length(gl_PointCoord - .5); if (d > .5) discard; float a = vA * smoothstep(.5, .28, d); gl_FragColor = vec4(mix(vec3(1.), vC * .8, smoothstep(.12, .45, d)), a); }' });
+  let pts = null, parts = [];
+  const along = (ln, f) => { const x = Math.max(0, Math.min(ln.P.length - 1.001, f * (ln.P.length - 1))), i = Math.floor(x), k = x - i; return [ln.P[i].clone().lerp(ln.P[i + 1], k), ln.N[i].clone().lerp(ln.N[i + 1], k).normalize()]; };
+  const buildArrows = spots => { parts = []; if (pts) { arrows.remove(pts); pts.geometry.dispose(); pts = null; }
     if (!opts.arrows) return;
-    for (const s of spots) { if (!HEX[s.k] || order.indexOf(s.id) < 0 || (only && !only.has(s.id))) continue; const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0);
-      if (!paths.has(g)) paths.set(g, pathOf(g)); const pa = paths.get(g); if (!pa) continue;
-      const n = s.k === 'WEAK' ? 7 : 3;
-      for (const half of s.k === 'WEAK' ? [0] : [0, 1]) for (let j = 0; j < n; j++) {
-        const mesh = new THREE.Mesh(s.k === 'WEAK' ? dot : chevron, new THREE.MeshBasicMaterial({ color: HEX[s.k], transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
-        mesh.renderOrder = 2; arrows.add(mesh); arr.push({ mesh, k: s.k, pa, half, j, n }); } }
-    arrows.userData.done = false; };
-  const mx = new THREE.Matrix4(), xa = new THREE.Vector3();
-  const stepArrows = now => { const T = now / 1000;
-    for (const a of arr) { let f, dir = 1, op;
-      if (a.k === 'WEAK') { f = (a.j + .5) / a.n; op = .35 + .55 * (.5 + .5 * Math.sin(T * 2.2 - a.j * .5)); }
-      else { const ph = (T * .55 + a.j / a.n) % 1; op = Math.sin(Math.PI * ph) * .95;
-        // половина 0: левый конец ↔ центр, половина 1: правый конец ↔ центр
-        const r = a.k === 'SHORT' ? ph * .5 : .5 - ph * .5; f = a.half ? 1 - r : r; dir = (a.k === 'SHORT') === !a.half ? 1 : -1; }
-      const q = at(a.pa, f), d = q.d.multiplyScalar(dir); xa.crossVectors(d, q.n).normalize(); const dn = d.clone().crossVectors(q.n, xa).normalize();
-      const S = a.k === 'WEAK' ? 2.2 : 3; mx.makeBasis(xa.multiplyScalar(S), dn.multiplyScalar(S), q.n.clone().multiplyScalar(S)); a.mesh.matrixAutoUpdate = false; a.mesh.matrix.copy(mx).setPosition(q.p.addScaledVector(q.n, 6)); a.mesh.material.opacity = op; } };
+    for (const s of spots) { if (!RGB[s.k] || order.indexOf(s.id) < 0 || (only && !only.has(s.id))) continue; const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0);
+      if (!lanesBy.has(g)) lanesBy.set(g, lanesOf(g)); const L = lanesBy.get(g); if (!L) continue;
+      const n = s.k === 'WEAK' ? 14 : Math.round(18 + 22 * Math.min(1, Math.abs(s.tone))); // сильнее отклонение, гуще поток
+      for (let j = 0; j < n; j++) parts.push({ k: s.k, ln: L[j % L.length], half: j % 2, ph: Math.random(), sp: (s.k === 'WEAK' ? .05 : .32) * (.75 + Math.random() * .5), fl: Math.random() * 6.3, c: RGB[s.k] }); }
+    if (!parts.length) return; const nv = parts.length * TAIL.length, geo2 = new THREE.BufferGeometry();
+    geo2.setAttribute('position', new THREE.BufferAttribute(new Float32Array(nv * 3), 3)); geo2.setAttribute('aSize', new THREE.BufferAttribute(new Float32Array(nv), 1));
+    geo2.setAttribute('aAlpha', new THREE.BufferAttribute(new Float32Array(nv), 1)); const colA = new Float32Array(nv * 3); parts.forEach((p, i) => { for (let t = 0; t < TAIL.length; t++) colA.set(p.c, (i * TAIL.length + t) * 3); });
+    geo2.setAttribute('aColor', new THREE.BufferAttribute(colA, 3)); pts = new THREE.Points(geo2, pmat); pts.frustumCulled = false; pts.renderOrder = 2; arrows.add(pts); arrows.userData.done = false; };
+  let lastT = performance.now();
+  const stepArrows = now => { if (!pts) return; const dt = Math.min(.1, (now - lastT) / 1000); lastT = now;
+    pmat.uniforms.uScale.value = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360)) * root.scale.x;
+    const P = pts.geometry.attributes.position.array, S = pts.geometry.attributes.aSize.array, A = pts.geometry.attributes.aAlpha.array;
+    parts.forEach((p, i) => { p.ph = (p.ph + dt * p.sp) % 1; let f, dir, a;
+      if (p.k === 'WEAK') { f = .15 + .7 * ((p.fl * .13 + p.ph) % 1); dir = p.half ? 1 : -1; a = .25 + .45 * (.5 + .5 * Math.sin(now / 420 + p.fl)); }
+      // гипертонус: от конца к центру; перерастяжение: от центра к концу. Половина частиц с одной стороны, половина с другой
+      else { const r = p.k === 'SHORT' ? p.ph * .5 : .5 - p.ph * .5; f = p.half ? 1 - r : r; dir = ((p.k === 'SHORT') === !p.half) ? 1 : -1; a = Math.sin(Math.PI * p.ph) ** .7; }
+      for (let t = 0; t < TAIL.length; t++) { const ft = f - dir * t * (p.k === 'WEAK' ? .015 : .04), [q, nrm] = along(p.ln, ft), o = (i * TAIL.length + t);
+        q.addScaledVector(nrm, 5); P[o * 3] = q.x; P[o * 3 + 1] = q.y; P[o * 3 + 2] = q.z; S[o] = (p.k === 'WEAK' ? 18 : 24) * TAIL[t][0]; A[o] = a * TAIL[t][1]; } });
+    pts.geometry.attributes.position.needsUpdate = true; pts.geometry.attributes.aSize.needsUpdate = true; pts.geometry.attributes.aAlpha.needsUpdate = true; };
   buildArrows(spots); let normOn = false, lastArrow = 0;
   const wv = new THREE.Vector3(), nv = new THREE.Vector3(), cv3 = new THREE.Vector3();
   const placeMarks = () => { const w = container.clientWidth, h = container.clientHeight;
@@ -646,7 +657,7 @@ export async function body3D(container, spots, onPick, opts = {}) {
   function anim() { if (!alive) return; if (!renderer.domElement.isConnected) { api.dispose(); return; }
     if (rv) { reveal(); dirty = true; }
     if (fly) { fly.k = Math.min(1, fly.k + .06); const e = 1 - (1 - fly.k) ** 3; ctl.target.lerpVectors(fly.from.t, fly.to.t, e); camera.position.lerpVectors(fly.from.p, fly.to.p, e); if (fly.k >= 1) fly = null; dirty = true; }
-    const now = performance.now(); if (arr.length && !normOn && now - lastArrow > (device.weak ? 66 : 33)) { lastArrow = now; if (!reduceMotion() || !arrows.userData.done) { stepArrows(reduceMotion() ? 900 : now); arrows.userData.done = true; dirty = true; } }
+    const now = performance.now(); if (parts.length && !normOn && now - lastArrow > (device.weak ? 66 : 33)) { lastArrow = now; if (!reduceMotion() || !arrows.userData.done) { stepArrows(reduceMotion() ? 900 : now); arrows.userData.done = true; dirty = true; } }
     ctl.update(); if (dirty) { dirty = false; renderer.render(scene, camera); placeMarks(); } requestAnimationFrame(anim); }
   let isBack = false;
   const api = { turn(back) { isBack = back; const d = camera.position.distanceTo(ctl.target); flyTo(ctl.target, d, back); },
@@ -658,7 +669,7 @@ export async function body3D(container, spots, onPick, opts = {}) {
     norm(on) { normOn = !!on; const sp = normOn ? lastSpots.map(s => ({ ...s, k: 'OK', tone: 0 })) : (only ? lastSpots.map(s => only.has(s.id) ? s : { ...s, k: 'OK', tone: 0 }) : lastSpots);
       paint(sp, col); target.set(col); geo.attributes.color.needsUpdate = true; arrows.visible = !normOn; marks.forEach(x => { x.el.hidden = normOn; }); dirty = true; },
     update(spots) { lastSpots = spots; spots = only ? spots.map(s => only.has(s.id) ? s : { ...s, k: 'OK', tone: 0 }) : spots; paint(spots, col); target.set(col); geo.attributes.color.needsUpdate = true; { const ix = meshIndex(m, spots); if (ix !== curIx) { curIx = ix; geo.setIndex(new THREE.BufferAttribute(ix, 1)); } } buildMarks(spots); buildArrows(spots); if (normOn) api.norm(true); dirty = true; },
-    dispose() { if (!alive) return; alive = false; ctl.dispose(); for (const a of arr) a.mesh.material.dispose(); chevron.dispose(); dot.dispose(); geo.dispose(); mat.dispose(); renderer.dispose(); try { renderer.forceContextLoss(); } catch (e) {} } };
+    dispose() { if (!alive) return; alive = false; ctl.dispose(); if (pts) pts.geometry.dispose(); pmat.dispose(); geo.dispose(); mat.dispose(); renderer.dispose(); try { renderer.forceContextLoss(); } catch (e) {} } };
   anim(); return api;
 }
 

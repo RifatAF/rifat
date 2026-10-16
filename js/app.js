@@ -1,4 +1,5 @@
 // BodyPassport web: тот же поток, тексты и дизайн, что в Android-версии.
+import { backupSoon, restoreIfEmpty, downloadBackup, pickRestore } from './backup.js';
 import { stateScores, cnsDelta, LAW, LAW_WHY } from './muscle-logic.js';
 import { P, F, G, Movement, sideView, levelled, analyze, fmt, standSnapshot, sideSnapshot, features } from './analysis.js';
 import { track, vasSave, vasLog, vasStats, vasDelta, channel, screenView, deviceInfo } from './track.js';
@@ -11,7 +12,6 @@ import { applyRuleWeights } from './core.js';
 import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, mailLinkLogin, logout, deleteAccount, betaUsers, providers, config, setAppMode, setRole } from './auth.js';
 import { exFigure, hasFigure } from './exfig.js';
 import { painWord, PAIN_SCALE } from './vas.js';
-import { recordTest, saveBlob } from './core.js';
 import { sayText } from './saytext.js';
 import { BATTERY_UNITS, forwardBend, singleBalance, thoracicRotation, overheadReach, chairStand, retroGait, autoScale } from './test-battery.js';
 import { mountPacing, falseStart, matchScore, PHASE, SHORT_CMD, GO_WORD, COUNT_WORDS, numWord, ZERO_CLICK } from './pacing-guard.js';
@@ -49,7 +49,7 @@ function claimLegacy() { const u = meSync(); if (!u || localStorage.getItem('bp_
   for (const k of ['bp_tests', 'bp_profile', 'bp_done']) { const v = localStorage.getItem(k); if (v != null && localStorage.getItem(K(k)) == null) localStorage.setItem(K(k), v); localStorage.removeItem(k); } }
 window.addEventListener('bp-login', () => claimLegacy());
 const tests = () => JSON.parse(localStorage.getItem(K('bp_tests')) || '[]');
-const saveTest = t => { const a = tests(); a.push(t); localStorage.setItem(K('bp_tests'), JSON.stringify(a.slice(-20))); };
+const saveTest = t => { const a = tests(); a.push(t); localStorage.setItem(K('bp_tests'), JSON.stringify(a.slice(-20))); backupSoon(); };
 const bot = () => C.booking + '?start=app_' + encodeURIComponent(REF);
 // v2.0: Гипертонус (SHORT), Перерастяжение (HYPER), Слабая (WEAK); NT — мышца этим тестом не измерялась, «нормой» ее не называем
 export const TONE = { HYPER: ['Перерастяжение', 'var(--hyper)', 'var(--hyperS)', 'похоже, перерастянута', 'Перерастяжение', 'var(--hyperT)'], SHORT: ['Гипертонус', 'var(--short)', 'var(--short-s)', 'похоже, гипертонус', 'Гипертонус', 'var(--short-t)'],
@@ -60,9 +60,9 @@ const plural = id => { const z = (C.muscles[id] && C.muscles[id].zone) || ''; re
 export const toneText = (s, i) => { const t = TONE[s.k][i]; return plural(s.id) ? t.replace('нута', 'нуты').replace('слабая', 'слабые').replace('ается', 'аются') : t; };
 // что значит каждый цвет: одна строка простыми словами (клиент путал «укорочена» и «перегружена»)
 export const TONE_HELP = `<details class="q"><summary aria-label="Что значат цвета">?</summary><div style="display:flex;flex-direction:column;gap:6px;line-height:1.4">
-  <span><span class="mark sm SHORT"></span> <b>Гипертонус</b> →← мышца зажата и укорочена</span>
-  <span><span class="mark sm HYPER"></span> <b>Перерастяжение</b> ←→ мышцу тянет соседняя. Не растягивать и не раскатывать</span>
-  <span><span class="mark sm WEAK"></span> <b>Слабая</b> мышца не включается</span></div></details>`;
+  <span><span class="mark sm SHORT"></span> <b>Гипертонус</b> →← мышца зажата: в 3D поток стекается к центру</span>
+  <span><span class="mark sm HYPER"></span> <b>Перерастяжение</b> ←→ мышцу тянет соседняя: поток разбегается к краям. Не растягивать</span>
+  <span><span class="mark sm WEAK"></span> <b>Слабая</b> мышца не включается: искры еле мерцают</span></div></details>`;
 export const TONE_HEX = { HYPER: '#D9822B', SHORT: '#C8414A', WEAK: '#2F6BD8', OK: '#26775D', NT: '#B9BEC2', DONE: '#3FAE76' };
 export const TONE_TEXT_HEX = { HYPER: '#9E4E0E', SHORT: '#B3343B', WEAK: '#2A5CB8', OK: '#1E7149', NT: '#6B747A', DONE: '#1E7149' };
 const sideWord = s => s === 'RIGHT' ? 'справа' : 'слева';
@@ -271,8 +271,8 @@ export function onboarding() {
     <div class="pad" style="margin-top:24px"><h1>Тест движения за 3 минуты</h1>
       <p class="sub" style="margin-top:10px">Камера покажет, какие мышцы зажаты, перерастянуты или слабые, и подберет упражнения.</p>
       ${INV() ? '' : `<div class="row" style="margin-top:20px"><img src="img/rifat.jpg" alt="Рифат Аюпов" width="40" height="40" style="border-radius:50%;object-fit:cover;flex:none"><div style="font-size:13px;line-height:1.35"><b style="font-weight:600;display:block">Методика Рифата Аюпова</b><span style="color:var(--sub)">кинезиотерапевт, биомеханик</span></div></div>`}</div>
-    <div class="dock" style="padding-top:28px"><button class="btn" id="next">Начать тест <span class="meta">· бесплатно</span></button>${myReports().length || tests().length ? '<button class="btn ghost" id="mycab">Мой кабинет</button>' : ''}<button class="link" id="pro" style="display:block;margin:0 auto;font-size:14px;color:var(--sub);font-weight:500">Я специалист</button></div></div>`);
-  $('#next').onclick = () => { track('onb_done'); prep(); }; if ($('#pro')) $('#pro').onclick = () => localStorage.getItem('bp_inv') ? specSheet() : openPro(); if ($('#mycab')) $('#mycab').onclick = clientHome;
+    <div class="dock" style="padding-top:28px"><button class="btn" id="next">Начать тест <span class="meta">· бесплатно</span></button>${myReports().length || tests().length ? '<button class="btn ghost" id="mycab">Мой кабинет</button>' : ''}<div class="row" style="justify-content:center;gap:20px"><button class="link" id="pro" style="font-size:14px;color:var(--sub);font-weight:500">Я специалист</button>${canInstall() ? `<button class="link" id="inst1" style="font-size:14px;font-weight:600">${ic('download', 's')} Установить</button>` : ''}</div></div></div>`);
+  $('#next').onclick = () => { track('onb_done'); prep(); }; if ($('#pro')) $('#pro').onclick = () => localStorage.getItem('bp_inv') ? specSheet() : openPro(); if ($('#mycab')) $('#mycab').onclick = clientHome; if ($('#inst1')) $('#inst1').onclick = () => installNow();
 }
 
 // ---------- 2. подготовка ----------
@@ -525,8 +525,8 @@ async function runProtocol0(protocol, opts = {}) {
   const video = app.querySelector('video'); const sk = $('#sk');
   try { if (!device.camera) throw new Error('no camera api'); await startCamera(video); } catch (e) { stop = true; return cameraHelp(); }
   // бета: тест пишется в видеофайл с камерой и скелетом, файл сохраняется в «Загрузки» по окончании или при выходе
-  const rec = isBetaMode() && !device.wv && localStorage.getItem('bp_rec') !== '0' ? recordTest(video) : null;
-  const saveRec = async () => { if (!rec) return; const b = await rec.stop(); if (b && b.size > 1e4) { saveBlob(b, `bodypassport-test-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.${/mp4/.test(b.type) ? 'mp4' : 'webm'}`); toast('Видео теста сохранено в «Загрузки»'); } };
+  // видео теста не пишем и на телефоне не храним: в «Загрузках» копились файлы, которые никто не открывал
+  const saveRec = async () => {};
   const corr = () => (cam.back ? -1 : 1) * phone.roll;
   // v2.0: светофор, фальстарт, FPS-Guard, коррекция перспективы при съемке с пола
   const pg = mountPacing(app.querySelector('.cam')), fs = falseStart(); let fsAt = 0, fsOff = false, gaitFr = [];
@@ -767,7 +767,7 @@ export function bindSwipe(el, onDone) {
 }
 async function runTest(vns = null, acute) {
   const r = await runProtocol(consumerProtocol(), { pre: PRE, vns, acute }); if (!r) return;
-  const { poses, ...light } = r; saveTest(light); rememberBaseline(light.touch); resetTouch(); try { await consumerPoses.save(poses); } catch (e) {} analysisScreen();
+  const { poses, ...light } = r; saveTest(light); rememberBaseline(light.touch); resetTouch(); analysisScreen();
 }
 
 function cameraHelp() {
@@ -792,16 +792,16 @@ export const profileOk = (p = PROFILE()) => !!(p && p.name && p.sex && +p.height
  *  ритм набора (интервалы, их разброс, исправления), удержание касаний и траектория пальца на ползунке (виляние, микро-откаты).
  *  Отдельного «теста» нет: так замер не искажается ожиданием проверки (эффект наблюдателя). invite: анкета для специалиста, 4 шага. */
 export function profileSteps(done, back, invite = false) {
-  const acc = meSync(), pr = { ...(PROFILE() || {}) }, Y = new Date().getFullYear();
-  const st = { name: pr.name || (acc && (acc.givenName || (acc.name || '').split(' ')[0])) || '', surname: pr.surname || (acc && acc.familyName) || '', year: pr.year || (pr.dob ? +String(pr.dob).slice(0, 4) : ''),
+  const pr = { ...(PROFILE() || {}) }, Y = new Date().getFullYear();
+  const st = { name: pr.name || '', surname: pr.surname || '', year: pr.year || (pr.dob ? +String(pr.dob).slice(0, 4) : ''),
     sex: pr.sex || '', height: +pr.height || 170, hand: pr.hand || 'R', activity: pr.activity || '', zones: pr.zones || [], complaints: pr.complaints || '' };
   const N = invite ? 4 : 3; let i = 0;
   const chips = (key, opts, multi) => `<div class="chips">${opts.map(([k, t]) => `<button type="button" class="chip2${(multi ? st[key].includes(k) : st[key] === k) ? ' on' : ''}" data-c="${key}" data-v="${k}" aria-pressed="${multi ? st[key].includes(k) : st[key] === k}">${t}</button>`).join('')}</div>`;
   const STEPS = [
     { h: 'Как вас зовут?', ok: () => st.name.trim().length >= 2, btn: 'Указать возраст',
-      body: () => `<input id="pf_name" class="field big" autocomplete="given-name" autocapitalize="words" enterkeyhint="next" placeholder="Имя" value="${esc(st.name)}">${invite ? `<input id="pf_surname" class="field" style="margin-top:12px" autocomplete="family-name" placeholder="Фамилия, по желанию" value="${esc(st.surname)}">` : ''}` },
+      body: () => `<input id="pf_name" class="field big" autocomplete="off" autocapitalize="words" enterkeyhint="next" placeholder="Имя" value="${esc(st.name)}">${invite ? `<input id="pf_surname" class="field" style="margin-top:12px" autocomplete="off" placeholder="Фамилия, по желанию" value="${esc(st.surname)}">` : ''}` },
     { h: 'Год рождения и пол', ok: () => +st.year >= 1925 && +st.year <= Y - 8 && !!st.sex, btn: 'Указать рост',
-      body: () => `<input id="pf_year" class="field big num" inputmode="numeric" pattern="[0-9]*" maxlength="4" enterkeyhint="done" autocomplete="bday-year" placeholder="${Y - 35}" value="${st.year}"><div style="height:16px"></div>${chips('sex', [['M', 'Мужской'], ['F', 'Женский']])}` },
+      body: () => `<input id="pf_year" class="field big num" inputmode="numeric" pattern="[0-9]*" maxlength="4" enterkeyhint="done" autocomplete="off" placeholder="${Y - 35}" value="${st.year}"><div style="height:16px"></div>${chips('sex', [['M', 'Мужской'], ['F', 'Женский']])}` },
     { h: 'Рост', ok: () => st.height >= 140 && st.height <= 210, btn: invite ? 'Сохранить рост' : 'Сохранить и начать',
       body: () => `<div class="hval"><b id="pf_hv" class="num">${st.height}</b><span>см</span></div><input id="pf_height" type="range" class="range" min="140" max="210" step="1" value="${st.height}" aria-label="Рост, см"><div class="row" style="justify-content:space-between;font-size:12px;color:var(--sub);margin-top:6px"><span>140</span><span>210</span></div><div style="height:24px"></div>${chips('hand', [['R', 'Правша'], ['L', 'Левша']])}` },
     { h: 'Что беспокоит?', ok: () => true, btn: 'Сохранить и начать', skip: true,
@@ -809,7 +809,7 @@ export function profileSteps(done, back, invite = false) {
   ].slice(0, N);
   const save = () => { const token = pr.token || seal.rid();
     localStorage.setItem(K('bp_profile'), JSON.stringify({ ...pr, token, name: st.name.trim(), surname: st.surname.trim(), year: +st.year, dob: `${st.year}-07-01`, sex: st.sex, height: String(st.height), hand: st.hand, activity: st.activity, zones: st.zones, complaints: st.complaints.trim() }));
-    setBodySex(st.sex); track('profile_done', { c: invite ? 'inv' : 'self' }, false); done(); };
+    setBodySex(st.sex); backupSoon(); track('profile_done', { c: invite ? 'inv' : 'self' }, false); done(); };
   const draw = () => { const S = STEPS[i];
     go(`<div class="scr fade" id="pf"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="stepper"><span>Шаг ${i + 1} из ${N}</span><i><b style="width:${(i + 1) / N * 100}%"></b></i></div><span style="width:48px"></span></div>
       <div class="pad" style="padding-top:24px"><h1>${S.h}</h1><div style="margin-top:24px">${S.body()}</div></div>
@@ -888,12 +888,9 @@ async function inviteWelcome() {
   if ($('#editpf')) $('#editpf').onclick = joinForm;
   $('#go').onclick = async () => { if (!$('#share_ok').checked) { $('#share_ok').parentElement.style.outline = '2px solid var(--over)'; return; } localStorage.setItem('bp_share_' + inv.i, String(Date.now())); let st = null; try { st = await launchTest((vns, acute) => ({ vns, acute }), e => { throw e; }); } catch (e) { inviteWelcome(); return startError(e, () => $('#go') && $('#go').click()); } if (!st) return;
     const r = await runProtocol(inv.p, { onCancel: inviteWelcome, pre: PREI, vns: st.vns, acute: st.acute }); if (!r) return; stampMain(r);
-    const { poses, ...light } = r; saveTest({ ...light, pain, inv: inv.i }); rememberBaseline(light.touch); resetTouch(); consumerPoses.save(poses).catch(() => {});
-    savePosesLocal(r); const cm = comment(); sendResult({ ...r, pain, comment: cm, profile: inv.join || inv.cal ? PROFILE() : undefined }); analysisScreen(); };
+    const { poses, ...light } = r; saveTest({ ...light, pain, inv: inv.i }); rememberBaseline(light.touch); resetTouch();
+    const cm = comment(); sendResult({ ...r, pain, comment: cm, profile: inv.join || inv.cal ? PROFILE() : undefined }); analysisScreen(); };
 }
-// запись скелета остается и у клиента (IndexedDB на его телефоне)
-function savePosesLocal(r) { try { const q = indexedDB.open('bodypassport-client', 1); q.onupgradeneeded = () => q.result.createObjectStore('poses', { keyPath: 'date' });
-  q.onsuccess = () => { const t = q.result.transaction('poses', 'readwrite'); t.objectStore('poses').put({ date: r.date, protocol: r.protocol, poses: r.poses, setup: r.setup }); }; } catch (e) {} }
 // неотправленный результат с записью скелета весит мегабайты: храним в IndexedDB, а не в localStorage (там квота около 5 МБ)
 const outbox = (() => { const open = () => new Promise((ok, no) => { const q = indexedDB.open('bodypassport-outbox', 1); q.onupgradeneeded = () => q.result.createObjectStore('o'); q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error); });
   const tx = (mode, fn) => open().then(db => new Promise((ok, no) => { const t = db.transaction('o', mode); const r = fn(t.objectStore('o')); t.oncomplete = () => ok(r && r.result); t.onerror = () => no(t.error); }));
@@ -1020,7 +1017,7 @@ export function map() {
    ${cnsCard(t, a)}
    <div class="pad" style="margin-top:16px">${verdictCard(top, a.findings, 'Сильных перекосов не видно')}</div>
    <div class="pad row" style="margin-top:12px;gap:8px;font-size:12px;color:var(--sub)">${ic('cpu', 's')}<span>Посчитано на телефоне. Оценка движения, не диагноз</span></div>
-   <div class="dock">${pl.length ? `<button class="btn" id="plan">${ic('play', 's')}Комплекс на сегодня · ${totalMin(pl.map(ex))} мин</button>` : `<button class="btn" id="again">${ic('rotate-ccw', 's')}${SHARED ? 'Пройти свой тест' : 'Пройти тест заново'}</button>`}<nav class="bnav">${[['more', 'file-text', 'Обзор'], ['lrs', 'arrow-right-left', 'Стороны'], ...(SHARED ? [] : [['rec', 'play', 'Запись']]), ['shr', 'share', 'Поделиться']].map(([id, i, n]) => `<button id="${id}">${ic(i, 's')}<span>${n}</span></button>`).join('')}</nav></div></div>`);
+   <div class="dock">${pl.length ? `<button class="btn" id="plan">${ic('play', 's')}Комплекс на сегодня · ${totalMin(pl.map(ex))} мин</button>` : `<button class="btn" id="again">${ic('rotate-ccw', 's')}${SHARED ? 'Пройти свой тест' : 'Пройти тест заново'}</button>`}<nav class="bnav">${[['more', 'file-text', 'Обзор'], ['lrs', 'arrow-right-left', 'Стороны'], ['shr', 'share', 'Поделиться']].map(([id, i, n]) => `<button id="${id}">${ic(i, 's')}<span>${n}</span></button>`).join('')}</nav></div></div>`);
   if (device.webgl2 && !device.weak && !device.wv) preload3D();
   // подписи: зона и короткий замер цветом состояния
   const labels = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 4)).map(s => ({ key: s.key, title: C.muscles[s.id].zone + (s.side === 'RIGHT' ? ' · П' : ' · Л'), sub: toneText(s, 3).replace('похоже, ', ''), value: shortVal(seen(a, s)[0]), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
@@ -1089,7 +1086,6 @@ function moreSheet({ t, a }, top, hasPlan, only) {
   if (only === 'lr') { d.innerHTML = `<div><h2>Анализ сторон</h2>${lr || '<p class="sub" style="margin-top:12px">В этом тесте не было упражнений, где сравниваются левая и правая сторона.</p>'}<button class="btn" id="mx" style="margin-top:var(--s4)">Закрыть</button></div>`; document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; d.querySelector('#mx').onclick = () => d.remove(); return; }
   d.innerHTML = `<div><h2>Обзор</h2>${lr}${ba}${lim}${zones}${goal}
     <div class="group" style="margin-top:var(--s3)">
-      ${SHARED ? '' : `<button class="row-link" id="myrec">${ic('play', 's')}<span>Моя запись: скелет и 3D-фигура</span>${ic('chevron-right', 's chev')}</button>`}
       <button class="row-link" id="shareRes">${ic('share', 's')}<span>Поделиться: ссылка или картинка</span>${ic('chevron-right', 's chev')}</button>
       ${top.length && !SHARED ? `<button class="row-link" id="cal">${ic('volume-2', 's')}<span>Напоминать каждый день в 20:00</span>${ic('chevron-right', 's chev')}</button>` : ''}
       ${hasPlan ? `<button class="row-link" id="again">${ic('rotate-ccw', 's')}<span>${SHARED ? 'Пройти свой тест' : 'Пройти тест заново'}</span>${ic('chevron-right', 's chev')}</button>` : ''}
@@ -1347,7 +1343,7 @@ export async function workout(ids, reasons = {}) {
   run();
 }
 function camOff() { cam.onFrame = null; if (cam.running) stopCamera(); }
-function mark(e) { const d = JSON.parse(localStorage.getItem(K('bp_done')) || '[]'); d.push({ id: e.id, t: Date.now() }); localStorage.setItem(K('bp_done'), JSON.stringify(d.slice(-500))); }
+function mark(e) { const d = JSON.parse(localStorage.getItem(K('bp_done')) || '[]'); d.push({ id: e.id, t: Date.now() }); localStorage.setItem(K('bp_done'), JSON.stringify(d.slice(-500))); backupSoon(10000); }
 function streak() { const days = new Set(JSON.parse(localStorage.getItem(K('bp_done')) || '[]').map(x => new Date(x.t).toDateString())); let n = 0; const d = new Date(); if (!days.has(d.toDateString())) d.setDate(d.getDate() - 1); while (days.has(d.toDateString())) { n++; d.setDate(d.getDate() - 1); } return n; }
 async function done(list, pre = null, n = list.length) { camOff(); keepAwake(false); const s = Math.max(1, streak());
   const post = await vasSheet('Оцените уровень боли после упражнений (0–10)', pre ?? 0);
@@ -1434,13 +1430,13 @@ export function clientHome() {
       ${all.length ? `<div class="group">${all.slice().reverse().slice(0, 8).map(t => `<button class="row-link ctest" data-d="${t.date}"><span style="flex:1;text-align:left"><b style="font-weight:600">${fmtD(t.date)} · ${testLabel(t)}</b><small class="sub" style="display:block;font-size:13px">${zonesOf(t) ? zonesOf(t) + ' ' + plural3(zonesOf(t), 'зона требует', 'зоны требуют', 'зон требуют') + ' внимания' : 'без выраженных перекосов'}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>` : '<p class="sub">Тестов пока нет.</p>'}
       ${all.length === 1 ? '<p class="sub" style="font-size:14px">Пройдите тест еще раз через 3–4 недели, и здесь появится сравнение.</p>' : ''}`)}
     ${reps.length ? card('Отчеты специалиста', `<div class="group">${reps.slice().reverse().map(r => `<button class="row-link crep" data-c="${esc(r.code)}">${ic('file-text', 's')}<span style="flex:1;text-align:left">${esc(r.date || fmtD(r.at))}<small class="sub" style="display:block;font-size:13px">${esc(r.author)}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>`) : ''}
-   </div><div class="dock"><button class="btn${exIds.length ? ' line' : ''}" id="ctest">${ic('rotate-ccw', 's')}Пройти тест${all.length ? ' снова' : ''}</button></div></div>`);
+   </div>${installCard()}<div class="dock"><button class="btn${exIds.length ? ' line' : ''}" id="ctest">${ic('rotate-ccw', 's')}Пройти тест${all.length ? ' снова' : ''}</button></div></div>`);
   $('#back').onclick = () => (all.length ? map() : onboarding()); $('#cset').onclick = settings;
   if ($('#cgo')) $('#cgo').onclick = () => workout(exIds);
   app.querySelectorAll('.cex').forEach(b => b.onclick = () => workout([b.dataset.id]));
   app.querySelectorAll('.ctest').forEach(b => b.onclick = () => { SHOW_T = +b.dataset.d; map(); });
   app.querySelectorAll('.crep').forEach(b => b.onclick = () => reportView(b.dataset.c));
-  $('#ctest').onclick = () => { SHOW_T = null; again(); };
+  $('#ctest').onclick = () => { SHOW_T = null; again(); }; bindInstall();
 }
 
 // ---------- настройки ----------
@@ -1448,11 +1444,13 @@ export function settings() {
   const d = document.createElement('div'); d.className = 'sheet';
   d.innerHTML = `<div><h2>Настройки</h2>
     <div class="group" style="margin-top:var(--s4)"><div class="row" style="min-height:56px"><span style="flex:1">Голосовые подсказки</span><button class="pill" id="vm">${voice.muted ? 'Выкл' : 'Вкл'}</button></div></div>
-    <p class="ondevice" style="margin-top:var(--s3)">${ic('shield-check', 's')}Результаты хранятся только в этом браузере.</p>
+    <p class="ondevice" style="margin-top:var(--s3)">${ic('shield-check', 's')}${meSync() ? 'Копия данных хранится в вашем аккаунте' : 'Войдите, чтобы данные не пропали при удалении приложения'}</p>
     <div id="acc"></div>
     <div class="group" style="margin-top:var(--s3)">
       <button class="row-link" id="fbk">${ic('message-square', 's')}<span>Ошибка, неудобство или идея</span>${ic('chevron-right', 's chev')}</button>
       ${canInstall() ? `<button class="row-link" id="sinst">${ic('download', 's')}<span>Установить приложение</span>${ic('chevron-right', 's chev')}</button>` : ''}
+      <button class="row-link" id="bkf">${ic('download', 's')}<span>Сохранить копию в файл</span>${ic('chevron-right', 's chev')}</button>
+      <button class="row-link" id="rsf">${ic('upload', 's')}<span>Восстановить из файла</span>${ic('chevron-right', 's chev')}</button>
       <button class="row-link" id="shapp">${ic('share', 's')}<span>Поделиться приложением</span>${ic('chevron-right', 's chev')}</button>
       ${canSwitchMode() ? `<button class="row-link" id="topro">${ic('user-plus', 's')}<span>Кабинет специалиста</span>${ic('chevron-right', 's chev')}</button>` : ''}
       <a class="row-link" href="/privacy" target="_blank">${ic('shield-check', 's')}<span>Конфиденциальность</span>${ic('chevron-right', 's chev')}</a>
@@ -1463,6 +1461,7 @@ export function settings() {
   document.body.appendChild(d);
   d.querySelector('#fbk').onclick = () => { d.remove(); bugSheet(); };
   d.querySelector('#shapp').onclick = () => shareApp();
+  d.querySelector('#bkf').onclick = () => downloadBackup(); d.querySelector('#rsf').onclick = () => pickRestore(n => { if (n) { d.remove(); tests().length ? map() : onboarding(); } });
   if (d.querySelector('#sinst')) d.querySelector('#sinst').onclick = () => { d.remove(); installNow(); };
   d.querySelector('#vm').onclick = e => { voice.muted = !voice.muted; localStorage.setItem('bp_mute', voice.muted ? '1' : '0'); e.target.textContent = voice.muted ? 'Выкл' : 'Вкл'; };
   d.querySelector('#wipe').onclick = async () => { if (!confirm('Удалить все мои данные на этом телефоне: тесты, отчеты специалиста, занятия, анкету и ссылку от специалиста? Это нельзя отменить.')) return;
@@ -1729,6 +1728,8 @@ async function checkInvAlive() { const inv = INV(); if (!inv || !inv.i) return;
   if (j && Array.isArray(j.p)) { const p = sortUnits(j.p.filter(u => Object.prototype.hasOwnProperty.call(UNITS, u))); if (p.length && p.join() !== (inv.p || []).join()) { try { const o = JSON.parse(localStorage.getItem('bp_inv') || 'null'); if (o) { o.p = p; localStorage.setItem('bp_inv', JSON.stringify(o)); if (app.querySelector('#share_ok')) inviteWelcome(); } } catch (e) {} } } }
 
 // ---------- старт ----------
+// старые записи скелета на телефоне клиента больше не нужны: освобождаем место один раз
+try { if (!localStorage.getItem('bp_poses_wiped')) { consumerPoses.clear().catch(() => {}); indexedDB.deleteDatabase('bodypassport-client'); localStorage.setItem('bp_poses_wiped', '1'); } } catch (e) {}
 startPassive(); // фоновый сбор касаний и ритма набора с первого экрана (только SELF_TEST)
 (async () => {
   track('app_open', { r: REF, c: channel() });
@@ -1738,7 +1739,7 @@ startPassive(); // фоновый сбор касаний и ритма набо
   mountBugTab(); await voice.init();
   // кнопка «Войти» из письма: входим и открываем свой режим (кабинет специалиста или карту клиента)
   { const ml = await mailLinkLogin(); if (ml && ml.error) toast('Ссылка для входа устарела: запросите новое письмо'); else if (ml && ml.role === 'specialist') localStorage.setItem('bp_mode', 'pro'); }
-  await Promise.all([getMe(), config()]); claimLegacy(); mountBetaBar(); if (localStorage.getItem('bp_mode') !== 'pro') checkInvAlive();
+  await Promise.all([getMe(), config()]); claimLegacy(); await restoreIfEmpty().catch(() => 0); mountBetaBar(); if (localStorage.getItem('bp_mode') !== 'pro') checkInvAlive();
   if ('serviceWorker' in navigator) {
     // когда выходит новая версия, страница один раз перезагружается сама
     let reloaded = false; const had = !!navigator.serviceWorker.controller;
