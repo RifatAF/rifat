@@ -406,7 +406,7 @@ export function drawHeat(cv, spots0, back, selected, labels = [], opts = {}) {
     for (const l of shown.filter(l => l.n)) { const s = mine.find(q => q.key === l.key); ctx.globalAlpha = Math.min(1, labA * 2 + (markT(0) > 0 ? 1 : 0));
       ctx.fillStyle = '#13212B'; ctx.beginPath(); ctx.arc(s.x * 200, s.y * 440, 12, 0, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '700 14px Onest, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(String(l.n), s.x * 200, s.y * 440 + 1); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1; }
-    const sel = mine.find(s => s.key === selected); if (sel) { ctx.strokeStyle = '#13212B'; ctx.lineWidth = 2; ctx.setLineDash([]); ctx.beginPath(); ctx.arc(sel.x * 200, sel.y * 440, 12, 0, 7); ctx.stroke(); }
+    // выбранная мышца видна в карточке под схемой: черное кольцо на схеме путали с еще одним состоянием
     ctx.restore();
     if (labA > 0 && !numbered) callouts(ctx, shown.filter(l => !l.n), mine, labA);
   };

@@ -303,10 +303,11 @@ export const UNITS = {
 export const ORDER = ['stand', 'ohs_front', 'fwd', 'slb', 'sls', 'trot', 'reach', 'thold', 'bends', 'calf', 'profile', 'side', 'back', 'chair'];
 // «боком» уже включает стойку боком: отдельная стойка не нужна
 export const sortUnits = u => ORDER.filter(x => u.includes(x) && !(x === 'profile' && u.includes('side')));
-const consumerProtocol = () => FULL ? sortUnits(['stand', 'ohs_front', 'sls', 'side', 'back', ...(STRENGTH ? ['thold', 'bends', 'calf'] : [])]) : sortUnits(BATTERY_UNITS);
-// быстрый тест: 4 теста (стойка, присед, одна нога, стойка боком) без поворотов и силового блока; сила и симметрия только в точном
+// быстрый: батарея v2 и присед боком (без него не видно, держит ли поясница в приседе и выносится ли голова); точный: плюс одна нога и спиной
+export const QUICK_UNITS = [...BATTERY_UNITS, 'side'], FULL_UNITS = [...QUICK_UNITS, 'sls', 'back'];
+const consumerProtocol = () => FULL ? sortUnits([...FULL_UNITS, ...(STRENGTH ? ['thold', 'bends', 'calf'] : [])]) : sortUnits(QUICK_UNITS);
 export const rowsOf = p => sortUnits(p).flatMap(u => UNITS[u]);
-const QUICK = rowsOf(BATTERY_UNITS), FULLS = rowsOf(['stand', 'ohs_front', 'sls', 'side', 'back']), STR = rowsOf(['thold', 'bends', 'calf']);
+const QUICK = rowsOf(QUICK_UNITS), FULLS = rowsOf(FULL_UNITS), STR = rowsOf(['thold', 'bends', 'calf']);
 export const SETUP_SEC = 36;
 export const secs = l => l.reduce((x, s) => x + s[2], 0);
 export const mins = sec => (Math.ceil(sec / 30) / 2).toString().replace('.', ',');
@@ -346,7 +347,7 @@ function prepSheet(toSteps, keep) {
     <div class="seg" style="margin-top:var(--s4)"><button id="m0" class="${FULL ? '' : 'on'}">Быстрый · ${mins(SETUP_SEC + secs(QUICK))} мин</button><button id="m1" class="${FULL ? 'on' : ''}">Точный · ${mins(SETUP_SEC + secs(FULLS) + (STRENGTH ? secs(STR) : 0))} мин</button></div>
     <div class="eyebrow" style="margin-top:var(--s5)">Камера</div><div class="seg" style="margin-top:8px"><button id="c0" class="${cam.back ? '' : 'on'}">Фронтальная</button><button id="c1" class="${cam.back ? 'on' : ''}">Основная</button></div>
     <p class="sub" style="font-size:13px;margin-top:6px">${cam.back ? 'Точнее картинка. Экран не видно, ведет голос.' : 'Во время теста вы видите себя на экране.'}</p>
-    ${FULL ? `<label class="card row" style="margin-top:var(--s4);align-items:flex-start"><input type="checkbox" class="check" id="strc" ${STRENGTH ? 'checked' : ''}><div style="flex:1"><b style="font-size:15px">Сила и симметрия</b><div class="sub" style="font-size:13px">Сравнит левую и правую сторону: плечи, бока, икры, бедра. Добавляет ${mins(secs(STR))} мин</div></div></label>` : `<p class="sub" style="font-size:13px;margin-top:var(--s4)">Быстрый: 4 теста лицом и боком, около ${mins(SETUP_SEC + secs(QUICK))} мин. Сила и симметрия левой и правой стороны есть в точном тесте.</p>`}
+    ${FULL ? `<label class="card row" style="margin-top:var(--s4);align-items:flex-start"><input type="checkbox" class="check" id="strc" ${STRENGTH ? 'checked' : ''}><div style="flex:1"><b style="font-size:15px">Сила и симметрия</b><div class="sub" style="font-size:13px">Сравнит левую и правую сторону: плечи, бока, икры, бедра. Добавляет ${mins(secs(STR))} мин</div></div></label>` : `<p class="sub" style="font-size:13px;margin-top:var(--s4)">Быстрый: ${QUICK.length} шагов лицом и боком, около ${mins(SETUP_SEC + secs(QUICK))} мин. Сила и симметрия левой и правой стороны есть в точном тесте.</p>`}
     <div id="stepsat" class="eyebrow" style="margin-top:var(--s5)">Шаги</div><div style="margin-top:8px">${stepList(consumerProtocol(), PRE)}</div>
     <button class="btn" id="psx" style="margin-top:var(--s5)">Применить</button></div>`;
   document.body.appendChild(d);
@@ -471,7 +472,12 @@ const SAY = {
   bendIntro: 'Наклоны в стороны. Руки вдоль тела.', bendR: 'Медленно наклонись вправо.', bendL: 'Теперь наклонись влево.', lower: 'Ниже, рука скользит по бедру', ret: 'Вернись.',
   calfRIntro: 'Встань на правую ногу и поднимайся на носок пятнадцать секунд', calfLIntro: 'Теперь на левой ноге. Поднимайся на носок пятнадцать секунд', calfGo: 'Поднимайся на носок и опускайся. Пятнадцать секунд.', calfHigher: 'Поднимайся выше на носок',
   sideTurn: 'Повернись правым боком к телефону.', backTurn: 'Повернись спиной к телефону.', frontTurn: 'Повернись ко мне лицом.',
-  armsOverhead: 'Подними прямые руки вверх.', squatGo: 'Приседай. Три раза.',
+  armsOverhead: 'Подними прямые руки вверх.', squatGo: 'Приседай. Три раза.', staySide: 'Остаемся боком к телефону. Стопы на ширине плеч.',
+  // фразы батареи v2: в SAY, чтобы записи загрузились заранее и голос не замолкал на загрузке перед шагом
+  fwdIntro: 'Наклонитесь вперед. Колени прямые, руки тянутся к полу.', slbIntro: 'Руки на поясе. Встаньте на правую ногу, левую согните назад.', slbSwap: 'Смена ноги. Теперь на левой.',
+  trotIntro: 'Скрестите руки на груди. Поворачивайтесь вправо и влево, несколько раз. Таз на месте.', reachIntro: 'Поднимайте прямые руки над головой и опускайте. Три раза.',
+  chairIntro: 'Сядьте на стул, руки скрестите на груди. По сигналу вставайте и садитесь, сколько сможете за тридцать секунд.', reachWait: 'Поднимите руки над головой. Я жду.',
+  chairPain: 'Останавливаемся. Сделаем безопасный тест со стулом.',
   finish: 'Тест закончен. Можно подойти к телефону.',
   vertical: 'Поставь телефон вертикально, не наклоняй его',
   noFeet: 'Не вижу ноги. Отойди назад', noHead: 'Не вижу голову. Отойди назад', farther: 'Отойди чуть дальше', closer: 'Подойди чуть ближе',
@@ -565,7 +571,8 @@ async function runProtocol0(protocol, opts = {}) {
   const bar = (frac, label) => { $('#pbf').style.width = Math.max(0, Math.min(1, frac)) * 100 + '%'; if (label !== undefined) $('#pbt').textContent = label; if (segs[si]) segs[si].style.width = Math.max(8, frac * 100) + '%'; };
   const say = async text => { if (stop) return; $('#cue').textContent = text; await voice.speak(text); };
   let lastHint = '', lastHintAt = 0, hints = 0; const fpsS = [];
-  const hint = (text, gap = 4000) => { const now = Date.now(); if (now - lastHintAt < gap || (text === lastHint && now - lastHintAt < 7000)) return; lastHint = text; lastHintAt = now; hints++; lastIssue = text; $('#cue').textContent = text; voice.say(text); };
+  // подсказки не давят: не перебивают говорящий голос, любая не чаще раза в 6 с, та же фраза не чаще раза в 12 с
+  const hint = (text, gap = 6000, force = false) => { const now = Date.now(); if (!force && (voice.busy() || now - lastHintAt < gap || (text === lastHint && now - lastHintAt < 12000))) return; lastHint = text; lastHintAt = now; hints++; lastIssue = text; $('#cue').textContent = text; voice.say(text); };
   // ---- запись ----
   const grab = (fr, rolls) => { const f = cam.frame; if (f && f.pose && (!fr.length || fr.at(-1).t !== f.t)) { if (fg.state.skip && fr.length % (fg.state.skip + 1)) { fr.push(fr.at(-1)); return; } fr.push({ t: f.t, p: lev(f), w: f.world }); rolls.push(phone.roll); } };
   const poses = {}, quality = {}; let W = 1, H = 1;
@@ -578,20 +585,20 @@ async function runProtocol0(protocol, opts = {}) {
   // «в кадре» = видны плечо и таз: поднятая нога или наклон головы не считаются уходом из кадра
   const present = q => !!q && (q[P.L_SHOULDER].visibility > .5 || q[P.R_SHOULDER].visibility > .5) && (q[P.L_HIP].visibility > .5 || q[P.R_HIP].visibility > .5);
   const away = () => { const f = cam.frame; if (f && present(f.pose)) seenAt = Date.now(); return Date.now() - seenAt > 1500; };
-  const backInFrame = async () => { const t = Date.now(); bar(0, 'Вернитесь в кадр целиком'); hint(SAY.inFrame, 0);
+  const backInFrame = async () => { const t = Date.now(); bar(0, 'Вернитесь в кадр целиком'); hint(SAY.inFrame, 0, true);
     let okSince = 0; while (!stop && !skip) { const f = cam.frame, ok = f && fullyVisible(f.pose, prof); if (ok) { okSince = okSince || Date.now(); if (Date.now() - okSince > 800) break; } else okSince = 0;
-      if (Date.now() - t > 9000 && !okSince) { hint(SAY.inFrame, 0); } await sleep(60); } seenAt = Date.now(); return Date.now() - t; };
+      if (Date.now() - t > 9000 && !okSince) { hint(SAY.inFrame, 10000); } await sleep(60); } seenAt = Date.now(); return Date.now() - t; };
   const hold = async (key, sec, label, extra) => { if (pg.phase !== PHASE.REC) { voice.beep('start'); pg.rec(); } const fr = [], rolls = []; let t0 = Date.now(); const said = {}; seenAt = Date.now();
     while (!stop && !skip) { if (away()) { await backInFrame(); fr.length = 0; rolls.length = 0; t0 = Date.now(); voice.beep('start'); continue; } const el = (Date.now() - t0) / 1000, left = Math.ceil(sec - el); if (el >= sec) break; grab(fr, rolls); bar(el / sec, `${label}: ${left} с`); $('#reps').hidden = false; $('#ring').textContent = left; $('#repn').textContent = 'сек';
       if (sec >= 12 && left === 10 && !said[10]) { said[10] = 1; hint(SAY.hold10, 0); } if (sec >= 9 && left === 5 && !said[5]) { said[5] = 1; hint(SAY.hold5, 0); }
       if (extra && fr.length) extra(fr, left); await sleep(30); }
     bar(1, ''); voice.beep('stop'); if (key) keep(key, fr, rolls); return fr; };
-  // руки вверх: считаем подъемы (обе кисти выше носа, потом ниже плеч), а не секунды; счет голосом, не дольше 25 секунд
+  // руки вверх: считаем подъемы (обе кисти выше носа, потом ниже плеч), а не секунды; счет голосом, не дольше 40 секунд
   const armReps = async (key, N = 3) => { voice.beep('start'); pg.rec(); const fr = [], rolls = []; let n = 0, up = false, t0 = Date.now(); seenAt = Date.now();
     bar(0, `Подъемы: 0 из ${N}`); $('#reps').hidden = false; $('#ring').textContent = 0; $('#repn').textContent = `из ${N}`;
-    while (!stop && !skip && n < N && Date.now() - t0 < 25000) { if (away()) { t0 += await backInFrame(); continue; } grab(fr, rolls); const q = fr.length && fr.at(-1).p;
+    let idle = Date.now(); while (!stop && !skip && n < N && Date.now() - t0 < 40000) { if (away()) { t0 += await backInFrame(); idle = Date.now(); continue; } grab(fr, rolls); const q = fr.length && fr.at(-1).p; if (Date.now() - idle > 7000) { idle = Date.now(); hint(SAY.reachWait, 0); }
       if (q) { const hi = q[P.L_WRIST].y < q[P.NOSE].y && q[P.R_WRIST].y < q[P.NOSE].y, lo = q[P.L_WRIST].y > q[P.L_SHOULDER].y && q[P.R_WRIST].y > q[P.R_SHOULDER].y;
-        if (hi && !up) up = true; else if (lo && up) { up = false; n++; $('#ring').textContent = n; bar(n / N, `Подъемы: ${n} из ${N}`); voice.say(numWord(n)); } }
+        if (hi && !up) { up = true; idle = Date.now(); } else if (lo && up) { up = false; n++; idle = Date.now(); $('#ring').textContent = n; bar(n / N, `Подъемы: ${n} из ${N}`); voice.say(numWord(n)); } }
       await sleep(30); }
     bar(1, ''); voice.beep('stop'); keep(key, fr, rolls); return fr; };
   // повторы: считаем по движению таза; полоса = сделанные повторы из трех
@@ -639,7 +646,7 @@ async function runProtocol0(protocol, opts = {}) {
       // время на установку: не раньше 8 с от включения камеры и 2,5 с ровно в кадре, иначе тест стартовал, пока человек еще отходил
       const fr0 = cam.frame, ms = fr0 && fr0.pose ? matchScore(fr0.pose, fr0.w, fr0.h) : 0, good = !bad && fullyVisible(fr0 && fr0.pose) && ms >= ZERO_CLICK; pg.pos(good);
       if (good) { if (!okSince) { okSince = Date.now(); voice.say(SHORT_CMD.ok); } bar((Date.now() - okSince) / 2500, 'Замрите'); if (Date.now() - okSince > 2500 && Date.now() - t0 > 8000) break; }
-      else { okSince = 0; bar(0, bad || ''); hint(shortOf(bad || SAY.farther), 3500); }
+      else { okSince = 0; bar(0, bad || ''); if (Date.now() - t0 > 6000) hint(shortOf(bad || SAY.farther), 8000); }
       if (Date.now() - t0 > 120000) { stop = true; stopCamera(); return cancel(); } await sleep(150); }
     if (stop) return; track('setup', { d: (Date.now() - t0) / 1000, n: hints }, false); setupDone = true; pg.instr(); var gait = retroGait(gaitFr); gaitFr = null; sil.style.transition = 'opacity .32s'; sil.style.opacity = 0; await say(SAY.seen); }
   // ---- тесты ----
@@ -668,9 +675,9 @@ async function runProtocol0(protocol, opts = {}) {
       snapshot = standSnapshot(st); snapshot.sway = Math.round(sq.sway * 10) / 10; if (Number.isFinite(sq.yaw)) snapshot.yaw = Math.round(sq.yaw);
       const f = cam.frame; setup = { bodyFrac: med(st.map(x => bodyFrac(x.p))) / (f ? f.h : 1), roll: phone.roll, pitch: phone.pitch ?? null, back: cam.back, w: f && f.w, h: f && f.h, scale: autoScale(st, (PROFILE() || {}).height), retroGait: gait || null };
       // ВБД в статике: расхождение плоскостей грудной клетки и таза, подъем плеч на вдохе (мм по шкале)
-      // дыхание (Левит): плечи на глубоком вдохе не должны подниматься, работает диафрагма; один вдох и выдох по 3 секунды
-      step(k, 'Глубокий вдох', 'Носом в живот, плечи на месте', FOC.stand); demo('test_breath'); await say(SAY.breathIn); const bIn = await hold('breath_in', 3, 'Вдох'); if (stop || skipped()) return;
-      await say(SAY.breathOut); const bOut = await hold('breath_out', 3, 'Выдох'); if (stop || skipped()) return; demo(null);
+      // дыхание (Левит): плечи на глубоком вдохе не должны подниматься, работает диафрагма; один вдох и выдох по 5 секунд
+      step(k, 'Глубокий вдох', 'Носом в живот, плечи на месте', FOC.stand); demo('test_breath'); await say(SAY.breathIn); const bIn = await hold('breath_in', 5, 'Вдох'); if (stop || skipped()) return;
+      await say(SAY.breathOut); const bOut = await hold('breath_out', 5, 'Выдох'); if (stop || skipped()) return; demo(null);
       const ap = setup.scale ? apicalBreath(bIn, bOut, setup.scale.cmPerPx) : null;
       moves.iap = { quality: 'GOOD', f: { rib_flare: Math.round(med(st.map(x => ribFlare(x.p))) * 10) / 10, ...(Number.isFinite(ap) ? { apical_mm: Math.round(ap) } : {}) } };
       await say(SAY.good); k++; }
@@ -699,22 +706,22 @@ async function runProtocol0(protocol, opts = {}) {
         if (skipped()) return; moves[key] = fr.length > 20 ? Movement.calfRaise(fr, right) : { f: {}, reps: 0, quality: 'RETAKE' }; await say(SAY.footDown); k++; } }
     if (u === 'side') { await face('side'); step(k, 'Боком: стой ровно', 'Правое плечо к телефону', null); await say(SAY.freeze);
       const sf = await hold('side_stand', 5, 'Замри'); if (skipped()) return; side = sideSnapshot(sf);
-      step(k, 'Боком: присед', 'Стопы чуть шире плеч, руки вверх, 3 раза'); demo('test_squat'); await say(SAY.wide); await say(SAY.armsOverhead); 
+      step(k, 'Боком: присед', 'Остаемся боком, правое плечо к телефону. Руки вверх, 3 раза'); demo('test_squat'); await say(SAY.staySide); await say(SAY.armsOverhead); 
       const osFr = []; moves.ohs_side = await goReps(SAY.squatGo, 'ohs_side', fr => { osFr.push(...fr); return Movement.side(fr); }, .12, 3);
       { const w = buttWink(osFr); if (Number.isFinite(w)) moves.iap = { quality: 'GOOD', f: { ...((moves.iap || {}).f || {}), butt_wink: Math.round(w * 10) / 10 } }; } if (skipped()) return; await say(SAY.stop); k++; }
     if (u === 'profile') { await face('side'); step(k, 'Боком: стой ровно', 'Руки вдоль тела, смотри прямо', null); await say(SAY.freeze);
       const sf = await hold('side_stand', 5, 'Замри'); if (stop || skipped()) return; side = sideSnapshot(sf);
       await say(SAY.good); k++; }
-    if (u === 'fwd') { await face('front'); step(k, 'Наклон вперед', 'Ноги прямые, медленно тянитесь руками к полу и вернитесь', FOC.bend); demo('test_fwd'); await say('Наклонитесь вперед. Колени прямые, руки тянутся к полу.'); if (skipped()) return;
+    if (u === 'fwd') { await face('front'); step(k, 'Наклон вперед', 'Ноги прямые, медленно тянитесь руками к полу и вернитесь', FOC.bend); demo('test_fwd'); await say(SAY.fwdIntro); if (skipped()) return;
       await countdown(GO_WORD.bend); const fr = await hold('fwd', 10, 'Наклон'); if (skipped()) return; moves.fwd = forwardBend(fr); await say(SAY.ret); k++; }
-    if (u === 'slb') { await face('front'); step(k, 'Баланс на одной ноге', 'Руки на поясе. Сначала на правой, потом на левой, по 6 секунд', FOC.stand); demo('test_slb'); await say('Руки на поясе. Встаньте на правую ногу, левую согните назад.'); if (skipped()) return;
-      await countdown(GO_WORD.balance); const fR = await hold('slb_r', 6, 'Правая нога'); if (skipped()) return; await say('Смена ноги. Теперь на левой.'); await countdown(GO_WORD.balance); const fL = await hold('slb_l', 6, 'Левая нога'); if (skipped()) return;
+    if (u === 'slb') { await face('front'); step(k, 'Баланс на одной ноге', 'Руки на поясе. Сначала на правой, потом на левой, по 6 секунд', FOC.stand); demo('test_slb'); await say(SAY.slbIntro); if (skipped()) return;
+      await countdown(GO_WORD.balance); const fR = await hold('slb_r', 6, 'Правая нога'); if (skipped()) return; await say(SAY.slbSwap); await countdown(GO_WORD.balance); const fL = await hold('slb_l', 6, 'Левая нога'); if (skipped()) return;
       moves.slb = singleBalance(fR, fL); await say(SAY.footDown); k++; }
-    if (u === 'trot') { await face('front'); step(k, 'Повороты корпуса', 'Руки скрещены на груди, таз на месте. Вправо и влево, несколько раз', FOC.stand); demo('test_trot'); await say('Скрестите руки на груди. Поворачивайтесь вправо и влево, несколько раз. Таз на месте.'); if (skipped()) return;
+    if (u === 'trot') { await face('front'); step(k, 'Повороты корпуса', 'Руки скрещены на груди, таз на месте. Вправо и влево, несколько раз', FOC.stand); demo('test_trot'); await say(SAY.trotIntro); if (skipped()) return;
       await countdown(GO_WORD.rotate); const fr = await hold('trot', 10, 'Повороты'); if (skipped()) return; moves.trot = trotSweep(fr); await say(SAY.good); k++; }
-    if (u === 'reach') { await face('front'); step(k, 'Руки вверх', 'Поднимите прямые руки над головой и опустите. 3 раза', FOC.arms); demo('test_reach'); await say('Поднимайте прямые руки над головой и опускайте. Три раза.'); if (skipped()) return;
+    if (u === 'reach') { await face('front'); step(k, 'Руки вверх', 'Поднимите прямые руки над головой и опустите. 3 раза', FOC.arms); demo('test_reach'); await say(SAY.reachIntro); if (skipped()) return;
       await countdown(GO_WORD.reach); const fr = await armReps('reach', 3); if (skipped()) return; moves.reach = overheadReach(fr); await say(SAY.armsDown); k++; }
-    if (u === 'chair') { await face('front'); fsOff = true; step(k, 'Вставание со стула', 'Сядьте на стул боком к камере, руки на груди. Вставайте и садитесь 30 секунд'); demo('test_chair'); await say('Сядьте на стул, руки скрестите на груди. По сигналу вставайте и садитесь, сколько сможете за тридцать секунд.'); if (skipped()) return;
+    if (u === 'chair') { await face('front'); fsOff = true; step(k, 'Вставание со стула', 'Сядьте на стул боком к камере, руки на груди. Вставайте и садитесь 30 секунд'); demo('test_chair'); await say(SAY.chairIntro); if (skipped()) return;
       await countdown(GO_WORD.chair); moves.chair = await reps('chair', fr => chairStand(fr), .1, 99, true, 30000); moves.chair.quality = moves.chair.reps ? 'GOOD' : 'RETAKE'; await say(SAY.good); k++; fsOff = false; }
     if (u === 'back') { await face('back'); step(k, 'Спиной: присед', 'Стопы чуть шире плеч, руки вверх, 3 раза', FOC.squat); await say(SAY.wide); await say(SAY.armsOverhead); if (skipped()) return; 
       moves.ohs_back = await goReps(SAY.squatGo, 'ohs_back', fr => Movement.back(fr), .12, 3); if (skipped()) return; await say(SAY.stop); k++; }
@@ -735,7 +742,7 @@ async function runProtocol0(protocol, opts = {}) {
       else if (k > k0) await okFlash(steps[k - 1] ? steps[k - 1][0] : '', k); }
     flushGL(app);
     if (painStop && !stop) { limits[u] = { level: 'Боль', reasons: ['Нажата кнопка «Больно»'] }; for (const r of units.slice(units.indexOf(u) + 1)) limits[r] = { level: 'Не выполнялось', reasons: ['Тест остановлен из-за боли'] };
-      skip = false; painStop = false; if (u !== 'chair') { await say('Останавливаемся. Сделаем безопасный тест со стулом.'); await runUnit('chair'); } break; }
+      skip = false; painStop = false; if (u !== 'chair') { await say(SAY.chairPain); await runUnit('chair'); } break; }
     if (skip && !stop) { track('step_skip', { c: u }, false); voice.beep('stop'); step(null, 'Не получается? Ничего страшного', 'Ответь на пару вопросов'); limits[u] = await cantSheet(u); skip = false;
       if (/опор|неглуб/i.test(limits[u].level || '') && (u === 'ohs_front' || u === 'sls')) { limits[u].alt = 'support'; await runAlt(u); } else k = k0 + (UNITS[u] || []).length; }
   }
@@ -1012,10 +1019,27 @@ function postureFigure(pats) {
     ${tw ? `<path d="M34 78 Q60 92 86 78" fill="none" stroke="${col}" stroke-width="3" stroke-linecap="round" marker-end="url(#pfa)"><animate attributeName="stroke-dasharray" values="0 80;80 0;80 0;0 80" keyTimes="0;.4;.8;1" dur="4s" repeatCount="indefinite"/></path>` : ''}
     <defs><marker id="pfa" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="${col}"/></marker></defs></svg>`;
 }
+// поза для объемного скелета: те же признаки, что в подписях, в градусах (усилены втрое, чтобы было видно)
+function poseOf(pats) {
+  const g = k => pats.find(p => p.k === k), d = (fd, cap = 14) => Math.min(cap, Math.abs(fd.value || 0) * 3), o = {};
+  if (g('tilt')) o.tilt = d(g('tilt').fd) * (g('tilt').fd.side === 'RIGHT' ? -1 : 1);
+  if (g('pelvis')) o.pelvis = d(g('pelvis').fd) * (g('pelvis').fd.side === 'RIGHT' ? -1 : 1);
+  if (g('head')) o.head = d(g('head').fd, 18) * (g('head').fd.side === 'RIGHT' ? 1 : -1);
+  if (g('twist')) { const fd = g('twist').fd; o.twist = fd.rule.id === 'trot_asym' ? Math.min(30, Math.max(12, Math.abs(fd.value || 0) * 2)) * (fd.side === 'LEFT' ? -1 : 1) : 10; }
+  if (g('fwd')) { const fd = g('fwd').fd; if (fd.rule.id === 'head_forward') o.headFwd = 1; else o.fwd = 14; }
+  if (g('shrug')) o.shrug = 1; return o;
+}
+// «Как вас ведет» в раскрывающемся блоке: объемный скелет уходит из ровной стойки в позу человека, рядом подписи
 function postureCard(a) {
-  const pats = posturePatterns(a.findings); if (!pats.length) return '';
-  return `<div class="pad" style="margin-top:16px"><div class="card row" style="gap:16px;align-items:center">${postureFigure(pats)}
-    <div style="flex:1;min-width:0"><div class="eyebrow">Как вас ведет</div>${pats.map(p => `<div style="margin-top:10px"><b style="font-size:17px">${p.label}</b><div style="font-size:13px;color:var(--sub);line-height:1.35">${esc(p.sub)}</div></div>`).join('')}</div></div></div>`;
+  const pats = posturePatterns(a.findings);
+  return `<div class="pad" style="margin-top:16px"><details class="acc card" id="posacc"><summary style="font-weight:600;min-height:40px"><span style="flex:1">Как вас ведет</span><span style="font-size:14px;font-weight:500;color:${pats.length ? 'var(--short-t)' : 'var(--ok-t)'};margin-right:8px">${pats.length ? esc(pats[0].label) : 'Ровно'}</span></summary>
+    <div class="row" style="gap:12px;align-items:center;margin-top:8px">${device.webgl2 ? '<div id="pos3d" style="width:150px;height:240px;flex:none;position:relative"></div>' : postureFigure(pats)}
+      <div style="flex:1;min-width:0">${pats.length ? pats.map(p => `<div style="margin-top:10px"><b style="font-size:16px">${p.label}</b><div style="font-size:13px;color:var(--sub);line-height:1.35">${esc(p.sub)}</div></div>`).join('') : '<div style="font-size:15px;line-height:1.4">Крена, скручивания и наклона вперед не видно</div>'}
+        <div style="font-size:12px;color:var(--faint);margin-top:12px">Отклонения на скелете усилены. Скелет можно крутить пальцем</div></div></div></details></div>`;
+}
+function bindPosture(a) {
+  const acc = $('#posacc'), box = $('#pos3d'); if (!acc || !box) return; let s3 = null;
+  acc.addEventListener('toggle', async () => { if (acc.open && !s3) { try { const { skeleton3D } = await import('./skeleton3d.js'); s3 = await skeleton3D(box, poseOf(posturePatterns(a.findings))); } catch (e) { box.outerHTML = postureFigure(posturePatterns(a.findings)); } } });
 }
 // дыхание и внутрибрюшное давление: Коларж (ребра и таз), Левит (дыхание), Макгилл (поясница под нагрузкой)
 export function iapRows(f) {
@@ -1111,6 +1135,7 @@ export function map() {
   $('#vf').onclick = () => { if (MODE3D) { MODE3D = false; BACK = false; return map(); } BACK = false; setView(); };
   $('#vb').onclick = () => { if (MODE3D) { MODE3D = false; BACK = true; return map(); } BACK = true; setView(); };
   if ($('#v3')) $('#v3').onclick = () => { if (!MODE3D) { MODE3D = true; map(); } };
+  bindPosture(a);
   if ($('#plan')) $('#plan').onclick = () => durationSheet(top, pl, why);
   if ($('#again')) $('#again').onclick = again;
   if ($('#re')) $('#re').onclick = () => { FULL = false; prep(); };
