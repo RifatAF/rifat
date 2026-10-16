@@ -1,3 +1,4 @@
+import { mergeV2 } from './test-battery.js';
 // Порт логики анализа из Android-модуля domain (Kotlin): те же формулы и пороги.
 export const P = { NOSE:0, L_EAR:7, R_EAR:8, L_SHOULDER:11, R_SHOULDER:12, L_ELBOW:13, R_ELBOW:14, L_WRIST:15, R_WRIST:16,
   L_HIP:23, R_HIP:24, L_KNEE:25, R_KNEE:26, L_ANKLE:27, R_ANKLE:28, L_HEEL:29, R_HEEL:30, L_FOOT:31, R_FOOT:32 };
@@ -339,6 +340,7 @@ export function features(t) {
     ohs_front: ['valgus_max', 'sq_shift', 'foot_out_max', 'sq_depth', 'oh_reach'], ohs_back: ['valgus_max', 'sq_shift', 'sq_pelvis'], ohs_side: ['sq_lean', 'sq_arms', 'sq_heel'],
     sls_r: ['sls_valgus_r', 'sls_drop_r', 'sls_trunk_r', 'sls_sway_r', 'sls_arms_r', 'sls_touch_r', 'asym_quad'], sls_l: ['sls_valgus_l', 'sls_drop_l', 'sls_trunk_l', 'sls_sway_l', 'sls_arms_l', 'sls_touch_l', 'asym_quad'], t_hold: ['asym_delt'], bends: ['asym_bend', 'bend_sum'], calf_r: ['asym_calf', 'calf_reps_r'], calf_l: ['asym_calf', 'calf_reps_l'] };
   const lowq = {}; for (const [k, fs] of Object.entries(LQ)) if (low(k)) for (const x of fs) lowq[x] = true;
+  mergeV2(f, t.moves); // батарея v2.0 и маркеры ВБД
   if (Object.keys(lowq).length) f.lowq = lowq;
   if (Object.keys(reps).length) f._reps = reps; if (Object.keys(views).length) f._views = views;
   return f;

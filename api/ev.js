@@ -6,7 +6,7 @@ import { currentUser, isAdmin, sessionUid } from './_session.js';
 // псевдоним аккаунта: одинаков для одного человека, но по нему нельзя узнать id, имя или почту
 const alias = uid => uid && process.env.SESSION_SECRET ? crypto.createHmac('sha256', process.env.SESSION_SECRET + ':ev').update(uid).digest('base64url').slice(0, 12) : null;
 
-const NAMES = new Set(['app_open', 'onb_done', 'login_ok', 'safety_ok', 'safety_stop', 'test_start', 'test_done', 'test_cancel', 'map_view', 'share_result',
+const NAMES = new Set(['app_open', 'plan_minutes', 'onb_done', 'login_ok', 'safety_ok', 'safety_stop', 'test_start', 'test_done', 'test_cancel', 'map_view', 'share_result',
   'inv_open', 'result_sent', 'result_fail', 'pro_open', 'assess_start', 'assess_done', 'invite_sent', 'join_sent', 'result_pulled', 'report_sent', 'retest_set', 'err',
   'fb_sent', 'ref_share', 'install_shown', 'install_ok',
   'pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'db_empty', 'db_other', 'backup_done', 'restore_done',

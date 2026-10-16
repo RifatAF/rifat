@@ -1,7 +1,7 @@
 // Обезличенная аналитика воронки, технические события и ошибки из браузера. Без имен, почты и данных теста:
 // название шага, роль (клиент / специалист), случайный номер вкладки и, если человек вошел, псевдоним аккаунта,
 // который считает сервер (HMAC от id, обратно не превращается). Нужен, чтобы видеть одного специалиста по неделям.
-const EVENTS = new Set(['app_open', 'onb_done', 'login_ok', 'safety_ok', 'safety_stop', 'test_start', 'test_done', 'test_cancel', 'map_view', 'share_result',
+const EVENTS = new Set(['app_open', 'plan_minutes', 'onb_done', 'login_ok', 'safety_ok', 'safety_stop', 'test_start', 'test_done', 'test_cancel', 'map_view', 'share_result',
   'inv_open', 'result_sent', 'result_fail', 'pro_open', 'assess_start', 'assess_done', 'invite_sent', 'join_sent', 'result_pulled', 'report_sent', 'retest_set', 'err',
   'fb_sent', 'ref_share', 'install_shown', 'install_ok',
   // бета: техника и трение

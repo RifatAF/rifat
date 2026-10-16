@@ -1,3 +1,7 @@
+import { drawGhost } from './biomechanics-engine.js';
+import { clinicalSection, vectorSection } from './white-label-pdf.js';
+import { setSession, MODES, aiRecsOn } from './session-controller.js';
+import { releaseFor, massageAllowed } from './biomechanics-engine.js';
 // Кабинет специалиста: клиенты, оценки по протоколам, три слоя результата, резервная копия.
 // Все данные в IndexedDB на телефоне специалиста; на сервер ничего не уходит.
 import { analyze, fmt, recompute } from './analysis.js';
@@ -8,7 +12,7 @@ import { meSync, logout, getMe } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
 import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS } from './plans.js';
 import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast, preload3D, saveBlob , setBodySex } from './core.js';
-import { cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, mainOf, TONE_HELP, applyMain, fromMain, muscleInfo, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen } from './app.js';
+import { cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, mainOf, TONE_HELP, applyMain, fromMain, muscleInfo, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen, TIP_ACT } from './app.js';
 
 // активные клиенты занимают слоты; пример и закрытые (пришли сверх лимита) не считаются
 // ведение = ретест, ссылка на ретест или занятия дома за 30 дней. Первые тесты новых клиентов лимит не трогают
@@ -178,7 +182,7 @@ async function photoEditor(src, set0) {
     cv.onwheel = e => { e.preventDefault(); st.zoom = Math.max(1, Math.min(4, st.zoom * (e.deltaY < 0 ? 1.06 : 1 / 1.06))); d.querySelector('#pz').value = st.zoom; draw(); };
     d.querySelector('#pz').oninput = e => { st.zoom = +e.target.value; draw(); }; d.querySelector('#pb').oninput = e => { st.bright = +e.target.value; draw(); };
     d.querySelector('#prs').onclick = () => { Object.assign(st, { zoom: 1, dx: 0, dy: 0, bright: 1 }); d.querySelector('#pz').value = 1; d.querySelector('#pb').value = 1; draw(); };
-    const done = v => { d.remove(); res(v); }; d.querySelector('#pcx').onclick = () => done(null);
+    const done = v => { d.remove(); res(v); }; d.addEventListener('bp-close', () => res(null)); d.querySelector('#pcx').onclick = () => done(null);
     d.querySelector('#pok').onclick = () => { const c = document.createElement('canvas'); c.width = 360; c.height = 360; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 360, 360);
       const f = fit(360); x.filter = `brightness(${st.bright})`; x.drawImage(img, f.x, f.y, f.w, f.h);
       done({ photo: c.toDataURL('image/jpeg', .88), src: small, set: { zoom: st.zoom, dx: st.dx, dy: st.dy, bright: st.bright } }); }; });
@@ -236,7 +240,7 @@ function slotWidget(s) {
     <div style="height:6px;border-radius:3px;background:var(--surface);margin-top:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${full ? 'var(--over)' : 'var(--ink)'}"></div></div>
     ${full ? '<div style="font-size:13px;margin-top:8px">Новых клиентов тестируйте свободно. Ретест еще одного клиента откроется в PRO или когда закончится 30 дней ведения у кого-то из текущих.</div>' : ''}</div></div>`;
 }
-export async function proHome(query = '', pulled = null) { syncAutoCalib().catch(() => {}); if (device.webgl2) preload3D(); // схемы в карточках и отчетах рисуются по 3D-модели
+export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC); syncAutoCalib().catch(() => {}); if (device.webgl2) preload3D(); // схемы в карточках и отчетах рисуются по 3D-модели
   track('pro_open');
   localStorage.setItem('bp_mode', 'pro');
   const lc = await legacyCount().catch(() => 0);
@@ -431,7 +435,7 @@ async function clientForm(id, thenAssess) {
     <div class="row" style="gap:10px"><div style="flex:1">${inp('first', 'Имя *', c.first ?? (c.name || '').split(' ')[0])}</div><div style="flex:1">${inp('last', 'Фамилия', c.last ?? (c.name || '').split(' ').slice(1).join(' '))}</div></div>
     <div class="row" style="gap:10px"><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Дата рождения</div>${inp('dob', '', c.dob, 'date')}</div><div style="width:110px"><div class="sub" style="font-size:12px;margin-bottom:4px">Пол</div>${sel('sex', [['', '—'], ['M', 'Муж'], ['F', 'Жен']], c.sex)}</div></div>
     <div class="row" style="gap:10px"><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Рост, см</div>${inp('height', '', c.height, 'number')}</div><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Ведущая сторона</div>${sel('hand', [['R', 'Правша'], ['L', 'Левша']], c.hand)}</div></div>
-    ${inp('activity', 'Спорт или работа', c.activity)}
+    ${inp('activity', 'Спорт или работа', c.activity)}${TIP_ACT}
     <textarea id="complaints" placeholder="Жалобы, травмы" rows="3" class="field" style="height:auto;padding:12px 16px">${esc(c.complaints)}</textarea>
     <textarea id="notes" placeholder="Заметки" rows="3" class="field" style="height:auto;padding:12px 16px">${esc(c.notes)}</textarea>
     <button class="btn line" id="dict" style="height:48px">${ic('mic', 's')}Надиктовать</button>
@@ -686,7 +690,7 @@ function retestSheet(c, last) {
       d.querySelectorAll('[data-n]').forEach(b => b.onclick = () => { t = t0.getTime() + +b.dataset.n * DAY; draw(); });
       d.querySelector('#rsd').onchange = e => { const [y, m, dd] = e.target.value.split('-').map(Number); if (y) { t = new Date(y, m - 1, dd).getTime(); draw(); } };
       d.querySelector('#rss').onchange = e => { send = e.target.checked; draw(); };
-      d.querySelector('#rsx').onclick = () => { d.remove(); res(false); };
+      d.querySelector('#rsx').onclick = () => { d.remove(); res(false); }; d.addEventListener('bp-close', () => res(false));
       if (d.querySelector('#rsdel')) d.querySelector('#rsdel').onclick = async () => { if (last) { delete last.nextDate; last.retestSet = false; await put('assessments', last); } delete c.plannedRetest; await put('clients', c); syncReminders().catch(() => {}); d.remove(); res(true); };
       d.querySelector('#rsok').onclick = async () => { if (last) { last.nextDate = t; last.retestSet = true; last.draft = false; await put('assessments', last); } else { c.plannedRetest = t; await put('clients', c); }
         track('retest_set', { n: Math.round((t - Date.now()) / DAY), s: send ? 1 : 0 }, false); syncReminders().catch(() => {}); d.remove();
@@ -782,7 +786,7 @@ async function newAssessment(clientId, retestOf, opts = {}) {
     $('#go').onclick = async () => { useHit('tpl', tpl[0]); voice.unlock(); startMotion(); $('#go').textContent = 'Загружаю модель…';
       try { await initPose(); } catch (e) { toast('Не удалось загрузить модель: ' + e.message); return draw(); }
       track('assess_start', { n: units.length }, false);
-      const r = await runProtocol(units, { target: prev && prev.setup, onCancel: () => clientCard(clientId), pre }); if (!r) return;
+      const r = await runProtocol(units, { target: prev && prev.setup, onCancel: () => clientCard(clientId), pre, specialist: true }); if (!r) return;
       const a = { id: uid(), clientId, date: r.date, template: tpl[0], templateName: session ? 'После сеанса' : tpl[0] === 'posture' && !prev ? 'До сеанса' : tpl[1], protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, ...(r.main ? { main: r.main } : {}), tech: r.tech || null, limits: r.limits || {}, pain, painSide, lumbarZone: LUMBAR[tpl[0]] || (prev && prev.lumbarZone) || null, hyp: {}, plan: null, note: '', expect: expect.trim().slice(0, 500), nextDate: r.date + 30 * DAY, prevId: prev ? prev.id : null, draft: true };
       await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); track('assess_done', { n: units.length }, false); if (prev) track('retest_done', { n: Math.round((r.date - prev.date) / DAY) }, false); if (prev) endTrialOnRetest(); result(a.id); }; };
   draw(); if (opts.autostart) $('#go').click();
@@ -818,7 +822,7 @@ function whySheet(text) {
       <input class="field" id="wt" placeholder="Или своими словами" maxlength="140" style="margin-top:var(--s3);height:48px">
       <button class="btn" id="wok" style="margin-top:var(--s4)">Сохранить правку</button><button class="btn ghost" id="wx" style="margin-top:var(--s2)">Отмена</button></div>`;
     document.body.appendChild(d); let pick = '';
-    const done = v => { d.remove(); res(v); };
+    const done = v => { d.remove(); res(v); }; d.addEventListener('bp-close', () => res(null));
     // готовая причина сохраняется одним касанием; последняя причина подсвечена и подставляется кнопкой «Сохранить»
     pick = lastWhy; d.querySelectorAll('[data-w]').forEach(b => { b.classList.toggle('on', b.dataset.w === lastWhy); b.onclick = () => { lastWhy = b.dataset.w; done(b.dataset.w); }; });
     d.querySelector('#wok').onclick = () => { const t = (d.querySelector('#wt').value.trim() || pick).slice(0, 140); if (!t) { d.querySelector('#wt').focus(); return toast('Выберите причину'); } lastWhy = t; done(t); };
@@ -870,7 +874,7 @@ function proSpots(a) {
 }
 // на схеме только главное: мышцы, подтвержденные специалистом, иначе самые выраженные гипотезы. Остальное серым, без шума.
 const byTone = (x, y) => Math.abs(y.tone) - Math.abs(x.tone);
-const LEGEND = `<div class="row" style="justify-content:center;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--sub)">${[['HYPER', 'перегружена'], ['SHORT', 'укорочена'], ['WEAK', 'слабая']].map(([k, t]) => `<span class="row" style="gap:6px"><span class="mark sm ${k}"></span>${t}</span>`).join('')}</div>`;
+const LEGEND = `<div class="row" style="justify-content:center;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--sub)">${[['SHORT', 'зажим →←'], ['HYPER', 'перетяг ←→'], ['WEAK', 'спад']].map(([k, t]) => `<span class="row" style="gap:6px"><span class="mark sm ${k}"></span>${t}</span>`).join('')}</div>`;
 // Единый источник «над чем работаем»: одно и то же в решении, на всех схемах (карточка, итог, 3D), в отчете и в упражнениях.
 // По каждому состоянию (укрепить, растянуть, расслабить) до двух мышц, как в строках решения.
 function focusOf(a, sp = proSpots(a)) { const conf = a.check || {};
@@ -948,8 +952,8 @@ export async function result(aid, view = 'measured') {
       <p class="sub" style="font-size:13px;margin-top:6px">Черновик по замеру. В отчёт пойдёт ваша версия.</p>
       <div id="hlist" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s3)">${list.map((s, i) => hypCard(a, an, s, i === list.findIndex(x => C.muscles[x.id] && C.muscles[x.id].proTest && !chk[x.key]), evid)).join('')}</div></details>`;
     dock = `<div class="dock bar"><div style="flex:1;font-size:14px;align-self:center">Проверено руками <b class="num" id="hcnt">${testable.filter(s => chk[s.key] || s.edited).length} из ${testable.length}</b></div><button class="btn line" id="addm" style="width:auto;padding:0 18px">${ic('plus', 's')}Мышца</button></div>`; }
-  if (view === 'measured') { const pl = a.plan || { ex: plan(focusOf(a, sp).planSpots), text: '' }; const recs = muscleRecs(a);
-    body += `<h2 id="planh" style="font-size:20px;margin-top:var(--s4)">Назначение</h2><div class="card"><div class="row"><div class="eyebrow" style="flex:1">Рекомендации по мышцам</div>${recs.length ? '<button class="pill" id="addall" style="font-size:12px">Добавить все</button>' : ''}</div>
+  if (view === 'measured') { const pl = a.plan || { ex: plan(focusOf(a, sp).planSpots), text: '' }; const recs = aiRecsOn() || localStorage.getItem('bp_ai_hints') === '1' ? muscleRecs(a) : [];
+    body += `<h2 id="planh" style="font-size:20px;margin-top:var(--s4)">Назначение</h2><div class="card"><div class="row"><div class="eyebrow" style="flex:1">Рекомендации по мышцам</div>${recs.length ? '<button class="pill" id="addall" style="font-size:12px">Добавить все</button>' : '<button class="pill" id="aihints" style="font-size:12px">Показать справочные подсказки</button>'}</div>${recs.length ? '' : '<p class="sub" style="font-size:13px;margin-top:8px">Сессия под руководством специалиста: автоматические назначения выключены, решение за вами.</p>'}
       ${recs.length ? recs.map((r, i) => `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line-2)"><div class="row"><i class="bar" style="background:${TONE_HEX[r.s.k]};height:22px"></i><b style="flex:1;font-size:15px">${r.head}</b>${r.all.length ? `<button class="pill" data-add="${i}" style="font-size:12px">Добавить</button>` : ''}</div>
         ${r.out.map(([h, t]) => `<div style="font-size:14px;margin-top:6px;line-height:1.4"><b>${h}:</b> ${t}</div>`).join('')}</div>`).join('') : '<p class="sub" style="margin-top:8px">Значимых отклонений нет.</p>'}</div>
     <div class="card"><div class="eyebrow">Упражнения</div><input id="exq" class="field" type="search" placeholder="Найти упражнение или мышцу" style="margin-top:8px;height:44px" aria-label="Поиск упражнения">${Object.values(C.exercises).filter(e => !e.id.endsWith('_right') || pl.ex.includes(e.id)).sort((x, y) => (pl.ex.includes(y.id) - pl.ex.includes(x.id)) || x.title.localeCompare(y.title)).map(e => `<label class="row" data-exq="${esc([e.title, e.goal, e.category].filter(Boolean).join(' ').toLowerCase())}"${pl.ex.includes(e.id) ? '' : ' hidden'} style="margin-top:8px;font-size:15px"><input type="checkbox" data-e="${e.id}" ${pl.ex.includes(e.id) ? 'checked' : ''} style="width:20px;height:20px;accent-color:var(--ink)"><span style="flex:1">${e.title.split(' (')[0]}${e.id.endsWith('_right') ? ' (правая)' : e.id.endsWith('_left') ? ' (левая)' : ''}</span><span style="font-size:12px;color:var(--sub)">${e.dose || ''}</span></label>`).join('')}<button class="link" id="exall" style="margin-top:10px;font-size:14px">Показать все упражнения</button></div>
@@ -1036,7 +1040,8 @@ export async function result(aid, view = 'measured') {
     $('#exq').oninput = exShow; $('#exall').onclick = () => { exAll = !exAll; exShow(); };
     const recs = muscleRecs(a); const addIds = async list => { await savePlan(a); a.plan = a.plan || { ex: [], text: '' }; a.plan.ex = [...new Set([...a.plan.ex, ...list])]; await put('assessments', a); const y = scrollY; await result(aid, 'plan'); scrollTo(0, y); };
     document.querySelectorAll('[data-add]').forEach(b => b.onclick = () => addIds(recs[+b.dataset.add].all));
-    if ($('#addall')) $('#addall').onclick = () => addIds(recs.flatMap(r => r.all)); }
+    if ($('#addall')) $('#addall').onclick = () => addIds(recs.flatMap(r => r.all));
+    if ($('#aihints')) $('#aihints').onclick = () => { localStorage.setItem('bp_ai_hints', '1'); result(aid, view); }; }
 }
 /** Пересчет по сохраненной записи скелета; исходный расчет хранится, чтобы можно было вернуться. Повторное нажатие возвращает исходный. */
 async function recalc(a) {
@@ -1052,15 +1057,15 @@ function muscleRecs(a) {
   const sideW = s => s.side === 'RIGHT' ? 'справа' : 'слева', sk = s => s.side === 'RIGHT' ? 'right' : 'left';
   const ids = (l, s) => (l || []).map(x => x.replace('{s}', sk(s))).filter(x => C.exercises[x]);
   const exT = id => { const t = C.exercises[id].title, m = /\((левая|правая) сторона\)/.exec(t); return t.split(' (')[0] + (m ? (m[1] === 'левая' ? ', слева' : ', справа') : ''); };
-  return sp.map(s => { const m = C.muscles[s.id], state = s.k === 'WEAK' ? 'слабая' : s.k === 'SHORT' ? 'укорочена' : 'перегружена', out = [];
+  return sp.map(s => { const m = C.muscles[s.id], state = s.k === 'WEAK' ? 'спад' : s.k === 'SHORT' ? 'зажим' : 'перетяг (МФР и растяжка запрещены)', out = [];
     if (s.k === 'WEAK') { const subs = ((m.plan && m.plan.subs) || []).map(x => C.muscles[x]).filter(Boolean);
       const rel = ids(m.plan && m.plan.release, s), iso = ids((m.plan && m.plan.isolate) || m.activate, s).filter(x => !rel.includes(x)), integ = ids(m.plan && m.plan.integrate, s).filter(x => !rel.includes(x) && !iso.includes(x));
       if (subs.length || rel.length) out.push(['Отпустить', `${subs.map(x => x.name.toLowerCase()).join(', ') || 'перехватывающие мышцы'}${rel.length ? ': ' + rel.map(exT).join(', ') : ''}`, rel]);
       if (iso.length) out.push(['Включить отдельно', iso.map(exT).join(', '), iso]);
       if (integ.length) out.push(['Закрепить в движении', integ.map(exT).join(', '), integ]); }
-    else { const rel = ids(m.relax, s), ant = m.antagonist && C.muscles[m.antagonist];
-      if (m.massage) out.push(['Самомассаж' + (m.tool ? ' (' + m.tool + ')' : ''), m.massage, []]);
-      if (rel.length) out.push(['Растянуть', rel.map(exT).join(', '), rel]);
+    else { const rel = ids(releaseFor(m, s.k, x => C.exercises[x]), s), ant = m.antagonist && C.muscles[m.antagonist];
+      if (m.massage && massageAllowed(s.k)) out.push(['Самомассаж' + (m.tool ? ' (' + m.tool + ')' : ''), m.massage, []]);
+      if (rel.length) out.push([s.k === 'HYPER' ? 'Мягкая изометрия' : 'Растянуть', rel.map(exT).join(', '), rel]);
       const act = ant ? ids(((ant.plan && ant.plan.isolate) || []).concat(ant.activate || []), s).filter(x => !rel.includes(x)).slice(0, 1) : [];
       if (act.length) out.push([`Включить антагонист: ${ant.name.toLowerCase()}`, act.map(exT).join(', '), act]); }
     return { s, head: `${m.name} ${sideW(s)}: ${state}`, out, all: [...new Set(out.flatMap(x => x[2]))] }; });
@@ -1089,7 +1094,7 @@ function pwSheet(title, text, twice) {
       ${twice ? '<input class="field" id="pw2" type="password" autocomplete="new-password" placeholder="Повторите пароль" style="margin-top:var(--s2);height:48px">' : ''}
       <p id="pwe" class="sub" style="font-size:13px;min-height:18px;margin-top:6px;color:var(--over-t)"></p>
       <button class="btn" id="pwok">${twice ? 'Зашифровать и сохранить' : 'Открыть копию'}</button><button class="btn ghost" id="pwx" style="margin-top:var(--s2)">Отмена</button></div>`;
-    document.body.appendChild(d); const done = v => { d.remove(); res(v); }; setTimeout(() => d.querySelector('#pw1').focus(), 50);
+    document.body.appendChild(d); const done = v => { d.remove(); res(v); }; d.addEventListener('bp-close', () => res(null)); setTimeout(() => d.querySelector('#pw1').focus(), 50);
     d.querySelector('#pwok').onclick = () => { const a = d.querySelector('#pw1').value, b = twice ? d.querySelector('#pw2').value : a;
       if (a.length < 6) return d.querySelector('#pwe').textContent = 'Нужно хотя бы 6 символов'; if (a !== b) return d.querySelector('#pwe').textContent = 'Пароли не совпадают'; done(a); };
     d.querySelector('#pwx').onclick = () => done(null); }); }
@@ -1124,7 +1129,7 @@ async function restore(file) {
 function confirm2(text, ok = 'Да', danger = true) {
   return new Promise(res => { const d = document.createElement('div'); d.className = 'sheet';
     d.innerHTML = `<div><h2 style="font-size:20px;line-height:1.3">${esc(text)}</h2><button class="btn" id="cfy" style="margin-top:var(--s5);${danger ? 'background:var(--over-t)' : ''}">${esc(ok)}</button><button class="btn ghost" id="cfn" style="margin-top:var(--s2)">Отмена</button></div>`;
-    document.body.appendChild(d); const done = v => { d.remove(); res(v); };
+    document.body.appendChild(d); const done = v => { d.remove(); res(v); }; d.addEventListener('bp-close', () => res(false));
     d.querySelector('#cfy').onclick = () => done(true); d.querySelector('#cfn').onclick = () => done(false); d.onclick = e => { if (e.target === d) done(false); }; }); }
 // снимок в отдельной базе этого аккаунта
 const snapName = () => nameFor() + '-snap';
@@ -1311,6 +1316,9 @@ async function report(aid) {
   // занятия дома: комплаенс и боль до/после (если клиент делал комплекс по ссылке)
   const hv = c.progress && c.progress.vas || []; if (hv.length) { const m = vasStats(hv, 30), pairs = hv.filter(r => Number.isFinite(r.pre) && Number.isFinite(r.post));
     sections.push({ h: 'Занятия дома, 30 дней', rows: [{ text: `Выполнено в ${m.activeDays} из 30 дней (${m.compliance}%)` }, ...(m.avgPre != null ? [{ text: `Боль в среднем: ${String(m.avgPre).replace('.', ',')} до занятия → ${String(m.avgPost).replace('.', ',')} после` }] : [])], chart: pairs.slice(-14) }); }
+  // режим специалиста: клиническая классификация и векторная сетка (θ относительно g, мм) в отчет PDF
+  { const pp = await get('poses', a.id).catch(() => null), st = pp && pp.poses && unpack(pp.poses.stand, (a.setup && a.setup.w) || 720, (a.setup && a.setup.h) || 1280), pose = st && st.length ? st[st.length >> 1].p : null;
+    for (const x of [clinicalSection(top, C.muscles), vectorSection(a.snapshot, a.setup, pose)]) if (x) sections.push(x); }
   const pro = isPro(), logo = pro ? await meta('logo') : '', photo = await meta('photo'), title = await meta('title'), myLogo = await meta('logo');
   const cv = await passportImage({ eyebrow: 'ПАСПОРТ ДВИЖЕНИЯ', name: c.name, date: 'Оценка ' + fmtDate(a.date), sp: mapSp, sections, delta, footer: { name: author, title, contact: contact ? 'Запись: ' + contact : location.host, after, note, logo, photo, brand: pro ? 'pro' : 'free' }, raw: true });
   // предпросмотр перед отправкой: специалист видит ровно то, что получит клиент
@@ -1415,7 +1423,7 @@ async function addResult(c, r) {
 // =================== Калибровка (бета, только администратор) ===================
 // Автор методики заранее знает проблему человека: отмечает ее здесь, человек проходит анкету (где болит, что беспокоит)
 // и полный видеотест, результат с записью движения приходит в кабинет. Выгрузка сводит экспертную оценку, ответы и замеры в один файл.
-const CAL_STATES = [['HYPER', 'перегружена'], ['SHORT', 'укорочена'], ['WEAK', 'слабая']], CAL_SIDES = [['LEFT', 'Л'], ['RIGHT', 'П'], ['BOTH', 'обе']];
+const CAL_STATES = [['SHORT', 'зажим'], ['HYPER', 'перетяг'], ['WEAK', 'спад']], CAL_SIDES = [['LEFT', 'Л'], ['RIGHT', 'П'], ['BOTH', 'обе']];
 async function calibSheet(edit) {
   const d = document.createElement('div'); d.className = 'sheet'; const labels = edit ? edit.calib.labels.slice() : []; let side = 'BOTH', q = '', tpl = TEMPLATES.find(t => t[0] === 'full') || TEMPLATES[0];
   const ms = Object.entries(C.muscles).map(([id, m]) => ({ id, name: m.name, zone: m.zone || '' }));
@@ -1543,12 +1551,12 @@ export async function pullResults() {
   if (bx) for (const item of boxes(bx).flatMap(id => data[id] || [])) {
     let m; try { m = await seal.decrypt(bx.key, item.data); } catch (e) { done(item.p); continue; }
     if (m && m.type === 'progress') { const c = typeof m.token === 'string' && m.token.length >= 16 && (await all('clients')).find(x => x.remoteToken === m.token); if (c) await saveProgress(c, m.vas); done(item.p); continue; }
-    try { const p0 = m.profile && typeof m.profile === 'object' ? m.profile : {}, pr = { name: str(p0.name, 40), surname: str(p0.surname, 60), dob: /^\d{4}-\d{2}-\d{2}$/.test(p0.dob) ? p0.dob : '', sex: ['M', 'F'].includes(p0.sex) ? p0.sex : '', height: /^\d{2,3}$/.test(p0.height) ? p0.height : '', hand: ['R', 'L'].includes(p0.hand) ? p0.hand : '', activity: str(p0.activity, 120), complaints: str(p0.complaints, 1000) };
+    try { const p0 = m.profile && typeof m.profile === 'object' ? m.profile : {}, pr = { name: str(p0.name, 40), surname: str(p0.surname, 60), email: /^[^\s@<>]{1,64}@[^\s@<>]{1,120}$/.test(p0.email || '') ? p0.email : '', dob: /^\d{4}-\d{2}-\d{2}$/.test(p0.dob) ? p0.dob : '', sex: ['M', 'F'].includes(p0.sex) ? p0.sex : '', height: /^\d{2,3}$/.test(p0.height) ? p0.height : '', hand: ['R', 'L'].includes(p0.hand) ? p0.hand : '', activity: str(p0.activity, 120), complaints: str(p0.complaints, 1000) };
       if (typeof m.token !== 'string' || !/^[A-Za-z0-9_-]{16,64}$/.test(m.token)) m.token = null;
       // тот же человек по общей ссылке повторно — в ту же карточку
       let c = m.token && (await all('clients')).find(x => x.remoteToken && x.remoteToken === m.token);
             if (!c) c = { id: uid(), created: Date.now(), remoteToken: m.token, notes: '' };
-      Object.assign(c, { name: [pr.name, pr.surname].filter(Boolean).join(' ') || 'Без имени', dob: pr.dob || c.dob || '', sex: pr.sex || c.sex || '', height: pr.height || c.height || '', hand: pr.hand || c.hand || 'R', leg: pr.hand || c.leg || 'R', activity: pr.activity || c.activity || '', complaints: pr.complaints || c.complaints || '' });
+      Object.assign(c, { name: [pr.name, pr.surname].filter(Boolean).join(' ') || 'Без имени', dob: pr.dob || c.dob || '', sex: pr.sex || c.sex || '', height: pr.height || c.height || '', hand: pr.hand || c.hand || 'R', leg: pr.hand || c.leg || 'R', activity: pr.activity || c.activity || '', email: pr.email || c.email || '', complaints: pr.complaints || c.complaints || '' });
       if (!m.result || typeof m.result !== 'object') throw new Error('no result');
       await put('clients', c); await addResult(c, m.result); got.push(c.name); done(item.p); } catch (e) { console.warn('inbox item', e); } }
   if (got.length) track('result_pulled', { n: got.length }, false);
@@ -1575,18 +1583,21 @@ export async function motionViewer(poses, setup, back, titleText) {
     <div class="row" style="margin-top:10px;gap:8px"><div class="seg" style="flex:1"><button id="m2" class="on">Схема</button><button id="m3">3D-фигура</button></div></div>
     <div class="card" style="margin-top:10px;padding:10px"><div id="stage" style="width:100%;height:380px;position:relative"><canvas id="cv" style="width:100%;height:100%;display:block"></canvas></div>
      <div class="row" style="margin-top:8px"><button class="round" id="pp" aria-label="Пауза" style="background:var(--surface-2)">${ic('pause', 's')}</button><input type="range" id="ph" min="0" max="1000" value="0" style="flex:1;accent-color:var(--ink)"></div>
-     <div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap"><button class="pill" id="sp" style="font-size:12px">Скорость 1×</button><button class="pill" id="am" style="font-size:12px">Подчеркнуть отклонения</button><span id="amn" style="font-size:12px;color:var(--short-t)"></span></div>
+     <div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap"><button class="pill" id="sp" style="font-size:12px">Скорость 1×</button><button class="pill" id="am" style="font-size:12px">Подчеркнуть отклонения</button><button class="pill" id="gh" style="font-size:12px">Норма поверх факта</button><span id="amn" style="font-size:12px;color:var(--short-t)"></span></div>
      <p style="font-size:12px;color:var(--sub);margin-top:8px" id="note"></p></div></div></div>`);
   let fr2 = [], fr3 = null, dur = 1;
   const load = () => { const pk = poses[key]; fr2 = normalize(unpack(pk, setup && setup.w, setup && setup.h)); fr3 = unpackWorld(pk); dur = Math.max(1, fr2.length ? fr2.at(-1).t : 1);
     $('#note').textContent = mode === '3d' && !fr3 ? 'Для этой записи нет объемных данных: фигура построена по плоской записи.' : 'Скелет выровнен по стопам и росту. Скорость реальная.'; };
   const frameAt = () => { const i = Math.min(fr2.length - 1, Math.round(k * (fr2.length - 1))); return i; };
+  let ghost = false;
   const draw2 = () => { const cv = $('#cv'); if (!cv) return; const ctx = cv.getContext('2d'), W = cv.width = cv.clientWidth * devicePixelRatio, H = cv.height = cv.clientHeight * devicePixelRatio;
     ctx.clearRect(0, 0, W, H); const f = fr2[frameAt()]; if (!f) return; const p = exaggerate(f.p, amp), sc = H / 1.6, ox = W / 2, oy = H * .94, P = l => [ox + l.x * sc, oy + l.y * sc];
     ctx.strokeStyle = '#E0D8CA'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, oy); ctx.lineTo(W, oy); ctx.stroke();
     ctx.lineCap = 'round'; for (const [i, j] of BONES) { if (p[i].v < .3 || p[j].v < .3) continue; ctx.strokeStyle = [25, 26, 23, 24].includes(i) || [25, 26].includes(j) ? '#E8765A' : '#1E2533'; ctx.lineWidth = 7 * devicePixelRatio; ctx.beginPath(); ctx.moveTo(...P(p[i])); ctx.lineTo(...P(p[j])); ctx.stroke(); }
     ctx.fillStyle = '#C6E84B'; for (const j of [11, 12, 13, 14, 23, 24, 25, 26, 27, 28]) { ctx.beginPath(); ctx.arc(...P(p[j]), 6 * devicePixelRatio, 0, 7); ctx.fill(); }
-    const h = P(p[0]); ctx.strokeStyle = '#1E2533'; ctx.lineWidth = 5 * devicePixelRatio; ctx.beginPath(); ctx.arc(h[0], h[1], sc * .05, 0, 7); ctx.stroke(); };
+    const h = P(p[0]); ctx.strokeStyle = '#1E2533'; ctx.lineWidth = 5 * devicePixelRatio; ctx.beginPath(); ctx.arc(h[0], h[1], sc * .05, 0, 7); ctx.stroke();
+    // Ghost Overlay: зеленая симметричная норма полупрозрачно поверх факта, углы плеч и таза
+    if (ghost) { const g = drawGhost(ctx, p.map(l => { const [x, y] = P(l); return { x, y, visibility: l.v }; }), 0, { fact: false }); if (g) { ctx.fillStyle = '#1E7149'; ctx.font = `600 ${13 * devicePixelRatio}px system-ui`; ctx.fillText(`θ плеч ${g.shoulderDeg}° · θ таза ${g.pelvisDeg}°`, 12 * devicePixelRatio, 20 * devicePixelRatio); } } };
   const loop = () => { if (!document.getElementById('stage')) return; if (playing) { k = (k + (1 / 60) * speed / dur) % 1; $('#ph').value = Math.round(k * 1000); }
     if (mode === 'flat') draw2(); else if (v3) v3.set(frameAt()); raf = requestAnimationFrame(loop); };
   const open3d = async () => { const THREE = await import('three'); const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
@@ -1621,6 +1632,7 @@ export async function motionViewer(poses, setup, back, titleText) {
   $('#pp').onclick = () => { playing = !playing; $('#pp').innerHTML = ic(playing ? 'pause' : 'play', 's'); };
   $('#ph').oninput = e => { playing = false; $('#pp').innerHTML = ic('play', 's'); k = e.target.value / 1000; };
   $('#sp').onclick = () => { speed = speed === 1 ? .5 : speed === .5 ? .25 : 1; $('#sp').textContent = `Скорость ${String(speed).replace('.', ',')}×`; };
+  $('#gh').onclick = () => { ghost = !ghost; $('#gh').style.borderColor = ghost ? 'var(--ok-t)' : 'transparent'; draw2(); };
   $('#am').onclick = () => { amp = amp === 1 ? 2 : 1; $('#am').style.borderColor = amp > 1 ? 'var(--short)' : 'transparent'; $('#amn').textContent = amp > 1 ? 'Колени и наклон корпуса усилены ×2 для наглядности' : ''; };
   $('#m2').onclick = () => { if (mode === 'flat') return; mode = 'flat'; $('#m2').classList.add('on'); $('#m3').classList.remove('on'); if (v3) v3.dispose(); v3 = null; $('#stage').innerHTML = '<canvas id="cv" style="width:100%;height:100%;display:block"></canvas>'; load(); };
   $('#m3').onclick = async () => { if (mode === '3d') return; mode = '3d'; $('#m3').classList.add('on'); $('#m2').classList.remove('on'); load(); v3 = await open3d(); };

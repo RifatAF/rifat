@@ -84,6 +84,10 @@
  ],
  "rewrites": [
   {
+   "source": "/models/face_landmarker.task",
+   "destination": "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+  },
+  {
    "source": "/models/pose_landmarker_:v(lite|full|heavy).task",
    "destination": "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_:v/float16/1/pose_landmarker_:v.task"
   },

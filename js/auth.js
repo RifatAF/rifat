@@ -45,7 +45,9 @@ export const meSync = () => me || null;
 export const configSync = () => cfg || {};
 /** Возврат с виджета Telegram: данные пришли в адресе страницы, подпись проверяет сервер. */
 export async function tgWebLogin(data) {
-  const role = localStorage.getItem('bp_login_role') || 'client';
+  // роль специалиста — только по свежему нажатию кнопки входа в кабинете (10 минут), иначе клиент
+  let role = 'client'; try { const x = JSON.parse(localStorage.getItem('bp_login_role') || 'null'); if (x && x.role === 'specialist' && Date.now() - x.t < 600000) role = 'specialist'; } catch (e) {}
+  localStorage.removeItem('bp_login_role');
   me = (await post('telegram', { data, role, consent: !!localStorage.getItem(CONSENT_KEY), health: !!localStorage.getItem(CONSENT_KEY), ref: localStorage.getItem('bp_ref') })).user;
   if (role === 'specialist' && me.role !== 'specialist') me = await setRole('specialist');
   return role;
@@ -122,10 +124,10 @@ export function loginScreen(role, cont, opts = {}) {
       }).catch(() => { d.innerHTML = '<p class="sub" style="font-size:13px">Google сейчас недоступен</p>'; }); }
     if (list.includes('tg-web')) {
       // своя кнопка вместо iframe-виджета: без артефактов на фоне, и вход идет через страницу Telegram с возвратом на сайт
-      localStorage.setItem('bp_login_role', role);
       const u = `https://oauth.telegram.org/auth?bot_id=${cfg.telegramId}&origin=${encodeURIComponent(location.origin)}&request_access=write&return_to=${encodeURIComponent(location.origin + '/')}`;
       // основной вход Google, Telegram дополнительный: второстепенная кнопка под ним
       box.insertAdjacentHTML('beforeend', `${list.includes('google') ? '<p class="sub" style="font-size:13px;text-align:center;margin:2px 0">или</p>' : ''}<a class="btn${list.includes('google') ? ' line' : ''}" id="tgweb" href="${u}" style="text-decoration:none"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="${list.includes('google') ? '#229ED9' : '#fff'}" d="M9.8 15.2 9.6 19c.4 0 .6-.2.8-.4l2-1.9 4.1 3c.8.4 1.3.2 1.5-.7l2.7-12.6c.3-1.1-.4-1.6-1.2-1.3L3.7 11.3c-1.1.4-1.1 1-.2 1.3l4.1 1.3 9.6-6c.5-.3.9-.1.5.2"/></svg>Войти через Telegram</a>${pro && list.includes('google') ? '<p class="sub" style="font-size:12px;text-align:center">Через Telegram бот сразу пишет, когда клиент прошел тест по ссылке</p>' : ''}`);
+      box.querySelector('#tgweb').addEventListener('click', () => localStorage.setItem('bp_login_role', JSON.stringify({ role, t: Date.now() })));
     }
     if (list.includes('email')) {
       // самый простой путь: почта и одна кнопка; в письме кнопка «Войти», код нужен, только если письмо открыто на другом устройстве
@@ -172,7 +174,6 @@ export function safetyScreen(cont, back, booking) {
   show(`<div class="scr fade"><div class="top-bar">${back ? `<button class="round" id="sback" aria-label="Назад">${ic('chevron-left')}</button>` : '<div style="height:48px"></div>'}<span style="flex:1"></span></div>
    <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:var(--s3)">
     <div class="eyebrow">Перед тестом</div><h1 style="font-size:26px">Есть ли у вас сейчас что-то из этого?</h1>
-    <p class="sub" style="font-size:14px">В тесте приседания и стойка на одной ноге. Если что-то из списка есть, сначала нужен врач.</p>
     <div class="group">${FLAGS.map(([k, t]) => `<label class="chk-row" data-k="${k}"><input type="checkbox" class="check"><span>${t}</span></label>`).join('')}</div>
    </div><div class="dock"><p style="font-size:13px;color:var(--sub);text-align:center">Спросим снова через ${RF_DAYS} дней</p><button class="btn" id="sok">Ничего из этого нет</button></div></div>`);
   if (back) document.getElementById('sback').onclick = back;

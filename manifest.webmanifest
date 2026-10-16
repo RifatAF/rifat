@@ -1,8 +1,9 @@
 {
+  "id": "/",
   "name": "BodyPassport",
   "short_name": "BodyPassport",
   "description": "Карта тела по камере телефона",
-  "start_url": "./",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#0E5A6B",
   "theme_color": "#F3F6F6",
@@ -32,5 +33,6 @@
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "scope": "/"
 }
