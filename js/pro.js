@@ -1541,6 +1541,14 @@ async function saveProgress(c, vas) {
   const list = (Array.isArray(vas) ? vas : []).slice(-60).map(r => r && typeof r === 'object' ? { t: n(r.t, 0, Date.now() + DAY), pre: n(r.pre, 0, 10), post: n(r.post, 0, 10), n: n(r.n, 0, 50), all: n(r.all, 0, 50) } : null).filter(r => r && r.t);
   c.progress = { vas: list, at: Date.now() }; await put('clients', c);
 }
+/** Досланные замеры ЦНС: дописать в оценки клиента с той же датой, если их там нет. */
+async function saveCns(c, items) {
+  const as = await byClient(c.id); let n = 0;
+  for (const it of (Array.isArray(items) ? items : []).slice(0, 10)) { if (!it || typeof it !== 'object' || !Number.isFinite(it.date)) continue;
+    const a = as.find(x => x.date === it.date); if (!a || a.vns || a.touch) continue; const cn = cleanCns(it.vns, it.touch); if (!cn.vns && !cn.touch) continue;
+    Object.assign(a, cn); await put('assessments', a); n++; }
+  if (n) track('cns_backfill_got', { n }, false);
+}
 export async function pullResults() {
   const clients = (await all('clients')).filter(c => c.invite); const bx = await meta('inbox');
   const boxes = b => [b.id].concat(b.old && Date.now() < LEGACY_UNTIL ? [b.old] : []);
@@ -1550,12 +1558,14 @@ export async function pullResults() {
   for (const c of clients) for (const item of boxes(c.invite).flatMap(id => data[id] || [])) {
     let r; try { r = await seal.decrypt(c.invite.key, item.data); } catch (e) { done(item.p); continue; } // не расшифровывается этим ключом: мусор, иначе он занимает лимит ссылки
     if (r && r.type === 'progress') { await saveProgress(c, r.vas); done(item.p); continue; }
+    if (r && r.type === 'cns') { await saveCns(c, r.items); done(item.p); continue; }
     if (r && r.type === 'join') { const p0 = r.profile && typeof r.profile === 'object' ? r.profile : {};
       c.selfReport = { complaints: str(p0.complaints, 600), activity: str(p0.activity, 120), dob: /^\d{4}-\d{2}-\d{2}$/.test(p0.dob) ? p0.dob : '', sex: ['M', 'F'].includes(p0.sex) ? p0.sex : '', height: /^\d{2,3}$/.test(p0.height) ? p0.height : '', name: [str(p0.name, 40), str(p0.surname, 60)].filter(Boolean).join(' ') };
       await put('clients', c); r = r.result; if (!r || typeof r !== 'object') { done(item.p); continue; } }
     try { await addResult(c, r); got.push(c.name); done(item.p); } catch (e) { console.warn('relay item', e); } }
   if (bx) for (const item of boxes(bx).flatMap(id => data[id] || [])) {
     let m; try { m = await seal.decrypt(bx.key, item.data); } catch (e) { done(item.p); continue; }
+    if (m && m.type === 'cns') { const c = typeof m.token === 'string' && m.token.length >= 16 && (await all('clients')).find(x => x.remoteToken === m.token); if (c) await saveCns(c, m.items); done(item.p); continue; }
     if (m && m.type === 'progress') { const c = typeof m.token === 'string' && m.token.length >= 16 && (await all('clients')).find(x => x.remoteToken === m.token); if (c) await saveProgress(c, m.vas); done(item.p); continue; }
     try { const p0 = m.profile && typeof m.profile === 'object' ? m.profile : {}, pr = { name: str(p0.name, 40), surname: str(p0.surname, 60), email: /^[^\s@<>]{1,64}@[^\s@<>]{1,120}$/.test(p0.email || '') ? p0.email : '', dob: /^\d{4}-\d{2}-\d{2}$/.test(p0.dob) ? p0.dob : '', sex: ['M', 'F'].includes(p0.sex) ? p0.sex : '', height: /^\d{2,3}$/.test(p0.height) ? p0.height : '', hand: ['R', 'L'].includes(p0.hand) ? p0.hand : '', activity: str(p0.activity, 120), complaints: str(p0.complaints, 1000) };
       if (typeof m.token !== 'string' || !/^[A-Za-z0-9_-]{16,64}$/.test(m.token)) m.token = null;
