@@ -1456,6 +1456,17 @@ async function sendProgress(log) {
     if (r.ok) { localStorage.setItem('bp_prog_at', String(Date.now())); track('progress_sent', {}, false); } } catch (e) {}
 }
 
+// ЦНС для уже отправленных тестов: раньше кабинет выбрасывал замеры глаз и касаний. Телефон клиента один раз досылает их,
+// кабинет дописывает в оценки с той же датой. Видео и скелет не идут, только числа замеров.
+async function backfillCns() {
+  const inv = INV(); if (!inv || localStorage.getItem('bp_cns_bf_' + inv.i)) return;
+  const items = tests().filter(t => t && t.date && (t.vns || t.touch)).slice(-10).map(t => ({ date: t.date, vns: t.vns || null, touch: t.touch || null }));
+  if (!items.length) { localStorage.setItem('bp_cns_bf_' + inv.i, '1'); return; }
+  try { const pr = PROFILE(); const body = await seal.encrypt(inv.k, { type: 'cns', token: inv.join ? pr && pr.token : undefined, items });
+    const r = await fetch('/api/relay?id=' + inv.i, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body });
+    if (r.ok) { localStorage.setItem('bp_cns_bf_' + inv.i, '1'); track('cns_backfill', { n: items.length }, false); } } catch (e) {}
+}
+
 // ---------- отчет специалиста по веб-ссылке: только просмотр, без входа ----------
 async function reportView(code) {
   const [id, k] = String(code).split('.');
@@ -1830,6 +1841,7 @@ startPassive(); // фоновый сбор касаний и ритма набо
     try { role = await tgWebLogin(data); claimLegacy(); } catch (e) { toast('Не получилось войти через Telegram: ' + e.message); }
     return role === 'specialist' ? openPro() : INV() ? inviteWelcome() : prep(); }
   if (location.hash.startsWith('#rep=')) return reportView(location.hash.slice(5));
+  setTimeout(() => backfillCns().catch(() => {}), 5000);
   if (location.hash.startsWith('#r=')) { try { SHARED = cleanResult(await unpackResult(location.hash.slice(3))); } catch (e) { SHARED = null; } }
   if (location.hash.startsWith('#join=')) { try { const inv = { ...cleanInv(seal.unpack(location.hash.slice(6))), join: true }; localStorage.setItem('bp_inv', JSON.stringify(inv)); localStorage.setItem('bp_mode', 'client'); history.replaceState(null, '', location.pathname); return inviteWelcome(); } catch (e) {} }
   if (location.hash.startsWith('#inv=')) { try { const inv = cleanInv(seal.unpack(location.hash.slice(5))); localStorage.setItem('bp_inv', JSON.stringify(inv)); localStorage.setItem('bp_mode', 'client'); history.replaceState(null, '', location.pathname); return inviteWelcome(); } catch (e) {} }
