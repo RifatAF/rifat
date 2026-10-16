@@ -1,3 +1,5 @@
+import { drawGhost } from './biomechanics-engine.js';
+import { clinicalSection, vectorSection } from './white-label-pdf.js';
 import { setSession, MODES, aiRecsOn } from './session-controller.js';
 import { releaseFor, massageAllowed } from './biomechanics-engine.js';
 // Кабинет специалиста: клиенты, оценки по протоколам, три слоя результата, резервная копия.
@@ -1314,6 +1316,9 @@ async function report(aid) {
   // занятия дома: комплаенс и боль до/после (если клиент делал комплекс по ссылке)
   const hv = c.progress && c.progress.vas || []; if (hv.length) { const m = vasStats(hv, 30), pairs = hv.filter(r => Number.isFinite(r.pre) && Number.isFinite(r.post));
     sections.push({ h: 'Занятия дома, 30 дней', rows: [{ text: `Выполнено в ${m.activeDays} из 30 дней (${m.compliance}%)` }, ...(m.avgPre != null ? [{ text: `Боль в среднем: ${String(m.avgPre).replace('.', ',')} до занятия → ${String(m.avgPost).replace('.', ',')} после` }] : [])], chart: pairs.slice(-14) }); }
+  // режим специалиста: клиническая классификация и векторная сетка (θ относительно g, мм) в отчет PDF
+  { const pp = await get('poses', a.id).catch(() => null), st = pp && pp.poses && unpack(pp.poses.stand, (a.setup && a.setup.w) || 720, (a.setup && a.setup.h) || 1280), pose = st && st.length ? st[st.length >> 1].p : null;
+    for (const x of [clinicalSection(top, C.muscles), vectorSection(a.snapshot, a.setup, pose)]) if (x) sections.push(x); }
   const pro = isPro(), logo = pro ? await meta('logo') : '', photo = await meta('photo'), title = await meta('title'), myLogo = await meta('logo');
   const cv = await passportImage({ eyebrow: 'ПАСПОРТ ДВИЖЕНИЯ', name: c.name, date: 'Оценка ' + fmtDate(a.date), sp: mapSp, sections, delta, footer: { name: author, title, contact: contact ? 'Запись: ' + contact : location.host, after, note, logo, photo, brand: pro ? 'pro' : 'free' }, raw: true });
   // предпросмотр перед отправкой: специалист видит ровно то, что получит клиент
@@ -1578,18 +1583,21 @@ export async function motionViewer(poses, setup, back, titleText) {
     <div class="row" style="margin-top:10px;gap:8px"><div class="seg" style="flex:1"><button id="m2" class="on">Схема</button><button id="m3">3D-фигура</button></div></div>
     <div class="card" style="margin-top:10px;padding:10px"><div id="stage" style="width:100%;height:380px;position:relative"><canvas id="cv" style="width:100%;height:100%;display:block"></canvas></div>
      <div class="row" style="margin-top:8px"><button class="round" id="pp" aria-label="Пауза" style="background:var(--surface-2)">${ic('pause', 's')}</button><input type="range" id="ph" min="0" max="1000" value="0" style="flex:1;accent-color:var(--ink)"></div>
-     <div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap"><button class="pill" id="sp" style="font-size:12px">Скорость 1×</button><button class="pill" id="am" style="font-size:12px">Подчеркнуть отклонения</button><span id="amn" style="font-size:12px;color:var(--short-t)"></span></div>
+     <div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap"><button class="pill" id="sp" style="font-size:12px">Скорость 1×</button><button class="pill" id="am" style="font-size:12px">Подчеркнуть отклонения</button><button class="pill" id="gh" style="font-size:12px">Норма поверх факта</button><span id="amn" style="font-size:12px;color:var(--short-t)"></span></div>
      <p style="font-size:12px;color:var(--sub);margin-top:8px" id="note"></p></div></div></div>`);
   let fr2 = [], fr3 = null, dur = 1;
   const load = () => { const pk = poses[key]; fr2 = normalize(unpack(pk, setup && setup.w, setup && setup.h)); fr3 = unpackWorld(pk); dur = Math.max(1, fr2.length ? fr2.at(-1).t : 1);
     $('#note').textContent = mode === '3d' && !fr3 ? 'Для этой записи нет объемных данных: фигура построена по плоской записи.' : 'Скелет выровнен по стопам и росту. Скорость реальная.'; };
   const frameAt = () => { const i = Math.min(fr2.length - 1, Math.round(k * (fr2.length - 1))); return i; };
+  let ghost = false;
   const draw2 = () => { const cv = $('#cv'); if (!cv) return; const ctx = cv.getContext('2d'), W = cv.width = cv.clientWidth * devicePixelRatio, H = cv.height = cv.clientHeight * devicePixelRatio;
     ctx.clearRect(0, 0, W, H); const f = fr2[frameAt()]; if (!f) return; const p = exaggerate(f.p, amp), sc = H / 1.6, ox = W / 2, oy = H * .94, P = l => [ox + l.x * sc, oy + l.y * sc];
     ctx.strokeStyle = '#E0D8CA'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, oy); ctx.lineTo(W, oy); ctx.stroke();
     ctx.lineCap = 'round'; for (const [i, j] of BONES) { if (p[i].v < .3 || p[j].v < .3) continue; ctx.strokeStyle = [25, 26, 23, 24].includes(i) || [25, 26].includes(j) ? '#E8765A' : '#1E2533'; ctx.lineWidth = 7 * devicePixelRatio; ctx.beginPath(); ctx.moveTo(...P(p[i])); ctx.lineTo(...P(p[j])); ctx.stroke(); }
     ctx.fillStyle = '#C6E84B'; for (const j of [11, 12, 13, 14, 23, 24, 25, 26, 27, 28]) { ctx.beginPath(); ctx.arc(...P(p[j]), 6 * devicePixelRatio, 0, 7); ctx.fill(); }
-    const h = P(p[0]); ctx.strokeStyle = '#1E2533'; ctx.lineWidth = 5 * devicePixelRatio; ctx.beginPath(); ctx.arc(h[0], h[1], sc * .05, 0, 7); ctx.stroke(); };
+    const h = P(p[0]); ctx.strokeStyle = '#1E2533'; ctx.lineWidth = 5 * devicePixelRatio; ctx.beginPath(); ctx.arc(h[0], h[1], sc * .05, 0, 7); ctx.stroke();
+    // Ghost Overlay: зеленая симметричная норма полупрозрачно поверх факта, углы плеч и таза
+    if (ghost) { const g = drawGhost(ctx, p.map(l => { const [x, y] = P(l); return { x, y, visibility: l.v }; }), 0, { fact: false }); if (g) { ctx.fillStyle = '#1E7149'; ctx.font = `600 ${13 * devicePixelRatio}px system-ui`; ctx.fillText(`θ плеч ${g.shoulderDeg}° · θ таза ${g.pelvisDeg}°`, 12 * devicePixelRatio, 20 * devicePixelRatio); } } };
   const loop = () => { if (!document.getElementById('stage')) return; if (playing) { k = (k + (1 / 60) * speed / dur) % 1; $('#ph').value = Math.round(k * 1000); }
     if (mode === 'flat') draw2(); else if (v3) v3.set(frameAt()); raf = requestAnimationFrame(loop); };
   const open3d = async () => { const THREE = await import('three'); const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
@@ -1624,6 +1632,7 @@ export async function motionViewer(poses, setup, back, titleText) {
   $('#pp').onclick = () => { playing = !playing; $('#pp').innerHTML = ic(playing ? 'pause' : 'play', 's'); };
   $('#ph').oninput = e => { playing = false; $('#pp').innerHTML = ic('play', 's'); k = e.target.value / 1000; };
   $('#sp').onclick = () => { speed = speed === 1 ? .5 : speed === .5 ? .25 : 1; $('#sp').textContent = `Скорость ${String(speed).replace('.', ',')}×`; };
+  $('#gh').onclick = () => { ghost = !ghost; $('#gh').style.borderColor = ghost ? 'var(--ok-t)' : 'transparent'; draw2(); };
   $('#am').onclick = () => { amp = amp === 1 ? 2 : 1; $('#am').style.borderColor = amp > 1 ? 'var(--short)' : 'transparent'; $('#amn').textContent = amp > 1 ? 'Колени и наклон корпуса усилены ×2 для наглядности' : ''; };
   $('#m2').onclick = () => { if (mode === 'flat') return; mode = 'flat'; $('#m2').classList.add('on'); $('#m3').classList.remove('on'); if (v3) v3.dispose(); v3 = null; $('#stage').innerHTML = '<canvas id="cv" style="width:100%;height:100%;display:block"></canvas>'; load(); };
   $('#m3').onclick = async () => { if (mode === '3d') return; mode = '3d'; $('#m3').classList.add('on'); $('#m2').classList.remove('on'); load(); v3 = await open3d(); };

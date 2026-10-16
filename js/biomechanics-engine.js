@@ -87,10 +87,10 @@ export function ghostDiff(p, cmPerPx = 0) {
 }
 const BONES = [[11, 12], [11, 23], [12, 24], [23, 24], [11, 13], [13, 15], [12, 14], [14, 16], [23, 25], [25, 27], [24, 26], [26, 28]];
 /** Рисует наложение: зеленая норма полупрозрачно поверх факта, подписи смещений. */
-export function drawGhost(ctx, p, cmPerPx = 0) {
+export function drawGhost(ctx, p, cmPerPx = 0, { fact = true } = {}) {
   const g = ghostDiff(p, cmPerPx); if (!g) return null;
   const line = (q, col, w) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); for (const [a, b] of BONES) { ctx.moveTo(q[a].x, q[a].y); ctx.lineTo(q[b].x, q[b].y); } ctx.stroke(); };
-  ctx.save(); line(p, 'rgba(255,255,255,.9)', 4); ctx.globalAlpha = .55; line(g.norm, '#2BD47D', 6); ctx.globalAlpha = 1;
+  ctx.save(); if (fact) line(p, 'rgba(255,255,255,.9)', 4); ctx.globalAlpha = .55; line(g.norm, '#2BD47D', 6); ctx.globalAlpha = 1;
   ctx.fillStyle = '#fff'; ctx.font = '600 14px system-ui'; for (const { i, mm } of g.points) if (mm > 5) ctx.fillText(mm + ' мм', p[i].x + 8, p[i].y - 6);
   ctx.restore(); return g;
 }
