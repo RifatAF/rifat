@@ -110,3 +110,14 @@ test('сессия: в режиме специалиста пассивный с
   setSession(MODES.SPEC); assert.equal(passiveOn(), false); assert.equal(aiRecsOn(), false); assert.equal(uiLang(), 'clinical');
   setSession(MODES.SELF); assert.equal(passiveOn(), true);
 });
+// голос один и мужской: каждая фраза, которую говорит приложение, должна быть в списке озвучки при сборке
+import fs from 'node:fs';
+import { SHORT_CMD } from '../js/pacing-guard.js';
+test('голос: все фразы приложения записываются при сборке', () => {
+  const extra = new Set(JSON.parse(fs.readFileSync(new URL('../data/voice-extra.json', import.meta.url))));
+  const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  const sayBlock = app.slice(app.indexOf('const SAY = {'), app.indexOf('};', app.indexOf('const SAY = {')));
+  const phrases = [...sayBlock.matchAll(/:\s*'([^']+)'/g)].map(m => m[1]), lit = [...app.matchAll(/\b(?:say|speak)\('([^']+)'\)/g)].map(m => m[1]);
+  const miss = [...phrases, ...lit, ...COUNT_WORDS, ...Object.values(SHORT_CMD)].filter(x => !extra.has(x));
+  assert.deepEqual(miss, []);
+});

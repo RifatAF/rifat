@@ -13,7 +13,7 @@ import { painWord, PAIN_SCALE } from './vas.js';
 import { recordTest, saveBlob } from './core.js';
 import { sayText } from './saytext.js';
 import { BATTERY_UNITS, forwardBend, singleBalance, thoracicRotation, overheadReach, chairStand, retroGait, autoScale } from './test-battery.js';
-import { mountPacing, falseStart, matchScore, PHASE, SHORT_CMD, GO_WORD, COUNT_WORDS, ZERO_CLICK } from './pacing-guard.js';
+import { mountPacing, falseStart, matchScore, PHASE, SHORT_CMD, GO_WORD, COUNT_WORDS, numWord, ZERO_CLICK } from './pacing-guard.js';
 import { pinhole, fpsGuard, flushGL } from './hardware-adapter.js';
 import { setSession, MODES, passiveOn } from './session-controller.js';
 import { touchSummary, resetTouch, startPassive } from './touch-tracker.js';
@@ -587,10 +587,10 @@ async function runProtocol0(protocol, opts = {}) {
         const fl = Math.max(F.kneeFlexion(p, true), F.kneeFlexion(p, false)); if (fl > maxFlex) maxFlex = fl;
         if (!down && dy > deep) { down = true; downAt = Date.now(); lastMove = Date.now(); peak = dy; counted = false; }
         // счет голосом строго в нижней точке: движение развернулось вверх после не меньше чем 250 мс внизу
-        if (down) { if (dy > peak) peak = dy; if (!counted && dy < peak - deep * .25 && Date.now() - downAt >= 250 && Date.now() - countAt >= 500) { counted = true; n++; countAt = Date.now(); lastMove = Date.now(); $('#ring').textContent = n; bar(n / N, `Повторы: ${n} из ${N}`); voice.say(COUNT_WORDS[n - 1] || String(n)); } }
+        if (down) { if (dy > peak) peak = dy; if (!counted && dy < peak - deep * .25 && Date.now() - downAt >= 250 && Date.now() - countAt >= 500) { counted = true; n++; countAt = Date.now(); lastMove = Date.now(); $('#ring').textContent = n; bar(n / N, `Повторы: ${n} из ${N}`); voice.say(numWord(n)); } }
         // повтор засчитывается, если внизу были не меньше четверти секунды и с прошлого прошло больше полсекунды;
         // вместо слова короткий сигнал: слова запаздывали и обрывали друг друга
-        if (down && dy < deep * .35) { down = false; if (!counted && Date.now() - downAt >= 250 && Date.now() - countAt >= 500) { n++; countAt = Date.now(); lastMove = Date.now(); $('#ring').textContent = n; bar(n / N, `Повторы: ${n} из ${N}`); voice.say(COUNT_WORDS[n - 1] || String(n)); } } }
+        if (down && dy < deep * .35) { down = false; if (!counted && Date.now() - downAt >= 250 && Date.now() - countAt >= 500) { n++; countAt = Date.now(); lastMove = Date.now(); $('#ring').textContent = n; bar(n / N, `Повторы: ${n} из ${N}`); voice.say(numWord(n)); } } }
       if (!down && Date.now() - lastMove > 6000) { lastMove = Date.now(); hint(SAY.repWait, 0); }
       await sleep(30); }
     const r = fr.length > 10 ? an(fr) : { f: {}, reps: 0, quality: 'RETAKE' }; if (r.f) r.f.max_knee_flex = maxFlex; keep(key, fr, rolls, r.visibility);
@@ -1257,7 +1257,7 @@ export async function workout(ids, reasons = {}) {
       try { await initPose(); if (myTok.dead || closed) return; await startCamera(v); } catch (er) { $('#exhint').textContent = 'Камера недоступна'; return; }
       track('ex_cam', { c: rk.kind }, false);
       cam.onFrame = f => { if (myTok.dead || closed) return camOff(); const r = rk.feed(f.pose, f.t); if (!f.pose) return; if ($('#exhint').textContent.startsWith('Поставьте')) $('#exhint').textContent = '';
-        if (r.ev === 'rep') { const inSet = r.n - (setN - 1) * tgt; $('#exn').textContent = inSet; voice.say(String(inSet));
+        if (r.ev === 'rep') { const inSet = r.n - (setN - 1) * tgt; $('#exn').textContent = inSet; voice.say(numWord(inSet));
           if (inSet >= tgt) { if (setN >= sets) { camOff(); voice.say('Отлично, упражнение выполнено'); mark(e); doneN++; i++; token.dead = true; setTimeout(run, 1500); return; }
             setN++; if ($('#exs')) $('#exs').textContent = setN; setTimeout(() => voice.say('Подход готов. Отдохните и продолжайте'), 600); $('#exn').textContent = 0; } }
         if (r.ev === 'low' && f.t - lastCue > 6) { lastCue = f.t; const cue = REP_KINDS[rk.kind].cue.low; $('#exhint').textContent = cue; voice.say(cue); } }; };
@@ -1275,7 +1275,7 @@ export async function workout(ids, reasons = {}) {
     // объяснение можно пропустить или послушать заново; после него короткий сигнал «Пип» и пошел таймер
     let exTok = 0, ready; const started = new Promise(r => ready = r);
     const explain = async () => { const my = ++exTok, dead = () => myTok.dead || closed || my !== exTok;
-      const rec = [sayText(e), e.voice].find(x => x && voice.has(x));
+      const rec = [sayText(e)].find(x => x && voice.has(x));
       if (rec) { const nS = Math.min(3, e.steps.length), t0 = Date.now(), per = (rec.length * 65) / (nS + (e.check ? 1 : 0));
         const tick = setInterval(() => { if (dead()) return clearInterval(tick); lit(Math.min(nS - 1, Math.floor((Date.now() - t0) / per))); }, 300);
         await voice.speak(rec); clearInterval(tick); }
@@ -1292,7 +1292,7 @@ export async function workout(ids, reasons = {}) {
     while (left > 0) { await sleep(1000); if (myTok.dead || closed) return; if (!playing) continue; left--;
       $('#tm').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`; $('#arc').style.strokeDashoffset = 283 * (left / total);
       const cur = Math.min(e.steps.length - 1, Math.floor((total - left) * Math.min(3, e.steps.length) / total)); app.querySelectorAll('.st').forEach((el, k) => el.style.opacity = k <= cur ? 1 : .45);
-      if (left <= 3 && left > 0) voice.say(String(left));
+      if (left <= 3 && left > 0) voice.say(numWord(left));
       else if (hold && (total - left) % hold === 0) voice.say(`${(total - left) / hold} из ${total / hold}. Расслабьтесь на вдох и снова`);
       else if (blind && left > 5 && (total - left) % 10 === 0) voice.say(`Прошло ${total - left} секунд`); }
     voice.say(i + 1 < list.length ? 'Отлично. Отдых, готовим следующее' : 'Отлично'); mark(e); doneN++; i++; await sleep(i < list.length ? 2500 : 700); run();

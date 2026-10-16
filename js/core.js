@@ -39,9 +39,12 @@ function playFile(f) { let stopped = false, src = null, el = null, res;
   if (ctxOk()) decode(f).then(b => { if (stopped) return; h.dur = b.duration; src = voice._ac.createBufferSource(); src.buffer = b; src.connect(voice._ac.destination); src.onended = () => res(true); src.start(); }).catch(viaEl);
   else viaEl();
   return h; }
-// фразы без записи (новые подсказки) читаем голосом телефона: лучше другой голос, чем тишина
-function sysSay(text, done) { try { if (!window.speechSynthesis) return false; speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ru-RU'; const vs = speechSynthesis.getVoices().filter(v => v.lang.startsWith('ru'));
-  u.voice = vs.find(v => /dmitr|male|юр|макс/i.test(v.name)) || vs[0] || null; if (done) u.onend = done; speechSynthesis.speak(u); return true; } catch (e) { return false; } }
+// голос везде один: мужская запись DmitryNeural. Фразы без записи телефон читает только мужским голосом,
+// иначе тишина (текст все равно на экране). Женский или случайный системный голос не используем никогда.
+const MALE = /dmitr|yuri|юрий|maxim|максим|pavel|павел/i;
+function sysSay(text, done) { try { if (!window.speechSynthesis) return false; const vs = speechSynthesis.getVoices().filter(v => v.lang.startsWith('ru') && MALE.test(v.name) && !/female|жен/i.test(v.name));
+  if (!vs.length) { try { track('voice_missing', { c: String(text).slice(0, 60) }, false); } catch (e) {} return false; }
+  speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ru-RU'; u.voice = vs[0]; if (done) u.onend = done; speechSynthesis.speak(u); return true; } catch (e) { return false; } }
 export const voice = {
   async init() { voiceIdx = await fetch('voice/index.json', { cache: 'no-store' }).then(r => r.json()).catch(() => voiceIdx || {}); },
   /** Проверка перед тестом: все фразы есть в списке записей; если нет — перечитать список. */
@@ -69,7 +72,7 @@ export const voice = {
     const f = voiceIdx[text.trim()]; if (audio) { audio.stop(); audio = null; }
     const est = 400 + text.length * 70; this.until = Date.now() + est; this.hardUntil = Date.now() + est + 2500;
     if (f) { this.until = this.hardUntil = Date.now() + 15000; const h = playFile(f); audio = h; h.done.then(ok => { if (!ok && audio === h) sysSay(text); if (audio === h) this.until = 0; }); }
-    else sysSay(text, () => { this.until = 0; });
+    else if (!sysSay(text, () => { this.until = 0; })) this.until = 0;
   },
   /** Сказать фразу целиком и дождаться конца. Не обрывается следующими фразами; не дольше 15 с, чтобы сбой звука не останавливал тест. */
   speak(text, cueEl) {
