@@ -1,4 +1,5 @@
-// Touch Dynamics v2.0: пассивный замер через PointerEvents, пока человек отмечает зоны боли или двигает ползунок энергии.
+// Touch Dynamics v2.0: фоновый замер через PointerEvents на всем приложении. Отдельных экранов нет: человек заполняет
+// анкету (имя, дата рождения, рост), листает, проводит пальцем по «Проведите, чтобы начать», а замер уже идет.
 //  • Hold Time — сколько палец держит касание до отпускания или до начала движения. Норма 70–110 мс, больше 160 мс — признак тревожности или зажима.
 //  • Path Jitter — виляние свайпа: среднеквадратичное отклонение траектории от прямой начало–конец, в долях длины пути.
 //  • Micro-Reversals — микро-откаты: палец на 2–12 px возвращается назад против основного направления.
@@ -7,11 +8,30 @@ import { passiveOn, onSession } from './session-controller.js';
 
 export const HOLD = { normMin: 70, normMax: 110, anxious: 160 };
 const MOVE_PX = 4, REV_MIN = 2, REV_MAX = 12;
-const S = { holds: [], jitter: [], reversals: 0, swipes: 0, taps: 0 };
+const S = { holds: [], jitter: [], reversals: 0, swipes: 0, taps: 0, iki: [], dwell: [], keys: 0, corrections: 0 };
 const detach = new Set();
-onSession(() => { if (!passiveOn()) { for (const f of detach) f(); detach.clear(); resetTouch(); } });
+let global = null;
+onSession(() => { if (!passiveOn()) { for (const f of detach) f(); detach.clear(); global = null; resetTouch(); } else if (global === false) startPassive(); });
 
-export function resetTouch() { S.holds = []; S.jitter = []; S.reversals = 0; S.swipes = 0; S.taps = 0; }
+export function resetTouch() { Object.assign(S, { holds: [], jitter: [], reversals: 0, swipes: 0, taps: 0, iki: [], dwell: [], keys: 0, corrections: 0 }); }
+
+/** Фоновый сбор по всему документу с первого экрана. В режиме специалиста ждет возврата в SELF_TEST. */
+export function startPassive(root = document) {
+  if (!passiveOn()) { global = false; return; } if (global) return; const offT = trackTouch(root), offK = trackKeys(root);
+  global = () => { offT(); offK(); }; detach.add(global);
+}
+/** Ритм набора в полях анкеты: интервалы между символами (по событию input — работает и с экранной клавиатурой),
+ *  удержание клавиши там, где есть keydown/keyup, и доля исправлений. Сам текст не читается и не хранится. */
+export function trackKeys(root) {
+  if (!passiveOn()) return () => {}; let last = 0; const downAt = new Map();
+  const inp = e => { const t = e.target; if (!t || !/^(INPUT|TEXTAREA)$/.test(t.tagName) || /range|checkbox|radio|file/.test(t.type)) return;
+    const now = e.timeStamp; if (/^delete/.test(e.inputType || '')) S.corrections++; else { S.keys++; if (last && now - last < 2000) S.iki.push(now - last); } last = now; };
+  const kd = e => { if (e.key && e.key.length === 1 && !downAt.has(e.code || e.key)) downAt.set(e.code || e.key, e.timeStamp); };
+  const ku = e => { const k = e.code || e.key, t = downAt.get(k); if (t != null) { const d = e.timeStamp - t; if (d > 20 && d < 1000) S.dwell.push(d); downAt.delete(k); } };
+  const o = { passive: true, capture: true }; root.addEventListener('input', inp, o); root.addEventListener('keydown', kd, o); root.addEventListener('keyup', ku, o);
+  const off = () => { root.removeEventListener('input', inp, o); root.removeEventListener('keydown', kd, o); root.removeEventListener('keyup', ku, o); detach.delete(off); };
+  detach.add(off); return off;
+}
 
 /** Виляние и микро-откаты одной траектории [[x, y, t], ...]. */
 export function metrics(path) {
@@ -50,28 +70,10 @@ export function trackTouch(el) {
 const med = a => { if (!a.length) return null; const v = [...a].sort((x, y) => x - y); return v[v.length >> 1]; };
 /** Итог для результата теста. holdFlag — признак тревожности или зажима (медиана > 160 мс). */
 export function touchSummary() {
-  if (!passiveOn() || (!S.holds.length && !S.swipes)) return null;
+  if (!passiveOn() || (!S.holds.length && !S.swipes && S.keys < 5)) return null;
   const hold = med(S.holds);
-  return { holdMs: hold == null ? null : Math.round(hold), holdNorm: hold != null && hold >= HOLD.normMin && hold <= HOLD.normMax, holdFlag: hold != null && hold > HOLD.anxious,
+  const iki = med(S.iki), dwell = med(S.dwell);
+  return { typing: S.keys >= 5 ? { ikiMs: Math.round(iki), dwellMs: dwell == null ? null : Math.round(dwell), corrections: Math.round(S.corrections / Math.max(1, S.keys) * 100) / 100, keys: S.keys } : null,
+    holdMs: hold == null ? null : Math.round(hold), holdNorm: hold != null && hold >= HOLD.normMin && hold <= HOLD.normMax, holdFlag: hold != null && hold > HOLD.anxious,
     jitter: med(S.jitter), reversals: S.reversals, reversalsPerSwipe: S.swipes ? Math.round(S.reversals / S.swipes * 10) / 10 : 0, swipes: S.swipes, taps: S.taps, samples: S.holds.length };
-}
-
-// ---------- ползунок «Уровень энергии» ----------
-const ENERGY = [[0, 'Истощение'], [20, 'Снижен'], [40, 'В норме'], [70, 'Приподнят'], [88, 'Перевозбуждение']];
-export const energyWord = v => ENERGY.filter(([t]) => v >= t).pop()[1];
-/** Шторка с ползунком энергии; замер касаний подключается сам. Возвращает { energy, touch } или null, если закрыли. */
-export function energySheet() {
-  return new Promise(res => {
-    const d = document.createElement('div'); d.className = 'sheet';
-    d.innerHTML = `<div><h2 style="font-size:21px">Уровень энергии: <span id="enw">В норме</span></h2>
-      <p class="sub" style="font-size:14px;margin-top:6px">Сдвиньте ползунок, как вы себя чувствуете прямо сейчас</p>
-      <input type="range" id="en" min="0" max="100" value="55" style="width:100%;margin-top:18px;accent-color:var(--ink);height:40px" aria-label="Уровень энергии">
-      <div class="row" style="justify-content:space-between;font-size:12px;color:var(--sub)"><span>без сил</span><span>на взводе</span></div>
-      <button class="btn" id="enok" style="margin-top:16px">Дальше</button></div>`;
-    document.body.appendChild(d); const off = trackTouch(d), r = d.querySelector('#en');
-    r.oninput = () => { d.querySelector('#enw').textContent = energyWord(+r.value); };
-    const done = v => { off(); d.remove(); res(v); };
-    d.querySelector('#enok').onclick = () => done({ energy: +r.value, word: energyWord(+r.value), touch: touchSummary() });
-    d.addEventListener('bp-close', () => done(null));
-  });
 }

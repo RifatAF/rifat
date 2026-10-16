@@ -1,6 +1,7 @@
 // ВНС-фенотип v2.0, фаза 1: телефон в руках, 30–40 см от лица. Окуломоторный блок «Жидкая частица», 2,3 секунды.
 //
-//   Подготовка (до 1,5 с): сфера в центре, проверяем лицо и расстояние, копим rPPG.
+//   Все это спрятано в экран загрузки перед тестом: человек видит красивый загрузчик и сам следит за каплей.
+//   Пока идет настоящая загрузка, капля «дышит» в центре: проверяем лицо и расстояние, копим rPPG.
 //   0,00–2,00 с  Smooth Pursuit: WebGL-сфера плавно идет по лемнискате Бернулли (∞). Слежение — подзатылочный зажим C0–C2.
 //   2,00–2,06 с  сфера схлопывается в центр.
 //   2,06–2,30 с  Saccadic Snap: вспышка в верхнем углу. Латентность саккады, норма 180–220 мс.
@@ -28,34 +29,45 @@ export function stimulusAt(t, w, h) {
   return { x: w * .86, y: h * .12, r: .7, flash: Math.max(0, 1 - (t - FLASH_AT) / 240) };
 }
 
-// ---------- WebGL-сфера ----------
+// ---------- WebGL-сцена загрузчика: «жидкая частица» ----------
+// Метаболы: ведущая капля и три капли шлейфа сливаются в одну жидкую форму. Фон — медленное «северное сияние».
+// В финале капля схлопывается в центр, а в правом верхнем углу вспыхивает звезда «готово» (это и есть стимул саккады).
 const VS = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
-// жидкая сфера: освещение по нормали, легкая «рябь» поверхности во времени, вспышка — мягкое свечение
-const FS = `precision mediump float;uniform vec2 res;uniform vec3 s;uniform float time;uniform vec3 fl;
-void main(){vec2 q=gl_FragCoord.xy;q.y=res.y-q.y;vec3 col=vec3(.043,.102,.125);
- vec2 d=(q-s.xy)/max(s.z,1.);float r=length(d);float wob=.04*sin(atan(d.y,d.x)*5.+time*6.);
- if(r<1.+wob){vec3 n=normalize(vec3(d,sqrt(max(0.,1.-r*r))));float l=max(dot(n,normalize(vec3(-.4,-.5,.8))),0.);
-  float sp=pow(max(dot(reflect(-normalize(vec3(-.4,-.5,.8)),n),vec3(0.,0.,1.)),0.),24.);
-  col=mix(vec3(.10,.55,.32),vec3(.17,.83,.49),l)+sp*.8;}
- else col+=vec3(.17,.83,.49)*.25*exp(-(r-1.)*3.);
- if(fl.z>0.){float f=length(q-fl.xy)/(res.x*.08);col+=vec3(1.)*fl.z*exp(-f*f);}
- gl_FragColor=vec4(col,1.);}`;
-/** Рисовальщик сферы. WebGL, при его отсутствии — Canvas 2D с тем же видом. */
-export function createSphere(canvas) {
-  const gl = canvas.getContext('webgl', { antialias: true, preserveDrawingBuffer: false }) || canvas.getContext('experimental-webgl');
+const FS = `precision highp float;uniform vec2 res;uniform float time,rad,flash,fade;uniform vec2 b0,b1,b2,b3;
+float ball(vec2 q,vec2 c,float r){vec2 d=q-c;return r*r/max(dot(d,d),1.);}
+vec2 grad(vec2 q,vec2 c,float r){vec2 d=q-c;float l=dot(d,d)+r*r*.6;return -2.*r*r*d/(l*l);}
+void main(){vec2 q=gl_FragCoord.xy;q.y=res.y-q.y;vec2 uv=q/res;
+ vec3 bg=mix(vec3(.024,.075,.09),vec3(.04,.16,.18),smoothstep(1.2,0.,length(uv-vec2(.5,.45))*1.6));
+ float a=sin(uv.x*3.+time*.35)*sin(uv.y*2.2-time*.27);bg+=vec3(.0,.10,.08)*smoothstep(.2,1.,a)*.6;
+ float f=ball(q,b0,rad)+ball(q,b1,rad*.78)+ball(q,b2,rad*.6)+ball(q,b3,rad*.45);
+ vec3 col=bg+vec3(.17,.83,.55)*min(f,1.)*.18;
+ vec2 g=grad(q,b0,rad)+grad(q,b1,rad*.78)+grad(q,b2,rad*.6)+grad(q,b3,rad*.45);
+ // нормаль жидкой поверхности по градиенту поля метаболов; край сглажен, без «лесенки»
+ float e=clamp((f-1.)/(f+.6),0.,1.);vec3 n=normalize(vec3(-g*rad*.9,e*1.2+.25));vec3 L=normalize(vec3(-.45,-.6,.65));
+ float dif=max(dot(n,L),0.),sp=pow(max(dot(reflect(-L,n),vec3(0.,0.,1.)),0.),28.),rim=pow(1.-n.z,2.);
+ vec3 liq=mix(vec3(.04,.36,.30),vec3(.35,.95,.70),dif)+sp*.85+rim*vec3(.3,1.,.75)*.55;
+ col=mix(col,liq,smoothstep(.9,1.1,f));
+ vec2 st=vec2(res.x*.86,res.y*.12),d=q-st;float r=length(d)/(res.x*.05);float ang=atan(d.y,d.x);
+ float rays=pow(abs(cos(ang*2.)),36.)*exp(-r*.35)+pow(abs(cos(ang*2.+.785)),60.)*exp(-r*.6);
+ col+=flash*(vec3(1.,.98,.9)*exp(-r*r*1.6)+vec3(.7,1.,.9)*rays*.9);
+ gl_FragColor=vec4(col*fade,1.);}`;
+/** Сцена загрузчика. WebGL, при его отсутствии — Canvas 2D (простая капля). */
+export function createLiquidScene(canvas) {
+  const gl = canvas.getContext('webgl', { antialias: true, premultipliedAlpha: false }) || canvas.getContext('experimental-webgl');
   if (gl) { const sh = (t, src) => { const o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o); return o; };
     const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(pr);
     if (gl.getProgramParameter(pr, gl.LINK_STATUS)) { gl.useProgram(pr); const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW); const loc = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-      const u = n => gl.getUniformLocation(pr, n), U = { res: u('res'), s: u('s'), time: u('time'), fl: u('fl') }; canvas.__gl = gl;
-      return { kind: 'webgl', draw(x, y, r, time, flash) { const k = canvas.width / canvas.clientWidth || 1; gl.viewport(0, 0, canvas.width, canvas.height);
-          gl.uniform2f(U.res, canvas.width, canvas.height); gl.uniform3f(U.s, x * k, y * k, r * k); gl.uniform1f(U.time, time);
-          gl.uniform3f(U.fl, canvas.width * .86, canvas.height * .12, flash || 0); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); },
+      const u = n => gl.getUniformLocation(pr, n), U = Object.fromEntries(['res', 'time', 'rad', 'flash', 'fade', 'b0', 'b1', 'b2', 'b3'].map(n => [n, u(n)])); canvas.__gl = gl;
+      return { kind: 'webgl', draw({ pts, r, time, flash = 0, fade = 1 }) { const k = canvas.width / (canvas.clientWidth || 1); gl.viewport(0, 0, canvas.width, canvas.height);
+          gl.uniform2f(U.res, canvas.width, canvas.height); gl.uniform1f(U.time, time); gl.uniform1f(U.rad, r * k); gl.uniform1f(U.flash, flash); gl.uniform1f(U.fade, fade);
+          ['b0', 'b1', 'b2', 'b3'].forEach((n, i) => gl.uniform2f(U[n], pts[i].x * k, pts[i].y * k)); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); },
         dispose() { try { gl.flush(); gl.deleteBuffer(b); gl.deleteProgram(pr); gl.getExtension('WEBGL_lose_context')?.loseContext(); } catch (e) {} } }; } }
   const ctx = canvas.getContext('2d');
-  return { kind: '2d', draw(x, y, r, time, flash) { const k = canvas.width / canvas.clientWidth || 1; ctx.setTransform(k, 0, 0, k, 0, 0); ctx.fillStyle = '#0B1A20'; ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-      if (r > 0) { const g = ctx.createRadialGradient(x - r * .35, y - r * .35, 1, x, y, r); g.addColorStop(0, '#E8FFF4'); g.addColorStop(1, '#2BD47D'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); }
-      if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash})`; ctx.beginPath(); ctx.arc(canvas.clientWidth * .86, canvas.clientHeight * .12, 26, 0, 7); ctx.fill(); } }, dispose() {} };
+  return { kind: '2d', draw({ pts, r, flash = 0, fade = 1 }) { const k = canvas.width / (canvas.clientWidth || 1), W = canvas.clientWidth, H = canvas.clientHeight; ctx.setTransform(k, 0, 0, k, 0, 0);
+      ctx.globalAlpha = 1; ctx.fillStyle = '#06131A'; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = fade;
+      pts.forEach((p, i) => { const rr = r * [1, .78, .6, .45][i]; const g = ctx.createRadialGradient(p.x - rr * .3, p.y - rr * .3, 1, p.x, p.y, rr); g.addColorStop(0, '#C9FFE6'); g.addColorStop(1, '#14A07A'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, rr, 0, 7); ctx.fill(); });
+      if (flash > 0) { ctx.fillStyle = `rgba(255,255,240,${flash})`; ctx.beginPath(); ctx.arc(W * .86, H * .12, 18, 0, 7); ctx.fill(); } ctx.globalAlpha = 1; }, dispose() {} };
 }
 
 // ---------- глаза и голова по Face Landmarker ----------
@@ -152,39 +164,50 @@ function foreheadRGB(px, video, lm, w, h) {
   for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; } const n = d.length / 4; return { r: r / n, g: g / n, b: b / n };
 }
 
-/** Запуск блока поверх root на видео фронтальной камеры. Возвращает итог или null (режим специалиста, нет модели). */
-export async function runVnsBlock({ root, video, mirror = true, onPhase } = {}) {
-  if (!passiveOn() || !root || !video) return null;
-  let face; try { face = await loadFace(); } catch (e) { return { status: 'INVALID', reasons: ['model'] }; }
-  const cv = document.createElement('canvas'), W = root.clientWidth || innerWidth, H = root.clientHeight || innerHeight, dpr = Math.min(2, devicePixelRatio || 1);
-  cv.width = W * dpr; cv.height = H * dpr; cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:20'; root.appendChild(cv);
-  const sphere = createSphere(cv), R = Math.min(W, H) * .045;
+/** Экран загрузки перед тестом, внутри которого незаметно идет окуломоторный блок и rPPG.
+ *  ready — промис настоящей загрузки (камера, модель позы). Пока он не готов, капля «дышит» в центре и копится пульс;
+ *  затем 2,3 с стимула: «восьмерка», схлопывание и вспышка «готово». Возвращает итог ВНС или null (специалист, нет лица). */
+export async function runLoader({ ready, video, mirror = true, caption = ['Загружаем распознавание движения', 'Настраиваем камеру', 'Почти готово'] } = {}) {
+  const measure = passiveOn() && !!video && !(typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const el = document.createElement('div'); el.className = 'vnsl';
+  el.innerHTML = `<canvas></canvas><div class="vnsl-ui"><div class="vnsl-cap" aria-live="polite">${caption[0]}</div><div class="vnsl-bar"><b></b></div></div>`;
+  document.body.appendChild(el); const cv = el.querySelector('canvas'), cap = el.querySelector('.vnsl-cap'), bar = el.querySelector('.vnsl-bar b');
+  const W = innerWidth, H = innerHeight, dpr = Math.min(1.5, devicePixelRatio || 1); cv.width = W * dpr; cv.height = H * dpr;
+  const scene = createLiquidScene(cv), R = Math.min(W, H) * .055;
+  let face = null, readyDone = false, readyErr = null; ready = Promise.resolve(ready).then(() => { readyDone = true; }, e => { readyDone = true; readyErr = e; });
+  if (measure) loadFace().then(f => { face = f; }, () => {});
   const probe = document.createElement('canvas'); probe.width = 16; probe.height = 8; const px = probe.getContext('2d', { willReadFrequently: true });
-  // перевод экранных пикселей в градусы зрения: CSS-пиксель телефона ≈ 0,016 см, расстояние — по радужке
-  const CM_PER_PX = 2.54 / 160; let distCm = 35;
+  const CM_PER_PX = 2.54 / 160; let distCm = 35, faceSeen = 0;
   const samples = [], trace = [], reasons = new Set(); let lastTs = -1, total = 0, valid = 0;
-  const sense = (now, tStim) => { const vw = video.videoWidth, vh = video.videoHeight; if (!vw || now - lastTs < 15) return; lastTs = now;
+  const sense = (now, tStim) => { if (!face || !video.videoWidth || now - lastTs < 15) return; lastTs = now; const vw = video.videoWidth, vh = video.videoHeight;
     let r; try { r = face.detectForVideo(video, now); } catch (e) { return; }
-    const lm = r.faceLandmarks && r.faceLandmarks[0]; if (tStim >= 0) total++; if (!lm || lm.length < 478) { if (tStim >= 0) reasons.add('no_face'); return; }
+    const lm = r.faceLandmarks && r.faceLandmarks[0]; if (tStim >= 0) total++; if (!lm || lm.length < 478) { if (tStim >= 0) reasons.add('no_face'); return; } faceSeen++;
     const blend = r.faceBlendshapes && r.faceBlendshapes[0] ? Object.fromEntries(r.faceBlendshapes[0].categories.map(c => [c.categoryName, c.score])) : null;
     const head = headPose(r.facialTransformationMatrixes && r.facialTransformationMatrixes[0] && r.facialTransformationMatrixes[0].data);
     const eye = irisInEye(lm), conf = irisConfidence(eye, blend), gz = gazeAngles(head, eye), dc = faceDistanceCm(lm, vw); if (dc) distCm = distCm * .8 + dc * .2;
-    const c = foreheadRGB(px, video, lm, vw, vh); if (c) trace.push({ t: now, ...c });
+    try { const c = foreheadRGB(px, video, lm, vw, vh); if (c) trace.push({ t: now, ...c }); } catch (e) {}
     if (tStim < 0) return; const ok = conf >= GUARD.irisConf && gz.total <= GUARD.gazeDeg; if (!ok) reasons.add(conf < GUARD.irisConf ? 'iris_conf' : 'gaze_angle'); else valid++;
     const st = stimulusAt(tStim, W, H), deg = p => Math.atan2(p * CM_PER_PX, distCm) * D;
-    // фронтальная камера зеркальна: взгляд вправо по экрану — влево в кадре
     samples.push({ t: tStim, ok, conf, tx: deg(st.x - W / 2), ty: deg(st.y - H / 2), gh: (mirror ? -1 : 1) * gz.h, gv: -gz.v }); };
-  const t0 = performance.now();
-  await new Promise(done => { let stimStart = null;
-    const frame = () => { const now = performance.now(), el = now - t0;
-      if (stimStart == null && (el >= T.LEAD || (el > 600 && trace.length > 12))) { stimStart = now; onPhase && onPhase('stimulus'); }
-      const tStim = stimStart == null ? -1 : now - stimStart; if (tStim >= T.END) return done();
-      const st = tStim < 0 ? { x: W / 2, y: H / 2, r: 1, flash: 0 } : stimulusAt(tStim, W, H);
-      sphere.draw(st.x, st.y, R * st.r, now / 1000, st.flash); sense(now, tStim); requestAnimationFrame(frame); };
-    onPhase && onPhase('lead'); requestAnimationFrame(frame); });
-  sphere.dispose(); cv.remove();
-  const validFrac = total ? valid / total : 0, status = validFrac >= GUARD.validFrac ? 'OK' : 'INVALID';
-  return { status, reasons: [...reasons], validFrac: Math.round(validFrac * 100) / 100, distanceCm: Math.round(distCm), renderer: sphere.kind,
+  // шлейф: позиции капли с задержкой; при «дыхании» в центре капли кружат рядом
+  // шлейф считается по времени, а не по кадрам: капли сливаются в одну форму при любой частоте кадров
+  const posAt = (now, tStim) => { if (tStim < 0) { const a = now / 700; return { x: W / 2 + Math.cos(a) * R * .35, y: H / 2 + Math.sin(a * 1.3) * R * .25 }; } const s = stimulusAt(Math.min(tStim, T.END - 1), W, H); return { x: s.x, y: s.y }; };
+  const t0 = performance.now(); let stimStart = null, endAt = null;
+  await new Promise(done => { const frame = () => { const now = performance.now(), el0 = now - t0;
+      // старт стимула: загрузка закончилась, прошло не меньше 1,6 с и (если меряем) накоплено 3,5 с пульса или прошло 7 с
+      if (stimStart == null && readyDone && el0 > 1600 && (!measure || !face || trace.length > 90 || el0 > 7000 || (el0 > 3000 && !faceSeen))) stimStart = now;
+      const tStim = stimStart == null ? -1 : now - stimStart; if (tStim >= T.END && endAt == null) endAt = now;
+      const fade = endAt == null ? Math.min(1, el0 / 350) : Math.max(0, 1 - (now - endAt) / 420); if (endAt != null && fade <= 0) return done();
+      const lag = i => posAt(now - i * 45, tStim < 0 ? -1 : (tStim - i * 45 < 0 ? -1 : tStim - i * 45)), p = lag(0);
+      const st = tStim < 0 ? { r: 1, flash: 0 } : stimulusAt(Math.min(tStim, T.END - 1), W, H), r = R * (tStim < 0 ? 1 + Math.sin(now / 420) * .06 : Math.max(.15, st.r));
+      scene.draw({ pts: [p, lag(1), lag(2), lag(3)], r, time: now / 1000, flash: st.flash, fade });
+      const prog = stimStart == null ? Math.min(.8, el0 / 6000) : .8 + .2 * Math.min(1, tStim / T.END); bar.style.width = (prog * 100).toFixed(1) + '%';
+      const ci = stimStart == null ? (el0 < 2200 ? 0 : 1) : 2; if (cap.textContent !== caption[ci]) cap.textContent = caption[ci];
+      if (measure) sense(now, endAt == null ? tStim : -1); requestAnimationFrame(frame); }; requestAnimationFrame(frame); });
+  await ready; scene.dispose(); el.remove(); if (readyErr) throw readyErr;
+  if (!measure || !total) return measure ? { status: 'INVALID', reasons: [face ? 'no_face' : 'model'], ppg: rppg(trace) } : null;
+  const validFrac = valid / total, status = validFrac >= GUARD.validFrac ? 'OK' : 'INVALID';
+  return { status, reasons: [...reasons], validFrac: Math.round(validFrac * 100) / 100, distanceCm: Math.round(distCm), renderer: scene.kind,
     pursuit: status === 'OK' ? pursuitStats(samples) : null, saccadeMs: status === 'OK' ? saccadeLatency(samples) : null, ppg: rppg(trace), frames: total };
 }
 /** Короткая сводка для экрана. */
