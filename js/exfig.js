@@ -34,7 +34,8 @@ const EX = {
   ex_scalene_stretch: { a: { ...STAND, aN1: 60, aN2: -150 }, b: { hd: -128 }, hl: 'neck' },
   ex_chin_tuck: { a: { ...STAND, ho: 5 }, b: { ho: -3 }, hl: 'neck' },
   ex_doorway_pec_stretch: { a: { ...STAND, hx: 92, aN1: 0, aN2: -90, aF1: 2, aF2: -88, props: ['door'] }, b: { hx: 100, t: -80, aN1: 25, aN2: -70 }, hl: 'chest' },
-  ex_y_raise: { a: { ...FRONT }, b: { aN1: -120, aN2: -120, aF1: -60, aF2: -60 }, hl: 'upperback' },
+  // лежа на животе, вид сбоку: руки вытянуты вперед за голову и приподнимаются от пола
+  ex_y_raise: { a: { ...PRONE, aN1: 182, aN2: 182, aF1: 184, aF2: 184 }, b: { aN1: 196, aN2: 196, aF1: 198, aF2: 198 }, hl: 'upperback' },
   ex_hamstring_stretch: { a: { ...SUPINE, lF1: 0, lF2: 0, lF3: -90, aN1: -40, aN2: -10, props: ['towel'] }, b: { lN1: -82, lN2: -82, lN3: -170, aN1: -70, aN2: -75 }, hl: 'thighback' },
   ex_cat_cow: { a: { ...QUAD, c: 7, hd: -40 }, b: { c: -9, hd: 72 }, hl: 'upperback' },
   ex_dead_bug: { a: { ...SUPINE, aN1: -90, aN2: -90, aF1: -88, aF2: -88, lN1: -90, lN2: 0, lF1: -88, lF2: 2, lN3: -90, lF3: -88 }, b: { aN1: 176, aN2: 176, lF1: -12, lF2: -12, lF3: -100 }, hl: 'core' },

@@ -410,9 +410,9 @@ const SAY = {
   wide: 'Стопы на ширине плеч', ohsIntro: 'Теперь присед. Подними прямые руки вверх. Пятки не отрывай.', ohsGo: 'Приседай. Пять раз, медленно.', go: 'Поехали', c3: 'Три', c2: 'Два', c1: 'Раз',
   ohsAltIntro: 'Возьмись рукой за спинку стула или за стену.', ohsAltGo: 'Приседай, насколько можешь без боли. Три раза.',
   repWait: 'Приседай. Я жду.', stop: 'Стоп. Хорошо.',
-  slsRIntro: 'Встань на правую ногу, левую подними. Три неглубоких приседа', slsRGo: 'Приседай на правой ноге. Три раза, неглубоко.',
-  slsLIntro: 'Теперь встань на левую ногу, правую подними. Три неглубоких приседа', slsLGo: 'Приседай на левой ноге. Три раза, неглубоко.',
-  slsAltR: 'Встань на правую ногу, левую подними. Можно держаться за стену.', slsAltL: 'Теперь встань на левую ногу, правую подними.',
+  slsRIntro: 'Встань на правую ногу. Согни вторую ногу назад, вперед ее не выставляй. Три неглубоких приседа', slsRGo: 'Приседай на правой ноге. Три раза, неглубоко.',
+  slsLIntro: 'Теперь встань на левую ногу. Согни вторую ногу назад, вперед ее не выставляй. Три неглубоких приседа', slsLGo: 'Приседай на левой ноге. Три раза, неглубоко.',
+  slsAltR: 'Встань на правую ногу, вторую согни назад. Можно держаться за стену.', slsAltL: 'Теперь встань на левую ногу, вторую согни назад.',
   footDown: 'Стоп. Опусти ногу.', cant: 'Начинай, я жду движение. Если не получается, нажми «Не могу»',
   tholdIntro: 'Подними руки в стороны до уровня плеч.', tholdGo: 'Держи двадцать секунд.', keep: 'Держи, не опускай', hold10: 'Ещё десять секунд', hold5: 'Ещё пять секунд',
   armsUp: 'Руки выше, до уровня плеч', armsDown: 'Опусти руки.',
@@ -1103,7 +1103,7 @@ export async function workout(ids, reasons = {}) {
   const finish = () => done(list, pre, doneN);
   const run = async () => {
     if (closed) return; if (i >= list.length) return finish();
-    const e = list[i], total = Math.max(10, e.durationSec); let left = total, playing = false; const rs = reasons[e.id];
+    const e = list[i], hm = (e.dose || '').match(/(\d+)\s*×\s*(\d+)\s*с/), total = hm ? +hm[1] * +hm[2] : Math.max(10, e.durationSec); let left = total, playing = false; const rs = reasons[e.id];
     // камера считает повторы и подсказывает по технике там, где это надежно (мост, носки, отведение, руки вверх)
     camOff(); const tgt = targetReps(e.dose), rk = device.camera && tgt && repKind(e.id) ? repCounter(e.id) : null, sets = setsOf(e.dose);
     const camHtml = () => localStorage.getItem('bp_excam') === '1' ? `<div style="position:relative;border-radius:var(--r-lg);overflow:hidden;background:#000;height:190px"><video id="exv" playsinline muted style="width:100%;height:100%;object-fit:cover"></video>
@@ -1122,7 +1122,8 @@ export async function workout(ids, reasons = {}) {
       <div class="row" style="gap:14px;margin-top:14px;align-items:center"><div style="position:relative;width:${hasFigure(e.id) ? 72 : 200}px;height:${hasFigure(e.id) ? 72 : 200}px;flex:none;margin:${hasFigure(e.id) ? '0' : '8px auto 0'}"><svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg)"><circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="6"/><circle id="arc" cx="50" cy="50" r="45" fill="none" stroke="#D4F25A" stroke-width="6" stroke-linecap="round" stroke-dasharray="283" stroke-dashoffset="283"/></svg>
         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><b id="tm" class="num" style="font-size:${hasFigure(e.id) ? 20 : 56}px;font-weight:600;letter-spacing:-.02em;opacity:.45">${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}</b></div></div><span id="tml" style="font-size:14px;color:var(--cam-sub)">старт после подсказки</span></div>
       <div style="flex:1;margin-top:20px;display:flex;flex-direction:column;gap:12px">${e.steps.slice(0, 3).map((s, k) => `<div class="row st" style="opacity:.45;align-items:flex-start"><span class="step-n" style="color:var(--signal);width:22px;padding-top:2px">${String(k + 1).padStart(2, '0')}</span><span style="font-size:16px;line-height:1.35;flex:1">${s}</span></div>`).join('')}
-        ${e.check ? `<div class="row" style="background:rgba(255,255,255,.08);border-radius:var(--r-md);padding:12px;align-items:flex-start;gap:10px"><span style="color:var(--signal)">${ic('info', 's')}</span><span style="font-size:14px;line-height:1.4">${e.check}</span></div>` : ''}</div>
+        ${e.check ? `<div class="row" style="background:rgba(255,255,255,.08);border-radius:var(--r-md);padding:12px;align-items:flex-start;gap:10px"><span style="color:var(--signal)">${ic('info', 's')}</span><span style="font-size:14px;line-height:1.4">${e.check}</span></div>` : ''}
+        <div class="row" id="exctl" style="gap:8px"><button class="btn line" id="exskip" style="flex:1;height:44px;color:#fff;border-color:rgba(255,255,255,.3)">⏩ Пропустить</button><button class="btn line" id="exrep" style="flex:1;height:44px;color:#fff;border-color:rgba(255,255,255,.3)">🔄 Повторить объяснение</button></div></div>
       <div class="row" style="justify-content:center;gap:28px;margin-top:16px"><button class="round" id="pv" aria-label="Назад" style="width:56px;height:56px;background:rgba(255,255,255,.1);color:#fff">${ic('skip-back')}</button><button class="round" id="pp" aria-label="Пауза" style="width:80px;height:80px;background:var(--signal);color:var(--cam-bg)">${ic('pause')}</button><button class="round" id="nx" aria-label="Дальше" style="width:56px;height:56px;background:rgba(255,255,255,.1);color:#fff">${ic('skip-forward')}</button></div></div>`);
     let token = {}; const myTok = token;
     const camStart = async () => { const v = $('#exv'); if (!v || !rk) return; $('#excoff').onclick = () => { localStorage.setItem('bp_excam', '0'); camOff(); $('#cambox').innerHTML = camHtml(); bindCam(); };
@@ -1145,19 +1146,30 @@ export async function workout(ids, reasons = {}) {
     const lit = k => app.querySelectorAll('.st').forEach((el, n) => el.style.opacity = n <= k ? 1 : .45);
     // есть мужская запись этого упражнения (тот же голос, что в тесте): играем ее, шаги подсвечиваем по ходу записи
     // запись на «вы» со стороной (озвучивается при сборке), иначе старая запись, иначе голос телефона по шагам
-    const rec = [sayText(e), e.voice].find(x => x && voice.has(x));
-    if (rec) { const nS = Math.min(3, e.steps.length), t0 = Date.now(), per = (rec.length * 65) / (nS + (e.check ? 1 : 0));
-      const tick = setInterval(() => { if (myTok.dead || closed) return clearInterval(tick); lit(Math.min(nS - 1, Math.floor((Date.now() - t0) / per))); }, 300);
-      await voice.speak(rec); clearInterval(tick); }
-    else { await voice.speak(e.title.split(' (')[0] + (exSide(e) ? ', ' + (exSide(e) === 'слева' ? 'левая сторона' : 'правая сторона') : ''));
-      for (let k = 0; k < Math.min(3, e.steps.length); k++) { if (myTok.dead || closed) return; lit(k); await voice.speak(e.steps[k]); }
-      if (e.check && !myTok.dead && !closed) await voice.speak(e.check); }
+    // объяснение можно пропустить или послушать заново; после него короткий сигнал «Пип» и пошел таймер
+    let exTok = 0, ready; const started = new Promise(r => ready = r);
+    const explain = async () => { const my = ++exTok, dead = () => myTok.dead || closed || my !== exTok;
+      const rec = [sayText(e), e.voice].find(x => x && voice.has(x));
+      if (rec) { const nS = Math.min(3, e.steps.length), t0 = Date.now(), per = (rec.length * 65) / (nS + (e.check ? 1 : 0));
+        const tick = setInterval(() => { if (dead()) return clearInterval(tick); lit(Math.min(nS - 1, Math.floor((Date.now() - t0) / per))); }, 300);
+        await voice.speak(rec); clearInterval(tick); }
+      else { await voice.speak(e.title.split(' (')[0] + (exSide(e) ? ', ' + (exSide(e) === 'слева' ? 'левая сторона' : 'правая сторона') : ''));
+        for (let k = 0; k < Math.min(3, e.steps.length); k++) { if (dead()) return; lit(k); await voice.speak(e.steps[k]); }
+        if (e.check && !dead()) await voice.speak(e.check); }
+      if (!dead()) ready(); };
+    $('#exskip').onclick = () => { exTok++; hush(); ready(); };
+    $('#exrep').onclick = () => { hush(); lit(-1); explain(); };
+    explain(); await started; if ($('#exctl')) $('#exctl').hidden = true;
+    if (!myTok.dead && !closed) { voice.beep('start'); await sleep(400); }
+    const blind = /лежа|лёжа|ляг|спиной|на живот|на бок|на спину/i.test(e.title + ' ' + e.steps.join(' ')), hold = hm ? +hm[2] : 0;
     if (myTok.dead || closed) return; lit(-1); playing = true; $('#tm').style.opacity = 1; $('#tml').textContent = 'осталось';
     while (left > 0) { await sleep(1000); if (myTok.dead || closed) return; if (!playing) continue; left--;
       $('#tm').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`; $('#arc').style.strokeDashoffset = 283 * (left / total);
       const cur = Math.min(e.steps.length - 1, Math.floor((total - left) * Math.min(3, e.steps.length) / total)); app.querySelectorAll('.st').forEach((el, k) => el.style.opacity = k <= cur ? 1 : .45);
-      if (left <= 3 && left > 0) voice.say(String(left)); }
-    voice.say('Отлично'); mark(e); doneN++; i++; await sleep(700); run();
+      if (left <= 3 && left > 0) voice.say(String(left));
+      else if (hold && (total - left) % hold === 0) voice.say(`${(total - left) / hold} из ${total / hold}. Расслабьтесь на вдох и снова`);
+      else if (blind && left > 5 && (total - left) % 10 === 0) voice.say(`Прошло ${total - left} секунд`); }
+    voice.say(i + 1 < list.length ? 'Отлично. Отдых, готовим следующее' : 'Отлично'); mark(e); doneN++; i++; await sleep(i < list.length ? 2500 : 700); run();
   };
   run();
 }
