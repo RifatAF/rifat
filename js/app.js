@@ -7,7 +7,7 @@ import { seal } from './core.js';
 import { calibReport, reportCSV, caseLines, RES_NAMES, learnWeights } from './calibreport.js';
 import { RULE_NAMES } from './evidence.js';
 import { applyRuleWeights } from './core.js';
-import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, mailLinkLogin, logout, deleteAccount, betaUsers, providers, config, setAppMode } from './auth.js';
+import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, mailLinkLogin, logout, deleteAccount, betaUsers, providers, config, setAppMode, setRole } from './auth.js';
 import { exFigure, hasFigure } from './exfig.js';
 import { painWord, PAIN_SCALE } from './vas.js';
 import { recordTest, saveBlob } from './core.js';
@@ -1277,8 +1277,13 @@ async function accountBlock(el, close) {
   const u = await getMe(true); if (!el.isConnected) return;
   if (!u) { if ((await providers()).length) { el.innerHTML = '<button class="btn line" id="login" style="margin-top:12px">Войти</button>'; el.querySelector('#login').onclick = () => { close(); const home = () => (tests().length ? map() : onboarding()); ensureLogin('client', home).then(ok => ok && home()); }; } return; }
   el.innerHTML = `<div class="group" style="margin-top:var(--s3)"><div class="row" style="min-height:64px"><span class="avatar">${esc((u.name || '?').slice(0, 1).toUpperCase())}</span><div style="flex:1;font-size:14px;line-height:1.35"><b>${esc(u.name)}</b><div style="color:var(--sub);font-size:12px">${u.provider === 'google' ? 'Google' : u.provider === 'email' ? esc(u.email || 'Почта') : 'Telegram'}${u.role === 'specialist' ? ' · специалист' : ''}</div></div><button class="pill" id="lo">Выйти</button></div>
+    <label class="row-link" style="cursor:pointer"><span style="flex:1">Режим специалиста<span style="display:block;color:var(--sub);font-size:12px">Кабинет для ведения клиентов</span></span><input type="checkbox" id="prorole" ${u.role === 'specialist' ? 'checked' : ''} style="width:22px;height:22px;accent-color:var(--ink)"></label>
     ${u.admin ? `<button class="row-link" id="adm">${ic('settings', 's')}<span>Администрирование</span>${ic('chevron-right', 's chev')}</button>` : ''}
     <button class="row-link" id="delacc" style="color:var(--over-t)"><span>Удалить аккаунт</span></button></div>`;
+  // роль специалиста включается только этим переключателем (или входом через кабинет), с явным подтверждением
+  el.querySelector('#prorole').onchange = async e => { const on = e.target.checked;
+    if (on && !confirm('Включить режим специалиста? Откроется кабинет для ведения клиентов.')) { e.target.checked = false; return; }
+    try { await setRole(on ? 'specialist' : 'client'); localStorage.setItem('bp_mode', on ? 'pro' : 'client'); close(); on ? openPro() : (tests().length ? map() : onboarding()); } catch (err) { e.target.checked = !on; toast('Не получилось: ' + err.message); } };
   el.querySelector('#lo').onclick = async () => { const out = async () => { await logout(); localStorage.removeItem('bp_mode'); onboarding(); }; close(); if (configSync().beta !== false) exitSurvey('logout', out); else out(); };
   el.querySelector('#delacc').onclick = async () => { if (!confirm('Удалить аккаунт? Результаты на этом телефоне останутся, их можно удалить отдельно.')) return; try { await deleteAccount(); localStorage.removeItem('bp_mode'); close(); onboarding(); } catch (e) { toast('Не получилось: ' + e.message); } };
   if (el.querySelector('#adm')) el.querySelector('#adm').onclick = () => { close(); adminScreen(); };
@@ -1555,7 +1560,11 @@ async function checkInvAlive() { const inv = INV(); if (!inv || !inv.i) return;
   if (location.hash.startsWith('#join=')) { try { const inv = { ...cleanInv(seal.unpack(location.hash.slice(6))), join: true }; localStorage.setItem('bp_inv', JSON.stringify(inv)); localStorage.setItem('bp_mode', 'client'); history.replaceState(null, '', location.pathname); return inviteWelcome(); } catch (e) {} }
   if (location.hash.startsWith('#inv=')) { try { const inv = cleanInv(seal.unpack(location.hash.slice(5))); localStorage.setItem('bp_inv', JSON.stringify(inv)); localStorage.setItem('bp_mode', 'client'); history.replaceState(null, '', location.pathname); return inviteWelcome(); } catch (e) {} }
   // ссылка из уведомления бота «результат в кабинете»
-  if (new URLSearchParams(location.search).get('pro') === '1') { localStorage.setItem('bp_mode', 'pro'); history.replaceState(null, '', location.pathname); }
+  const proLink = new URLSearchParams(location.search).get('pro') === '1';
+  if (proLink) { localStorage.setItem('bp_mode', 'pro'); history.replaceState(null, '', location.pathname); }
+  // режим специалиста по умолчанию не включаем: без входа (или без явной ссылки «в кабинет») человек — клиент.
+  // Иначе гость, открывший соглашение и обновивший страницу, попадал в кабинет специалиста.
+  if (localStorage.getItem('bp_mode') === 'pro' && !proLink && !(meSync() && meSync().role === 'specialist')) localStorage.setItem('bp_mode', 'client');
   if (!SHARED && localStorage.getItem('bp_mode') === 'pro') return openPro();
   SHARED || tests().length ? map() : onboarding();
 })();
