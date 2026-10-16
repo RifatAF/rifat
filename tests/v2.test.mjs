@@ -5,8 +5,8 @@ import { forwardBend, singleBalance, thoracicRotation, overheadReach, chairStand
 import { matchScore, falseStart, COUNT_WORDS } from '../js/pacing-guard.js';
 import { perspK, pinhole, jerk } from '../js/hardware-adapter.js';
 import { STATES, releaseFor, measuredIds, iapAssess, ribFlare, normPose, ghostDiff, layerOf } from '../js/biomechanics-engine.js';
-import { lemniscate, rppg, pursuitStats } from '../js/vns-phenotype.js';
-import { metrics } from '../js/touch-tracker.js';
+import { lemniscate, rppg, pursuitStats, saccadeLatency, stimulusAt, headPose, irisInEye, irisConfidence, gazeAngles, faceDistanceCm, FLASH_AT, T } from '../js/vns-phenotype.js';
+import { metrics, energyWord } from '../js/touch-tracker.js';
 import { setSession, MODES, passiveOn, aiRecsOn, uiLang } from '../js/session-controller.js';
 
 // стоящий человек 1000×1000: голова сверху, лодыжки внизу
@@ -78,14 +78,33 @@ test('Ghost Overlay: норма симметрична, смещения в мм
   const g = ghostDiff(p, .2); assert.ok(g.points.find(x => x.i === 11).mm > 0); assert.ok(g.shoulderDeg !== 0);
   assert.equal(layerOf('erector'), 'deep'); assert.equal(layerOf('upper_trap'), 'surface');
 });
-test('ВНС: лемниската, слежение и пульс', () => {
+test('ВНС: стимул — лемниската 2,0 с, схлопывание, вспышка в углу', () => {
   const a = lemniscate(0, 100, 100), b = lemniscate(.25, 100, 100); assert.ok(a.x > 80 && Math.abs(b.x - 50) < 1);
-  const s = Array.from({ length: 40 }, (_, i) => { const t = i * 50, x = lemniscate(t / 2000, 360, 640).x; return { t, tx: x, eye: { x: x / 10, y: 0 } }; });
-  assert.ok(pursuitStats(s).smooth > .95);
-  const tr = Array.from({ length: 70 }, (_, i) => ({ t: i * 33, g: 100 + Math.sin(2 * Math.PI * 1.2 * i * .033) })); const h = rppg(tr); assert.ok(h.valid && Math.abs(h.hr - 72) < 10, 'hr ' + h.hr);
+  assert.equal(stimulusAt(T.PURSUIT + 30, 100, 100).r, .5); const f = stimulusAt(FLASH_AT + 10, 100, 100); assert.ok(f.flash > .9 && f.x > 80 && f.y < 20);
 });
-test('касания: волнистость и откаты', () => {
-  const m = metrics([[0, 0], [10, 3], [20, -3], [15, 0], [30, 0]]); assert.ok(m.jitter > 0); assert.ok(m.reversals >= 2);
+// лицо из 478 точек: глаза по центру, радужка 12 px в кадре 1000 px
+const face = (dh = 0) => { const lm = Array.from({ length: 478 }, () => ({ x: .5, y: .5 })); const at = (i, x, y) => { lm[i] = { x, y }; };
+  at(33, .40, .40); at(133, .46, .40); at(159, .43, .39); at(145, .43, .41); at(362, .54, .40); at(263, .60, .40); at(386, .57, .39); at(374, .57, .41);
+  at(468, .43 + dh * .03, .40); at(473, .57 + dh * .03, .40); at(469, .436, .40); at(471, .424, .40); at(474, .576, .40); at(476, .564, .40); return lm; };
+test('ВНС: ирис, уверенность, угол взора, расстояние', () => {
+  const e = irisInEye(face()); assert.ok(Math.abs(e.h) < 1e-9); assert.ok(irisConfidence(e, { eyeBlinkLeft: 0, eyeBlinkRight: 0 }) >= .8);
+  assert.ok(irisConfidence(e, { eyeBlinkLeft: .9 }) < .8, 'моргание');
+  const right = irisInEye(face(.5)); assert.ok(right.h > .4); assert.ok(gazeAngles({ yaw: 20, pitch: 0 }, right).total > 25, 'взгляд в сторону');
+  const id = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]; assert.ok(Math.abs(headPose(id).yaw) < 1e-9);
+  const c = Math.cos(.5), sn = Math.sin(.5), yawM = [c, 0, -sn, 0, 0, 1, 0, 0, sn, 0, c, 0, 0, 0, 0, 1]; assert.ok(Math.abs(Math.abs(headPose(yawM).yaw) - 28.6) < .5);
+  const d = faceDistanceCm(face(), 1000); assert.ok(d > 60 && d < 90, 'см ' + d);
+});
+test('ВНС: слежение, латентность саккады, пульс', () => {
+  const s = Array.from({ length: 60 }, (_, i) => { const t = i * 33, tx = lemniscate(t / T.PURSUIT, 360, 640).x / 20; return { t, ok: true, tx, gh: tx * .9, gv: 0 }; }).filter(x => x.t < T.PURSUIT);
+  const p = pursuitStats(s); assert.ok(p.corr > .99 && Math.abs(p.gain - .9) < .05);
+  const sac = [...Array.from({ length: 8 }, (_, i) => ({ t: FLASH_AT - 200 + i * 25, ok: true, gh: 0, gv: 0 })), ...Array.from({ length: 8 }, (_, i) => { const t = FLASH_AT + i * 33; return { t, ok: true, gh: t - FLASH_AT >= 190 ? 12 : 0, gv: 0 }; })];
+  const lat = saccadeLatency(sac); assert.ok(lat >= 190 && lat <= 235, 'мс ' + lat);
+  const tr = Array.from({ length: 150 }, (_, i) => { const w = Math.sin(2 * Math.PI * 1.2 * i / 30); return { t: i * 1000 / 30, r: 150 - w * .3, g: 100 + w, b: 80 - w * .2 }; });
+  const h = rppg(tr); assert.ok(h.valid && Math.abs(h.hr - 72) < 6, 'hr ' + h.hr);
+});
+test('касания: виляние, микро-откаты, слова ползунка', () => {
+  const m = metrics([[0, 0], [10, 3], [20, -3], [15, 0], [30, 0], [26, 1], [60, 0]]); assert.ok(m.jitter > 0); assert.equal(m.reversals, 2);
+  assert.equal(metrics([[0, 0], [30, 0], [60, 0]]).jitter, 0); assert.equal(energyWord(55), 'В норме'); assert.equal(energyWord(5), 'Истощение');
 });
 test('сессия: в режиме специалиста пассивный сбор и ИИ выключены', () => {
   setSession(MODES.SPEC); assert.equal(passiveOn(), false); assert.equal(aiRecsOn(), false); assert.equal(uiLang(), 'clinical');

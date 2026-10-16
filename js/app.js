@@ -16,8 +16,8 @@ import { BATTERY_UNITS, forwardBend, singleBalance, thoracicRotation, overheadRe
 import { mountPacing, falseStart, matchScore, PHASE, SHORT_CMD, GO_WORD, COUNT_WORDS, ZERO_CLICK } from './pacing-guard.js';
 import { pinhole, fpsGuard, flushGL } from './hardware-adapter.js';
 import { setSession, MODES, passiveOn } from './session-controller.js';
-import { trackTouch, touchSummary, resetTouch } from './touch-tracker.js';
-import { runOculomotor } from './vns-phenotype.js';
+import { trackTouch, touchSummary, resetTouch, energySheet } from './touch-tracker.js';
+import { runVnsBlock, vnsSummary, loadFace } from './vns-phenotype.js';
 import { ribFlare, apicalRise, buttWink } from './biomechanics-engine.js';
 import { STATES, NT_TEXT, releaseFor, massageAllowed, measuredIds, ACTION_NAMES, LAYERS, LAYER_NAMES, layerOf } from './biomechanics-engine.js';
 import { repCounter, repKind, targetReps, setsOf, REP_KINDS } from './repcount.js';
@@ -498,11 +498,13 @@ export async function runProtocol(protocol, opts = {}) {
   return Promise.race([runProtocol0(protocol, { ...opts, _skipAll: done }), fake]);
 }
 async function runProtocol0(protocol, opts = {}) {
-  setSession(opts.specialist ? MODES.SPEC : MODES.SELF);
+  setSession(opts.specialist ? MODES.SPEC : MODES.SELF); resetTouch();
   // Safety Gate: острая боль до старта. 7 и выше — вместо батареи безопасный Chair Stand Test
   const acute = opts.noSafety ? 0 : await vasSheet('Есть ли острая боль прямо сейчас? (0–10)', 0, 'Боли нет', true);
   if (acute === undefined) return (opts.onCancel || prep)();
   if (acute >= 7) { toast('При сильной боли сделаем только безопасный тест: вставание со стула'); protocol = ['chair']; }
+  // фаза 1 (телефон в руках): ползунок энергии с замером касаний, модель лица грузится заранее
+  let energy = null; if (passiveOn() && !opts.noVns) { loadFace().catch(() => {}); energy = await energySheet(); }
   await voice.ensure(Object.values(SAY)); voice.warm(Object.values(SAY));
   const pre = opts.pre || {}; const units = sortUnits(protocol); const BAT = units.includes('fwd'); const steps = rowsOf(units.filter(u => !pre[u] || pre[u].alt)); const startedAt = Date.now();
   go(`<div class="cam"><video playsinline muted autoplay></video><canvas id="sil"></canvas><canvas id="sk"></canvas><div class="count" id="cnt"></div>
@@ -610,7 +612,8 @@ async function runProtocol0(protocol, opts = {}) {
     await say(want === 'side' ? SAY.sideTurn : want === 'back' ? SAY.backTurn : SAY.frontTurn);
     const t0 = Date.now(); while (!stop && Date.now() - t0 < 4000) { bar((Date.now() - t0) / 4000, 'Поворачивайся'); await sleep(50); } facing = want; };
   // ---- фаза 1 (телефон в руках): окуломоторный блок 2,3 с, только при самостоятельном тесте на фронтальную камеру ----
-  let vns = null; if (passiveOn() && !cam.back && !opts.noVns && !units.every(u => u === 'chair')) { step(null, 'Следите глазами за шариком', 'Телефон в руках, 30–40 см от лица'); await say('Следите глазами за шариком'); vns = await runOculomotor(app.querySelector('.cam'), () => cam.frame, video).catch(() => null); }
+  let vns = null; if (passiveOn() && !cam.back && !opts.noVns && !units.every(u => u === 'chair')) { step(null, 'Следите глазами за шариком', 'Телефон в руках, 30–40 см от лица'); await say('Держите телефон перед лицом и следите глазами за шариком');
+    cam.hold = true; try { vns = await runVnsBlock({ root: app.querySelector('.cam'), video, mirror: !cam.back }); } catch (e) { vns = null; } cam.hold = false; }
   // ---- 0. в кадр ----
   step(null, 'Поставьте телефон и отойдите', 'Не торопитесь: тест начнется сам, когда вы будете целиком в кадре'); pg.pos(false); await say(SAY.setup);
   const issue = () => { const f = cam.frame, p = f && f.pose; if (!level) return SAY.tilt; if (phone.ok && Math.abs(phone.pitch) > 18) return SAY.vertical; if (light < 45) return SAY.dark; if (!p) return SAY.farther;
@@ -729,7 +732,7 @@ async function runProtocol0(protocol, opts = {}) {
   track('cam_q', { n: fpsMed || 0, q: qv.length ? Math.min(...qv) : 0, c: `${poseInfo.deleg} ${poseInfo.model}` }, false);
   // техника съемки: без нее ретест на другом телефоне нельзя отличить от изменения у человека
   const tech = { model: poseInfo.model, deleg: poseInfo.deleg, fps: fpsMed && Math.round(fpsMed), pitch: phone.ok && Number.isFinite(phone.pitch) ? Math.round(phone.pitch) : null, rules: C.bodymap && C.bodymap.version };
-  const res = { date: Date.now(), started: startedAt, kind: testKind(units), session: opts.specialist ? MODES.SPEC : MODES.SELF, vns, touch: passiveOn() ? touchSummary() : null, protocol: units, full: units.includes('side') || units.includes('profile'), snapshot, side, moves, poses, quality, limits, setup, tech };
+  const res = { date: Date.now(), started: startedAt, kind: testKind(units), session: opts.specialist ? MODES.SPEC : MODES.SELF, vns, energy: energy && { v: energy.energy, word: energy.word }, touch: passiveOn() ? touchSummary() : null, protocol: units, full: units.includes('side') || units.includes('profile'), snapshot, side, moves, poses, quality, limits, setup, tech };
   sendNorms(res); return res;
 }
 
@@ -1016,10 +1019,13 @@ function moreSheet({ t, a }, top, hasPlan, only) {
   const ba = all_t.length >= 2 && t.snapshot && first !== t ? sec('Было → стало', [['Наклон плеч', first.snapshot.shoulderTilt, t.snapshot.shoulderTilt], ['Наклон таза', first.snapshot.pelvicTilt, t.snapshot.pelvicTilt]].map(([n, x, y]) => `<div style="margin-top:12px"><div style="font-size:14px;color:var(--sub)">${n}</div><div class="delta"><s>${fmt(x)}°</s>${ic('chevron-right', 's')}<b style="font-size:32px">${fmt(y)}°</b></div></div>`).join('')) : '';
   const lim = t.limits && Object.keys(t.limits).length ? sec('Не получилось выполнить', Object.entries(t.limits).map(([u, l]) => `<div style="margin-top:8px;font-size:14px"><b>${esc(LIMIT_NAMES[u] || u)}</b>: ${esc([l.level, ...(l.reasons || [])].filter(Boolean).join(', '))}${l.alt ? ' · сделан облегченный вариант' : ''}${l.side && l.side !== 'BOTH' ? (l.side === 'LEFT' ? ', слева' : ', справа') : ''}</div>`).join('') + '<p style="font-size:12px;color:var(--sub);margin-top:8px">Это важно для специалиста: такие ограничения разбираются на консультации.</p>') : '';
   const zones = top.length ? sec(`Все зоны · ${top.length}`, `<div class="stack" style="margin-top:8px">${top.map(s => `<div class="list-item" data-k="${s.key}" style="background:var(--bg);min-height:56px"><span class="mark ${s.k}"></span><div style="flex:1;min-width:0"><b style="font-size:15px">${title(s)}</b><div style="font-size:12px;color:var(--sub)">${tech(s)}</div></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div>`) : '';
+  // ВНС (бета): ползунок энергии, касания, глаза и пульс из фазы 1; при INVALID блок просто не показывается
+  const vl = [...(t.energy ? [`Энергия: ${t.energy.word.toLowerCase()}`] : []), ...(t.touch && t.touch.holdMs ? [`Касание ${t.touch.holdMs} мс${t.touch.holdFlag ? ' (дольше нормы: признак напряжения)' : t.touch.holdNorm ? ' (норма)' : ''}`] : []), ...(vnsSummary(t.vns) || [])];
+  const vns = vl.length ? sec('Нервная система · бета', vl.map(x => `<div style="margin-top:8px;font-size:15px;line-height:1.4">${esc(x)}</div>`).join('') + '<p style="font-size:12px;color:var(--sub);margin-top:10px">Пассивный замер, пока телефон был в руках. Оценка, не диагноз.</p>') : '';
   const goal = benefits.length ? sec('К чему стремимся', benefits.map(b => `<div class="row" style="margin-top:10px;align-items:flex-start"><span class="mark OK" style="margin-top:3px"></span><span style="font-size:15px;line-height:1.4">${b}</span></div>`).join('') + '<p class="sub" style="font-size:14px;margin-top:12px">Делай комплекс 2 недели и пройди тест снова. Сравните карты до и после.</p>') : '';
   const d = document.createElement('div'); d.className = 'sheet';
   if (only === 'lr') { d.innerHTML = `<div><h2>Анализ сторон</h2>${lr || '<p class="sub" style="margin-top:12px">В этом тесте не было упражнений, где сравниваются левая и правая сторона.</p>'}<button class="btn" id="mx" style="margin-top:var(--s4)">Закрыть</button></div>`; document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; d.querySelector('#mx').onclick = () => d.remove(); return; }
-  d.innerHTML = `<div><h2>Обзор</h2>${lr}${ba}${lim}${zones}${goal}
+  d.innerHTML = `<div><h2>Обзор</h2>${lr}${ba}${lim}${zones}${vns}${goal}
     <div class="group" style="margin-top:var(--s3)">
       ${SHARED ? '' : `<button class="row-link" id="myrec">${ic('play', 's')}<span>Моя запись: скелет и 3D-фигура</span>${ic('chevron-right', 's chev')}</button>`}
       <button class="row-link" id="shareRes">${ic('share', 's')}<span>Поделиться: ссылка или картинка</span>${ic('chevron-right', 's chev')}</button>

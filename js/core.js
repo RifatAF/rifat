@@ -192,7 +192,7 @@ function loop(gen = ++loopGen) {
   // после перезапуска камеры старый цикл завершается: два цикла вызывали бы детектор дважды на кадр
   if (!cam.running || gen !== loopGen) return;
   const v = cam.video;
-  if (landmarker && v.readyState >= 2) {
+  if (landmarker && v.readyState >= 2 && !cam.hold) {
     const ts = performance.now(); if (ts - lastTs >= 30) { lastTs = ts;
       const r = landmarker.detectForVideo(v, ts); const w = v.videoWidth, h = v.videoHeight;
       const raw = r.landmarks && r.landmarks[0] ? oneEuro(r.landmarks[0], ts / 1000) : (oeS = null);
