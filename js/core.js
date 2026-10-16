@@ -291,7 +291,7 @@ function bodyParts() { const e = (x, y, rx, ry) => { const p = new Path2D(); p.e
   return [...BODY.map(d => new Path2D(d)), e(100, 34, 20, 24), neck, e(72, 428, 14, 6), e(128, 428, 14, 6)]; }
 // пять опорных точек: норма нейтральная (цвет фигуры), карта показывает только отклонения
 const RAMP = [[-1, 0x2A5CB8], [-.45, 0x7FA6EE], [0, 0xE9E7E1], [.45, 0xF0A36A], [1, 0xD9484F]];
-// цвет мышцы по состоянию, а не по знаку: зажим красный, перетяг оранжевый, спад синий; сила отклонения дает насыщенность
+// цвет мышцы по состоянию, а не по знаку: гипертонус красный, перерастяжение оранжевый, слабая синяя; сила отклонения дает насыщенность
 const STATE_RGB = { HYPER: [217, 130, 43], SHORT: [200, 65, 74], WEAK: [47, 107, 216], DONE: [63, 174, 118] }, BASE_RGB = [233, 231, 225];
 export function stateRGB(k, tone) { const c = STATE_RGB[k] || (tone < 0 ? STATE_RGB.WEAK : STATE_RGB.HYPER); const t = k === 'OK' ? 0 : Math.max(.55, Math.min(1, Math.abs(tone) * 1.3));
   return BASE_RGB.map((b, i) => Math.round(b + (c[i] - b) * t)); }
@@ -588,6 +588,45 @@ export async function body3D(container, spots, onPick, opts = {}) {
       const el = document.createElement('button'); el.className = 'mark3d'; el.setAttribute('aria-label', s.key); el.innerHTML = `<span class="mark ${s.k}"${s.derived && !s.edited ? ' style="opacity:.75"' : ''}></span>`;
       el.onclick = () => onPick && onPick(s.key); container.appendChild(el); return { el, local: new THREE.Vector3(c[0], c[2], -c[1]), vis: null }; }).filter(Boolean); };
   buildMarks(spots);
+  // Стрелки по волокнам: главная ось мышцы (PCA по ее наружной поверхности) ≈ направление волокон.
+  // Гипертонус: стрелки бегут с обоих концов к центру (мышца стягивается). Перерастяжение: от центра к концам (ее растягивают).
+  // Слабая: точки вдоль волокон медленно гаснут и загораются (мышца не включается). Стрелки лежат на коже, по нормали сетки.
+  const arrows = new THREE.Group(); obj.add(arrows); let arr = [];
+  const chevron = (() => { const sh = new THREE.Shape(); sh.moveTo(0, 9); sh.lineTo(7, -3); sh.lineTo(3.2, -3); sh.lineTo(0, 2.5); sh.lineTo(-3.2, -3); sh.lineTo(-7, -3); sh.closePath(); return new THREE.ShapeGeometry(sh); })();
+  const dot = new THREE.CircleGeometry(3.4, 12);
+  const pathOf = g => { const V = []; for (let v = 0; v < m.nv; v++) if (m.grp[v] === g && m.nrm[v * 3] * m.pos[v * 3] + m.nrm[v * 3 + 1] * m.pos[v * 3 + 1] > 0) V.push(v);
+    if (V.length < 12) return null; const c = [0, 0, 0]; for (const v of V) for (let q = 0; q < 3; q++) c[q] += m.pos[v * 3 + q] / V.length;
+    const cv = [0, 0, 0, 0, 0, 0, 0, 0, 0]; for (const v of V) { const d = [0, 1, 2].map(q => m.pos[v * 3 + q] - c[q]); for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) cv[a * 3 + b] += d[a] * d[b]; }
+    let u = [1, .7, .4]; for (let it = 0; it < 24; it++) { const w = [0, 1, 2].map(a => cv[a * 3] * u[0] + cv[a * 3 + 1] * u[1] + cv[a * 3 + 2] * u[2]), l = Math.hypot(...w) || 1; u = w.map(x => x / l); }
+    const pr = V.map(v => (m.pos[v * 3] - c[0]) * u[0] + (m.pos[v * 3 + 1] - c[1]) * u[1] + (m.pos[v * 3 + 2] - c[2]) * u[2]).sort((a, b) => a - b);
+    const t0 = pr[Math.floor(pr.length * .12)], t1 = pr[Math.floor(pr.length * .88)], K = 15, P = [], N = [];
+    for (let k = 0; k < K; k++) { const t = t0 + (t1 - t0) * k / (K - 1), q = [c[0] + u[0] * t, c[1] + u[1] * t, c[2] + u[2] * t]; let best = -1, bd = 1e18;
+      for (const v of V) { const d = (m.pos[v * 3] - q[0]) ** 2 + (m.pos[v * 3 + 1] - q[1]) ** 2 + (m.pos[v * 3 + 2] - q[2]) ** 2; if (d < bd) { bd = d; best = v; } }
+      // в координаты сцены: X = x, Y = z, Z = −y
+      P.push(new THREE.Vector3(m.pos[best * 3], m.pos[best * 3 + 2], -m.pos[best * 3 + 1])); N.push(new THREE.Vector3(m.nrm[best * 3], m.nrm[best * 3 + 2], -m.nrm[best * 3 + 1]).normalize()); }
+    return { P, N }; };
+  const paths = new Map(), HEX = { SHORT: 0xC8414A, HYPER: 0xD9822B, WEAK: 0x2F6BD8 };
+  const at = (pa, f) => { const x = Math.max(0, Math.min(pa.P.length - 1.001, f * (pa.P.length - 1))), i = Math.floor(x), k = x - i;
+    return { p: pa.P[i].clone().lerp(pa.P[i + 1], k), n: pa.N[i].clone().lerp(pa.N[i + 1], k).normalize(), d: pa.P[i + 1].clone().sub(pa.P[i]).normalize() }; };
+  const buildArrows = spots => { for (const a of arr) { arrows.remove(a.mesh); a.mesh.material.dispose(); } arr = [];
+    if (!opts.arrows) return;
+    for (const s of spots) { if (!HEX[s.k] || order.indexOf(s.id) < 0 || (only && !only.has(s.id))) continue; const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0);
+      if (!paths.has(g)) paths.set(g, pathOf(g)); const pa = paths.get(g); if (!pa) continue;
+      const n = s.k === 'WEAK' ? 7 : 3;
+      for (const half of s.k === 'WEAK' ? [0] : [0, 1]) for (let j = 0; j < n; j++) {
+        const mesh = new THREE.Mesh(s.k === 'WEAK' ? dot : chevron, new THREE.MeshBasicMaterial({ color: HEX[s.k], transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+        mesh.renderOrder = 2; arrows.add(mesh); arr.push({ mesh, k: s.k, pa, half, j, n }); } }
+    arrows.userData.done = false; };
+  const mx = new THREE.Matrix4(), xa = new THREE.Vector3();
+  const stepArrows = now => { const T = now / 1000;
+    for (const a of arr) { let f, dir = 1, op;
+      if (a.k === 'WEAK') { f = (a.j + .5) / a.n; op = .35 + .55 * (.5 + .5 * Math.sin(T * 2.2 - a.j * .5)); }
+      else { const ph = (T * .55 + a.j / a.n) % 1; op = Math.sin(Math.PI * ph) * .95;
+        // половина 0: левый конец ↔ центр, половина 1: правый конец ↔ центр
+        const r = a.k === 'SHORT' ? ph * .5 : .5 - ph * .5; f = a.half ? 1 - r : r; dir = (a.k === 'SHORT') === !a.half ? 1 : -1; }
+      const q = at(a.pa, f), d = q.d.multiplyScalar(dir); xa.crossVectors(d, q.n).normalize(); const dn = d.clone().crossVectors(q.n, xa).normalize();
+      const S = a.k === 'WEAK' ? 2.2 : 3; mx.makeBasis(xa.multiplyScalar(S), dn.multiplyScalar(S), q.n.clone().multiplyScalar(S)); a.mesh.matrixAutoUpdate = false; a.mesh.matrix.copy(mx).setPosition(q.p.addScaledVector(q.n, 6)); a.mesh.material.opacity = op; } };
+  buildArrows(spots); let normOn = false, lastArrow = 0;
   const wv = new THREE.Vector3(), nv = new THREE.Vector3(), cv3 = new THREE.Vector3();
   const placeMarks = () => { const w = container.clientWidth, h = container.clientHeight;
     for (const x of marks) { obj.localToWorld(wv.copy(x.local));
@@ -607,6 +646,7 @@ export async function body3D(container, spots, onPick, opts = {}) {
   function anim() { if (!alive) return; if (!renderer.domElement.isConnected) { api.dispose(); return; }
     if (rv) { reveal(); dirty = true; }
     if (fly) { fly.k = Math.min(1, fly.k + .06); const e = 1 - (1 - fly.k) ** 3; ctl.target.lerpVectors(fly.from.t, fly.to.t, e); camera.position.lerpVectors(fly.from.p, fly.to.p, e); if (fly.k >= 1) fly = null; dirty = true; }
+    const now = performance.now(); if (arr.length && !normOn && now - lastArrow > (device.weak ? 66 : 33)) { lastArrow = now; if (!reduceMotion() || !arrows.userData.done) { stepArrows(reduceMotion() ? 900 : now); arrows.userData.done = true; dirty = true; } }
     ctl.update(); if (dirty) { dirty = false; renderer.render(scene, camera); placeMarks(); } requestAnimationFrame(anim); }
   let isBack = false;
   const api = { turn(back) { isBack = back; const d = camera.position.distanceTo(ctl.target); flyTo(ctl.target, d, back); },
@@ -614,8 +654,11 @@ export async function body3D(container, spots, onPick, opts = {}) {
     /** Новая раскраска и маркеры (правка специалиста) без пересоздания сцены и сброса камеры. */
     /** Слой мышц: ids — набор видимых и кликабельных мышц, null — все слои. */
     only(ids) { only = ids; api.update(lastSpots); },
-    update(spots) { lastSpots = spots; spots = only ? spots.map(s => only.has(s.id) ? s : { ...s, k: 'OK', tone: 0 }) : spots; paint(spots, col); target.set(col); geo.attributes.color.needsUpdate = true; { const ix = meshIndex(m, spots); if (ix !== curIx) { curIx = ix; geo.setIndex(new THREE.BufferAttribute(ix, 1)); } } buildMarks(spots); dirty = true; },
-    dispose() { if (!alive) return; alive = false; ctl.dispose(); geo.dispose(); mat.dispose(); renderer.dispose(); try { renderer.forceContextLoss(); } catch (e) {} } };
+    /** «Как должно быть»: мышцы в балансе, без цвета, маркеров и стрелок. false — вернуть результат теста. */
+    norm(on) { normOn = !!on; const sp = normOn ? lastSpots.map(s => ({ ...s, k: 'OK', tone: 0 })) : (only ? lastSpots.map(s => only.has(s.id) ? s : { ...s, k: 'OK', tone: 0 }) : lastSpots);
+      paint(sp, col); target.set(col); geo.attributes.color.needsUpdate = true; arrows.visible = !normOn; marks.forEach(x => { x.el.hidden = normOn; }); dirty = true; },
+    update(spots) { lastSpots = spots; spots = only ? spots.map(s => only.has(s.id) ? s : { ...s, k: 'OK', tone: 0 }) : spots; paint(spots, col); target.set(col); geo.attributes.color.needsUpdate = true; { const ix = meshIndex(m, spots); if (ix !== curIx) { curIx = ix; geo.setIndex(new THREE.BufferAttribute(ix, 1)); } } buildMarks(spots); buildArrows(spots); if (normOn) api.norm(true); dirty = true; },
+    dispose() { if (!alive) return; alive = false; ctl.dispose(); for (const a of arr) a.mesh.material.dispose(); chevron.dispose(); dot.dispose(); geo.dispose(); mat.dispose(); renderer.dispose(); try { renderer.forceContextLoss(); } catch (e) {} } };
   anim(); return api;
 }
 

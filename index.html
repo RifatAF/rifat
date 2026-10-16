@@ -282,6 +282,33 @@ body:has(.cam) #bugtab,body:has(.sheet) #bugtab{display:none}
 details:not(.tip)>summary:not(:has(svg))::after{content:'▼';margin-left:auto;padding-left:10px;font-size:11px;color:var(--sub);transition:transform .2s}details[open]:not(.tip)>summary:not(:has(svg))::after{transform:rotate(180deg)}
 details.acc{background:var(--surface-2,#f3f2ee);border:1px solid var(--line-2);border-radius:12px;padding:0 14px}details.acc[open]{padding-bottom:12px}
 .bnav{display:flex;gap:4px;margin-top:var(--s1)}.bnav>button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-height:52px;border:0;background:none;font:inherit;font-size:12px;font-weight:600;color:var(--sub);cursor:pointer;border-radius:12px}.bnav>button:active{background:var(--line-2)}.tip>div{margin-top:8px;background:#fff;border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.4;color:var(--sub);border:1px solid var(--line)}
+/* анкета по шагам */
+.stepper{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;font:500 12px var(--mono);color:var(--sub);letter-spacing:.04em;text-transform:uppercase}
+.stepper i{display:block;width:120px;height:4px;border-radius:2px;background:var(--surface-2);overflow:hidden}.stepper b{display:block;height:100%;background:var(--brand);border-radius:2px;transition:width var(--d3) var(--ease-out)}
+.field:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 4px var(--brand-s)}
+.field.big{height:68px;font-size:26px;font-weight:600;letter-spacing:-.01em;border-radius:var(--r-lg)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip2{min-height:48px;padding:0 20px;border-radius:var(--r-pill);border:1.5px solid var(--line);background:var(--surface);font:600 15px var(--font);color:var(--text);cursor:pointer}
+.chip2.on{background:var(--brand);border-color:var(--brand);color:#fff}.chip2:active{transform:scale(.96)}
+.hval{display:flex;align-items:baseline;justify-content:center;gap:8px;margin:8px 0 20px}.hval b{font-size:72px;font-weight:700;letter-spacing:-.04em;line-height:1}.hval span{font-size:20px;color:var(--sub)}
+.range{-webkit-appearance:none;appearance:none;width:100%;height:44px;background:transparent;touch-action:none}
+.range::-webkit-slider-runnable-track{height:8px;border-radius:4px;background:linear-gradient(90deg,var(--brand-s),var(--brand))}
+.range::-webkit-slider-thumb{-webkit-appearance:none;width:36px;height:36px;margin-top:-14px;border-radius:50%;background:#fff;border:2px solid var(--brand);box-shadow:var(--sh-2)}
+.range::-moz-range-track{height:8px;border-radius:4px;background:linear-gradient(90deg,var(--brand-s),var(--brand))}
+.range::-moz-range-thumb{width:32px;height:32px;border-radius:50%;background:#fff;border:2px solid var(--brand);box-shadow:var(--sh-2)}
+/* подсказка [?] без лишнего текста на экране */
+details.q{display:inline-block;position:relative;vertical-align:middle}details.q>summary{list-style:none;flex:none;min-height:0;padding:0;width:26px;height:26px;border-radius:50%;border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;font:700 13px var(--font);color:var(--sub);cursor:pointer;background:var(--surface)}
+details.q>summary::-webkit-details-marker{display:none}details.q>summary::after{content:none!important}
+details.q[open]>summary{background:var(--ink);color:#fff;border-color:var(--ink)}
+details.q>div{position:absolute;z-index:20;right:-8px;top:34px;width:min(300px,80vw);background:var(--ink);color:#fff;border-radius:var(--r-md);padding:12px 14px;font-size:13px;line-height:1.45;box-shadow:var(--sh-2);text-align:left}
+details.q>div .mark{vertical-align:middle}
+/* проценты состояний */
+.pct{display:grid;grid-template-columns:auto 1fr auto;gap:10px 12px;align-items:center;font-size:14px}
+.pct .lr{display:flex;gap:3px;height:10px}.pct .lr i{flex:1;position:relative;background:var(--surface-2);border-radius:5px;overflow:hidden}
+.pct .lr i b{position:absolute;top:0;bottom:0;border-radius:5px}.pct .lr i:first-child b{right:0}.pct .lr i:last-child b{left:0}
+.pct .v{font:600 15px var(--font);font-variant-numeric:tabular-nums;min-width:44px;text-align:right}
+.pct small{grid-column:1/4;margin:-6px 0 4px;font-size:12px;color:var(--sub);display:flex;gap:12px;white-space:nowrap}.pct small span:nth-child(2){flex:1;text-align:center}
+.seg.sm button{min-height:34px;font-size:13px;padding:0 12px}
 </style>
 </head>
 <body>
