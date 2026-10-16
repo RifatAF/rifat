@@ -288,15 +288,15 @@ function bodyParts() { const e = (x, y, rx, ry) => { const p = new Path2D(); p.e
   return [...BODY.map(d => new Path2D(d)), e(100, 34, 20, 24), neck, e(72, 428, 14, 6), e(128, 428, 14, 6)]; }
 // пять опорных точек: норма нейтральная (цвет фигуры), карта показывает только отклонения
 const RAMP = [[-1, 0x2A5CB8], [-.45, 0x7FA6EE], [0, 0xE9E7E1], [.45, 0xF0A36A], [1, 0xD9484F]];
-// цвет мышцы по состоянию, а не по знаку: перегружена красная, укорочена коричневая, слабая синяя; сила отклонения дает насыщенность
-const STATE_RGB = { HYPER: [200, 65, 74], SHORT: [163, 86, 26], WEAK: [47, 107, 216] }, BASE_RGB = [233, 231, 225];
+// цвет мышцы по состоянию, а не по знаку: зажим красный, перетяг оранжевый, спад синий; сила отклонения дает насыщенность
+const STATE_RGB = { HYPER: [217, 130, 43], SHORT: [200, 65, 74], WEAK: [47, 107, 216], DONE: [63, 174, 118] }, BASE_RGB = [233, 231, 225];
 export function stateRGB(k, tone) { const c = STATE_RGB[k] || (tone < 0 ? STATE_RGB.WEAK : STATE_RGB.HYPER); const t = k === 'OK' ? 0 : Math.max(.55, Math.min(1, Math.abs(tone) * 1.3));
   return BASE_RGB.map((b, i) => Math.round(b + (c[i] - b) * t)); }
 export function ramp(v) { const x = Math.max(-1, Math.min(1, v)); let i = RAMP.findLastIndex(r => r[0] <= x); i = Math.max(0, Math.min(RAMP.length - 2, i));
   const [a, ca] = RAMP[i], [b, cb] = RAMP[i + 1], t = Math.max(0, Math.min(1, (x - a) / (b - a))); const ch = (c, s) => (c >> s) & 255; const mix = s => Math.round(ch(ca, s) + (ch(cb, s) - ch(ca, s)) * t);
   return [mix(16), mix(8), mix(0)]; }
 export const RAMP_CSS = 'linear-gradient(90deg,' + RAMP.map(([v, c]) => '#' + c.toString(16).padStart(6, '0') + ' ' + ((v + 1) * 50) + '%').join(',') + ')';
-export const MARK_HEX = { HYPER: '#C8414A', SHORT: '#A3561A', WEAK: '#2F6BD8' };
+export const MARK_HEX = { HYPER: '#D9822B', SHORT: '#C8414A', WEAK: '#2F6BD8', DONE: '#3FAE76' };
 /** Маркер состояния формой: перегрузка — круг, укорочение — ромб, слабость — кольцо. derived: пунктир без ореола. */
 export function drawMark(ctx, x, y, k, o = {}) {
   const c = MARK_HEX[k]; if (!c) return; const sc = o.scale ?? 1; ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
@@ -576,10 +576,10 @@ export async function body3D(container, spots, onPick, opts = {}) {
     tapT = Date.now(); });
   renderer.domElement.addEventListener('pointerup', e => { if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 8) return; const r = renderer.domElement.getBoundingClientRect();
     ray.setFromCamera({ x: (e.clientX - r.left) / r.width * 2 - 1, y: -((e.clientY - r.top) / r.height) * 2 + 1 }, camera);
-    const hit = ray.intersectObject(obj)[0]; if (!hit) return; const g = m.grp[hit.face.a]; if (g > 0 && g < 255 && order[(g - 1) >> 1]) { const id = order[(g - 1) >> 1]; onPick && onPick(id + ':' + ((g - 1) % 2 ? 'RIGHT' : 'LEFT')); } });
+    const hit = ray.intersectObject(obj)[0]; if (!hit) return; const g = m.grp[hit.face.a]; if (g > 0 && g < 255 && order[(g - 1) >> 1]) { const id = order[(g - 1) >> 1]; if (only && !only.has(id)) return; onPick && onPick(id + ':' + ((g - 1) % 2 ? 'RIGHT' : 'LEFT')); } });
   // маркеры состояния поверх модели. Видимость без трассировки лучей: маркер виден, если его сторона тела смотрит на камеру
   // (трассировка по сетке на каждом кадре тормозила вращение на телефонах)
-  let marks = [];
+  let marks = [], only = null, lastSpots = spots;
   const buildMarks = spots => { marks.forEach(x => x.el.remove());
     marks = spots.filter(s => s.k !== 'OK' && order.indexOf(s.id) >= 0).map(s => { const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0), c = m.meta.blobs[g]; if (!c) return null;
       const el = document.createElement('button'); el.className = 'mark3d'; el.setAttribute('aria-label', s.key); el.innerHTML = `<span class="mark ${s.k}"${s.derived && !s.edited ? ' style="opacity:.75"' : ''}></span>`;
@@ -609,7 +609,9 @@ export async function body3D(container, spots, onPick, opts = {}) {
   const api = { turn(back) { isBack = back; const d = camera.position.distanceTo(ctl.target); flyTo(ctl.target, d, back); },
     focus(zone) { const [y, d] = ZONES[zone] || ZONES.all; flyTo(new THREE.Vector3(0, y, 0), d, isBack); },
     /** Новая раскраска и маркеры (правка специалиста) без пересоздания сцены и сброса камеры. */
-    update(spots) { paint(spots, col); target.set(col); geo.attributes.color.needsUpdate = true; { const ix = meshIndex(m, spots); if (ix !== curIx) { curIx = ix; geo.setIndex(new THREE.BufferAttribute(ix, 1)); } } buildMarks(spots); dirty = true; },
+    /** Слой мышц: ids — набор видимых и кликабельных мышц, null — все слои. */
+    only(ids) { only = ids; api.update(lastSpots); },
+    update(spots) { lastSpots = spots; spots = only ? spots.map(s => only.has(s.id) ? s : { ...s, k: 'OK', tone: 0 }) : spots; paint(spots, col); target.set(col); geo.attributes.color.needsUpdate = true; { const ix = meshIndex(m, spots); if (ix !== curIx) { curIx = ix; geo.setIndex(new THREE.BufferAttribute(ix, 1)); } } buildMarks(spots); dirty = true; },
     dispose() { if (!alive) return; alive = false; ctl.dispose(); geo.dispose(); mat.dispose(); renderer.dispose(); try { renderer.forceContextLoss(); } catch (e) {} } };
   anim(); return api;
 }

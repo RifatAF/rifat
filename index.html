@@ -33,7 +33,7 @@
   --src-measured:#13212B;--src-hyp:#2A5CB8;
   /* состояния мышц: заливка / текст / подложка */
   --over:#C8414A;--over-t:#A8323B;--over-s:#FBE6E4;
-  --short:#A3561A;--short-t:#8A4512;--short-s:#FCEBDC;
+  --short:#C8414A;--short-t:#B3343B;--short-s:#FBE4E5;
   --weak:#2F6BD8;--weak-t:#24539F;--weak-s:#E3EBFA;
   --ok:#26775D;--ok-t:#1E6A51;--ok-s:#DFF1E7;
   --edge:#8A6A00;--edge-s:#F6EFD6;
@@ -58,7 +58,7 @@
   /* АЛИАСЫ v2 → v3: старые имена в app.js/pro.js продолжают работать. Удалить после шагов 3–4. */
   --ink2:#1E2533;--coral:var(--short);--coralT:var(--short-t);
   --green:var(--ok);--peach:var(--short-s);--seg:var(--surface-2);
-  --hyper:var(--over);--hyperS:var(--over-s);--hyperT:var(--over-t);--shortS:var(--short-s);--shortT:var(--short-t);
+  --hyper:#D9822B;--hyperS:#FCEBDC;--hyperT:#9E4E0E;--shortS:var(--short-s);--shortT:var(--short-t);
   --weakS:var(--weak-s);--weakT:var(--weak-t);--okS:var(--ok-s);--okT:var(--ok-t);
   --r1:var(--r-sm);--r2:var(--r-md);--r3:var(--r-lg);--r4:var(--r-xl);--sh1:var(--sh-1);--sh2:var(--sh-2);
   --ease:var(--ease-out);--t1:var(--d1);--t2:var(--d3);
@@ -125,9 +125,9 @@ button,a,.list-item,[data-k],[data-id]{transition:transform var(--d1) var(--ease
 .src.hyp{background:transparent;color:var(--src-hyp);border:1px dashed var(--src-hyp);padding:2px 5px}
 .edge{display:inline-flex;font-size:var(--fs-xs);font-weight:600;color:var(--edge);background:var(--edge-s);padding:2px 6px;border-radius:5px;white-space:nowrap}
 .mark{display:inline-block;flex:none;width:14px;height:14px;box-sizing:border-box}
-.mark.HYPER{border-radius:50%;background:var(--over)}
+.mark.HYPER{border-radius:50%;background:var(--hyper)}
 .mark.SHORT{width:11px;height:11px;margin:1.5px;background:var(--short);transform:rotate(45deg)}
-.mark.WEAK{border-radius:50%;border:3.5px solid var(--weak)}
+.mark.WEAK{border-radius:50%;border:3px dashed var(--weak)}.mark.DONE{border-radius:50%;background:#3FAE76}.mark.NT{border-radius:50%;background:var(--line-2);border:2px solid #B9BEC2}
 .mark.OK{border-radius:50%;background:var(--ok-s);position:relative}.mark.OK::after{content:'';position:absolute;left:4px;top:2px;width:4px;height:7px;border:solid var(--ok-t);border-width:0 2px 2px 0;transform:rotate(45deg)}
 .verdict-row{display:flex;gap:var(--s3);padding:var(--s3) 0}.verdict-row+.verdict-row{border-top:1px solid var(--line-2)}
 .verdict-row .mark{margin-top:4px}.verdict-row .what{font-size:var(--fs-h3);line-height:1.3}
