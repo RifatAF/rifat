@@ -6,7 +6,7 @@ import { matchScore, falseStart, COUNT_WORDS } from '../js/pacing-guard.js';
 import { perspK, pinhole, jerk } from '../js/hardware-adapter.js';
 import { STATES, releaseFor, measuredIds, iapAssess, ribFlare, normPose, ghostDiff, layerOf } from '../js/biomechanics-engine.js';
 import { lemniscate, rppg, pursuitStats, saccadeLatency, stimulusAt, headPose, irisInEye, irisConfidence, gazeAngles, faceDistanceCm, FLASH_AT, T } from '../js/vns-phenotype.js';
-import { metrics, energyWord } from '../js/touch-tracker.js';
+import { metrics } from '../js/touch-tracker.js';
 import { setSession, MODES, passiveOn, aiRecsOn, uiLang } from '../js/session-controller.js';
 
 // стоящий человек 1000×1000: голова сверху, лодыжки внизу
@@ -102,9 +102,9 @@ test('ВНС: слежение, латентность саккады, пуль�
   const tr = Array.from({ length: 150 }, (_, i) => { const w = Math.sin(2 * Math.PI * 1.2 * i / 30); return { t: i * 1000 / 30, r: 150 - w * .3, g: 100 + w, b: 80 - w * .2 }; });
   const h = rppg(tr); assert.ok(h.valid && Math.abs(h.hr - 72) < 6, 'hr ' + h.hr);
 });
-test('касания: виляние, микро-откаты, слова ползунка', () => {
+test('касания: виляние и микро-откаты', () => {
   const m = metrics([[0, 0], [10, 3], [20, -3], [15, 0], [30, 0], [26, 1], [60, 0]]); assert.ok(m.jitter > 0); assert.equal(m.reversals, 2);
-  assert.equal(metrics([[0, 0], [30, 0], [60, 0]]).jitter, 0); assert.equal(energyWord(55), 'В норме'); assert.equal(energyWord(5), 'Истощение');
+  assert.equal(metrics([[0, 0], [30, 0], [60, 0]]).jitter, 0);
 });
 test('сессия: в режиме специалиста пассивный сбор и ИИ выключены', () => {
   setSession(MODES.SPEC); assert.equal(passiveOn(), false); assert.equal(aiRecsOn(), false); assert.equal(uiLang(), 'clinical');

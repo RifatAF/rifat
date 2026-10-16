@@ -16,8 +16,8 @@ import { BATTERY_UNITS, forwardBend, singleBalance, thoracicRotation, overheadRe
 import { mountPacing, falseStart, matchScore, PHASE, SHORT_CMD, GO_WORD, COUNT_WORDS, ZERO_CLICK } from './pacing-guard.js';
 import { pinhole, fpsGuard, flushGL } from './hardware-adapter.js';
 import { setSession, MODES, passiveOn } from './session-controller.js';
-import { trackTouch, touchSummary, resetTouch, energySheet } from './touch-tracker.js';
-import { runVnsBlock, vnsSummary, loadFace } from './vns-phenotype.js';
+import { touchSummary, resetTouch, startPassive } from './touch-tracker.js';
+import { runLoader, vnsSummary } from './vns-phenotype.js';
 import { ribFlare, apicalRise, buttWink } from './biomechanics-engine.js';
 import { STATES, NT_TEXT, releaseFor, massageAllowed, measuredIds, ACTION_NAMES, LAYERS, LAYER_NAMES, layerOf } from './biomechanics-engine.js';
 import { repCounter, repKind, targetReps, setsOf, REP_KINDS } from './repcount.js';
@@ -330,13 +330,12 @@ export async function prep() {
       <button class="link" id="cant" style="min-height:44px;font-size:14px">Не могу выполнить некоторые движения</button></div>
     ${device.inApp ? `<div class="card row" style="align-items:flex-start">${ic('info')}<span style="font-size:14px;line-height:1.4">Ссылка открыта внутри приложения соцсети, здесь камера может не работать. Откройте ее в браузере: меню «⋯» → «Открыть в браузере».</span></div>` : ''}
    </div>
-   <div class="dock"><button class="btn" id="start">${ic('shield-check', 's')}Начать тест</button>${skipBtn()}</div></div>`);
+   <div class="dock">${swipeHTML('start', 'Проведите, чтобы начать тест')}${skipBtn()}</div></div>`);
   $('#back').onclick = () => tests().length ? map() : onboarding();
   $('#chg').onclick = () => prepSheet(); $('#cant').onclick = () => prepSheet(true);
   if ($('#skipTest')) $('#skipTest').onclick = () => { track('beta_skip_test'); saveTest(fakeResult(consumerProtocol())); analysisScreen(); };
   if (reopen) prepSheet(false, true);
-  $('#start').onclick = async () => { voice.unlock(); startMotion(); const b = $('#start'); b.disabled = true; b.innerHTML = '<span class="spin" style="margin:0;width:20px;height:20px;border-width:2.5px;border-color:rgba(255,255,255,.3);border-top-color:#fff"></span>Включаю камеру…';
-    try { await initPose(); runTest(); } catch (e) { b.disabled = false; b.textContent = 'Начать тест'; startError(e, () => b.click()); } };
+  bindSwipe($('#start'), async () => { const r = await launchTest(runTest, e => startError(e, () => launchTest(runTest, () => prep()))); if (r === null && $('#start')) prep(); });
 }
 // шторка настроек теста: режим, камера, сила, список шагов с «Не могу». После перерисовки prep() остается открытой
 function prepSheet(toSteps, keep) {
@@ -498,13 +497,12 @@ export async function runProtocol(protocol, opts = {}) {
   return Promise.race([runProtocol0(protocol, { ...opts, _skipAll: done }), fake]);
 }
 async function runProtocol0(protocol, opts = {}) {
-  setSession(opts.specialist ? MODES.SPEC : MODES.SELF); resetTouch();
+  setSession(opts.specialist ? MODES.SPEC : MODES.SELF);
   // Safety Gate: острая боль до старта. 7 и выше — вместо батареи безопасный Chair Stand Test
-  const acute = opts.noSafety ? 0 : await vasSheet('Есть ли острая боль прямо сейчас? (0–10)', 0, 'Боли нет', true);
+  const acute = opts.noSafety ? 0 : opts.acute !== undefined ? opts.acute : await vasSheet('Есть ли острая боль прямо сейчас? (0–10)', 0, 'Боли нет', true);
   if (acute === undefined) return (opts.onCancel || prep)();
   if (acute >= 7) { toast('При сильной боли сделаем только безопасный тест: вставание со стула'); protocol = ['chair']; }
-  // фаза 1 (телефон в руках): ползунок энергии с замером касаний, модель лица грузится заранее
-  let energy = null; if (passiveOn() && !opts.noVns) { loadFace().catch(() => {}); energy = await energySheet(); }
+
   await voice.ensure(Object.values(SAY)); voice.warm(Object.values(SAY));
   const pre = opts.pre || {}; const units = sortUnits(protocol); const BAT = units.includes('fwd'); const steps = rowsOf(units.filter(u => !pre[u] || pre[u].alt)); const startedAt = Date.now();
   go(`<div class="cam"><video playsinline muted autoplay></video><canvas id="sil"></canvas><canvas id="sk"></canvas><div class="count" id="cnt"></div>
@@ -523,7 +521,7 @@ async function runProtocol0(protocol, opts = {}) {
   track('test_start', { n: units.length }, false); const tStart = Date.now();
   $('#x').onclick = () => { stop = true; try { saveRec(); } catch (e) {} stopCamera(); cancel(); }; $('#skipb').onclick = () => { skip = true; };
   let painStop = false; $('#painb').onclick = () => { painStop = true; skip = true; voice.say(''); track('step_skip', { c: 'pain' }, false); };
-  if ($('#betaSkip')) $('#betaSkip').onclick = () => { stop = true; stopCamera(); voice.say(''); track('beta_skip_test', { c: 'camera' }); opts._skipAll({ ...fakeResult(units), poses: {} }); };
+  if ($('#betaSkip')) $('#betaSkip').onclick = () => { stop = true; stopCamera(); voice.say(''); track('beta_skip_test', { c: 'camera' }); opts._skipAll({ ...fakeResult(units), poses: {}, vns: opts.vns || null, touch: passiveOn() ? touchSummary() : null }); };
   const video = app.querySelector('video'); const sk = $('#sk');
   try { if (!device.camera) throw new Error('no camera api'); await startCamera(video); } catch (e) { stop = true; return cameraHelp(); }
   // бета: тест пишется в видеофайл с камерой и скелетом, файл сохраняется в «Загрузки» по окончании или при выходе
@@ -611,9 +609,6 @@ async function runProtocol0(protocol, opts = {}) {
   const face = async want => { if (facing === want) return; prof = want !== 'front'; step(null, want === 'side' ? 'Повернись правым боком' : want === 'back' ? 'Повернись спиной' : 'Повернись лицом', '');
     await say(want === 'side' ? SAY.sideTurn : want === 'back' ? SAY.backTurn : SAY.frontTurn);
     const t0 = Date.now(); while (!stop && Date.now() - t0 < 4000) { bar((Date.now() - t0) / 4000, 'Поворачивайся'); await sleep(50); } facing = want; };
-  // ---- фаза 1 (телефон в руках): окуломоторный блок 2,3 с, только при самостоятельном тесте на фронтальную камеру ----
-  let vns = null; if (passiveOn() && !cam.back && !opts.noVns && !units.every(u => u === 'chair')) { step(null, 'Следите глазами за шариком', 'Телефон в руках, 30–40 см от лица'); await say('Держите телефон перед лицом и следите глазами за шариком');
-    cam.hold = true; try { vns = await runVnsBlock({ root: app.querySelector('.cam'), video, mirror: !cam.back }); } catch (e) { vns = null; } cam.hold = false; }
   // ---- 0. в кадр ----
   step(null, 'Поставьте телефон и отойдите', 'Не торопитесь: тест начнется сам, когда вы будете целиком в кадре'); pg.pos(false); await say(SAY.setup);
   const issue = () => { const f = cam.frame, p = f && f.pose; if (!level) return SAY.tilt; if (phone.ok && Math.abs(phone.pitch) > 18) return SAY.vertical; if (light < 45) return SAY.dark; if (!p) return SAY.farther;
@@ -732,7 +727,7 @@ async function runProtocol0(protocol, opts = {}) {
   track('cam_q', { n: fpsMed || 0, q: qv.length ? Math.min(...qv) : 0, c: `${poseInfo.deleg} ${poseInfo.model}` }, false);
   // техника съемки: без нее ретест на другом телефоне нельзя отличить от изменения у человека
   const tech = { model: poseInfo.model, deleg: poseInfo.deleg, fps: fpsMed && Math.round(fpsMed), pitch: phone.ok && Number.isFinite(phone.pitch) ? Math.round(phone.pitch) : null, rules: C.bodymap && C.bodymap.version };
-  const res = { date: Date.now(), started: startedAt, kind: testKind(units), session: opts.specialist ? MODES.SPEC : MODES.SELF, vns, energy: energy && { v: energy.energy, word: energy.word }, touch: passiveOn() ? touchSummary() : null, protocol: units, full: units.includes('side') || units.includes('profile'), snapshot, side, moves, poses, quality, limits, setup, tech };
+  const res = { date: Date.now(), started: startedAt, kind: testKind(units), session: opts.specialist ? MODES.SPEC : MODES.SELF, vns: opts.vns || null, touch: passiveOn() ? touchSummary() : null, protocol: units, full: units.includes('side') || units.includes('profile'), snapshot, side, moves, poses, quality, limits, setup, tech };
   sendNorms(res); return res;
 }
 
@@ -748,9 +743,31 @@ function fakeResult(protocol) {
     snapshot: { shoulderTilt: j(4, 2), pelvicTilt: j(-3.5, 2), headTilt: j(1, .5), trunkLateral: j(1.2, .6) }, side: { headForwardDeg: j(16, 6), kneeHyperDeg: j(2, 1), shoulderShift: .01, hipShift: 0 },
     moves: { ...v2, ohs_front: { quality: 'GOOD', f: { ohs_valgus_r: j(12, 4), ohs_valgus_l: j(5, 2) } }, sls_r: { quality: 'GOOD', f: { sls_drop_r: j(5, 2), sls_valgus_r: j(11, 4), sls_trunk_r: j(3, 1) } }, sls_l: { quality: 'GOOD', f: { sls_drop_l: j(1.5, 1), sls_valgus_l: j(4, 2), sls_trunk_l: j(1, .5) } } } };
 }
-async function runTest() {
-  const r = await runProtocol(consumerProtocol(), { pre: PRE }); if (!r) return;
-  const { poses, ...light } = r; saveTest(light); try { await consumerPoses.save(poses); } catch (e) {} analysisScreen();
+/** Старт теста через экран загрузки. Пока грузятся камера и модель позы, на загрузчике плывет жидкая капля:
+ *  человек сам следит за ней глазами, и в это время незаметно идут окуломоторный блок и пульс (только SELF_TEST, фронтальная камера). */
+async function launchTest(run, onErr) {
+  // Safety Gate до загрузчика, чтобы после загрузки сразу открылась камера
+  const acute = await vasSheet('Есть ли острая боль прямо сейчас? (0–10)', 0, 'Боли нет', true); if (acute === undefined) return null;
+  voice.unlock(); startMotion(); const front = !cam.back && device.camera;
+  const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none'; document.body.appendChild(v);
+  cam.hold = true; const ready = (async () => { if (front) { try { await startCamera(v); } catch (e) {} } await initPose(); })();
+  let vns = null; try { vns = await runLoader({ ready, video: front ? v : null, mirror: true }); } catch (e) { cam.hold = false; v.remove(); return onErr(e); }
+  cam.hold = false; v.remove(); return run(vns, acute);
+}
+/** Кнопка-свайп: ведете кружок вправо до конца. Касание без свайпа слегка «подталкивает» кружок, Enter и пробел тоже запускают. */
+export const swipeHTML = (id, text) => `<div class="swipe" id="${id}" role="button" tabindex="0" aria-label="${text}"><span class="swipe-t">${text}</span><b class="swipe-k">${ic('chevron-right', 's')}</b></div>`;
+export function bindSwipe(el, onDone) {
+  if (!el) return; const k = el.querySelector('.swipe-k'); let x0 = null, dx = 0, fired = false; const max = () => el.clientWidth - k.offsetWidth - 12;
+  const fire = () => { if (fired) return; fired = true; el.classList.add('done'); k.style.transform = `translateX(${max()}px)`; setTimeout(onDone, 180); };
+  el.addEventListener('pointerdown', e => { if (fired) return; x0 = e.clientX; dx = 0; k.style.transition = 'none'; el.setPointerCapture(e.pointerId); });
+  el.addEventListener('pointermove', e => { if (x0 == null) return; dx = Math.max(0, Math.min(max(), e.clientX - x0)); k.style.transform = `translateX(${dx}px)`; el.style.setProperty('--p', dx / max()); });
+  el.addEventListener('pointerup', () => { if (x0 == null) return; x0 = null; k.style.transition = ''; if (dx >= max() * .85) return fire();
+    k.style.transform = dx < 6 ? 'translateX(18px)' : 'translateX(0)'; el.style.setProperty('--p', 0); if (dx < 6) setTimeout(() => { if (!fired) k.style.transform = 'translateX(0)'; }, 260); });
+  el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fire(); } });
+}
+async function runTest(vns = null, acute) {
+  const r = await runProtocol(consumerProtocol(), { pre: PRE, vns, acute }); if (!r) return;
+  const { poses, ...light } = r; saveTest(light); resetTouch(); try { await consumerPoses.save(poses); } catch (e) {} analysisScreen();
 }
 
 function cameraHelp() {
@@ -851,9 +868,9 @@ async function inviteWelcome() {
   // после теста экрана с полем уже нет: берем сохраненный текст
   const comment = () => String(($('#ccom') ? $('#ccom').value : (() => { try { return localStorage.getItem('bp_ccom_' + inv.i); } catch (e) { return ''; } })()) || '').trim().slice(0, 1000);
   if ($('#editpf')) $('#editpf').onclick = joinForm;
-  $('#go').onclick = async () => { if (!$('#share_ok').checked) { $('#share_ok').parentElement.style.outline = '2px solid var(--over)'; return; } localStorage.setItem('bp_share_' + inv.i, String(Date.now())); voice.unlock(); startMotion(); $('#go').textContent = 'Загружаю модель…'; try { await initPose(); } catch (e) { inviteWelcome(); return startError(e, () => $('#go') && $('#go').click()); }
-    const r = await runProtocol(inv.p, { onCancel: inviteWelcome, pre: PREI }); if (!r) return; stampMain(r);
-    const { poses, ...light } = r; saveTest({ ...light, pain, inv: inv.i }); consumerPoses.save(poses).catch(() => {});
+  $('#go').onclick = async () => { if (!$('#share_ok').checked) { $('#share_ok').parentElement.style.outline = '2px solid var(--over)'; return; } localStorage.setItem('bp_share_' + inv.i, String(Date.now())); let st = null; try { st = await launchTest((vns, acute) => ({ vns, acute }), e => { throw e; }); } catch (e) { inviteWelcome(); return startError(e, () => $('#go') && $('#go').click()); } if (!st) return;
+    const r = await runProtocol(inv.p, { onCancel: inviteWelcome, pre: PREI, vns: st.vns, acute: st.acute }); if (!r) return; stampMain(r);
+    const { poses, ...light } = r; saveTest({ ...light, pain, inv: inv.i }); resetTouch(); consumerPoses.save(poses).catch(() => {});
     savePosesLocal(r); const cm = comment(); sendResult({ ...r, pain, comment: cm, profile: inv.join || inv.cal ? PROFILE() : undefined }); analysisScreen(); };
 }
 // запись скелета остается и у клиента (IndexedDB на его телефоне)
@@ -1020,8 +1037,9 @@ function moreSheet({ t, a }, top, hasPlan, only) {
   const lim = t.limits && Object.keys(t.limits).length ? sec('Не получилось выполнить', Object.entries(t.limits).map(([u, l]) => `<div style="margin-top:8px;font-size:14px"><b>${esc(LIMIT_NAMES[u] || u)}</b>: ${esc([l.level, ...(l.reasons || [])].filter(Boolean).join(', '))}${l.alt ? ' · сделан облегченный вариант' : ''}${l.side && l.side !== 'BOTH' ? (l.side === 'LEFT' ? ', слева' : ', справа') : ''}</div>`).join('') + '<p style="font-size:12px;color:var(--sub);margin-top:8px">Это важно для специалиста: такие ограничения разбираются на консультации.</p>') : '';
   const zones = top.length ? sec(`Все зоны · ${top.length}`, `<div class="stack" style="margin-top:8px">${top.map(s => `<div class="list-item" data-k="${s.key}" style="background:var(--bg);min-height:56px"><span class="mark ${s.k}"></span><div style="flex:1;min-width:0"><b style="font-size:15px">${title(s)}</b><div style="font-size:12px;color:var(--sub)">${tech(s)}</div></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div>`) : '';
   // ВНС (бета): ползунок энергии, касания, глаза и пульс из фазы 1; при INVALID блок просто не показывается
-  const vl = [...(t.energy ? [`Энергия: ${t.energy.word.toLowerCase()}`] : []), ...(t.touch && t.touch.holdMs ? [`Касание ${t.touch.holdMs} мс${t.touch.holdFlag ? ' (дольше нормы: признак напряжения)' : t.touch.holdNorm ? ' (норма)' : ''}`] : []), ...(vnsSummary(t.vns) || [])];
-  const vns = vl.length ? sec('Нервная система · бета', vl.map(x => `<div style="margin-top:8px;font-size:15px;line-height:1.4">${esc(x)}</div>`).join('') + '<p style="font-size:12px;color:var(--sub);margin-top:10px">Пассивный замер, пока телефон был в руках. Оценка, не диагноз.</p>') : '';
+  const vl = [...(t.touch && t.touch.holdMs ? [`Касание ${t.touch.holdMs} мс${t.touch.holdFlag ? ' (дольше нормы: признак напряжения)' : t.touch.holdNorm ? ' (норма)' : ''}`] : []), ...(vnsSummary(t.vns) || [])];
+  if (t.touch && t.touch.typing) vl.push(`Ритм набора ${t.touch.typing.ikiMs} мс между символами${t.touch.typing.corrections > .15 ? ', много исправлений' : ''}`);
+  const vns = vl.length ? sec('Нервная система · бета', vl.map(x => `<div style="margin-top:8px;font-size:15px;line-height:1.4">${esc(x)}</div>`).join('') + '<p style="font-size:12px;color:var(--sub);margin-top:10px">Замерено в фоне, пока вы заполняли анкету и ждали загрузку. Оценка, не диагноз.</p>') : '';
   const goal = benefits.length ? sec('К чему стремимся', benefits.map(b => `<div class="row" style="margin-top:10px;align-items:flex-start"><span class="mark OK" style="margin-top:3px"></span><span style="font-size:15px;line-height:1.4">${b}</span></div>`).join('') + '<p class="sub" style="font-size:14px;margin-top:12px">Делай комплекс 2 недели и пройди тест снова. Сравните карты до и после.</p>') : '';
   const d = document.createElement('div'); d.className = 'sheet';
   if (only === 'lr') { d.innerHTML = `<div><h2>Анализ сторон</h2>${lr || '<p class="sub" style="margin-top:12px">В этом тесте не было упражнений, где сравниваются левая и правая сторона.</p>'}<button class="btn" id="mx" style="margin-top:var(--s4)">Закрыть</button></div>`; document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; d.querySelector('#mx').onclick = () => d.remove(); return; }
@@ -1200,7 +1218,7 @@ function vasSheet(title, init = 0, skip = 'Пропустить', cancel = false
       <div class="row" style="gap:12px;margin-top:16px"><input type="range" id="vs" min="0" max="10" value="${init}" style="flex:1;accent-color:var(--ink)" aria-label="${title}"><b id="vsv" class="num" style="font-size:32px;width:44px;text-align:right">${init}</b></div><div id="vsw" style="font-size:15px;font-weight:600;margin-top:4px">${painWord(init)}</div>
       <div class="row" style="justify-content:space-between;font-size:12px;color:var(--sub)"><span>нет боли</span><span>сильнейшая</span></div>
       <button class="btn" id="vok" style="margin-top:16px">Готово</button><button class="btn ghost" id="vno" style="margin-top:8px;border:0">${skip}</button></div>`;
-    document.body.appendChild(d); trackTouch(d); const r = d.querySelector('#vs'); r.oninput = () => { d.querySelector('#vsv').textContent = r.value; d.querySelector('#vsw').textContent = painWord(r.value); };
+    document.body.appendChild(d); const r = d.querySelector('#vs'); r.oninput = () => { d.querySelector('#vsv').textContent = r.value; d.querySelector('#vsw').textContent = painWord(r.value); };
     d.querySelector('#vok').onclick = () => { d.remove(); res(+r.value); }; d.querySelector('#vno').onclick = () => { d.remove(); res(null); };
     d.addEventListener('bp-close', () => res(cancel ? undefined : null)); if (cancel) d.querySelector('#vno').insertAdjacentHTML('afterend', '<button class="btn ghost" id="vcx" style="margin-top:4px;border:0;color:var(--sub)">Отмена</button>'), d.querySelector('#vcx').onclick = () => { d.remove(); res(undefined); }; });
 }
@@ -1664,6 +1682,7 @@ async function checkInvAlive() { const inv = INV(); if (!inv || !inv.i) return;
   if (j && Array.isArray(j.p)) { const p = sortUnits(j.p.filter(u => Object.prototype.hasOwnProperty.call(UNITS, u))); if (p.length && p.join() !== (inv.p || []).join()) { try { const o = JSON.parse(localStorage.getItem('bp_inv') || 'null'); if (o) { o.p = p; localStorage.setItem('bp_inv', JSON.stringify(o)); if (app.querySelector('#share_ok')) inviteWelcome(); } } catch (e) {} } } }
 
 // ---------- старт ----------
+startPassive(); // фоновый сбор касаний и ритма набора с первого экрана (только SELF_TEST)
 (async () => {
   track('app_open', { r: REF, c: channel() });
   // бета: с какого устройства зашли, чтобы потом оптимизировать под iPhone и Android
