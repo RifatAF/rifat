@@ -107,8 +107,8 @@ export function drawGhost(ctx, p, cmPerPx = 0, { fact = true } = {}) {
 // ---------- 7.4.2. Слои мышц на 3D: клик попадает только в выбранный слой ----------
 export const LAYERS = {
   surface: ['upper_trap', 'lower_trap', 'glute_max', 'hamstrings', 'calf', 'scm', 'pec_major', 'lats', 'deltoid', 'triceps', 'biceps', 'forearm_flex', 'rectus_fem', 'vastus_lat', 'vmo', 'tibialis', 'peroneus', 'tfl', 'rectus_abd', 'abdominals'],
-  middle: ['levator', 'rhomboid', 'glute_med', 'scalene', 'obliques', 'adductors', 'serratus'],
-  deep: ['suboccipital', 'deep_neck_flex', 'iliopsoas', 'ql', 'pec_minor', 'erector', 'thoracic_ext'],
+  middle: ['levator', 'rhomboid', 'glute_med', 'scalene', 'obliques', 'adductors', 'serratus', 'soleus', 'supraspinatus'],
+  deep: ['suboccipital', 'deep_neck_flex', 'iliopsoas', 'ql', 'pec_minor', 'erector', 'thoracic_ext', 'piriformis'],
 };
 export const LAYER_NAMES = [['surface', 'Поверхностный'], ['middle', 'Средний'], ['deep', 'Глубокий']];
 export const layerOf = id => Object.keys(LAYERS).find(k => LAYERS[k].includes(id)) || 'surface';

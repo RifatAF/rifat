@@ -13,7 +13,7 @@ import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetySc
 import { exFigure, hasFigure } from './exfig.js';
 import { painWord, PAIN_SCALE } from './vas.js';
 import { sayText } from './saytext.js';
-import { BATTERY_UNITS, forwardBend, singleBalance, thoracicRotation, overheadReach, chairStand, retroGait, autoScale } from './test-battery.js';
+import { BATTERY_UNITS, forwardBend, singleBalance, thoracicRotation, trotSweep, overheadReach, chairStand, retroGait, autoScale } from './test-battery.js';
 import { mountPacing, falseStart, matchScore, PHASE, SHORT_CMD, GO_WORD, COUNT_WORDS, numWord, ZERO_CLICK } from './pacing-guard.js';
 import { pinhole, fpsGuard, flushGL } from './hardware-adapter.js';
 import { setSession, MODES, passiveOn } from './session-controller.js';
@@ -59,10 +59,11 @@ export const TONE = { HYPER: ['Перерастяжение', 'var(--hyper)', 'v
 const plural = id => { const z = (C.muscles[id] && C.muscles[id].zone) || ''; return /мышцы|^\S+(ые|ие|тели)\s/i.test(z + ' '); };
 export const toneText = (s, i) => { const t = TONE[s.k][i]; return plural(s.id) ? t.replace('нута', 'нуты').replace('слабая', 'слабые').replace('ается', 'аются') : t; };
 // что значит каждый цвет: одна строка простыми словами (клиент путал «укорочена» и «перегружена»)
-export const TONE_HELP = `<details class="q"><summary aria-label="Что значат цвета">?</summary><div style="display:flex;flex-direction:column;gap:6px;line-height:1.4">
-  <span><span class="mark sm SHORT"></span> <b>Гипертонус</b> →← мышца зажата: в 3D поток стекается к центру</span>
-  <span><span class="mark sm HYPER"></span> <b>Перерастяжение</b> ←→ мышцу тянет соседняя: поток разбегается к краям. Не растягивать</span>
-  <span><span class="mark sm WEAK"></span> <b>Слабая</b> мышца не включается: искры еле мерцают</span></div></details>`;
+export const TONE_HELP = `<details class="q"><summary aria-label="Что значат цвета">?</summary><div style="display:flex;flex-direction:column;gap:10px;line-height:1.4">
+  <span><span class="mark sm SHORT"></span> <b>Гипертонус</b>: мышца зажата. Помогает расслабить и растянуть</span>
+  <span><span class="mark sm HYPER"></span> <b>Перерастяжение</b>: мышцу тянет соседняя. Растягивать нельзя</span>
+  <span><span class="mark sm WEAK"></span> <b>Слабая</b>: мышца не включается. Помогает укрепить</span>
+  <span style="color:#B9C4CC">В 3D точки бегут к центру мышцы, если она зажата, к краям, если растянута, и мерцают, если слабая</span></div></details>`;
 export const TONE_HEX = { HYPER: '#D9822B', SHORT: '#C8414A', WEAK: '#2F6BD8', OK: '#26775D', NT: '#B9BEC2', DONE: '#3FAE76' };
 export const TONE_TEXT_HEX = { HYPER: '#9E4E0E', SHORT: '#B3343B', WEAK: '#2A5CB8', OK: '#1E7149', NT: '#6B747A', DONE: '#1E7149' };
 const sideWord = s => s === 'RIGHT' ? 'справа' : 'слева';
@@ -105,7 +106,7 @@ let view3d = null;
 let lastHead = '';
 const callerName = () => { try { const l = (new Error().stack || '').split('\n').map(x => x.trim()).filter(x => x.startsWith('at '));
   for (const x of l.slice(2)) { const m = /^at (?:async )?([\w$.]+)/.exec(x); if (m && !/^(go|Object\.go|HTMLButtonElement|HTMLDivElement|Promise|new Promise)/.test(m[1])) return m[1].replace(/^Object\./, '').slice(0, 40); } } catch (e) {} return 'screen'; };
-export function go(html) { try { screenView(callerName()); } catch (e) {} if (view3d) { view3d.dispose(); view3d = null; } backFn = null; const head = html.slice(0, 260); if (head === lastHead) html = html.replace(' fade', ''); lastHead = head; app.innerHTML = html; window.scrollTo(0, 0);
+export function go(html) { try { screenView(callerName()); } catch (e) {} document.querySelectorAll('.qpop').forEach(x => x.remove()); if (view3d) { view3d.dispose(); view3d = null; } backFn = null; const head = html.slice(0, 260); if (head === lastHead) html = html.replace(' fade', ''); lastHead = head; app.innerHTML = html; window.scrollTo(0, 0);
   const tc = document.querySelector('meta[name=theme-color]'); if (tc) tc.content = html.includes('class="cam"') ? '#0A0C0F' : / dark[ "]/.test(html.slice(0, 200)) ? '#13212B' : '#F3F6F6'; }
 
 // ---------- «назад»: жест и системная кнопка ведут на шаг назад в приложении, а не закрывают его ----------
@@ -181,7 +182,7 @@ const pluralName = id => /мышцы|^\S+(ые|ие|тели)(\s|$)/i.test(C.mus
 export const ntitle = s => { let t = s.ambiguous ? 'признаки противоречат' : TONE[s.k][3]; if (s.derived && !s.edited) t = t.replace('похоже', 'возможно'); if (pluralName(s.id)) t = t.replace('нута', 'нуты').replace('слабая', 'слабые').replace('ается', 'аются');
   return `${C.muscles[s.id].name} ${sideWord(s.side)}: ${t}`; };
 // короткие названия для подписей на схеме: узнаваемые специалисту сокращения
-export const SHORT = { upper_trap: 'Верх. трапеция', levator: 'Подн. лопатку', suboccipital: 'Подзатылочные', lower_trap: 'Ниж. трапеция', rhomboid: 'Ромбовидные', erector: 'Разгиб. спины',
+export const SHORT = { piriformis: 'Грушевидная', supraspinatus: 'Надостная', soleus: 'Камбаловидная', upper_trap: 'Верх. трапеция', levator: 'Подн. лопатку', suboccipital: 'Подзатылочные', lower_trap: 'Ниж. трапеция', rhomboid: 'Ромбовидные', erector: 'Разгиб. спины',
   ql: 'Квадр. поясн.', glute_med: 'Ср. ягодичная', glute_max: 'Б. ягодичная', hamstrings: 'Задняя группа бедра', calf: 'Икроножная', scm: 'ГКС', scalene: 'Лестничные', deep_neck_flex: 'Глуб. сгибат.',
   pec_minor: 'М. грудная', obliques: 'Косые живота', iliopsoas: 'Илиопсоас', tfl: 'Напр. фасции', rectus_fem: 'Прямая бедра', adductors: 'Приводящие', pec_major: 'Б. грудная',
   lats: 'Широчайшая', serratus: 'Зубчатая', rectus_abd: 'Прямая живота', vmo: 'Вн. широкая', abdominals: 'Пресс', thoracic_ext: 'Грудн. разгиб.', tibialis: 'Большеберцовая',
@@ -294,8 +295,8 @@ export const UNITS = {
   // батарея v2.0 (6 этапов, 2 мин 15 с): наклон вперед, баланс на одной ноге, ротация корпуса, руки вверх
   fwd: [['Наклон вперед', 'Медленно тянитесь руками к полу', 18]],
   slb: [['Баланс на одной ноге', 'По 6 секунд на каждой', 22]],
-  trot: [['Повороты корпуса', 'Руки скрещены на груди, вправо и влево', 18]],
-  reach: [['Руки вверх', '2 раза, медленно', 18]],
+  trot: [['Повороты корпуса', 'Туда-сюда несколько раз, руки на груди', 18]],
+  reach: [['Руки вверх', '3 раза, медленно', 18]],
   // Safety Gate: безопасная замена при боли
   chair: [['Вставание со стула', '30 секунд', 40]],
 };
@@ -457,7 +458,7 @@ function packPoses(fr, w, h) {
 const SAY = {
   setup: 'Поставь телефон и отойди на два–четыре метра. Я скажу, когда увижу тебя целиком.',
   seen: 'Отлично, вижу тебя целиком',
-  standIntro: 'Встань ровно. Руки вдоль тела, смотри прямо.', freeze: 'Замри.', good: 'Хорошо.', breathIn: 'Глубокий вдох носом.', breathOut: 'Медленный выдох.',
+  inFrame: 'Встань в кадр целиком', standIntro: 'Встань ровно. Руки вдоль тела, смотри прямо.', freeze: 'Замри.', good: 'Хорошо.', breathIn: 'Глубокий вдох носом.', breathOut: 'Медленный выдох.',
   wide: 'Стопы на ширине плеч', ohsIntro: 'Теперь присед. Подними прямые руки вверх. Пятки не отрывай.', ohsGo: 'Приседай. Пять раз, медленно.', go: 'Поехали', c3: 'Три', c2: 'Два', c1: 'Раз',
   ohsAltIntro: 'Возьмись рукой за спинку стула или за стену.', ohsAltGo: 'Приседай, насколько можешь без боли. Три раза.',
   repWait: 'Приседай. Я жду.', stop: 'Стоп. Хорошо.',
@@ -572,15 +573,31 @@ async function runProtocol0(protocol, opts = {}) {
     const m = rolls.reduce((a, b) => a + b, 0) / rolls.length, sd = Math.sqrt(rolls.reduce((a, b) => a + (b - m) ** 2, 0) / rolls.length) || 0;
     quality[key] = Math.round(100 * Math.min(1, (vis ?? .9) / .9) * Math.min(1, (cam.fps || 20) / 20) * (light < 45 ? .7 : 1) * (sd > 2 ? .8 : 1)); };
   // удержание позы заданное время: полоса показывает, сколько осталось; extra(p, left) — подсказки по ходу
-  const hold = async (key, sec, label, extra) => { if (pg.phase !== PHASE.REC) { voice.beep('start'); pg.rec(); } const fr = [], rolls = []; const t0 = Date.now(); const said = {};
-    while (!stop && !skip) { const el = (Date.now() - t0) / 1000, left = Math.ceil(sec - el); if (el >= sec) break; grab(fr, rolls); bar(el / sec, `${label}: ${left} с`); $('#reps').hidden = false; $('#ring').textContent = left; $('#repn').textContent = 'сек';
+  // человек вышел из кадра: шаг замирает, голос зовет обратно, и замер начинается заново, когда его снова видно целиком
+  let seenAt = Date.now();
+  // «в кадре» = видны плечо и таз: поднятая нога или наклон головы не считаются уходом из кадра
+  const present = q => !!q && (q[P.L_SHOULDER].visibility > .5 || q[P.R_SHOULDER].visibility > .5) && (q[P.L_HIP].visibility > .5 || q[P.R_HIP].visibility > .5);
+  const away = () => { const f = cam.frame; if (f && present(f.pose)) seenAt = Date.now(); return Date.now() - seenAt > 1500; };
+  const backInFrame = async () => { const t = Date.now(); bar(0, 'Вернитесь в кадр целиком'); hint(SAY.inFrame, 0);
+    let okSince = 0; while (!stop && !skip) { const f = cam.frame, ok = f && fullyVisible(f.pose, prof); if (ok) { okSince = okSince || Date.now(); if (Date.now() - okSince > 800) break; } else okSince = 0;
+      if (Date.now() - t > 9000 && !okSince) { hint(SAY.inFrame, 0); } await sleep(60); } seenAt = Date.now(); return Date.now() - t; };
+  const hold = async (key, sec, label, extra) => { if (pg.phase !== PHASE.REC) { voice.beep('start'); pg.rec(); } const fr = [], rolls = []; let t0 = Date.now(); const said = {}; seenAt = Date.now();
+    while (!stop && !skip) { if (away()) { await backInFrame(); fr.length = 0; rolls.length = 0; t0 = Date.now(); voice.beep('start'); continue; } const el = (Date.now() - t0) / 1000, left = Math.ceil(sec - el); if (el >= sec) break; grab(fr, rolls); bar(el / sec, `${label}: ${left} с`); $('#reps').hidden = false; $('#ring').textContent = left; $('#repn').textContent = 'сек';
       if (sec >= 12 && left === 10 && !said[10]) { said[10] = 1; hint(SAY.hold10, 0); } if (sec >= 9 && left === 5 && !said[5]) { said[5] = 1; hint(SAY.hold5, 0); }
       if (extra && fr.length) extra(fr, left); await sleep(30); }
     bar(1, ''); voice.beep('stop'); if (key) keep(key, fr, rolls); return fr; };
+  // руки вверх: считаем подъемы (обе кисти выше носа, потом ниже плеч), а не секунды; счет голосом, не дольше 25 секунд
+  const armReps = async (key, N = 3) => { voice.beep('start'); pg.rec(); const fr = [], rolls = []; let n = 0, up = false, t0 = Date.now(); seenAt = Date.now();
+    bar(0, `Подъемы: 0 из ${N}`); $('#reps').hidden = false; $('#ring').textContent = 0; $('#repn').textContent = `из ${N}`;
+    while (!stop && !skip && n < N && Date.now() - t0 < 25000) { if (away()) { t0 += await backInFrame(); continue; } grab(fr, rolls); const q = fr.length && fr.at(-1).p;
+      if (q) { const hi = q[P.L_WRIST].y < q[P.NOSE].y && q[P.R_WRIST].y < q[P.NOSE].y, lo = q[P.L_WRIST].y > q[P.L_SHOULDER].y && q[P.R_WRIST].y > q[P.R_SHOULDER].y;
+        if (hi && !up) up = true; else if (lo && up) { up = false; n++; $('#ring').textContent = n; bar(n / N, `Подъемы: ${n} из ${N}`); voice.say(numWord(n)); } }
+      await sleep(30); }
+    bar(1, ''); voice.beep('stop'); keep(key, fr, rolls); return fr; };
   // повторы: считаем по движению таза; полоса = сделанные повторы из трех
   const reps = async (key, an, deep = .12, N = 3, quiet = false, maxMs = 60000) => { if (!quiet) voice.beep('start'); pg.rec(); const fr = [], rolls = []; if (skip) return { f: {}, reps: 0, quality: 'RETAKE' };
-    let n = 0, down = false, base = null, leg = null, maxFlex = 0, downAt = 0, countAt = 0, peak = 0, counted = false; const hys = []; const t0 = Date.now(); let lastMove = Date.now(); bar(0, `Повторы: 0 из ${N}`); $('#reps').hidden = false; $('#ring').textContent = 0; $('#repn').textContent = `из ${N}`;
-    while (!stop && !skip && n < N && Date.now() - t0 < maxMs) { grab(fr, rolls); const p = fr.length && fr.at(-1).p;
+    let n = 0, down = false, base = null, leg = null, maxFlex = 0, downAt = 0, countAt = 0, peak = 0, counted = false; const hys = []; let t0 = Date.now(); let lastMove = Date.now(); bar(0, `Повторы: 0 из ${N}`); $('#reps').hidden = false; $('#ring').textContent = 0; $('#repn').textContent = `из ${N}`;
+    seenAt = Date.now(); while (!stop && !skip && n < N && Date.now() - t0 < maxMs) { if (away()) { t0 += await backInFrame(); lastMove = Date.now(); continue; } grab(fr, rolls); const p = fr.length && fr.at(-1).p;
       // высота таза по медиане последних кадров: дрожание точек не считается повтором
       if (p) { hys.push((p[P.L_HIP].y + p[P.R_HIP].y) / 2); if (hys.length > 5) hys.shift(); const hy = hys.slice().sort((x, y) => x - y)[hys.length >> 1]; if (leg == null) leg = Math.max(1, Math.abs(((p[P.L_ANKLE].y + p[P.R_ANKLE].y) / 2) - hy));
         base = base == null ? hy : Math.min(base, hy * .02 + base * .98, base); const dy = (hy - base) / leg;
@@ -658,7 +675,7 @@ async function runProtocol0(protocol, opts = {}) {
       moves.iap = { quality: 'GOOD', f: { rib_flare: Math.round(med(st.map(x => ribFlare(x.p))) * 10) / 10, ...(Number.isFinite(ap) ? { apical_mm: Math.round(ap) } : {}) } };
       await say(SAY.good); k++; }
     if (u === 'ohs_front') { await face('front'); step(k, 'Присед с руками вверх', 'Стопы чуть шире плеч, руки вверх, пятки на полу. Садитесь как можно глубже без боли, 5 раз', FOC.squat); demo('test_squat'); await say(SAY.wide); await say(SAY.ohsIntro); if (skipped()) return; 
-      moves.ohs_front = await goReps(SAY.ohsGo, 'ohs_front', fr => Movement.front(fr), .12, BAT ? 3 : 5); if (skipped()) return; await say(SAY.stop); k++; }
+      moves.ohs_front = await goReps(SAY.ohsGo, 'ohs_front', fr => Movement.front(fr), .12, 5); if (skipped()) return; await say(SAY.stop); k++; }
     if (u === 'sls') { await face('front');
       step(k, 'Стоя на правой ноге', 'Левую ногу согните в колене и отведите стопу назад. Руки на поясе. Присядьте на правой 3 раза: колено вперед на 10–15 см, как будто садитесь на высокий стул', FOC.kneeR); demo('test_sls'); await say(SAY.slsRIntro); if (skipped()) return; 
       moves.sls_r = await goReps(SAY.slsRGo, 'sls_r', fr => Movement.singleLeg(fr, true), .06); if (skipped()) return; await say(SAY.footDown); k++;
@@ -693,11 +710,10 @@ async function runProtocol0(protocol, opts = {}) {
     if (u === 'slb') { await face('front'); step(k, 'Баланс на одной ноге', 'Руки на поясе. Сначала на правой, потом на левой, по 6 секунд', FOC.stand); demo('test_slb'); await say('Руки на поясе. Встаньте на правую ногу, левую согните назад.'); if (skipped()) return;
       await countdown(GO_WORD.balance); const fR = await hold('slb_r', 6, 'Правая нога'); if (skipped()) return; await say('Смена ноги. Теперь на левой.'); await countdown(GO_WORD.balance); const fL = await hold('slb_l', 6, 'Левая нога'); if (skipped()) return;
       moves.slb = singleBalance(fR, fL); await say(SAY.footDown); k++; }
-    if (u === 'trot') { await face('front'); step(k, 'Повороты корпуса', 'Руки скрещены на груди, таз на месте. Поворот вправо, потом влево', FOC.stand); demo('test_trot'); await say('Скрестите руки на груди. Таз не двигается. Поворачивайте корпус.'); if (skipped()) return;
-      await countdown(GO_WORD.rotate); await say('Вправо'); const fR = await hold('trot_r', 5, 'Вправо'); if (skipped()) return; await say('Влево'); const fL = await hold('trot_l', 5, 'Влево'); if (skipped()) return;
-      moves.trot = thoracicRotation(fR, fL); await say(SAY.good); k++; }
-    if (u === 'reach') { await face('front'); step(k, 'Руки вверх', 'Медленно поднимите прямые руки вверх и опустите, 2 раза', FOC.arms); demo('test_reach'); await say('Медленно поднимите прямые руки над головой и опустите. Два раза.'); if (skipped()) return;
-      await countdown(GO_WORD.reach); const fr = await hold('reach', 10, 'Руки вверх'); if (skipped()) return; moves.reach = overheadReach(fr); await say(SAY.armsDown); k++; }
+    if (u === 'trot') { await face('front'); step(k, 'Повороты корпуса', 'Руки скрещены на груди, таз на месте. Вправо и влево, несколько раз', FOC.stand); demo('test_trot'); await say('Скрестите руки на груди. Поворачивайтесь вправо и влево, несколько раз. Таз на месте.'); if (skipped()) return;
+      await countdown(GO_WORD.rotate); const fr = await hold('trot', 10, 'Повороты'); if (skipped()) return; moves.trot = trotSweep(fr); await say(SAY.good); k++; }
+    if (u === 'reach') { await face('front'); step(k, 'Руки вверх', 'Поднимите прямые руки над головой и опустите. 3 раза', FOC.arms); demo('test_reach'); await say('Поднимайте прямые руки над головой и опускайте. Три раза.'); if (skipped()) return;
+      await countdown(GO_WORD.reach); const fr = await armReps('reach', 3); if (skipped()) return; moves.reach = overheadReach(fr); await say(SAY.armsDown); k++; }
     if (u === 'chair') { await face('front'); fsOff = true; step(k, 'Вставание со стула', 'Сядьте на стул боком к камере, руки на груди. Вставайте и садитесь 30 секунд'); demo('test_chair'); await say('Сядьте на стул, руки скрестите на груди. По сигналу вставайте и садитесь, сколько сможете за тридцать секунд.'); if (skipped()) return;
       await countdown(GO_WORD.chair); moves.chair = await reps('chair', fr => chairStand(fr), .1, 99, true, 30000); moves.chair.quality = moves.chair.reps ? 'GOOD' : 'RETAKE'; await say(SAY.good); k++; fsOff = false; }
     if (u === 'back') { await face('back'); step(k, 'Спиной: присед', 'Стопы чуть шире плеч, руки вверх, 3 раза', FOC.squat); await say(SAY.wide); await say(SAY.armsOverhead); if (skipped()) return; 
@@ -1028,8 +1044,11 @@ function balanceCard(all) {
 // бета: что добавили к карте фоновые замеры ЦНС (анкета, касания, глаза, пульс)
 function cnsCard(t, a) {
   if (SHARED || !isBetaMode() || !(t.vns || t.touch)) return '';
+  // глаза (слежение, саккады) и касания с набором идут в карту; пульс по камере не учитывается
   const fired = a.findings.filter(f => f.rule.source === 'cns'), d = cnsDelta(spots(a), spots(analyze({ ...t, vns: null, touch: null }, C)));
-  const raw = [...(t.touch && t.touch.holdMs ? [`Касание ${t.touch.holdMs} мс`] : []), ...(t.touch && t.touch.typing ? [`Набор ${t.touch.typing.ikiMs} мс${t.touch.typing.rel ? ` (×${String(t.touch.typing.rel).replace('.', ',')} к обычному)` : ''}`] : []), ...(vnsSummary(t.vns) || [])];
+  const EYE_WHY = { no_face: 'лицо не было в кадре', iris_conf: 'камера плохо видела глаза (свет, очки)', gaze_angle: 'взгляд уходил от экрана', model: 'не загрузилась модель лица' };
+  const eyes = t.vns && t.vns.status !== 'OK' ? [`Глаза: не измерено, ${EYE_WHY[(t.vns.reasons || [])[0]] || 'мало данных'}`] : [];
+  const raw = [...eyes, ...(t.touch && t.touch.holdMs ? [`Касание ${t.touch.holdMs} мс`] : []), ...(t.touch && t.touch.typing ? [`Набор ${t.touch.typing.ikiMs} мс${t.touch.typing.rel ? ` (×${String(t.touch.typing.rel).replace('.', ',')} к обычному)` : ''}`] : []), ...(vnsSummary(t.vns) || [])];
   const delta = [['SHORT', 'гипертонус'], ['HYPER', 'перерастяжение'], ['WEAK', 'слабость']].filter(([k]) => d.scores[k]).map(([k, n]) => `<span style="font-weight:600;color:${TONE[k][5]}">${d.scores[k] > 0 ? '+' : ''}${d.scores[k]}% ${n}</span>`).join('');
   return `<div class="pad" style="margin-top:12px"><details class="acc card"><summary style="font-weight:600;min-height:32px"><span class="eyebrow" style="margin-right:8px">бета</span>Влияние ЦНС</summary>
     <div style="margin-top:10px;font-size:14px;line-height:1.45">${fired.length ? `<div class="row" style="gap:14px;flex-wrap:wrap">${delta || '<span style="color:var(--sub)">На проценты не повлияло</span>'}</div>
@@ -1073,7 +1092,7 @@ export function map() {
   const labels = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 4)).map(s => ({ key: s.key, title: C.muscles[s.id].zone + (s.side === 'RIGHT' ? ' · П' : ' · Л'), sub: toneText(s, 3).replace('похоже, ', ''), value: shortVal(seen(a, s)[0]), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
   let h2d = null, first = reveal;
   // на схеме и в 3D один и тот же набор: главные зоны итога (до 8) и выбранная; остальное серым
-  const focusK = new Set([...top.map(x => x.key), SEL].filter(Boolean)), today = SHARED ? new Set() : workedToday(), focus = () => all.map(x => today.has(x.key) && focusK.has(x.key) && x.key !== SEL ? { ...x, k: 'DONE', tone: .45 } : focusK.has(x.key) || x.key === SEL ? x : { ...x, k: 'OK', tone: 0 });
+  const focusK = new Set([...top.map(x => x.key), SEL].filter(Boolean)), today = SHARED ? new Set() : workedToday(), focus = () => all.map(x => focusK.has(x.key) || x.key === SEL ? x : { ...x, k: 'OK', tone: 0 });
   const draw2d = () => { if (!MODE3D) { h2d = drawHeat($('#heat'), focus(), BACK, SEL, labels, { reveal: first }); first = false; } };
   const renderSel = () => { const x = all.find(q => q.key === SEL); const box = $('#selbox'); if (!box) return;
     box.innerHTML = x ? `<div class="group fade" style="padding:var(--s4);background:var(--surface-2)"><div class="row" style="gap:8px"><span class="mark ${x.k}"></span><span style="font-size:13px;font-weight:600;color:${TONE[x.k][5]}">${x.ambiguous ? 'Неоднозначно' : TONE[x.k][0]}</span></div>

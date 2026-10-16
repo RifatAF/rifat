@@ -367,7 +367,7 @@ export async function ready3D() {
 }
 /** Нарисовать модель в canvas-контекст (в координатах 200×440) и вернуть точки мышц в долях кадра. */
 function draw3D(spots, back, wpx, hpx) {
-  const S = snap3; paintMesh(S.m, spots, S.col); S.geo.attributes.color.needsUpdate = true;
+  const S = snap3; spots = alias3d(spots, S.m.meta.order); paintMesh(S.m, spots, S.col); S.geo.attributes.color.needsUpdate = true;
   { const ix = meshIndex(S.m, spots); if (S.ix !== ix) { S.ix = ix; S.geo.setIndex(new S.THREE.BufferAttribute(ix, 1)); } }
   S.root.rotation.y = back ? Math.PI : 0;
   if (S.renderer.domElement.width !== wpx || S.renderer.domElement.height !== hpx) S.renderer.setSize(wpx, hpx, false);
@@ -537,12 +537,15 @@ function paintMesh(m, spots, out) { const order = m.meta.order, lin = c => (c / 
       c = acc.map(v => v / w0); }
     if (g === 0 && c !== BASE3) c = c.map((v, q) => BASE3[q] + (v - BASE3[q]) * .7);
     out[i * 3] = c[0]; out[i * 3 + 1] = c[1]; out[i * 3 + 2] = c[2]; } }
-export async function body3D(container, spots, onPick, opts = {}) {
+// мышцы без своей группы в сетке (глубокие и мелкие) показываем на покрывающей их мышце, если та сама не отмечена
+const ALIAS3D = { piriformis: 'glute_max', supraspinatus: 'upper_trap', soleus: 'calf' };
+const alias3d = (spots, order) => (spots || []).map(s => order.indexOf(s.id) >= 0 || !ALIAS3D[s.id] || (spots.some(o => o.id === ALIAS3D[s.id] && o.side === s.side && o.k !== 'OK')) ? s : { ...s, id: ALIAS3D[s.id] });
+export async function body3D(container, spots0, onPick, opts = {}) {
   container.style.borderRadius = '32px'; container.style.overflow = 'hidden'; container.style.background = '#fff';
   container.innerHTML = '<div class="skel" style="height:100%"></div>';
   const THREE = await import('three');
   const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
-  const m = await loadMesh(); const order = m.meta.order;
+  const m = await loadMesh(); const order = m.meta.order; let spots = alias3d(spots0, order);
   const col = new Float32Array(m.nv * 3), lin = c => (c / 255) ** 2.2, BASE3 = ramp(0).map(lin);
   const paint = (spots, out) => paintMesh(m, spots, out);
   paint(spots, col);
@@ -607,26 +610,26 @@ export async function body3D(container, spots, onPick, opts = {}) {
     const nl = Math.hypot(...nn) || 1, n0 = nn.map(x => x / nl); let w = [u[1] * n0[2] - u[2] * n0[1], u[2] * n0[0] - u[0] * n0[2], u[0] * n0[1] - u[1] * n0[0]]; const wl = Math.hypot(...w) || 1; w = w.map(x => x / wl);
     const pu = V.map(v => (m.pos[v * 3] - c[0]) * u[0] + (m.pos[v * 3 + 1] - c[1]) * u[1] + (m.pos[v * 3 + 2] - c[2]) * u[2]).sort((a, b) => a - b);
     const pw = V.map(v => (m.pos[v * 3] - c[0]) * w[0] + (m.pos[v * 3 + 1] - c[1]) * w[1] + (m.pos[v * 3 + 2] - c[2]) * w[2]).sort((a, b) => a - b);
-    const t0 = pu[Math.floor(pu.length * .1)], t1 = pu[Math.floor(pu.length * .9)], o0 = pw[Math.floor(pw.length * .2)], o1 = pw[Math.floor(pw.length * .8)], K = 16, NL = 5, lanes = [];
+    const t0 = pu[Math.floor(pu.length * .1)], t1 = pu[Math.floor(pu.length * .9)], o0 = pw[Math.floor(pw.length * .28)], o1 = pw[Math.floor(pw.length * .72)], K = 16, NL = 4, lanes = [];
     for (let li = 0; li < NL; li++) { const o = o0 + (o1 - o0) * (NL === 1 ? .5 : li / (NL - 1)), P = [], N = []; let miss = 0;
       for (let k = 0; k < K; k++) { const t = t0 + (t1 - t0) * k / (K - 1), q = [0, 1, 2].map(a => c[a] + u[a] * t + w[a] * o); let best = -1, bd = 1e18;
         for (const v of V) { const d = (m.pos[v * 3] - q[0]) ** 2 + (m.pos[v * 3 + 1] - q[1]) ** 2 + (m.pos[v * 3 + 2] - q[2]) ** 2; if (d < bd) { bd = d; best = v; } }
-        if (bd > 900) miss++; // точка дорожки ушла с мышцы дальше 3 см
+        if (bd > 225) miss++; // точка дорожки ушла с мышцы дальше 1,5 см: такую дорожку не рисуем, чтобы частицы не заходили на соседей
         P.push(new THREE.Vector3(m.pos[best * 3], m.pos[best * 3 + 2], -m.pos[best * 3 + 1])); N.push(new THREE.Vector3(m.nrm[best * 3], m.nrm[best * 3 + 2], -m.nrm[best * 3 + 1]).normalize()); }
-      if (miss < K * .4) lanes.push({ P, N }); }
+      if (miss < K * .2) lanes.push({ P, N }); }
     return lanes.length ? lanes : null; };
   const lanesBy = new Map(), RGB = { SHORT: [.784, .255, .29], HYPER: [.851, .51, .169], WEAK: [.184, .42, .847] };
   const TAIL = [[1, 1], [.8, .6], [.62, .34], [.46, .16]]; // размер и яркость головы и хвоста
   const pmat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, uniforms: { uScale: { value: 1 } },
     vertexShader: 'attribute float aSize; attribute float aAlpha; attribute vec3 aColor; uniform float uScale; varying float vA; varying vec3 vC; void main(){ vA = aAlpha; vC = aColor; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = aSize * uScale / -mv.z; gl_Position = projectionMatrix * mv; }',
-    fragmentShader: 'varying float vA; varying vec3 vC; void main(){ float d = length(gl_PointCoord - .5); if (d > .5) discard; float a = vA * smoothstep(.5, .28, d); gl_FragColor = vec4(mix(vec3(1.), vC * .8, smoothstep(.12, .45, d)), a); }' });
+    fragmentShader: 'varying float vA; varying vec3 vC; void main(){ float d = length(gl_PointCoord - .5); if (d > .5) discard; float a = vA * smoothstep(.5, .28, d); gl_FragColor = vec4(mix(min(vec3(1.), vC * 1.45 + .12), vC * .5, smoothstep(.1, .45, d)), a); }' });
   let pts = null, parts = [];
   const along = (ln, f) => { const x = Math.max(0, Math.min(ln.P.length - 1.001, f * (ln.P.length - 1))), i = Math.floor(x), k = x - i; return [ln.P[i].clone().lerp(ln.P[i + 1], k), ln.N[i].clone().lerp(ln.N[i + 1], k).normalize()]; };
   const buildArrows = spots => { parts = []; if (pts) { arrows.remove(pts); pts.geometry.dispose(); pts = null; }
     if (!opts.arrows) return;
     for (const s of spots) { if (!RGB[s.k] || order.indexOf(s.id) < 0 || (only && !only.has(s.id))) continue; const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0);
       if (!lanesBy.has(g)) lanesBy.set(g, lanesOf(g)); const L = lanesBy.get(g); if (!L) continue;
-      const n = s.k === 'WEAK' ? 10 : Math.round(10 + 14 * Math.min(1, Math.abs(s.tone))); // сильнее отклонение, гуще поток
+      const n = s.k === 'WEAK' ? 8 : Math.round(8 + 10 * Math.min(1, Math.abs(s.tone))); // сильнее отклонение, гуще поток
       for (let j = 0; j < n; j++) parts.push({ k: s.k, ln: L[j % L.length], half: j % 2, ph: Math.random(), sp: (s.k === 'WEAK' ? .05 : .32) * (.75 + Math.random() * .5), fl: Math.random() * 6.3, c: RGB[s.k] }); }
     if (!parts.length) return; const nv = parts.length * TAIL.length, geo2 = new THREE.BufferGeometry();
     geo2.setAttribute('position', new THREE.BufferAttribute(new Float32Array(nv * 3), 3)); geo2.setAttribute('aSize', new THREE.BufferAttribute(new Float32Array(nv), 1));
@@ -674,7 +677,7 @@ export async function body3D(container, spots, onPick, opts = {}) {
     /** «Как должно быть»: мышцы в балансе, без цвета, маркеров и стрелок. false — вернуть результат теста. */
     norm(on) { normOn = !!on; const sp = normOn ? lastSpots.map(s => ({ ...s, k: 'OK', tone: 0 })) : (only ? lastSpots.map(s => only.has(s.id) ? s : { ...s, k: 'OK', tone: 0 }) : lastSpots);
       paint(sp, col); target.set(col); geo.attributes.color.needsUpdate = true; arrows.visible = !normOn; marks.forEach(x => { x.el.hidden = normOn; }); dirty = true; },
-    update(spots) { lastSpots = spots; spots = only ? spots.map(s => only.has(s.id) ? s : { ...s, k: 'OK', tone: 0 }) : spots; paint(spots, col); target.set(col); geo.attributes.color.needsUpdate = true; { const ix = meshIndex(m, spots); if (ix !== curIx) { curIx = ix; geo.setIndex(new THREE.BufferAttribute(ix, 1)); } } buildMarks(spots); buildArrows(spots); if (normOn) api.norm(true); dirty = true; },
+    update(spots) { spots = alias3d(spots, order); lastSpots = spots; spots = only ? spots.map(s => only.has(s.id) ? s : { ...s, k: 'OK', tone: 0 }) : spots; paint(spots, col); target.set(col); geo.attributes.color.needsUpdate = true; { const ix = meshIndex(m, spots); if (ix !== curIx) { curIx = ix; geo.setIndex(new THREE.BufferAttribute(ix, 1)); } } buildMarks(spots); buildArrows(spots); if (normOn) api.norm(true); dirty = true; },
     dispose() { if (!alive) return; alive = false; ctl.dispose(); if (pts) pts.geometry.dispose(); pmat.dispose(); geo.dispose(); mat.dispose(); renderer.dispose(); try { renderer.forceContextLoss(); } catch (e) {} } };
   anim(); return api;
 }
@@ -717,3 +720,14 @@ function armSheet(o) {
 }
 if (typeof document !== 'undefined' && document.body) new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1 && n.classList.contains('sheet')) armSheet(n); })
   .observe(document.body, { childList: true });
+
+// подсказки [?]: текст показывается одной плашкой внизу экрана, а не рядом с кнопкой (там он уезжал за край)
+if (typeof document !== 'undefined') {
+  const closeQ = () => { document.querySelectorAll('.qpop').forEach(x => x.remove()); document.querySelectorAll('details.q[open]').forEach(x => x.open = false); };
+  document.addEventListener('toggle', e => { const d = e.target; if (!(d instanceof HTMLElement) || !d.matches('details.q')) return;
+    if (!d.open) { document.querySelectorAll('.qpop').forEach(x => x.remove()); return; }
+    document.querySelectorAll('details.q[open]').forEach(x => { if (x !== d) x.open = false; }); document.querySelectorAll('.qpop').forEach(x => x.remove());
+    const body = d.querySelector(':scope > div'); if (!body) return; const p = document.createElement('div'); p.className = 'qpop'; p.setAttribute('role', 'dialog');
+    p.innerHTML = `<div style="${body.getAttribute('style') || ''}">${body.innerHTML}</div><button aria-label="Закрыть">✕</button>`; p.querySelector('button').onclick = closeQ; document.body.appendChild(p); }, true);
+  document.addEventListener('pointerdown', e => { if (document.querySelector('.qpop') && !e.target.closest('.qpop, details.q')) closeQ(); }, true);
+}
