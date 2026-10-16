@@ -49,9 +49,12 @@ const ang = (a, b) => Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
 export function ribFlare(p) { if (!p) return null; const d = Math.abs(ang(p[11], p[12]) - ang(p[23], p[24])); return Math.min(d, 360 - d); }
 /** Апикальное дыхание: подъем плеч на вдохе до движения, мм. frames: [{ p }] за 2–3 секунды покоя. */
 export function apicalRise(frames, cmPerPx) {
-  const ys = frames.filter(f => f.p).map(f => (f.p[11].y + f.p[12].y) / 2); if (ys.length < 10 || !cmPerPx) return null;
-  return (Math.max(...ys) - Math.min(...ys)) * cmPerPx * 10;
+  // плечи относительно таза (раскачка всего тела не в счет), сглаживание по 5 кадрам, размах 10–90-й перцентиль (дрожание точек не в счет)
+  const ys = frames.filter(f => f.p).map(f => ((f.p[11].y + f.p[12].y) - (f.p[23].y + f.p[24].y)) / 2); if (ys.length < 15 || !cmPerPx) return null;
+  const sm = ys.map((_, i) => { const w = ys.slice(Math.max(0, i - 2), i + 3).sort((a, b) => a - b); return w[w.length >> 1]; }).sort((a, b) => a - b);
+  return (sm[Math.floor(sm.length * .9)] - sm[Math.floor(sm.length * .1)]) * cmPerPx * 10;
 }
+
 /** Butt Wink: потеря нейтрали поясницы в нижней трети приседа, градусы подкручивания таза (вид сбоку). */
 export function buttWink(frames) {
   const v = frames.filter(f => f.p).map(f => ({ hipY: (f.p[23].y + f.p[24].y) / 2, tilt: ang(f.p[11], f.p[23]) }));
