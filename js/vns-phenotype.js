@@ -13,7 +13,7 @@
 // Только SELF_TEST: в режиме специалиста блок не запускается.
 import { passiveOn } from './session-controller.js';
 
-export const T = { PURSUIT: 2000, COLLAPSE: 60, END: 2300, LEAD: 1500 };
+export const T = { PURSUIT: 2000, COLLAPSE: 60, END: 2300, LEAD: 1500, ACQUIRE: 250, LOCK: 300 };
 export const FLASH_AT = T.PURSUIT + T.COLLAPSE;
 export const GUARD = { irisConf: .8, gazeDeg: 25, validFrac: .6 };
 export const SACCADE_NORM = [180, 220];
@@ -105,7 +105,8 @@ function corr(a, b) { const ma = mean(a), mb = mean(b); let n = 0, da = 0, db = 
 /** Плавное слежение: корреляция взгляда с целью по горизонтали, усиление (gain) и догоняющие саккады.
  *  samples: [{ t, tx, gh }] — t мс, tx цель по горизонтали в градусах, gh взгляд по горизонтали в градусах (уже в системе экрана). */
 export function pursuitStats(samples) {
-  const v = samples.filter(s => s.ok && s.t < T.PURSUIT); if (v.length < 15) return null;
+  // первые 250 мс — догоняющая саккада на старт движения, в оценку плавности не входят
+  const v = samples.filter(s => s.ok && s.t >= T.ACQUIRE && s.t < T.PURSUIT); if (v.length < 12) return null;
   const tx = v.map(s => s.tx), gx = v.map(s => s.gh), c = corr(tx, gx);
   const vel = a => a.slice(1).map((x, i) => (x - a[i]) / Math.max(1, v[i + 1].t - v[i].t) * 1000);
   const tv = vel(tx), gv = vel(gx), rms = a => Math.sqrt(mean(a.map(x => x * x)));
@@ -167,18 +168,19 @@ function foreheadRGB(px, video, lm, w, h) {
 /** Экран загрузки перед тестом, внутри которого незаметно идет окуломоторный блок и rPPG.
  *  ready — промис настоящей загрузки (камера, модель позы). Пока он не готов, капля «дышит» в центре и копится пульс;
  *  затем 2,3 с стимула: «восьмерка», схлопывание и вспышка «готово». Возвращает итог ВНС или null (специалист, нет лица). */
-export async function runLoader({ ready, video, mirror = true, caption = ['Загружаем распознавание движения', 'Настраиваем камеру', 'Почти готово'] } = {}) {
+export async function runLoader({ ready, video, mirror = true } = {}) {
   const measure = passiveOn() && !!video && !(typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const el = document.createElement('div'); el.className = 'vnsl';
-  el.innerHTML = `<canvas></canvas><div class="vnsl-ui"><div class="vnsl-cap" aria-live="polite">${caption[0]}</div><div class="vnsl-bar"><b></b></div></div>`;
-  document.body.appendChild(el); const cv = el.querySelector('canvas'), cap = el.querySelector('.vnsl-cap'), bar = el.querySelector('.vnsl-bar b');
+  // без текста (ТЗ 4.2): текст уводит взгляд читать, а нужен взгляд на капле. Только тонкая полоса прогресса
+  el.innerHTML = `<canvas></canvas><div class="vnsl-ui" role="progressbar" aria-label="Загрузка"><div class="vnsl-bar"><b></b></div></div>`;
+  document.body.appendChild(el); const cv = el.querySelector('canvas'), bar = el.querySelector('.vnsl-bar b');
   const W = innerWidth, H = innerHeight, dpr = Math.min(1.5, devicePixelRatio || 1); cv.width = W * dpr; cv.height = H * dpr;
   const scene = createLiquidScene(cv), R = Math.min(W, H) * .055;
   let face = null, readyDone = false, readyErr = null; ready = Promise.resolve(ready).then(() => { readyDone = true; }, e => { readyDone = true; readyErr = e; });
   if (measure) loadFace().then(f => { face = f; }, () => {});
   const probe = document.createElement('canvas'); probe.width = 16; probe.height = 8; const px = probe.getContext('2d', { willReadFrequently: true });
   const CM_PER_PX = 2.54 / 160; let distCm = 35, faceSeen = 0;
-  const samples = [], trace = [], reasons = new Set(); let lastTs = -1, total = 0, valid = 0;
+  const samples = [], trace = [], reasons = new Set(); let lastTs = -1, total = 0, valid = 0, lockSince = 0, lockMs = null, prevG = null;
   const sense = (now, tStim) => { if (!face || !video.videoWidth || now - lastTs < 15) return; lastTs = now; const vw = video.videoWidth, vh = video.videoHeight;
     let r; try { r = face.detectForVideo(video, now); } catch (e) { return; }
     const lm = r.faceLandmarks && r.faceLandmarks[0]; if (tStim >= 0) total++; if (!lm || lm.length < 478) { if (tStim >= 0) reasons.add('no_face'); return; } faceSeen++;
@@ -186,7 +188,9 @@ export async function runLoader({ ready, video, mirror = true, caption = ['За�
     const head = headPose(r.facialTransformationMatrixes && r.facialTransformationMatrixes[0] && r.facialTransformationMatrixes[0].data);
     const eye = irisInEye(lm), conf = irisConfidence(eye, blend), gz = gazeAngles(head, eye), dc = faceDistanceCm(lm, vw); if (dc) distCm = distCm * .8 + dc * .2;
     try { const c = foreheadRGB(px, video, lm, vw, vh); if (c) trace.push({ t: now, ...c }); } catch (e) {}
-    if (tStim < 0) return; const ok = conf >= GUARD.irisConf && gz.total <= GUARD.gazeDeg; if (!ok) reasons.add(conf < GUARD.irisConf ? 'iris_conf' : 'gaze_angle'); else valid++;
+    // фиксация на капле в центре: взгляд почти не двигается (меньше 2° за кадр) при хорошем ирисе
+    if (tStim < 0) { const still = prevG && Math.hypot(gz.h - prevG.h, gz.v - prevG.v) < 2 && conf >= GUARD.irisConf && gz.total <= GUARD.gazeDeg; prevG = gz; lockSince = still ? (lockSince || now) : 0; return; }
+    const ok = conf >= GUARD.irisConf && gz.total <= GUARD.gazeDeg; if (!ok) reasons.add(conf < GUARD.irisConf ? 'iris_conf' : 'gaze_angle'); else valid++;
     const st = stimulusAt(tStim, W, H), deg = p => Math.atan2(p * CM_PER_PX, distCm) * D;
     samples.push({ t: tStim, ok, conf, tx: deg(st.x - W / 2), ty: deg(st.y - H / 2), gh: (mirror ? -1 : 1) * gz.h, gv: -gz.v }); };
   // шлейф: позиции капли с задержкой; при «дыхании» в центре капли кружат рядом
@@ -195,19 +199,21 @@ export async function runLoader({ ready, video, mirror = true, caption = ['За�
   const t0 = performance.now(); let stimStart = null, endAt = null;
   await new Promise(done => { const frame = () => { const now = performance.now(), el0 = now - t0;
       // старт стимула: загрузка закончилась, прошло не меньше 1,6 с и (если меряем) накоплено 3,5 с пульса или прошло 7 с
-      if (stimStart == null && readyDone && el0 > 1600 && (!measure || !face || trace.length > 90 || el0 > 7000 || (el0 > 3000 && !faceSeen))) stimStart = now;
+      // старт стимула: загрузка готова, капля видна не меньше 1,6 с, накоплен пульс, и взгляд уже 300 мс стоит на капле
+      // (после экрана со свайпом человек сначала находит каплю глазами; без фиксации слежение мерить нельзя)
+      const fixed = !measure || !face || !faceSeen || (lockSince && now - lockSince >= T.LOCK);
+      if (stimStart == null && readyDone && el0 > 1600 && ((fixed && (!measure || !face || trace.length > 90 || (el0 > 3000 && !faceSeen))) || el0 > 7000)) { stimStart = now; lockMs = lockSince ? Math.round(lockSince - t0) : null; }
       const tStim = stimStart == null ? -1 : now - stimStart; if (tStim >= T.END && endAt == null) endAt = now;
       const fade = endAt == null ? Math.min(1, el0 / 350) : Math.max(0, 1 - (now - endAt) / 420); if (endAt != null && fade <= 0) return done();
       const lag = i => posAt(now - i * 45, tStim < 0 ? -1 : (tStim - i * 45 < 0 ? -1 : tStim - i * 45)), p = lag(0);
       const st = tStim < 0 ? { r: 1, flash: 0 } : stimulusAt(Math.min(tStim, T.END - 1), W, H), r = R * (tStim < 0 ? 1 + Math.sin(now / 420) * .06 : Math.max(.15, st.r));
       scene.draw({ pts: [p, lag(1), lag(2), lag(3)], r, time: now / 1000, flash: st.flash, fade });
       const prog = stimStart == null ? Math.min(.8, el0 / 6000) : .8 + .2 * Math.min(1, tStim / T.END); bar.style.width = (prog * 100).toFixed(1) + '%';
-      const ci = stimStart == null ? (el0 < 2200 ? 0 : 1) : 2; if (cap.textContent !== caption[ci]) cap.textContent = caption[ci];
       if (measure) sense(now, endAt == null ? tStim : -1); requestAnimationFrame(frame); }; requestAnimationFrame(frame); });
   await ready; scene.dispose(); el.remove(); if (readyErr) throw readyErr;
   if (!measure || !total) return measure ? { status: 'INVALID', reasons: [face ? 'no_face' : 'model'], ppg: rppg(trace) } : null;
   const validFrac = valid / total, status = validFrac >= GUARD.validFrac ? 'OK' : 'INVALID';
-  return { status, reasons: [...reasons], validFrac: Math.round(validFrac * 100) / 100, distanceCm: Math.round(distCm), renderer: scene.kind,
+  return { status, reasons: [...reasons], validFrac: Math.round(validFrac * 100) / 100, distanceCm: Math.round(distCm), renderer: scene.kind, lockMs,
     pursuit: status === 'OK' ? pursuitStats(samples) : null, saccadeMs: status === 'OK' ? saccadeLatency(samples) : null, ppg: rppg(trace), frames: total };
 }
 /** Короткая сводка для экрана. */

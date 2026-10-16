@@ -581,7 +581,7 @@ export async function body3D(container, spots, onPick, opts = {}) {
   // (трассировка по сетке на каждом кадре тормозила вращение на телефонах)
   let marks = [], only = null, lastSpots = spots;
   const buildMarks = spots => { marks.forEach(x => x.el.remove());
-    marks = spots.filter(s => s.k !== 'OK' && order.indexOf(s.id) >= 0).map(s => { const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0), c = m.meta.blobs[g]; if (!c) return null;
+    marks = spots.filter(s => s.k !== 'OK' && s.k !== 'DONE' && s.k !== 'NT' && order.indexOf(s.id) >= 0).map(s => { const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0), c = m.meta.blobs[g]; if (!c) return null;
       const el = document.createElement('button'); el.className = 'mark3d'; el.setAttribute('aria-label', s.key); el.innerHTML = `<span class="mark ${s.k}"${s.derived && !s.edited ? ' style="opacity:.75"' : ''}></span>`;
       el.onclick = () => onPick && onPick(s.key); container.appendChild(el); return { el, local: new THREE.Vector3(c[0], c[2], -c[1]), vis: null }; }).filter(Boolean); };
   buildMarks(spots);
