@@ -874,7 +874,7 @@ function proSpots(a) {
 }
 // на схеме только главное: мышцы, подтвержденные специалистом, иначе самые выраженные гипотезы. Остальное серым, без шума.
 const byTone = (x, y) => Math.abs(y.tone) - Math.abs(x.tone);
-const LEGEND = `<div class="row" style="justify-content:center;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--sub)">${[['SHORT', 'зажим →←'], ['HYPER', 'перетяг ←→'], ['WEAK', 'спад']].map(([k, t]) => `<span class="row" style="gap:6px"><span class="mark sm ${k}"></span>${t}</span>`).join('')}</div>`;
+const LEGEND = `<div class="row" style="justify-content:center;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--sub)">${[['SHORT', 'гипертонус →←'], ['HYPER', 'перерастяжение ←→'], ['WEAK', 'слабая']].map(([k, t]) => `<span class="row" style="gap:6px"><span class="mark sm ${k}"></span>${t}</span>`).join('')}</div>`;
 // Единый источник «над чем работаем»: одно и то же в решении, на всех схемах (карточка, итог, 3D), в отчете и в упражнениях.
 // По каждому состоянию (укрепить, растянуть, расслабить) до двух мышц, как в строках решения.
 function focusOf(a, sp = proSpots(a)) { const conf = a.check || {};
@@ -1057,7 +1057,7 @@ function muscleRecs(a) {
   const sideW = s => s.side === 'RIGHT' ? 'справа' : 'слева', sk = s => s.side === 'RIGHT' ? 'right' : 'left';
   const ids = (l, s) => (l || []).map(x => x.replace('{s}', sk(s))).filter(x => C.exercises[x]);
   const exT = id => { const t = C.exercises[id].title, m = /\((левая|правая) сторона\)/.exec(t); return t.split(' (')[0] + (m ? (m[1] === 'левая' ? ', слева' : ', справа') : ''); };
-  return sp.map(s => { const m = C.muscles[s.id], state = s.k === 'WEAK' ? 'спад' : s.k === 'SHORT' ? 'зажим' : 'перетяг (МФР и растяжка запрещены)', out = [];
+  return sp.map(s => { const m = C.muscles[s.id], state = s.k === 'WEAK' ? 'слабая' : s.k === 'SHORT' ? 'гипертонус' : 'перерастяжение (МФР и растяжка запрещены)', out = [];
     if (s.k === 'WEAK') { const subs = ((m.plan && m.plan.subs) || []).map(x => C.muscles[x]).filter(Boolean);
       const rel = ids(m.plan && m.plan.release, s), iso = ids((m.plan && m.plan.isolate) || m.activate, s).filter(x => !rel.includes(x)), integ = ids(m.plan && m.plan.integrate, s).filter(x => !rel.includes(x) && !iso.includes(x));
       if (subs.length || rel.length) out.push(['Отпустить', `${subs.map(x => x.name.toLowerCase()).join(', ') || 'перехватывающие мышцы'}${rel.length ? ': ' + rel.map(exT).join(', ') : ''}`, rel]);
@@ -1423,7 +1423,7 @@ async function addResult(c, r) {
 // =================== Калибровка (бета, только администратор) ===================
 // Автор методики заранее знает проблему человека: отмечает ее здесь, человек проходит анкету (где болит, что беспокоит)
 // и полный видеотест, результат с записью движения приходит в кабинет. Выгрузка сводит экспертную оценку, ответы и замеры в один файл.
-const CAL_STATES = [['SHORT', 'зажим'], ['HYPER', 'перетяг'], ['WEAK', 'спад']], CAL_SIDES = [['LEFT', 'Л'], ['RIGHT', 'П'], ['BOTH', 'обе']];
+const CAL_STATES = [['SHORT', 'гипертонус'], ['HYPER', 'перерастяжение'], ['WEAK', 'слабая']], CAL_SIDES = [['LEFT', 'Л'], ['RIGHT', 'П'], ['BOTH', 'обе']];
 async function calibSheet(edit) {
   const d = document.createElement('div'); d.className = 'sheet'; const labels = edit ? edit.calib.labels.slice() : []; let side = 'BOTH', q = '', tpl = TEMPLATES.find(t => t[0] === 'full') || TEMPLATES[0];
   const ms = Object.entries(C.muscles).map(([id, m]) => ({ id, name: m.name, zone: m.zone || '' }));

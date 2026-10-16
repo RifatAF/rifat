@@ -20,12 +20,13 @@ export function startPassive(root = document) {
   if (!passiveOn()) { global = false; return; } if (global) return; const offT = trackTouch(root), offK = trackKeys(root);
   global = () => { offT(); offK(); }; detach.add(global);
 }
-/** Ритм набора в полях анкеты: интервалы между символами (по событию input — работает и с экранной клавиатурой),
- *  удержание клавиши там, где есть keydown/keyup, и доля исправлений. Сам текст не читается и не хранится. */
+/** Ритм набора в полях анкеты (keystroke dynamics по Vizer 2009, Epp 2011): интервалы между символами (событие input
+ *  работает и с экранной клавиатурой), их разброс (коэффициент вариации), удержание клавиши, где есть keydown/keyup,
+ *  и доля исправлений. Сам текст не читается и не хранится. Паузы длиннее 5 с (человек думает или отвлекся) не считаем. */
 export function trackKeys(root) {
   if (!passiveOn()) return () => {}; let last = 0; const downAt = new Map();
   const inp = e => { const t = e.target; if (!t || !/^(INPUT|TEXTAREA)$/.test(t.tagName) || /range|checkbox|radio|file/.test(t.type)) return;
-    const now = e.timeStamp; if (/^delete/.test(e.inputType || '')) S.corrections++; else { S.keys++; if (last && now - last < 2000) S.iki.push(now - last); } last = now; };
+    const now = e.timeStamp; if (/^delete/.test(e.inputType || '')) S.corrections++; else { S.keys++; if (last && now - last < 5000) S.iki.push(now - last); } last = now; };
   const kd = e => { if (e.key && e.key.length === 1 && !downAt.has(e.code || e.key)) downAt.set(e.code || e.key, e.timeStamp); };
   const ku = e => { const k = e.code || e.key, t = downAt.get(k); if (t != null) { const d = e.timeStamp - t; if (d > 20 && d < 1000) S.dwell.push(d); downAt.delete(k); } };
   const o = { passive: true, capture: true }; root.addEventListener('input', inp, o); root.addEventListener('keydown', kd, o); root.addEventListener('keyup', ku, o);
@@ -68,12 +69,19 @@ export function trackTouch(el) {
 }
 
 const med = a => { if (!a.length) return null; const v = [...a].sort((x, y) => x - y); return v[v.length >> 1]; };
+const cvOf = a => { if (a.length < 4) return null; const m = a.reduce((x, y) => x + y, 0) / a.length; return Math.round(Math.sqrt(a.reduce((x, y) => x + (y - m) ** 2, 0) / a.length) / m * 100) / 100; };
+// Личная норма: стресс по набору надежно видно только относительно самого человека (межличностный разброс больше эффекта),
+// поэтому храним медианы прошлых анкет (до 8) и считаем отношение к ним. Без истории отношения нет, правило не срабатывает.
+const BASE = 'bp_cns_base';
+const hist = () => { try { const h = JSON.parse(localStorage.getItem(BASE) || '[]'); return Array.isArray(h) ? h : []; } catch (e) { return []; } };
+/** Запомнить замер этой сессии в личную норму (после сохранения результата теста). */
+export function rememberBaseline(t) { if (!t || !t.typing || !t.typing.ikiMs) return; try { localStorage.setItem(BASE, JSON.stringify([...hist(), { iki: t.typing.ikiMs, hold: t.holdMs }].slice(-8))); } catch (e) {} }
 /** Итог для результата теста. holdFlag — признак тревожности или зажима (медиана > 160 мс). */
 export function touchSummary() {
   if (!passiveOn() || (!S.holds.length && !S.swipes && S.keys < 5)) return null;
   const hold = med(S.holds);
-  const iki = med(S.iki), dwell = med(S.dwell);
-  return { typing: S.keys >= 5 ? { ikiMs: Math.round(iki), dwellMs: dwell == null ? null : Math.round(dwell), corrections: Math.round(S.corrections / Math.max(1, S.keys) * 100) / 100, keys: S.keys } : null,
+  const iki = med(S.iki), dwell = med(S.dwell), h = hist(), base = h.length >= 2 ? med(h.map(x => x.iki).filter(Boolean)) : null;
+  return { typing: S.keys >= 5 && iki ? { ikiMs: Math.round(iki), cv: cvOf(S.iki), rel: base ? Math.round(iki / base * 100) / 100 : null, dwellMs: dwell == null ? null : Math.round(dwell), corrections: Math.round(S.corrections / Math.max(1, S.keys) * 100) / 100, keys: S.keys } : null,
     holdMs: hold == null ? null : Math.round(hold), holdNorm: hold != null && hold >= HOLD.normMin && hold <= HOLD.normMax, holdFlag: hold != null && hold > HOLD.anxious,
     jitter: med(S.jitter), reversals: S.reversals, reversalsPerSwipe: S.swipes ? Math.round(S.reversals / S.swipes * 10) / 10 : 0, swipes: S.swipes, taps: S.taps, samples: S.holds.length };
 }

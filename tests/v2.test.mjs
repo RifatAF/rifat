@@ -57,8 +57,8 @@ test('железо: перспектива, рывок', () => {
   assert.equal(pinhole(body(), 1000, 1)[27].y, 880); assert.ok(pinhole(body(), 1000, 20)[27].y > 880);
   assert.equal(jerk([1, 2, 3, 4, 5], 1), 0); assert.equal(jerk([1, 2, 3, 4], 1, false), null);
 });
-test('состояния: при Перетяге растяжка и МФР исключены', () => {
-  assert.equal(STATES.HYPER.ui, 'Перетяг'); assert.equal(STATES.SHORT.ui, 'Зажим'); assert.equal(STATES.WEAK.ui, 'Спад');
+test('состояния: при перерастяжении растяжка и МФР исключены', () => {
+  assert.equal(STATES.HYPER.ui, 'Перерастяжение'); assert.equal(STATES.SHORT.ui, 'Гипертонус'); assert.equal(STATES.WEAK.ui, 'Слабая');
   const ex = id => ({ ex_side_stretch_left: { category: 'растяжка' }, ex_iso_left: { category: 'укрепление' } })[id];
   assert.deepEqual(releaseFor({ relax: ['ex_side_stretch_{s}', 'ex_iso_{s}'] }, 'HYPER', ex), ['ex_iso_{s}']);
   assert.deepEqual(releaseFor({ relax: ['ex_side_stretch_{s}'], activate: ['ex_a'] }, 'HYPER', ex), ['ex_a']);

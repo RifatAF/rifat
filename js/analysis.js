@@ -1,3 +1,4 @@
+import { rebalance, RECIP } from './muscle-logic.js';
 import { mergeV2, mergeCns } from './test-battery.js';
 // Порт логики анализа из Android-модуля domain (Kotlin): те же формулы и пороги.
 export const P = { NOSE:0, L_EAR:7, R_EAR:8, L_SHOULDER:11, R_SHOULDER:12, L_ELBOW:13, R_ELBOW:14, L_WRIST:15, R_WRIST:16,
@@ -449,11 +450,13 @@ export function analyze(test, C) {
   const f = features(test);
   const fds = findings(C.bodymap.rules, f);
   const triggers = new Set(); // в доказательства цепей идут только цепи-триггеры CHAIN_*, отдельный признак засчитывается один раз через правила
-  const ants = Object.fromEntries(Object.entries(C.muscles).filter(([, m]) => m.antagonist).map(([k, m]) => [k, m.antagonist]));
+  const ants = Object.fromEntries(Object.entries(C.muscles).filter(([k, m]) => m.antagonist && !RECIP[k]).map(([k, m]) => [k, m.antagonist]));
   const base = tones(fds, Object.keys(C.muscles), ants);
   for (const a of chains(C.chains, base, triggers)) triggers.add('CHAIN_' + a.chain.id);
   const act = chains(C.chains, base, triggers);
-  return { f, findings: fds, chains: act, tones: applyInferred(base, act) };
+  const kindOf = t => fds.some(fd => fd.muscles.some(x => x.id === t.id && x.state === 'SHORT' && (x.side === t.side || x.side === 'BOTH'))) || act.some(c => c.chain.members.some(x => x.id === t.id && x.state === 'SHORT')) ? 'SHORT' : 'HYPER';
+  const tn = rebalance(applyInferred(base, act), kindOf, { ribFlare: fds.some(fd => fd.rule.id === 'iap_rib_flare' && !fd.borderline) });
+  return { f, findings: fds, chains: act, tones: tn, kindOf };
 }
 
 // ---------- калибровка: сверка оценки специалиста с ответом приложения ----------
