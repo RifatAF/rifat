@@ -11,6 +11,7 @@ import { RULE_NAMES } from './evidence.js';
 import { applyRuleWeights } from './core.js';
 import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, mailLinkLogin, logout, deleteAccount, betaUsers, providers, config, setAppMode, setRole } from './auth.js';
 import { exFigure, hasFigure } from './exfig.js';
+import { testDemo } from './testdemo.js';
 import { painWord, PAIN_SCALE } from './vas.js';
 import { sayText } from './saytext.js';
 import { BATTERY_UNITS, forwardBend, singleBalance, thoracicRotation, trotSweep, overheadReach, chairStand, retroGait, autoScale } from './test-battery.js';
@@ -475,8 +476,8 @@ const SAY = {
   sideTurn: 'Повернись правым боком к телефону.', backTurn: 'Повернись спиной к телефону.', frontTurn: 'Повернись ко мне лицом.',
   armsOverhead: 'Подними прямые руки вверх.', squatGo: 'Приседай. Три раза.', staySide: 'Остаемся боком к телефону. Стопы на ширине плеч.',
   // фразы батареи v2: в SAY, чтобы записи загрузились заранее и голос не замолкал на загрузке перед шагом
-  fwdIntro: 'Наклонитесь вперед. Колени прямые, руки тянутся к полу.', slbIntro: 'Руки на поясе. Встаньте на правую ногу, левую согните назад.', slbSwap: 'Смена ноги. Теперь на левой.',
-  trotIntro: 'Скрестите руки на груди. Поворачивайтесь вправо и влево, несколько раз. Таз на месте.', reachIntro: 'Поднимайте прямые руки над головой и опускайте. Три раза.',
+  fwdIntro: 'Стойте лицом к телефону. Наклонитесь вперед, к телефону. Колени прямые, руки тянутся к полу.', slbIntro: 'Руки на поясе. Встаньте на правую ногу, левую согните назад.', slbSwap: 'Смена ноги. Теперь на левой.',
+  trotIntro: 'Стойте лицом к телефону, руки скрестите на груди. Поворачивайте плечи вправо и влево, как будто смотрите за спину. Таз и стопы на месте.', reachIntro: 'Поднимайте прямые руки над головой и опускайте. Три раза.',
   chairIntro: 'Сядьте на стул, руки скрестите на груди. По сигналу вставайте и садитесь, сколько сможете за тридцать секунд.', reachWait: 'Поднимите руки над головой. Я жду.',
   chairPain: 'Останавливаемся. Сделаем безопасный тест со стулом.',
   finish: 'Тест закончен. Можно подойти к телефону.',
@@ -626,9 +627,9 @@ async function runProtocol0(protocol, opts = {}) {
   const countdown = async (word = GO_WORD.hold) => { if (stop || skip) return; demo(null); await pg.signal(word, () => voice.beep('start')); };
   const goReps = async (phrase, key, an, deep, N) => { await countdown(GO_WORD.squat); if (stop || skip) return { f: {}, reps: 0, quality: 'RETAKE' }; const sp = say(phrase); const r = await reps(key, an, deep, N, true); await sp; return r; };
   // схема движения крупно на экране, пока звучит объяснение: видно, как встать и насколько садиться
-  const demo = id => { const old = app.querySelector('.cam .demo'); if (old) old.remove(); if (!id) return; const d = document.createElement('div'); d.className = 'demo';
+  const demo = (id, fc) => { const old = app.querySelector('.cam .demo'); if (old) old.remove(); if (!id) return; const d = document.createElement('div'); d.className = 'demo';
     d.style.cssText = 'position:absolute;left:50%;top:14%;transform:translateX(-50%);width:min(92vw,440px);background:rgba(255,255,255,.95);border-radius:24px;padding:12px;z-index:5;pointer-events:none;box-shadow:0 12px 40px rgba(0,0,0,.35)';
-    d.innerHTML = exFigure(id, { size: '100%' }); app.querySelector('.cam').appendChild(d); };
+    d.innerHTML = testDemo(id, fc || facing); app.querySelector('.cam').appendChild(d); };
   // поворот: команда, затем 4 секунды с полосой, чтобы успеть повернуться
   let facing = 'front';
   const face = async want => { if (facing === want) return; prof = want !== 'front'; step(null, want === 'side' ? 'Повернись правым боком' : want === 'back' ? 'Повернись спиной' : 'Повернись лицом', '');
@@ -713,16 +714,16 @@ async function runProtocol0(protocol, opts = {}) {
     if (u === 'profile') { await face('side'); step(k, 'Боком: стой ровно', 'Руки вдоль тела, смотри прямо', null); await say(SAY.freeze);
       const sf = await hold('side_stand', 5, 'Замри'); if (stop || skipped()) return; side = sideSnapshot(sf);
       await say(SAY.good); k++; }
-    if (u === 'fwd') { await face('front'); step(k, 'Наклон вперед', 'Ноги прямые, медленно тянитесь руками к полу и вернитесь', FOC.bend); demo('test_fwd'); await say(SAY.fwdIntro); if (skipped()) return;
+    if (u === 'fwd') { await face('front'); step(k, 'Наклон вперед', 'Лицом к телефону. Ноги прямые, тянитесь руками к полу и вернитесь', FOC.bend); demo('test_fwd'); await say(SAY.fwdIntro); if (skipped()) return;
       await countdown(GO_WORD.bend); const fr = await hold('fwd', 10, 'Наклон'); if (skipped()) return; moves.fwd = forwardBend(fr); await say(SAY.ret); k++; }
     if (u === 'slb') { await face('front'); step(k, 'Баланс на одной ноге', 'Руки на поясе. Сначала на правой, потом на левой, по 6 секунд', FOC.stand); demo('test_slb'); await say(SAY.slbIntro); if (skipped()) return;
       await countdown(GO_WORD.balance); const fR = await hold('slb_r', 6, 'Правая нога'); if (skipped()) return; await say(SAY.slbSwap); await countdown(GO_WORD.balance); const fL = await hold('slb_l', 6, 'Левая нога'); if (skipped()) return;
       moves.slb = singleBalance(fR, fL); await say(SAY.footDown); k++; }
-    if (u === 'trot') { await face('front'); step(k, 'Повороты корпуса', 'Руки скрещены на груди, таз на месте. Вправо и влево, несколько раз', FOC.stand); demo('test_trot'); await say(SAY.trotIntro); if (skipped()) return;
+    if (u === 'trot') { await face('front'); step(k, 'Повороты корпуса', 'Лицом к телефону. Плечи вправо и влево, таз и стопы на месте', FOC.stand); demo('test_trot'); await say(SAY.trotIntro); if (skipped()) return;
       await countdown(GO_WORD.rotate); const fr = await hold('trot', 10, 'Повороты'); if (skipped()) return; moves.trot = trotSweep(fr); await say(SAY.good); k++; }
     if (u === 'reach') { await face('front'); step(k, 'Руки вверх', 'Поднимите прямые руки над головой и опустите. 3 раза', FOC.arms); demo('test_reach'); await say(SAY.reachIntro); if (skipped()) return;
       await countdown(GO_WORD.reach); const fr = await armReps('reach', 3); if (skipped()) return; moves.reach = overheadReach(fr); await say(SAY.armsDown); k++; }
-    if (u === 'chair') { await face('front'); fsOff = true; step(k, 'Вставание со стула', 'Сядьте на стул боком к камере, руки на груди. Вставайте и садитесь 30 секунд'); demo('test_chair'); await say(SAY.chairIntro); if (skipped()) return;
+    if (u === 'chair') { await face('front'); fsOff = true; step(k, 'Вставание со стула', 'Сядьте на стул боком к камере, руки на груди. Вставайте и садитесь 30 секунд'); demo('test_chair', 'side'); await say(SAY.chairIntro); if (skipped()) return;
       await countdown(GO_WORD.chair); moves.chair = await reps('chair', fr => chairStand(fr), .1, 99, true, 30000); moves.chair.quality = moves.chair.reps ? 'GOOD' : 'RETAKE'; await say(SAY.good); k++; fsOff = false; }
     if (u === 'back') { await face('back'); step(k, 'Спиной: присед', 'Стопы чуть шире плеч, руки вверх, 3 раза', FOC.squat); await say(SAY.wide); await say(SAY.armsOverhead); if (skipped()) return; 
       moves.ohs_back = await goReps(SAY.squatGo, 'ohs_back', fr => Movement.back(fr), .12, 3); if (skipped()) return; await say(SAY.stop); k++; }
