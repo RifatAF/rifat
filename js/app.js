@@ -19,7 +19,7 @@ import { pinhole, fpsGuard, flushGL } from './hardware-adapter.js';
 import { setSession, MODES, passiveOn } from './session-controller.js';
 import { touchSummary, resetTouch, startPassive, rememberBaseline } from './touch-tracker.js';
 import { runLoader, vnsSummary } from './vns-phenotype.js';
-import { ribFlare, apicalRise, buttWink } from './biomechanics-engine.js';
+import { ribFlare, apicalBreath, buttWink } from './biomechanics-engine.js';
 import { STATES, NT_TEXT, releaseFor, massageAllowed, measuredIds, ACTION_NAMES, LAYERS, LAYER_NAMES, layerOf } from './biomechanics-engine.js';
 import { repCounter, repKind, targetReps, setsOf, REP_KINDS } from './repcount.js';
 import { ready3D, C, loadContent, voice, sleep, phone, startMotion, initPose, poseInfo, notePoseSpeed, prefetchPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, RAMP_CSS, body3D, preload3D, setBodySex, device, keepAwake, ic, toast, reduceMotion } from './core.js';
@@ -67,7 +67,7 @@ export const TONE_HEX = { HYPER: '#D9822B', SHORT: '#C8414A', WEAK: '#2F6BD8', O
 export const TONE_TEXT_HEX = { HYPER: '#9E4E0E', SHORT: '#B3343B', WEAK: '#2A5CB8', OK: '#1E7149', NT: '#6B747A', DONE: '#1E7149' };
 const sideWord = s => s === 'RIGHT' ? 'справа' : 'слева';
 // ---------- итог в три строки: глагол действия, мышца, одна измеренная деталь ----------
-const VERBS = [['WEAK', 'Укрепить'], ['SHORT', 'Отпустить'], ['HYPER', 'Разгрузить']];
+const VERBS = [['WEAK', 'Укрепить'], ['SHORT', 'Расслабить'], ['HYPER', 'Разгрузить']];
 const lc = t => t ? t[0].toLowerCase() + t.slice(1) : t;
 // винительный падеж для названий мышц после глагола: «укрепить среднюю ягодичную»
 const acc = t => t.split(' ').map(w => { const m = w.match(/^(.*?)([,.]?)$/), x = m[1];
@@ -457,7 +457,7 @@ function packPoses(fr, w, h) {
 const SAY = {
   setup: 'Поставь телефон и отойди на два–четыре метра. Я скажу, когда увижу тебя целиком.',
   seen: 'Отлично, вижу тебя целиком',
-  standIntro: 'Встань ровно. Руки вдоль тела, смотри прямо.', freeze: 'Замри.', good: 'Хорошо.',
+  standIntro: 'Встань ровно. Руки вдоль тела, смотри прямо.', freeze: 'Замри.', good: 'Хорошо.', breathIn: 'Глубокий вдох носом.', breathOut: 'Медленный выдох.',
   wide: 'Стопы на ширине плеч', ohsIntro: 'Теперь присед. Подними прямые руки вверх. Пятки не отрывай.', ohsGo: 'Приседай. Пять раз, медленно.', go: 'Поехали', c3: 'Три', c2: 'Два', c1: 'Раз',
   ohsAltIntro: 'Возьмись рукой за спинку стула или за стену.', ohsAltGo: 'Приседай, насколько можешь без боли. Три раза.',
   repWait: 'Приседай. Я жду.', stop: 'Стоп. Хорошо.',
@@ -602,7 +602,7 @@ async function runProtocol0(protocol, opts = {}) {
   const goReps = async (phrase, key, an, deep, N) => { await countdown(GO_WORD.squat); if (stop || skip) return { f: {}, reps: 0, quality: 'RETAKE' }; const sp = say(phrase); const r = await reps(key, an, deep, N, true); await sp; return r; };
   // схема движения крупно на экране, пока звучит объяснение: видно, как встать и насколько садиться
   const demo = id => { const old = app.querySelector('.cam .demo'); if (old) old.remove(); if (!id) return; const d = document.createElement('div'); d.className = 'demo';
-    d.style.cssText = 'position:absolute;left:50%;top:18%;transform:translateX(-50%);width:min(78vw,340px);background:rgba(255,255,255,.94);border-radius:20px;padding:10px;z-index:5;pointer-events:none';
+    d.style.cssText = 'position:absolute;left:50%;top:14%;transform:translateX(-50%);width:min(92vw,440px);background:rgba(255,255,255,.95);border-radius:24px;padding:12px;z-index:5;pointer-events:none;box-shadow:0 12px 40px rgba(0,0,0,.35)';
     d.innerHTML = exFigure(id, { size: '100%' }); app.querySelector('.cam').appendChild(d); };
   // поворот: команда, затем 4 секунды с полосой, чтобы успеть повернуться
   let facing = 'front';
@@ -651,7 +651,11 @@ async function runProtocol0(protocol, opts = {}) {
       snapshot = standSnapshot(st); snapshot.sway = Math.round(sq.sway * 10) / 10; if (Number.isFinite(sq.yaw)) snapshot.yaw = Math.round(sq.yaw);
       const f = cam.frame; setup = { bodyFrac: med(st.map(x => bodyFrac(x.p))) / (f ? f.h : 1), roll: phone.roll, pitch: phone.pitch ?? null, back: cam.back, w: f && f.w, h: f && f.h, scale: autoScale(st, (PROFILE() || {}).height), retroGait: gait || null };
       // ВБД в статике: расхождение плоскостей грудной клетки и таза, подъем плеч на вдохе (мм по шкале)
-      moves.iap = { quality: 'GOOD', f: { rib_flare: Math.round(med(st.map(x => ribFlare(x.p))) * 10) / 10, ...(setup.scale ? { apical_mm: Math.round(apicalRise(st, setup.scale.cmPerPx)) } : {}) } };
+      // дыхание (Левит): плечи на глубоком вдохе не должны подниматься, работает диафрагма; один вдох и выдох по 3 секунды
+      step(k, 'Глубокий вдох', 'Носом в живот, плечи на месте', FOC.stand); demo('test_breath'); await say(SAY.breathIn); const bIn = await hold('breath_in', 3, 'Вдох'); if (stop || skipped()) return;
+      await say(SAY.breathOut); const bOut = await hold('breath_out', 3, 'Выдох'); if (stop || skipped()) return; demo(null);
+      const ap = setup.scale ? apicalBreath(bIn, bOut, setup.scale.cmPerPx) : null;
+      moves.iap = { quality: 'GOOD', f: { rib_flare: Math.round(med(st.map(x => ribFlare(x.p))) * 10) / 10, ...(Number.isFinite(ap) ? { apical_mm: Math.round(ap) } : {}) } };
       await say(SAY.good); k++; }
     if (u === 'ohs_front') { await face('front'); step(k, 'Присед с руками вверх', 'Стопы чуть шире плеч, руки вверх, пятки на полу. Садитесь как можно глубже без боли, 5 раз', FOC.squat); demo('test_squat'); await say(SAY.wide); await say(SAY.ohsIntro); if (skipped()) return; 
       moves.ohs_front = await goReps(SAY.ohsGo, 'ohs_front', fr => Movement.front(fr), .12, BAT ? 3 : 5); if (skipped()) return; await say(SAY.stop); k++; }
@@ -684,17 +688,17 @@ async function runProtocol0(protocol, opts = {}) {
     if (u === 'profile') { await face('side'); step(k, 'Боком: стой ровно', 'Руки вдоль тела, смотри прямо', null); await say(SAY.freeze);
       const sf = await hold('side_stand', 5, 'Замри'); if (stop || skipped()) return; side = sideSnapshot(sf);
       await say(SAY.good); k++; }
-    if (u === 'fwd') { await face('front'); step(k, 'Наклон вперед', 'Ноги прямые, медленно тянитесь руками к полу и вернитесь', FOC.bend); await say('Наклонитесь вперед. Колени прямые, руки тянутся к полу.'); if (skipped()) return;
+    if (u === 'fwd') { await face('front'); step(k, 'Наклон вперед', 'Ноги прямые, медленно тянитесь руками к полу и вернитесь', FOC.bend); demo('test_fwd'); await say('Наклонитесь вперед. Колени прямые, руки тянутся к полу.'); if (skipped()) return;
       await countdown(GO_WORD.bend); const fr = await hold('fwd', 10, 'Наклон'); if (skipped()) return; moves.fwd = forwardBend(fr); await say(SAY.ret); k++; }
-    if (u === 'slb') { await face('front'); step(k, 'Баланс на одной ноге', 'Руки на поясе. Сначала на правой, потом на левой, по 6 секунд', FOC.stand); await say('Руки на поясе. Встаньте на правую ногу, левую согните назад.'); if (skipped()) return;
+    if (u === 'slb') { await face('front'); step(k, 'Баланс на одной ноге', 'Руки на поясе. Сначала на правой, потом на левой, по 6 секунд', FOC.stand); demo('test_slb'); await say('Руки на поясе. Встаньте на правую ногу, левую согните назад.'); if (skipped()) return;
       await countdown(GO_WORD.balance); const fR = await hold('slb_r', 6, 'Правая нога'); if (skipped()) return; await say('Смена ноги. Теперь на левой.'); await countdown(GO_WORD.balance); const fL = await hold('slb_l', 6, 'Левая нога'); if (skipped()) return;
       moves.slb = singleBalance(fR, fL); await say(SAY.footDown); k++; }
-    if (u === 'trot') { await face('front'); step(k, 'Повороты корпуса', 'Руки скрещены на груди, таз на месте. Поворот вправо, потом влево', FOC.stand); await say('Скрестите руки на груди. Таз не двигается. Поворачивайте корпус.'); if (skipped()) return;
+    if (u === 'trot') { await face('front'); step(k, 'Повороты корпуса', 'Руки скрещены на груди, таз на месте. Поворот вправо, потом влево', FOC.stand); demo('test_trot'); await say('Скрестите руки на груди. Таз не двигается. Поворачивайте корпус.'); if (skipped()) return;
       await countdown(GO_WORD.rotate); await say('Вправо'); const fR = await hold('trot_r', 5, 'Вправо'); if (skipped()) return; await say('Влево'); const fL = await hold('trot_l', 5, 'Влево'); if (skipped()) return;
       moves.trot = thoracicRotation(fR, fL); await say(SAY.good); k++; }
-    if (u === 'reach') { await face('front'); step(k, 'Руки вверх', 'Медленно поднимите прямые руки вверх и опустите, 2 раза', FOC.arms); await say('Медленно поднимите прямые руки над головой и опустите. Два раза.'); if (skipped()) return;
+    if (u === 'reach') { await face('front'); step(k, 'Руки вверх', 'Медленно поднимите прямые руки вверх и опустите, 2 раза', FOC.arms); demo('test_reach'); await say('Медленно поднимите прямые руки над головой и опустите. Два раза.'); if (skipped()) return;
       await countdown(GO_WORD.reach); const fr = await hold('reach', 10, 'Руки вверх'); if (skipped()) return; moves.reach = overheadReach(fr); await say(SAY.armsDown); k++; }
-    if (u === 'chair') { await face('front'); fsOff = true; step(k, 'Вставание со стула', 'Сядьте на стул боком к камере, руки на груди. Вставайте и садитесь 30 секунд'); await say('Сядьте на стул, руки скрестите на груди. По сигналу вставайте и садитесь, сколько сможете за тридцать секунд.'); if (skipped()) return;
+    if (u === 'chair') { await face('front'); fsOff = true; step(k, 'Вставание со стула', 'Сядьте на стул боком к камере, руки на груди. Вставайте и садитесь 30 секунд'); demo('test_chair'); await say('Сядьте на стул, руки скрестите на груди. По сигналу вставайте и садитесь, сколько сможете за тридцать секунд.'); if (skipped()) return;
       await countdown(GO_WORD.chair); moves.chair = await reps('chair', fr => chairStand(fr), .1, 99, true, 30000); moves.chair.quality = moves.chair.reps ? 'GOOD' : 'RETAKE'; await say(SAY.good); k++; fsOff = false; }
     if (u === 'back') { await face('back'); step(k, 'Спиной: присед', 'Стопы чуть шире плеч, руки вверх, 3 раза', FOC.squat); await say(SAY.wide); await say(SAY.armsOverhead); if (skipped()) return; 
       moves.ohs_back = await goReps(SAY.squatGo, 'ohs_back', fr => Movement.back(fr), .12, 3); if (skipped()) return; await say(SAY.stop); k++; }
@@ -957,16 +961,61 @@ async function analysisScreen() {
 }
 
 // ---------- 5. карта тела ----------
-let BACK = true, SEL = null, MODE3D = false, NORM = false;
+let BACK = true, SEL = null, MODE3D = false;
 // короткий замер для подписи на карте: «14°», «8%»
 const shortVal = t => { const m = String(t || '').match(/(\d+(?:[.,]\d+)?)\s*(°|%|см)?/); return m ? m[1] + (m[2] || '') : null; };
-const VERB_OF = { WEAK: 'Включить', SHORT: 'Отпустить', HYPER: 'Разгрузить' };
+const VERB_OF = { WEAK: 'Включить', SHORT: 'Расслабить', HYPER: 'Разгрузить' };
 // для какой зоны итога упражнение: строка-связь на экране тренировки
 function reasonsOf(ids, top) { const out = {};
   for (const id of ids) for (const s of top.slice(0, 3)) { const m = C.muscles[s.id], sk = s.side === 'RIGHT' ? 'right' : 'left';
     const list = s.k === 'WEAK' ? ((m.plan && m.plan.isolate) || m.activate || []) : releaseFor(m, s.k, ex);
     if (!out[id] && list.some(x => x.replace('{s}', sk) === id)) out[id] = { k: s.k, t: `${VERB_OF[s.k]} ${acc(lc(m.name))} ${sideWord(s.side)}` }; }
   return out; }
+// «Как вас ведет»: перекосы позы простыми словами и схемой, которая плавно уходит из ровной стойки в позу человека.
+// Схема спереди: правая сторона человека слева на экране. Наклоны на схеме усилены в 3 раза, чтобы их было видно.
+const POSE_PAT = { shoulder_tilt: 'tilt', trunk_shift: 'tilt', pelvis_tilt: 'pelvis', head_tilt: 'head', trot_asym: 'twist', fwd_adams: 'twist', head_forward: 'fwd', trunk_forward: 'fwd', sq_lean: 'fwd', reach_shrug: 'shrug' };
+export function posturePatterns(findings) {
+  const by = {}; for (const fd of findings) { const k = POSE_PAT[fd.rule.id]; if (!k || fd.borderline && by[k]) continue; const v = Math.abs(fd.value || 0); if (!by[k] || v > Math.abs(by[k].value || 0)) by[k] = fd; }
+  const L = { tilt: fd => `Кренит ${fd.side === 'RIGHT' ? 'влево' : 'вправо'}`, pelvis: () => 'Таз перекошен', head: fd => `Голова к ${fd.side === 'RIGHT' ? 'правому' : 'левому'} плечу`,
+    twist: fd => fd.rule.id === 'trot_asym' ? `Скручивает ${fd.side === 'LEFT' ? 'вправо' : 'влево'}` : 'Скручивает спину', fwd: () => 'Тянет вперед', shrug: () => 'Плечи к ушам' };
+  return Object.entries(by).map(([k, fd]) => ({ k, fd, label: L[k](fd), sub: fd.observed.replace(' (на границе нормы)', '') })).slice(0, 3);
+}
+function postureFigure(pats) {
+  const g = k => pats.find(p => p.k === k), deg = (fd, cap = 14) => Math.min(cap, Math.abs(fd.value || 0) * 3);
+  // правая сторона человека на экране слева: «плечо выше справа» поднимает левую на экране сторону
+  const sh = g('tilt') ? deg(g('tilt').fd) * (g('tilt').fd.side === 'RIGHT' ? 1 : -1) : 0, pv = g('pelvis') ? deg(g('pelvis').fd) * (g('pelvis').fd.side === 'RIGHT' ? 1 : -1) : 0;
+  const hd = g('head') ? deg(g('head').fd, 18) * (g('head').fd.side === 'RIGHT' ? 1 : -1) : 0, tw = g('twist'), fw = g('fwd'), up = g('shrug') ? 5 : 0;
+  const A = (v, a, b) => `<animateTransform attributeName="transform" type="rotate" values="0 ${a} ${b};${v} ${a} ${b};${v} ${a} ${b};0 ${a} ${b}" keyTimes="0;.4;.8;1" dur="4s" repeatCount="indefinite"/>`;
+  const col = 'var(--short)';
+  return `<svg viewBox="0 0 120 200" width="110" height="184" aria-hidden="true" style="flex:none">
+    <g fill="var(--figure)" stroke="var(--faint)" stroke-width="2.5" stroke-linejoin="round">
+      <g>${A(pv, 60, 112)}<path d="M44 108 L76 108 L74 190 L64 190 L60 128 L56 190 L46 190 Z"/></g>
+      <g>${A(pv * .5, 60, 108)}
+        <g>${A(sh - pv * .5, 60, 52)}<path d="M38 ${52 - up} L82 ${52 - up} L78 110 L42 110 Z"/><path d="M38 ${52 - up} L30 104 M82 ${52 - up} L90 104" stroke-width="7" stroke-linecap="round"/></g>
+        <g>${A(-hd, 60, 44)}${fw ? `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 7;0 7;0 0" keyTimes="0;.4;.8;1" dur="4s" repeatCount="indefinite"/>` : ''}<circle cx="60" cy="30" r="13"/></g></g></g>
+    ${tw ? `<path d="M34 78 Q60 92 86 78" fill="none" stroke="${col}" stroke-width="3" stroke-linecap="round" marker-end="url(#pfa)"><animate attributeName="stroke-dasharray" values="0 80;80 0;80 0;0 80" keyTimes="0;.4;.8;1" dur="4s" repeatCount="indefinite"/></path>` : ''}
+    <defs><marker id="pfa" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="${col}"/></marker></defs></svg>`;
+}
+function postureCard(a) {
+  const pats = posturePatterns(a.findings); if (!pats.length) return '';
+  return `<div class="pad" style="margin-top:16px"><div class="card row" style="gap:16px;align-items:center">${postureFigure(pats)}
+    <div style="flex:1;min-width:0"><div class="eyebrow">Как вас ведет</div>${pats.map(p => `<div style="margin-top:10px"><b style="font-size:17px">${p.label}</b><div style="font-size:13px;color:var(--sub);line-height:1.35">${esc(p.sub)}</div></div>`).join('')}</div></div></div>`;
+}
+// дыхание и внутрибрюшное давление: Коларж (ребра и таз), Левит (дыхание), Макгилл (поясница под нагрузкой)
+export function iapRows(f) {
+  const n = v => Number.isFinite(v), fmt1 = v => String(Math.round(v)).replace('.', ',');
+  return [
+    { who: 'Коларж', name: 'Ребра и таз', ok: n(f.rib_flare) ? f.rib_flare <= 12 : null, val: n(f.rib_flare) ? (f.rib_flare <= 12 ? 'в одной плоскости' : `расходятся на ${fmt1(f.rib_flare)}°`) : 'не измерено' },
+    { who: 'Левит', name: 'Дыхание', ok: n(f.apical_mm) ? f.apical_mm <= 15 : null, val: n(f.apical_mm) ? (f.apical_mm <= 15 ? 'животом' : `грудью, плечи вверх на ${fmt1(f.apical_mm)} мм`) : 'не измерено' },
+    { who: 'Макгилл', name: 'Поясница в приседе', ok: n(f.butt_wink) ? f.butt_wink <= 10 : null, val: n(f.butt_wink) ? (f.butt_wink <= 10 ? 'держится' : `подкручивается на ${fmt1(f.butt_wink)}°`) : 'нужен присед боком' } ];
+}
+function iapCard(a) {
+  const rows = iapRows(a.f || {}), m = rows.filter(r => r.ok !== null); if (!m.length) return '';
+  const bad = m.filter(r => !r.ok).length;
+  return `<div class="pad" style="margin-top:16px"><div class="card"><div class="row" style="justify-content:space-between"><div><div class="eyebrow">Дыхание и давление в животе</div><h3 style="margin-top:4px;color:${bad ? 'var(--short-t)' : 'var(--ok-t)'}">${bad ? 'Давление не держится' : 'Давление держится'}</h3></div>
+    <details class="q"><summary aria-label="Что это">?</summary><div>Диафрагма, мышцы живота и тазового дна держат давление в животе, как корсет изнутри (Коларж). Если вдох делают плечи и шея, а не живот, корсет не работает (Левит). Тогда поясница проваливается под нагрузкой (Макгилл).</div></details></div>
+    ${rows.map(r => `<div class="row" style="margin-top:12px;gap:10px"><span style="width:22px;height:22px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;background:${r.ok === null ? 'var(--surface-2)' : r.ok ? 'var(--ok-s)' : 'var(--short-s)'};color:${r.ok === null ? 'var(--faint)' : r.ok ? 'var(--ok-t)' : 'var(--short-t)'}">${r.ok === null ? '·' : r.ok ? ic('check', 's') : '!'}</span><span style="flex:1;font-size:15px">${r.name}</span><span style="font-size:14px;color:${r.ok === false ? 'var(--short-t)' : 'var(--sub)'};text-align:right">${r.val}</span></div>`).join('')}</div></div>`;
+}
 // проценты по состояниям: сколько гипертонуса, перерастяжения и слабости и как они делятся между сторонами
 function balanceCard(all) {
   const sc = stateScores(all), rows = [['SHORT', 'Гипертонус'], ['HYPER', 'Перерастяжение'], ['WEAK', 'Слабость']].filter(([k]) => sc[k].all);
@@ -1007,13 +1056,14 @@ export function map() {
    <div class="pad" style="margin-top:12px"><div class="card" style="border-radius:var(--r-xl);padding:12px 8px 8px">
      <div class="seg" style="margin:0 4px"><button id="vf" class="${!BACK && !MODE3D ? 'on' : ''}">Спереди</button><button id="vb" class="${BACK && !MODE3D ? 'on' : ''}">Сзади</button>${device.webgl2 ? `<button id="v3" class="${MODE3D ? 'on' : ''}">3D</button>` : ''}</div>
      <div id="vis" style="position:relative;margin:8px auto 0;width:min(100%,360px);${MODE3D ? 'height:420px' : ''}">${MODE3D ? '' : '<canvas id="heat" style="width:100%;display:block;cursor:pointer"></canvas>'}</div>
-     <div class="row" style="justify-content:center;margin:8px 4px 0"><div class="seg sm" id="norm" role="group" aria-label="Сравнение с нормой"><button data-n="1" class="${NORM ? 'on' : ''}">Как должно быть</button><button data-n="0" class="${NORM ? '' : 'on'}">Как сейчас</button></div></div>
-     <div class="row" style="justify-content:center;gap:12px;flex-wrap:wrap;margin:10px 4px 0;font-size:13px;color:var(--sub)">${NORM ? '<span>Мышцы в балансе, суставы по центру</span>' : [['SHORT', 'гипертонус →←'], ['HYPER', 'перерастяжение ←→'], ['WEAK', 'слабая']].filter(([k]) => top.some(x => x.k === k)).map(([k, t]) => `<span class="row" style="gap:6px"><span class="mark sm ${k}"></span>${t}</span>`).join('')}${top.length && !NORM ? TONE_HELP : ''}</div>
+     <div class="row" style="justify-content:center;gap:12px;flex-wrap:wrap;margin:10px 4px 0;font-size:13px;color:var(--sub)">${[['SHORT', 'гипертонус →←'], ['HYPER', 'перерастяжение ←→'], ['WEAK', 'слабая']].filter(([k]) => top.some(x => x.k === k)).map(([k, t]) => `<span class="row" style="gap:6px"><span class="mark sm ${k}"></span>${t}</span>`).join('')}${top.length ? TONE_HELP : ''}</div>
      ${MODE3D ? `<details class="acc" style="margin:8px 8px 0;font-size:14px"><summary style="font-weight:600;min-height:40px">Слои и зоны</summary>
        <div class="row" id="lay" style="gap:6px;flex-wrap:wrap;justify-content:center;margin-top:6px"><button class="pill on" data-l="">Все слои</button>${LAYER_NAMES.map(([l, n]) => `<button class="pill" data-l="${l}">${n} · ${top.filter(x => layerOf(x.id) === l).length}</button>`).join('')}</div>
        <div class="row" style="gap:6px;flex-wrap:wrap;justify-content:center;margin-top:8px">${[['all', 'Всё тело'], ['head', 'Шея'], ['shoulders', 'Плечи'], ['back', 'Спина'], ['pelvis', 'Таз'], ['knees', 'Колени'], ['feet', 'Стопы']].map(([z, n]) => `<button class="pill" data-z="${z}">${n}</button>`).join('')}</div></details>` : ''}
      <div id="selbox" style="margin:8px 4px 0"></div></div></div>
+   ${postureCard(a)}
    ${top.length ? `<div class="pad" style="margin-top:16px">${balanceCard(all)}</div>` : ''}
+   ${iapCard(a)}
    ${cnsCard(t, a)}
    <div class="pad" style="margin-top:16px">${verdictCard(top, a.findings, 'Сильных перекосов не видно')}</div>
    <div class="pad row" style="margin-top:12px;gap:8px;font-size:12px;color:var(--sub)">${ic('cpu', 's')}<span>Посчитано на телефоне. Оценка движения, не диагноз</span></div>
@@ -1023,7 +1073,7 @@ export function map() {
   const labels = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 4)).map(s => ({ key: s.key, title: C.muscles[s.id].zone + (s.side === 'RIGHT' ? ' · П' : ' · Л'), sub: toneText(s, 3).replace('похоже, ', ''), value: shortVal(seen(a, s)[0]), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
   let h2d = null, first = reveal;
   // на схеме и в 3D один и тот же набор: главные зоны итога (до 8) и выбранная; остальное серым
-  const focusK = new Set([...top.map(x => x.key), SEL].filter(Boolean)), today = SHARED ? new Set() : workedToday(), focus = () => NORM ? all.map(x => ({ ...x, k: 'OK', tone: 0 })) : all.map(x => today.has(x.key) && focusK.has(x.key) && x.key !== SEL ? { ...x, k: 'DONE', tone: .45 } : focusK.has(x.key) || x.key === SEL ? x : { ...x, k: 'OK', tone: 0 });
+  const focusK = new Set([...top.map(x => x.key), SEL].filter(Boolean)), today = SHARED ? new Set() : workedToday(), focus = () => all.map(x => today.has(x.key) && focusK.has(x.key) && x.key !== SEL ? { ...x, k: 'DONE', tone: .45 } : focusK.has(x.key) || x.key === SEL ? x : { ...x, k: 'OK', tone: 0 });
   const draw2d = () => { if (!MODE3D) { h2d = drawHeat($('#heat'), focus(), BACK, SEL, labels, { reveal: first }); first = false; } };
   const renderSel = () => { const x = all.find(q => q.key === SEL); const box = $('#selbox'); if (!box) return;
     box.innerHTML = x ? `<div class="group fade" style="padding:var(--s4);background:var(--surface-2)"><div class="row" style="gap:8px"><span class="mark ${x.k}"></span><span style="font-size:13px;font-weight:600;color:${TONE[x.k][5]}">${x.ambiguous ? 'Неоднозначно' : TONE[x.k][0]}</span></div>
@@ -1036,11 +1086,9 @@ export function map() {
     if (from3d) muscleInfo(k, all, a, { onWhat: () => muscle(k) }); };
   const setView = () => { $('#vf').classList.toggle('on', !BACK && !MODE3D); $('#vb').classList.toggle('on', BACK && !MODE3D); if (view3d) view3d.turn(BACK); draw2d(); };
   if (!MODE3D) { draw2d(); $('#heat').onclick = e => { const x = h2d && h2d.hit(e.clientX, e.clientY); if (x) pick(x.key); }; }
-  else body3D($('#vis'), (() => { const n = NORM; NORM = false; const f = focus(); NORM = n; return f; })(), k => pick(k, true), { reveal: true, arrows: true }).then(v => { view3d = v; v.turn(BACK); if (NORM) v.norm(true); app.querySelectorAll('[data-z]').forEach(b => b.onclick = () => v.focus(b.dataset.z));
+  else body3D($('#vis'), focus(), k => pick(k, true), { reveal: true, arrows: true }).then(v => { view3d = v; v.turn(BACK); app.querySelectorAll('[data-z]').forEach(b => b.onclick = () => v.focus(b.dataset.z));
     app.querySelectorAll('#lay [data-l]').forEach(b => b.onclick = () => { app.querySelectorAll('#lay [data-l]').forEach(x => x.classList.toggle('on', x === b)); v.only(b.dataset.l ? new Set(LAYERS[b.dataset.l]) : null); }); });
   renderSel();
-  app.querySelectorAll('#norm [data-n]').forEach(b => b.onclick = () => { const n = b.dataset.n === '1'; if (n === NORM) return; NORM = n; track('norm_toggle', { c: n ? 'norm' : 'now' }, false);
-    if (view3d) { view3d.norm(n); app.querySelectorAll('#norm [data-n]').forEach(x => x.classList.toggle('on', x === b)); } else map(); });
   $('#vf').onclick = () => { if (MODE3D) { MODE3D = false; BACK = false; return map(); } BACK = false; setView(); };
   $('#vb').onclick = () => { if (MODE3D) { MODE3D = false; BACK = true; return map(); } BACK = true; setView(); };
   if ($('#v3')) $('#v3').onclick = () => { if (!MODE3D) { MODE3D = true; map(); } };
@@ -1066,42 +1114,35 @@ function again() { if (!SHARED && INV()) return INV().join ? joinForm() : invite
 // всё, что не нужно для решения «что делать сегодня», живет в шторке «Подробнее»
 function moreSheet({ t, a }, top, hasPlan, only) {
   const all_t = SHARED ? [] : tests().filter(x => x.snapshot), first = all_t[0];
-  const benefits = [...new Set(top.map(s => C.muscles[s.id].benefit).filter(Boolean))].slice(0, 3);
-  const sec = (h, body) => `<div class="card" style="margin-top:var(--s3)"><div class="eyebrow">${h}</div>${body}</div>`;
-  const f = a.f, rows = [['Руки в стороны, угол в конце', f.sym_delt, '°'], ['Наклон в сторону', f.sym_bend, '°'], ['Подъемы на носок', f.sym_calf, ''], ['Глубина приседа на одной ноге', f.sym_quad, '°']].filter(r => r[1]);
-  const lr = rows.length ? sec('Левая и правая сторона', `<div class="row" style="margin-top:10px;font-size:12px;color:var(--sub)"><span style="flex:1"></span><b style="width:72px;text-align:center">Левая</b><b style="width:72px;text-align:center">Правая</b></div>
-    ${rows.map(([n, v, u]) => { const [l, r] = v, d = Math.abs(l - r) / Math.max(1e-6, Math.max(Math.abs(l), Math.abs(r))); const weak = d > .12 ? (l < r ? 0 : 1) : -1;
-      const cell = (x, i) => `<b class="num" style="width:72px;text-align:center;color:${weak === i ? 'var(--over-t)' : 'var(--text)'}">${weak === i ? '<i class="dia" style="color:var(--over)"></i> ' : ''}${fmt(x)}${u}</b>`;
-      return `<div class="row" style="margin-top:8px"><span style="flex:1;font-size:14px">${n}</span>${cell(l, 0)}${cell(r, 1)}</div>`; }).join('')}
-    <p style="font-size:12px;color:var(--sub);margin-top:10px">Ромб — сторона, где результат хуже больше чем на 12%.</p>`) : '';
-  const ba = all_t.length >= 2 && t.snapshot && first !== t ? sec('Было → стало', [['Наклон плеч', first.snapshot.shoulderTilt, t.snapshot.shoulderTilt], ['Наклон таза', first.snapshot.pelvicTilt, t.snapshot.pelvicTilt]].map(([n, x, y]) => `<div style="margin-top:12px"><div style="font-size:14px;color:var(--sub)">${n}</div><div class="delta"><s>${fmt(x)}°</s>${ic('chevron-right', 's')}<b style="font-size:32px">${fmt(y)}°</b></div></div>`).join('')) : '';
-  const lim = t.limits && Object.keys(t.limits).length ? sec('Не получилось выполнить', Object.entries(t.limits).map(([u, l]) => `<div style="margin-top:8px;font-size:14px"><b>${esc(LIMIT_NAMES[u] || u)}</b>: ${esc([l.level, ...(l.reasons || [])].filter(Boolean).join(', '))}${l.alt ? ' · сделан облегченный вариант' : ''}${l.side && l.side !== 'BOTH' ? (l.side === 'LEFT' ? ', слева' : ', справа') : ''}</div>`).join('') + '<p style="font-size:12px;color:var(--sub);margin-top:8px">Это важно для специалиста: такие ограничения разбираются на консультации.</p>') : '';
-  const zones = top.length ? sec(`Все зоны · ${top.length}`, `<div class="stack" style="margin-top:8px">${top.map(s => `<div class="list-item" data-k="${s.key}" style="background:var(--bg);min-height:56px"><span class="mark ${s.k}"></span><div style="flex:1;min-width:0"><b style="font-size:15px">${title(s)}</b><div style="font-size:12px;color:var(--sub)">${tech(s)}</div></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div>`) : '';
-  // ВНС (бета): ползунок энергии, касания, глаза и пульс из фазы 1; при INVALID блок просто не показывается
-  const vl = [...(t.touch && t.touch.holdMs ? [`Касание ${t.touch.holdMs} мс${t.touch.holdFlag ? ' (дольше нормы: признак напряжения)' : t.touch.holdNorm ? ' (норма)' : ''}`] : []), ...(vnsSummary(t.vns) || [])];
-  if (t.touch && t.touch.typing) vl.push(`Ритм набора ${t.touch.typing.ikiMs} мс между символами${t.touch.typing.corrections > .15 ? ', много исправлений' : ''}`);
-  const vns = vl.length ? sec('Нервная система · бета', vl.map(x => `<div style="margin-top:8px;font-size:15px;line-height:1.4">${esc(x)}</div>`).join('') + '<p style="font-size:12px;color:var(--sub);margin-top:10px">Замерено в фоне, пока вы заполняли анкету и ждали загрузку. Оценка, не диагноз.</p>') : '';
-  const goal = benefits.length ? sec('К чему стремимся', benefits.map(b => `<div class="row" style="margin-top:10px;align-items:flex-start"><span class="mark OK" style="margin-top:3px"></span><span style="font-size:15px;line-height:1.4">${b}</span></div>`).join('') + '<p class="sub" style="font-size:14px;margin-top:12px">Делай комплекс 2 недели и пройди тест снова. Сравните карты до и после.</p>') : '';
-  const d = document.createElement('div'); d.className = 'sheet';
-  if (only === 'lr') { d.innerHTML = `<div><h2>Анализ сторон</h2>${lr || '<p class="sub" style="margin-top:12px">В этом тесте не было упражнений, где сравниваются левая и правая сторона.</p>'}<button class="btn" id="mx" style="margin-top:var(--s4)">Закрыть</button></div>`; document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; d.querySelector('#mx').onclick = () => d.remove(); return; }
-  d.innerHTML = `<div><h2>Обзор</h2>${lr}${ba}${lim}${zones}${goal}
-    <div class="group" style="margin-top:var(--s3)">
-      <button class="row-link" id="shareRes">${ic('share', 's')}<span>Поделиться: ссылка или картинка</span>${ic('chevron-right', 's chev')}</button>
-      ${top.length && !SHARED ? `<button class="row-link" id="cal">${ic('volume-2', 's')}<span>Напоминать каждый день в 20:00</span>${ic('chevron-right', 's chev')}</button>` : ''}
-      ${hasPlan ? `<button class="row-link" id="again">${ic('rotate-ccw', 's')}<span>${SHARED ? 'Пройти свой тест' : 'Пройти тест заново'}</span>${ic('chevron-right', 's chev')}</button>` : ''}
-      ${INV() ? '' : `<a class="row-link" href="${bot()}" target="_blank">${ic('message-square', 's')}<span>Разобрать карту с автором методики<small style="display:block;font-size:13px;color:var(--sub);font-weight:400">Рифат Аюпов, кинезиотерапевт, 12 лет практики · онлайн</small></span>${ic('chevron-right', 's chev')}</a>`}</div>
-    ${SHARED ? '' : `<div style="margin-top:var(--s3)">${rateCard(String(t.date))}</div>${installCard()}`}
+  const acc = (h, body, open = false) => `<details class="acc" style="margin-top:var(--s3)"${open ? ' open' : ''}><summary style="font-weight:600;font-size:16px">${h}</summary><div style="margin-top:4px">${body}</div></details>`;
+  const d = document.createElement('div'); d.className = 'sheet'; const close = () => d.remove();
+  // «Стороны»: та же мышца слева и справа, полосой; сверху проценты по состояниям
+  if (only === 'lr') { const sp = applyMain(spots(a), cleanMain(t.main)).filter(x => x.k !== 'OK'), ids = [...new Set(sp.map(x => x.id))];
+    const rows = ids.map(id => { const l = sp.find(x => x.id === id && x.side === 'LEFT'), r = sp.find(x => x.id === id && x.side === 'RIGHT'), v = x => x ? Math.round(Math.min(1, Math.abs(x.tone)) * 100) : 0;
+      return { id, l, r, L: v(l), R: v(r), k: (l && r ? (Math.abs(l.tone) >= Math.abs(r.tone) ? l : r) : l || r).k }; }).filter(x => Math.abs(x.L - x.R) >= 10).sort((x, y) => Math.abs(y.L - y.R) - Math.abs(x.L - x.R)).slice(0, 8);
+    const bar = (v, c, right) => `<i style="flex:1;height:10px;border-radius:5px;background:var(--surface-2);position:relative;overflow:hidden"><b style="position:absolute;top:0;bottom:0;${right ? 'left' : 'right'}:0;width:${v}%;background:${c};border-radius:5px"></b></i>`;
+    d.innerHTML = `<div><h2>Левая и правая сторона</h2>${top.length ? `<div style="margin-top:var(--s4)">${balanceCard(sp)}</div>` : ''}
+      ${rows.length ? `<div class="card" style="margin-top:var(--s3)"><div class="row" style="font-size:12px;color:var(--sub)"><span style="flex:1">Мышца</span><b style="width:34%;text-align:center">Л</b><b style="width:34%;text-align:center">П</b></div>
+        ${rows.map(x => `<div style="margin-top:12px"><div style="font-size:14px">${esc(C.muscles[x.id].name)}</div><div class="row" style="gap:4px;margin-top:4px"><span class="mark sm ${x.k}"></span>${bar(x.L, TONE_HEX[x.k])}${bar(x.R, TONE_HEX[x.k], true)}</div></div>`).join('')}</div>`
+      : '<p class="sub" style="margin-top:var(--s4)">Стороны работают ровно: разница меньше 10%.</p>'}
+      <button class="btn" id="mx" style="margin-top:var(--s4)">Закрыть</button></div>`;
+    document.body.appendChild(d); d.onclick = e => { if (e.target === d) close(); }; d.querySelector('#mx').onclick = close; return; }
+  const ba = all_t.length >= 2 && t.snapshot && first !== t ? acc('Было → стало', [['Наклон плеч', first.snapshot.shoulderTilt, t.snapshot.shoulderTilt], ['Наклон таза', first.snapshot.pelvicTilt, t.snapshot.pelvicTilt]].map(([n, x, y]) => `<div class="row" style="margin-top:10px"><span style="flex:1;font-size:15px">${n}</span><s style="color:var(--sub)">${fmt(x)}°</s>${ic('chevron-right', 's')}<b style="font-size:20px">${fmt(y)}°</b></div>`).join('')) : '';
+  const lim = t.limits && Object.keys(t.limits).length ? acc('Не получилось выполнить', Object.entries(t.limits).map(([u, l]) => `<div style="margin-top:8px;font-size:14px"><b>${esc(LIMIT_NAMES[u] || u)}</b>: ${esc([l.level, ...(l.reasons || [])].filter(Boolean).join(', '))}</div>`).join('')) : '';
+  const zones = top.length ? acc(`Все зоны · ${top.length}`, `<div class="stack" style="margin-top:6px">${top.map(s => `<div class="list-item" data-k="${s.key}" style="background:var(--bg);min-height:52px"><span class="mark ${s.k}"></span><div style="flex:1;min-width:0"><b style="font-size:15px">${title(s)}</b></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div>`, true) : '';
+  const row = (id, icon, text) => `<button class="row-link" id="${id}">${ic(icon, 's')}<span>${text}</span>${ic('chevron-right', 's chev')}</button>`;
+  d.innerHTML = `<div><h2>Обзор</h2>${zones}${ba}${lim}
+    ${acc('Действия', `<div class="group">${row('shareRes', 'share', 'Поделиться результатом')}${top.length && !SHARED ? row('cal', 'bell', 'Напоминать в 20:00') : ''}${hasPlan ? row('again', 'rotate-ccw', SHARED ? 'Пройти свой тест' : 'Пройти тест заново') : ''}${INV() ? '' : `<a class="row-link" href="${bot()}" target="_blank">${ic('message-square', 's')}<span>Разобрать с автором методики</span>${ic('chevron-right', 's chev')}</a>`}</div>`)}
+    ${SHARED ? '' : `<div style="margin-top:var(--s3)">${rateCard(String(t.date))}</div>`}
     <button class="btn" id="mx" style="margin-top:var(--s4)">Закрыть</button></div>`;
-  document.body.appendChild(d); const close = () => d.remove(); d.onclick = e => { if (e.target === d) close(); };
+  document.body.appendChild(d); d.onclick = e => { if (e.target === d) close(); };
   const q = s => d.querySelector(s);
-  q('#mx').onclick = close; bindRate('map'); bindInstall();
+  q('#mx').onclick = close; bindRate('map');
   d.querySelectorAll('.list-item[data-k]').forEach(el => el.onclick = () => { close(); muscle(el.dataset.k); });
   q('#shareRes').onclick = () => { close(); shareResult(); };
   if (q('#cal')) q('#cal').onclick = calendar;
   if (q('#again')) q('#again').onclick = () => { close(); again(); };
-  if (q('#myrec')) q('#myrec').onclick = async () => { close(); const p = await consumerPoses.get(); motionViewer(p, t.setup, map, 'Тест ' + new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })); };
 }
-
 async function shareResult() {
   track('share_result');
   const d = document.createElement('div'); d.className = 'sheet';
@@ -1217,14 +1258,14 @@ export function muscle(key) {
   const why = (s.cause && C.muscles[s.cause.id] && `${toneText(s, 0)}: ${LAW_WHY[s.cause.law]} (${lc(C.muscles[s.cause.id].name)} ${sideWord(s.cause.side)}). Закон: ${LAW[s.cause.law]}.`) || (fd && fd.meaning) || (ch && ch.chain.description) || (s.k === 'WEAK' ? 'Мышца почти не включается, и ее работу забирают соседи.' : s.k === 'SHORT' ? 'Гипертонус: мышца зажата и укорочена, поэтому движение ограничено.' : 'Перерастяжение: мышцу тянет напряженная соседняя, она и держит сустав из последних сил.');
   let stages;
   if (s.k === 'WEAK' && m.plan) { const subs = (m.plan.subs || []).map(x => C.muscles[x]).filter(Boolean); const rel = ids(m.plan.release), iso = ids(m.plan.isolate).filter(x => !rel.includes(x));
-    stages = [['Отпусти тех, кто работает за нее', subs.length ? `Пока ${subs.map(x => x.zone.toLowerCase()).join(' и ')} перехватывают работу, упражнения нагружают их, а не нужную мышцу.` : '', (subs.find(x => x.massage) || {}).massage, rel],
+    stages = [['Расслабь тех, кто работает за нее', subs.length ? `Пока ${subs.map(x => x.zone.toLowerCase()).join(' и ')} перехватывают работу, упражнения нагружают их, а не нужную мышцу.` : '', (subs.find(x => x.massage) || {}).massage, rel],
       ['Включи ее отдельно', 'Легкая нагрузка, чтобы мышца снова начала включаться.', null, iso], ['Закрепи в движении', 'Мышца работает в обычном движении, без подмены.', null, ids(m.plan.integrate).filter(x => !rel.includes(x) && !iso.includes(x))]];
   } else if (s.k === 'WEAK') stages = [['Включи ее', '', null, ids(m.activate)]];
   else { const rel = ids(releaseFor(m, s.k, ex)), ant = m.antagonist && C.muscles[m.antagonist]; const give = [...(ant ? ids((ant.plan && ant.plan.isolate) || []).concat(ids(ant.activate)) : []), ...ids(m.activate)].filter(x => !rel.includes(x));
-    stages = [s.k === 'HYPER' ? ['Сними нагрузку мягко', `⛔ ${STATES.HYPER.forbid[0].toUpperCase() + STATES.HYPER.forbid.slice(1)}: мышца и так перерастянута. Только мягкая изометрия.`, null, rel] : ['Отпусти гипертонус', '', massageAllowed(s.k) ? m.massage : null, rel], [ant ? 'Включи ' + ant.zone.toLowerCase() : 'Дай работу соседям', 'Перегрузка уменьшится, когда заработают мышцы, которые сейчас отлынивают.', null, [...new Set(give)].slice(0, 1)]]; }
+    stages = [s.k === 'HYPER' ? ['Сними нагрузку мягко', `⛔ ${STATES.HYPER.forbid[0].toUpperCase() + STATES.HYPER.forbid.slice(1)}: мышца и так перерастянута. Только мягкая изометрия.`, null, rel] : ['Расслабь мышцу', '', massageAllowed(s.k) ? m.massage : null, rel], [ant ? 'Включи ' + ant.zone.toLowerCase() : 'Дай работу соседям', 'Перегрузка уменьшится, когда заработают мышцы, которые сейчас отлынивают.', null, [...new Set(give)].slice(0, 1)]]; }
   // причина по закону Шеррингтона, Майерса или Шарман: сначала работаем с мышцей-источником
   const cm = s.cause && C.muscles[s.cause.id];
-  if (cm && s.cause.law !== 'sahr') stages.unshift([`Сначала отпусти ${lc(cm.zone || cm.name)} ${sideWord(s.cause.side)}`, 'Она тянет и тормозит эту мышцу. Пока она зажата, остальное не держится.', massageAllowed('SHORT') ? cm.massage : null, ids(releaseFor(cm, 'SHORT', ex))]);
+  if (cm && s.cause.law !== 'sahr') stages.unshift([`Сначала расслабь ${lc(cm.zone || cm.name)} ${sideWord(s.cause.side)}`, 'Она тянет и тормозит эту мышцу. Пока она зажата, остальное не держится.', massageAllowed('SHORT') ? cm.massage : null, ids(releaseFor(cm, 'SHORT', ex))]);
   stages = stages.filter(x => x[3].length || x[2]); const all = [...new Set(stages.flatMap(x => x[3]))]; let n = 0;
   const obs = seen(a, s), num = obs.map(x => String(x).match(/(\d+(?:[.,]\d+)?)\s*(°|%)?/)).find(Boolean);
   const finds = a.findings.filter(f => f.muscles.some(x => x.id === s.id && (x.side === s.side || x.side === 'BOTH')));
@@ -1292,7 +1333,7 @@ export async function workout(ids, reasons = {}) {
         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><b id="tm" class="num" style="font-size:${hasFigure(e.id) ? 20 : 56}px;font-weight:600;letter-spacing:-.02em;opacity:.45">${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}</b></div></div><span id="tml" style="font-size:14px;color:var(--cam-sub)">старт после подсказки</span></div>
       <div style="flex:1;margin-top:20px;display:flex;flex-direction:column;gap:12px">${e.steps.slice(0, 3).map((s, k) => `<div class="row st" style="opacity:.45;align-items:flex-start"><span class="step-n" style="color:var(--signal);width:22px;padding-top:2px">${String(k + 1).padStart(2, '0')}</span><span style="font-size:16px;line-height:1.35;flex:1">${s}</span></div>`).join('')}
         ${e.check ? `<div class="row" style="background:rgba(255,255,255,.08);border-radius:var(--r-md);padding:12px;align-items:flex-start;gap:10px"><span style="color:var(--signal)">${ic('info', 's')}</span><span style="font-size:14px;line-height:1.4">${e.check}</span></div>` : ''}
-        <div class="row" id="exctl" style="gap:8px"><button class="btn line" id="exskip" style="flex:1;height:44px;color:#fff;border-color:rgba(255,255,255,.3)">⏩ Пропустить</button><button class="btn line" id="exrep" style="flex:1;height:44px;color:#fff;border-color:rgba(255,255,255,.3)">🔄 Повторить объяснение</button></div></div>
+        <div class="row" id="exctl" style="gap:8px"><button class="btn glass" id="exrep">${ic('volume-2', 's')}Повторить</button><button class="btn glass" id="exskip">Сразу начать${ic('chevron-right', 's')}</button></div></div>
       <div class="row" style="justify-content:center;gap:28px;margin-top:16px"><button class="round" id="pv" aria-label="Назад" style="width:56px;height:56px;background:rgba(255,255,255,.1);color:#fff">${ic('skip-back')}</button><button class="round" id="pp" aria-label="Пауза" style="width:80px;height:80px;background:var(--signal);color:var(--cam-bg)">${ic('pause')}</button><button class="round" id="nx" aria-label="Дальше" style="width:56px;height:56px;background:rgba(255,255,255,.1);color:#fff">${ic('skip-forward')}</button></div></div>`);
     let token = {}; const myTok = token;
     const camStart = async () => { const v = $('#exv'); if (!v || !rk) return; $('#excoff').onclick = () => { localStorage.setItem('bp_excam', '0'); camOff(); $('#cambox').innerHTML = camHtml(); bindCam(); };
@@ -1442,21 +1483,16 @@ export function clientHome() {
 // ---------- настройки ----------
 export function settings() {
   const d = document.createElement('div'); d.className = 'sheet';
+  const row = (id, icon, text, extra = '') => `<button class="row-link" id="${id}"${extra}>${ic(icon, 's')}<span>${text}</span>${ic('chevron-right', 's chev')}</button>`;
+  const acc = (h, body, open = false) => `<details class="acc" style="margin-top:var(--s3)"${open ? ' open' : ''}><summary style="font-weight:600;font-size:16px">${h}</summary><div style="margin-top:4px">${body}</div></details>`;
   d.innerHTML = `<div><h2>Настройки</h2>
     <div class="group" style="margin-top:var(--s4)"><div class="row" style="min-height:56px"><span style="flex:1">Голосовые подсказки</span><button class="pill" id="vm">${voice.muted ? 'Выкл' : 'Вкл'}</button></div></div>
-    <p class="ondevice" style="margin-top:var(--s3)">${ic('shield-check', 's')}${meSync() ? 'Копия данных хранится в вашем аккаунте' : 'Войдите, чтобы данные не пропали при удалении приложения'}</p>
-    <div id="acc"></div>
-    <div class="group" style="margin-top:var(--s3)">
-      <button class="row-link" id="fbk">${ic('message-square', 's')}<span>Ошибка, неудобство или идея</span>${ic('chevron-right', 's chev')}</button>
-      ${canInstall() ? `<button class="row-link" id="sinst">${ic('download', 's')}<span>Установить приложение</span>${ic('chevron-right', 's chev')}</button>` : ''}
-      <button class="row-link" id="bkf">${ic('download', 's')}<span>Сохранить копию в файл</span>${ic('chevron-right', 's chev')}</button>
-      <button class="row-link" id="rsf">${ic('upload', 's')}<span>Восстановить из файла</span>${ic('chevron-right', 's chev')}</button>
-      <button class="row-link" id="shapp">${ic('share', 's')}<span>Поделиться приложением</span>${ic('chevron-right', 's chev')}</button>
-      ${canSwitchMode() ? `<button class="row-link" id="topro">${ic('user-plus', 's')}<span>Кабинет специалиста</span>${ic('chevron-right', 's chev')}</button>` : ''}
-      <a class="row-link" href="/privacy" target="_blank">${ic('shield-check', 's')}<span>Конфиденциальность</span>${ic('chevron-right', 's chev')}</a>
-      <button class="row-link" id="wipe" style="color:var(--over-t)">${ic('x', 's')}<span>Удалить все мои данные</span></button></div>
-    <div class="row" style="justify-content:center;gap:16px;margin-top:var(--s3);font-size:13px"><a href="/terms" target="_blank" style="color:var(--sub);font-weight:500">Соглашение</a><a href="/licenses" target="_blank" style="color:var(--sub);font-weight:500">Лицензии</a></div>
-    <p style="margin-top:var(--s3);font-size:12px;color:var(--sub);line-height:1.45">Автор методики: Рифат Аюпов, биомеханик, кинезиотерапевт, rifataiupov.com. Распознавание позы: MediaPipe (Google, Apache 2.0). 3D-модель: Z-Anatomy на основе BodyParts3D (DBCLS), CC BY-SA.</p>
+    ${acc('Аккаунт', `<div id="acc"></div>${canSwitchMode() ? `<div class="group" style="margin-top:8px">${row('topro', 'user-plus', 'Кабинет специалиста')}</div>` : ''}`, true)}
+    ${acc('Мои данные', `<p class="ondevice" style="margin:4px 0 8px">${ic('shield-check', 's')}${meSync() ? 'Копия хранится в аккаунте' : 'Войдите, чтобы данные не пропали'}</p>
+      <div class="group">${row('bkf', 'download', 'Сохранить копию в файл')}${row('rsf', 'upload', 'Восстановить из файла')}<button class="row-link" id="wipe" style="color:var(--over-t)">${ic('x', 's')}<span>Удалить все мои данные</span></button></div>`)}
+    ${acc('Помощь', `<div class="group">${row('fbk', 'message-square', 'Ошибка или идея')}${row('shapp', 'share', 'Поделиться приложением')}${canInstall() ? row('sinst', 'download', 'Установить приложение') : ''}
+      <a class="row-link" href="/privacy" target="_blank">${ic('shield-check', 's')}<span>Конфиденциальность</span>${ic('chevron-right', 's chev')}</a><a class="row-link" href="/terms" target="_blank">${ic('file-text', 's')}<span>Соглашение</span>${ic('chevron-right', 's chev')}</a></div>
+      <p style="margin-top:var(--s3);font-size:12px;color:var(--sub);line-height:1.45">Методика: Рифат Аюпов. <a href="/licenses" target="_blank" style="color:var(--sub);font-weight:500">Лицензии</a></p>`)}
     <button class="btn" id="cl" style="margin-top:var(--s4)">Готово</button></div>`;
   document.body.appendChild(d);
   d.querySelector('#fbk').onclick = () => { d.remove(); bugSheet(); };

@@ -95,8 +95,8 @@ export function mergeV2(f, moves) {
  *  интерполируют состояние нервной системы на тело (подзатылочные, шея, дыхательные мышцы). Только валидные замеры. */
 export function mergeCns(f, t) {
   const v = t && t.vns, tc = t && t.touch, put = (k, x) => { if (Number.isFinite(x) && f[k] === undefined) f[k] = x; };
-  if (v && v.status === 'OK') { if (v.pursuit) { put('cns_pursuit', v.pursuit.corr); put('cns_catchup', v.pursuit.catchUp); } put('cns_saccade', v.saccadeMs);
-    if (v.ppg && v.ppg.valid && !v.ppg.rough) { put('cns_hr', v.ppg.hr); put('cns_rmssd', v.ppg.hrv); } }
+  if (v && v.status === 'OK') { if (v.pursuit && v.pursuit.corr > .1) { put('cns_pursuit', v.pursuit.corr); put('cns_catchup', v.pursuit.catchUp); } put('cns_saccade', v.saccadeMs);
+    /* пульс по камере в карту не идет: замер ненадежен */ }
   if (tc) { if (tc.samples >= 3) put('cns_hold', tc.holdMs); if (tc.swipes) put('cns_reversals', tc.reversalsPerSwipe);
     const ty = tc.typing; if (ty && ty.keys >= 8) { put('cns_typing_rel', ty.rel); put('cns_typing_cv', ty.cv); put('cns_typing_err', ty.corrections); } }
   return f;

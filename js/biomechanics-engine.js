@@ -55,6 +55,12 @@ export function apicalRise(frames, cmPerPx) {
   return (sm[Math.floor(sm.length * .9)] - sm[Math.floor(sm.length * .1)]) * cmPerPx * 10;
 }
 
+/** Апикальное дыхание по Левиту: насколько плечи поднялись относительно таза на глубоком вдохе против выдоха, мм.
+ *  Медианы по кадрам (дрожание точек не в счет). Больше 15 мм: вдох делают лестничные и трапеции, а не диафрагма. */
+export function apicalBreath(inFr, outFr, cmPerPx) {
+  const d = fr => { const v = (fr || []).filter(f => f.p).map(f => ((f.p[23].y + f.p[24].y) - (f.p[11].y + f.p[12].y)) / 2).sort((a, b) => a - b); return v.length >= 8 ? v[v.length >> 1] : null; };
+  const a = d(inFr), b = d(outFr); if (a == null || b == null || !cmPerPx) return null; return Math.max(0, (a - b) * cmPerPx * 10);
+}
 /** Butt Wink: потеря нейтрали поясницы в нижней трети приседа, градусы подкручивания таза (вид сбоку). */
 export function buttWink(frames) {
   const v = frames.filter(f => f.p).map(f => ({ hipY: (f.p[23].y + f.p[24].y) / 2, tilt: ang(f.p[11], f.p[23]) }));
@@ -62,7 +68,7 @@ export function buttWink(frames) {
   const bottom = v.filter(x => x.hipY >= cut), top = v.filter(x => x.hipY < cut); if (!bottom.length || !top.length) return null;
   const mean = a => a.reduce((s, x) => s + x.tilt, 0) / a.length; return Math.abs(mean(bottom) - mean(top));
 }
-export const IAP_LIMITS = { ribFlare: 12, apicalMm: 12, buttWink: 10 };
+export const IAP_LIMITS = { ribFlare: 12, apicalMm: 15, buttWink: 10 };
 /** Маркеры утечки ВБД и вклад в карту мышц по ТЗ (раздел 3). */
 export function iapAssess({ flare, apicalMm, wink }) {
   const marks = [];
