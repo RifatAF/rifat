@@ -116,6 +116,14 @@ const callerName = () => { try { const l = (new Error().stack || '').split('\n')
 export function go(html) { try { screenView(callerName()); } catch (e) {} delete document.documentElement.dataset.theme; document.querySelectorAll('.qpop').forEach(x => x.remove()); if (view3d) { view3d.dispose(); view3d = null; } backFn = null; const head = html.slice(0, 260); if (head === lastHead) html = html.replace(' fade', ''); lastHead = head; app.innerHTML = html; window.scrollTo(0, 0); syncThemeColor();
   const tc = document.querySelector('meta[name=theme-color]'); if (tc) tc.content = html.includes('class="cam"') ? '#0A0C0F' : / dark[ "]/.test(html.slice(0, 200)) ? '#0B1B3B' : '#F5F6FA'; }
 
+// Конфиденциальность, соглашение, лицензии открываем внутри приложения листом: отдельная страница в установленном
+// приложении закрывала его жестом «назад». Лист закрывается жестом «назад», как любой другой.
+const DOC_RE = /^\/(privacy|terms|licenses)$/;
+function docSheet(href) { const d = document.createElement('div'); d.className = 'sheet doc-sheet';
+  d.innerHTML = `<div><button class="round" id="dcl" aria-label="Закрыть" style="position:absolute;right:12px;top:12px;z-index:1">${ic('x')}</button><iframe src="${esc(href)}" title="Документ" style="width:100%;height:80dvh;border:0;display:block;background:#fff;border-radius:12px"></iframe></div>`;
+  document.body.appendChild(d); d.querySelector('#dcl').onclick = () => d.remove(); d.onclick = e => { if (e.target === d) d.remove(); }; }
+document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('a[href]'); if (!a || !DOC_RE.test(a.getAttribute('href'))) return; e.preventDefault(); e.stopPropagation(); docSheet(a.getAttribute('href')); }, true);
+
 // ---------- «назад»: жест и системная кнопка ведут на шаг назад в приложении, а не закрывают его ----------
 // В истории браузера держим одну запись-ловушку. Жест «назад» снимает ее, мы делаем шаг назад внутри
 // приложения и ставим ловушку снова. На главном экране (нет кнопки «‹») жест закрывает приложение как обычно.
@@ -743,7 +751,7 @@ async function runProtocol0(protocol, opts = {}) {
       moves.slb = singleBalance(fR, fL); await say(SAY.footDown); k++; }
     if (u === 'trot') { await face('front'); step(k, 'Повороты корпуса', 'Лицом к телефону. Плечи вправо и влево, таз и стопы на месте', FOC.stand); demo('test_trot'); await say(SAY.trotIntro); if (skipped()) return;
       await countdown(GO_WORD.rotate); const fr = await hold('trot', 10, 'Повороты'); if (skipped()) return; moves.trot = trotSweep(fr); await say(SAY.good); k++; }
-    if (u === 'reach') { await face('front'); step(k, 'Руки вверх', 'Поднимите прямые руки над головой и опустите. 3 раза', FOC.arms); demo('test_reach'); await say(SAY.reachIntro); if (skipped()) return;
+    if (u === 'reach') { await face('front'); step(k, 'Руки вверх', 'Прямые руки вперед и вверх над головой, не через стороны. 3 раза', FOC.arms); demo('test_reach'); await say(SAY.reachIntro); if (skipped()) return;
       await countdown(GO_WORD.reach); const fr = await armReps('reach', 3); if (skipped()) return; moves.reach = overheadReach(fr); await say(SAY.armsDown); k++; }
     if (u === 'chair') { await face('front'); fsOff = true; step(k, 'Вставание со стула', 'Сядьте на стул боком к камере, руки на груди. Вставайте и садитесь 30 секунд'); demo('test_chair', 'side'); await say(SAY.chairIntro); if (skipped()) return;
       await countdown(GO_WORD.chair); moves.chair = await reps('chair', fr => chairStand(fr), .1, 99, true, 30000); moves.chair.quality = moves.chair.reps ? 'GOOD' : 'RETAKE'; await say(SAY.good); k++; fsOff = false; }
@@ -1066,16 +1074,42 @@ function postureCard(a) {
 }
 // «Было → стало» на объемной фигуре: полупрозрачный силуэт в позе прошлого теста, цветная фигура переходит в позу нынешнего.
 // Зеленым то, что выровнялось, красным то, что осталось или усилилось. Без WebGL блок не показывается, остаются цифры.
+// «Было → стало» на 3D-фигуре с мышцами: две картинки одна над другой, человек сам тянет разделитель, как в сравнениях графики в играх.
+// Под фигурой мышцы с процентами: насколько мышца ослаблена, зажата или перегружена в первом и в последнем тесте.
+const BA_NOUN = { WEAK: 'слабость', SHORT: 'зажатость', HYPER: 'перегрузка' };
+const baSpots = t => { const a = analyze(t, C); let all = spots(a); if (t.main) all = applyMain(all, t.main);
+  const keys = new Set(topOf(all).slice(0, 12).map(x => x.key)); return all.map(x => keys.has(x.key) ? x : { ...x, k: 'OK', tone: 0 }); };
+const pct = x => x && x.k !== 'OK' ? Math.min(100, Math.round(Math.abs(x.tone) * 100)) : 0;
 export function baBlock(id) {
-  if (!device.webgl2) return '';
-  return `<div class="ba3d"><div id="${id}" class="ba3d-box"></div><div class="ba3d-cap"><b id="${id}-ph">Было</b><span>Серый силуэт: как было. Цветная фигура: как стало</span>
-    <span class="ba3d-leg"><i style="background:var(--ok)"></i>выровнялось<i style="background:var(--short)"></i>осталось</span></div></div>`;
+  return `<div class="bas" id="${id}"><div class="bas-tabs"><button class="on" data-b="0">Спереди</button><button data-b="1">Сзади</button></div>
+    <div class="bas-box"><canvas class="bas-a"></canvas><canvas class="bas-b"></canvas><span class="bas-l">Было</span><span class="bas-r">Стало</span><div class="bas-h"><i></i></div>
+    <input type="range" min="0" max="100" value="50" aria-label="Было или стало"></div>
+    <p class="bas-hint">Тяните ползунок влево и вправо</p><div class="bas-list"></div></div>`;
 }
 export async function bindBa(id, prevT, curT) {
-  const box = document.getElementById(id); if (!box || box.dataset.on) return; box.dataset.on = '1';
-  const pz = t => poseOf(posturePatterns(analyze(t, C).findings)), ph = document.getElementById(id + '-ph');
-  try { const { skeleton3D } = await import('./skeleton3d.js'); await skeleton3D(box, pz(curT), { from: pz(prevT), onPhase: p => { if (ph) ph.textContent = p === 'was' ? 'Было' : p === 'now' ? 'Стало' : 'Было → стало'; } }); }
-  catch (e) { box.closest('.ba3d').remove(); }
+  const el = document.getElementById(id); if (!el || el.dataset.on) return; el.dataset.on = '1';
+  let A, B; try { A = baSpots(prevT); B = baSpots(curT); } catch (e) { el.remove(); return; }
+  const cvA = el.querySelector('.bas-a'), cvB = el.querySelector('.bas-b'), box = el.querySelector('.bas-box'), rng = el.querySelector('input');
+  // сторона по умолчанию: где больше изменилось
+  const diff = back => A.concat(B).filter(x => x.back === back && x.k !== 'OK').length;
+  let back = diff(true) > diff(false);
+  const draw = () => { drawHeat(cvA, A, back, null, [], { reveal: false }); drawHeat(cvB, B, back, null, [], { reveal: false });
+    el.querySelectorAll('.bas-tabs button').forEach(b => b.classList.toggle('on', +b.dataset.b === +back)); };
+  const set = v => { v = Math.max(0, Math.min(100, v)); rng.value = v; box.style.setProperty('--x', v + '%'); };
+  el.querySelectorAll('.bas-tabs button').forEach(b => b.onclick = () => { back = b.dataset.b === '1'; draw(); });
+  rng.oninput = () => set(+rng.value);
+  const at = e => { const r = box.getBoundingClientRect(); set((e.clientX - r.left) / r.width * 100); };
+  box.addEventListener('pointerdown', e => { box.setPointerCapture(e.pointerId); at(e); box._drag = true; });
+  box.addEventListener('pointermove', e => { if (box._drag) at(e); }); box.addEventListener('pointerup', () => { box._drag = false; });
+  set(50); draw();
+  // подсказка движением: разделитель один раз проходит туда и обратно
+  if (!reduceMotion()) { const t0 = performance.now(); const k = () => { if (box._drag) return; const t = (performance.now() - t0) / 1400; if (t > 1) return set(50); set(50 + Math.sin(t * Math.PI * 2) * 22); requestAnimationFrame(k); }; setTimeout(() => requestAnimationFrame(k), 500); }
+  const byKey = new Map(A.map(x => [x.key, x])), rows = [...new Set([...topOf(A), ...topOf(B)].map(x => x.key))].map(key => { const a = byKey.get(key), b = B.find(x => x.key === key); return { a, b, s: b && b.k !== 'OK' ? b : a }; })
+    .filter(r => r.s && C.muscles[r.s.id]).sort((x, y) => Math.max(pct(y.a), pct(y.b)) - Math.max(pct(x.a), pct(x.b))).slice(0, 8);
+  el.querySelector('.bas-list').innerHTML = rows.map(r => { const p0 = pct(r.a), p1 = pct(r.b), d = p1 - p0, k = (r.b && r.b.k !== 'OK' ? r.b : r.a).k;
+    const v = p1 === 0 && p0 > 0 ? '<b class="up">норма</b>' : d <= -8 ? '<b class="up">лучше</b>' : d >= 8 ? '<b class="down">хуже</b>' : '<b>так же</b>';
+    return `<div class="bas-row"><div><span>${esc(C.muscles[r.s.id].name)} ${sideWord(r.s.side)}</span><small>${BA_NOUN[k] || ''}</small></div><div class="bas-p"><span>${p0}%</span><i>→</i><span>${p1}%</span></div>${v}</div>`; }).join('')
+    + '<p class="bas-note">Процент: насколько мышца ослаблена, зажата или перегружена по тесту. 0% значит норма.</p>';
 }
 function bindPosture(a) {
   const acc = $('#posacc'), box = $('#pos3d'); if (!acc || !box) return; let s3 = null;
@@ -1247,7 +1281,7 @@ function moreSheet({ t, a }, top, hasPlan, only) {
   // первый тест: сравнивать не с чем, он сам становится точкой отсчета
   const dd = x => new Date(x.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' });
   const word = (x, y) => !Number.isFinite(x) || !Number.isFinite(y) ? '' : Math.abs(y) < Math.abs(x) - .5 ? '<span style="color:var(--ok-t);font-size:13px;font-weight:600">ровнее</span>' : Math.abs(y) > Math.abs(x) + .5 ? '<span style="color:var(--over-t);font-size:13px;font-weight:600">сильнее</span>' : '<span class="sub" style="font-size:13px">так же</span>';
-  const ba = all_t.length >= 2 && t.snapshot && first !== t && first.snapshot ? acc('Было → стало', baBlock('ba3d') + `<p class="sub" style="font-size:13px;margin-top:6px">Первый тест ${dd(first)} → этот тест ${dd(t)}. Меньше градусов: тело стоит ровнее.</p>` + [['Наклон плеч', first.snapshot.shoulderTilt, t.snapshot.shoulderTilt], ['Наклон таза', first.snapshot.pelvicTilt, t.snapshot.pelvicTilt]].map(([n, x, y]) => `<div class="row" style="margin-top:10px;gap:8px"><span style="flex:1;font-size:15px">${n}</span><s style="color:var(--sub)">${fmt(x)}°</s>${ic('chevron-right', 's')}<b style="font-size:20px">${fmt(y)}°</b>${word(x, y)}</div>`).join(''))
+  const ba = all_t.length >= 2 && first !== t ? acc('Было → стало', baBlock('ba3d') + `<p class="sub" style="font-size:13px;margin-top:6px">Первый тест ${dd(first)} → этот тест ${dd(t)}.${t.snapshot && first.snapshot ? ' Меньше градусов: тело стоит ровнее.' : ''}</p>` + (!(t.snapshot && first.snapshot) ? [] : [['Наклон плеч', first.snapshot.shoulderTilt, t.snapshot.shoulderTilt], ['Наклон таза', first.snapshot.pelvicTilt, t.snapshot.pelvicTilt]].map(([n, x, y]) => `<div class="row" style="margin-top:10px;gap:8px"><span style="flex:1;font-size:15px">${n}</span><s style="color:var(--sub)">${fmt(x)}°</s>${ic('chevron-right', 's')}<b style="font-size:20px">${fmt(y)}°</b>${word(x, y)}</div>`)).join(''))
     : acc('Было → стало', `<p style="font-size:15px;line-height:1.45;margin-top:6px">${SHARED ? 'Сравнение появится после следующего теста.' : 'Это ваш первый тест: он станет точкой отсчета. Пройдите тест снова через 2–4 недели, и здесь будет видно, что изменилось.'}</p>`);
   const lim = t.limits && Object.keys(t.limits).length ? acc('Не получилось выполнить', Object.entries(t.limits).map(([u, l]) => `<div style="margin-top:8px;font-size:14px"><b>${esc(LIMIT_NAMES[u] || u)}</b>: ${esc([l.level, ...(l.reasons || [])].filter(Boolean).join(', '))}</div>`).join('')) : '';
   const zones = top.length ? acc(`Все зоны · ${top.length}`, `<div class="stack" style="margin-top:6px">${top.map(s => `<div class="list-item" data-k="${s.key}" style="background:var(--bg);min-height:52px"><span class="mark ${s.k}"></span><div style="flex:1;min-width:0"><b style="font-size:15px">${title(s)}</b></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div>`, true) : '';

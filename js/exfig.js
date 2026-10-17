@@ -64,8 +64,12 @@ const EX = {
   test_slb: { a: { ...STAND, aN1: 112, aN2: -25, aF1: 110, aF2: -27 }, b: { lF1: 96, lF2: 196, lF3: 250 }, hl: 'hip' },
   // повороты корпуса: руки скрещены на груди, голова и плечи поворачиваются, таз на месте
   test_trot: { a: { ...FRONT, aN1: 60, aN2: -20, aF1: 120, aF2: 200, nose: 0 }, b: { nose: .85, aN1: 75, aF1: 105 }, hl: 'core' },
-  // руки вверх: прямые руки через стороны над головой
-  test_reach: { a: { ...FRONT }, b: { aN1: -100, aN2: -98, aF1: -80, aF2: -82 }, hl: 'upperback' },
+  // руки вверх: прямые руки вперед и вверх над головой (не через стороны)
+  test_reach: { vb: '0 -26 200 186', a: { ...FRONT, flex: 0 }, b: { flex: 1 }, hl: 'upperback' },
+  // те же тесты, вид спереди: человек стоит лицом к телефону и повторяет картинку, поэтому и рисуем лицом
+  test_squat_f: { vb: '0 -26 200 186', a: { ...FRONT, legAt: 1, lN1: 99, lN2: 94, lF1: 81, lF2: 86, aN1: -98, aN2: -96, aF1: -82, aF2: -84 }, b: { hy: 106, kTr: .88 }, hl: 'hip' },
+  test_slb_f: { a: { ...FRONT, aN1: 150, aN2: 35, aF1: 30, aF2: 145, kSF: 1, lF3: 60 }, b: { lF1: 86, lF2: 92, kSF: .45, lF3: 30 }, hl: 'hip' },
+  test_sls_f: { a: { ...FRONT, footAt: [92, 149], aN1: 150, aN2: 35, aF1: 30, aF2: 145, lF1: 86, lF2: 92, kSF: .45, lF3: 30 }, b: { hy: 88, kTr: .95 }, hl: 'hip' },
   // вставание со стула: сидя, руки на груди, встать и сесть
   test_chair: { a: { ...STAND, hx: 92, hy: 112, t: -70, hd: -80, lN1: 0, lN2: 90, lN3: 0, lF1: 2, lF2: 90, lF3: 0, aN1: 70, aN2: -150, aF1: 72, aF2: -148, props: ['chair'] }, b: { hx: 100, hy: 79, t: -90, hd: -90, lN1: 90, lN2: 90, lF1: 90, lF2: 90, aN1: 80, aN2: -140, aF1: 82, aF2: -138 }, hl: 'hip' },
 };
@@ -78,7 +82,7 @@ function ik(base, target, a, b, bend) {
 }
 // суставы позы
 function joints(p, ref) {
-  const H = [p.hx, p.hy], S = add(H, p.t, L.tr), front = p.v === 'front';
+  const H = [p.hx, p.hy], S = add(H, p.t, L.tr * (p.kTr ?? 1)), front = p.v === 'front';
   const perp = front ? dir(p.t + 90) : [0, 0], off = (P, k) => [P[0] + perp[0] * k, P[1] + perp[1] * k];
   const sN = off(S, -13), sF = off(S, 13), hN = off(H, -8), hF = off(H, 8);
   const head = add(S, p.hd, 18 + (p.ho || 0) * 0); const hc = [head[0] + (p.ho || 0), head[1]];
@@ -86,9 +90,17 @@ function joints(p, ref) {
   const arm = (s, a1, a2, k) => { const e = add(s, a1, L.ua * k); return [s, e, add(e, a2, L.fa * k)]; };
   const leg = (h, l1, l2, l3, kt) => { const k = add(h, l1, L.th * kt), an = add(k, l2, L.sh * kS); return [h, k, an, add(an, l3, L.ft)]; };
   let aN = arm(sN, p.aN1, p.aN2, kA), aF = arm(sF, p.aF1, p.aF2, 1), lN = leg(hN, p.lN1, p.lN2, p.lN3, kT), lF = leg(hF, p.lF1, p.lF2, p.lF3, 1);
+  // дальняя голень короче: нога согнута назад, стопа видна над полом (вид спереди)
+  if (p.kSF != null) { const k = lF[1], an = add(k, p.lF2, L.sh * p.kSF); lF = [lF[0], k, an, add(an, p.lF3, L.ft * .6)]; }
+  // руки вперед и вверх (вид спереди): кисть идет по вертикали перед телом, рука укорачивается в перспективе, а не уходит в сторону
+  if (p.flex != null) { const dy = Math.cos(Math.PI * p.flex) * (L.ua + L.fa), fl = (sh, sx) => { const w = [sh[0] + sx, sh[1] + dy]; return [sh, [(sh[0] + w[0]) / 2, (sh[1] + w[1]) / 2], w]; }; aN = fl(sN, -3); aF = fl(sF, 3); }
   // фиксированные опоры из исходной позы: стопы на полу, кисти на стене
-  if (ref && ref.legAt) { const fix = (h, r, s) => { const [k, an] = ik(h, r[2], L.th, L.sh, s); return [h, k, an, add(an, 0, L.ft)]; }; lN = fix(hN, ref.lN, -1); lF = fix(hF, ref.lF, -1); }
-  if (ref && ref.footAt) { const [k, an] = ik(hN, ref.footAt, L.th, L.sh, -1); lN = [hN, k, an, add(an, 0, L.ft)]; }
+  // вид спереди: колено выходит к камере, на схеме оно над стопой, чуть наружу, а не вбок, как в профиль
+  const fwdKnee = (h, an, out, toe) => [h, [(h[0] + an[0]) / 2 + out, (h[1] + an[1]) / 2], an, add(an, toe, L.ft * .6)];
+  if (ref && ref.legAt && front) { const o = Math.max(0, (p.hy - 79) * .35); lN = fwdKnee(hN, ref.lN[2], -2 - o, 120); lF = fwdKnee(hF, ref.lF[2], 2 + o, 60); }
+  else if (ref && ref.legAt) { const fix = (h, r, s) => { const [k, an] = ik(h, r[2], L.th, L.sh, s); return [h, k, an, add(an, 0, L.ft)]; }; lN = fix(hN, ref.lN, -1); lF = fix(hF, ref.lF, -1); }
+  if (ref && ref.footAt && front) lN = fwdKnee(hN, ref.footAt, -1, 120);
+  else if (ref && ref.footAt) { const [k, an] = ik(hN, ref.footAt, L.th, L.sh, -1); lN = [hN, k, an, add(an, 0, L.ft)]; }
   // стопа стоит на месте, голень тянется за коленом (поворот бедра наружу в перспективе)
   if (ref && ref.footFree) { const k = add(hN, p.lN1, L.th * kT), an = ref.lN[2]; lN = [hN, k, an, add(an, ref.lN3 ?? 0, L.ft)]; }
   if (ref && ref.footN) { const [k, an] = ik(hN, ref.lN[2], L.th, L.sh, 1); lN = [hN, k, an, add(an, ref.lN3 ?? 140, L.ft)]; }
@@ -185,7 +197,7 @@ export function exFigure(id, { dark = false, animate = true, size = '100%', ghos
   const figure = front
     ? limbLeg('lN') + limbLeg('lF') + P(neck, PAL.skin) + P(torso, PAL.shirt) + limbArm('aN') + limbArm('aF') + head
     : limbArm('aF', 1) + limbLeg('lF', 1) + P(neck, PAL.skin) + P(torso, PAL.shirt) + limbLeg('lN') + head + limbArm('aN');
-  return `<svg viewBox="0 0 200 160" width="${size}" style="display:block;max-width:100%" role="img" aria-label="Схема упражнения">
+  return `<svg viewBox="${spec.vb || '0 0 200 160'}" width="${size}" style="display:block;max-width:100%" role="img" aria-label="Схема упражнения">
     <defs><radialGradient id="${uid}g"><stop offset="0" stop-color="#FFB547" stop-opacity=".75"/><stop offset=".55" stop-color="#FF7A45" stop-opacity=".35"/><stop offset="1" stop-color="#FF7A45" stop-opacity="0"/></radialGradient></defs>
     <g${mirror ? ' transform="translate(200 0) scale(-1 1)"' : ''}>${floor}${mat}${shadow}${props}${ghost}${figure}${towel}${glow}</g></svg>`;
 }
