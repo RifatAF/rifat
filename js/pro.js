@@ -357,7 +357,8 @@ function pickClient(title, cs, then) {
 }
 
 /** Смена режима клиент ↔ специалист: администратору всегда; в бете всем, кроме клиентов, пришедших по ссылке специалиста; в полном режиме только администратору. */
-export function canSwitchMode() { const u = meSync(); if (u && u.admin) return true; if (!isBeta()) return false; try { return !localStorage.getItem('bp_inv'); } catch (e) { return false; } }
+// клиент и специалист — разные ветки: переход между ними только у администратора (для проверки обеих)
+export function canSwitchMode() { const u = meSync(); return !!(u && u.admin); }
 /** Одна точка обратной связи вместо четырех похожих пунктов. */
 function feedbackHub() { const d = document.createElement('div'); d.className = 'sheet';
   const it = (id, icon, t, sub) => `<button class="row-link" data-f="${id}">${ic(icon, 's')}<span style="flex:1;text-align:left"><b style="font-weight:600">${t}</b><br><small class="sub" style="font-size:13px">${sub}</small></span>${ic('chevron-right', 's chev')}</button>`;
