@@ -928,7 +928,7 @@ export async function result(aid, view = 'measured') {
     ${deltaCard}
     <div class="card"><div class="row" style="align-items:flex-start;gap:var(--s4)">
       <div style="width:92px;flex:none"><div class="seg" style="margin-bottom:6px;${hasBack ? '' : 'display:none'}"><button id="mf" class="on" style="min-height:32px;padding:0;font-size:12px">Пер.</button><button id="mb2" style="min-height:32px;padding:0;font-size:12px">Зад</button></div><canvas id="heat" style="width:92px;display:block"></canvas></div>
-      <div style="flex:1;min-width:0"><span class="src">ИЗМЕРЕНО</span>${facts.length ? facts.map((f, i) => { const m = numOf(f.observed); return `<div class="mrow" style="margin-top:12px"><i>${i + 1}</i><span>${esc(plainObs(f.observed))}${/на границе нормы/.test(f.observed) ? ' <span class="edge">граница</span>' : ''}</span>${m ? `<b>${m[1]}${m[2]}</b>` : ''}</div>`; }).join('') + '<p style="font-size:11px;color:var(--faint);margin-top:10px">Одна камера: точность угла около ±5°</p>' : '<p class="sub" style="margin-top:8px;font-size:14px">Существенных отклонений нет</p>'}</div></div></div>
+      <div style="flex:1;min-width:0"><span class="src">ЗАМЕР</span>${facts.length ? facts.map((f, i) => { const m = numOf(f.observed); return `<div class="mrow" style="margin-top:12px"><i>${i + 1}</i><span>${esc(plainObs(f.observed))}${/на границе нормы/.test(f.observed) ? ' <span class="edge">граница</span>' : ''}</span>${m ? `<b>${m[1]}${m[2]}</b>` : ''}</div>`; }).join('') + '<p style="font-size:11px;color:var(--faint);margin-top:10px">Одна камера: точность угла около ±5°</p>' : '<p class="sub" style="margin-top:8px;font-size:14px">Существенных отклонений нет</p>'}</div></div></div>
     ${hypTop.map(s => { const by = facts.map((f, i) => f.muscles.some(m => m.id === s.id) ? i + 1 : 0).filter(Boolean);
       return `<div class="hyp-card"><div class="eyebrow" style="color:var(--src-hyp)">Гипотеза${by.length ? ' · по ' + by.join(' и ') : ''}</div>
       <div class="row" style="margin-top:10px;align-items:flex-start"><span class="mark ${s.k}" style="margin-top:4px"></span><div style="font-size:16px;line-height:1.35">Вероятно: <b>${C.muscles[s.id].name} ${s.side === 'RIGHT' ? 'справа' : 'слева'}</b> · ${toneText(s, 0).toLowerCase()}</div></div>
@@ -1318,8 +1318,9 @@ async function report(aid) {
     else after.push({ h, text: 'Существенных изменений пока нет' });
     const pr = PAIN.filter(([z]) => (prev.pain || {})[z] > 0 || (a.pain || {})[z] > 0); if (pr.length) after.push({ h: 'Боль 0–10', text: pr.map(([z, n]) => `${n}: ${(prev.pain || {})[z] || 0} → ${(a.pain || {})[z] || 0}`).join(' · ') }); }
   if (!same) after.push({ h: 'Проверим снова', text: fmtDate(a.nextDate) + ': тот же тест, сравним с сегодняшним' });
-  const checked = Object.keys(a.check || {}).length > 0 || sp.some(s => s.edited);
-  const note = 'Предварительная оценка движения по камере телефона, не медицинское заключение. ' + (checked ? 'Выводы проверены специалистом на приеме.' : 'Выводы о мышцах пока не проверены руками.');
+  // сноска по факту: сколько мышц из показанных проверено руками; тест из дома не выдаем за прием (аудит, п. 5)
+  const shownM = sp.filter(s => s.k !== 'OK'), nChecked = shownM.filter(s => (a.check || {})[s.key] !== undefined || s.edited).length, remote = /^По ссылке/.test(a.templateName || '');
+  const note = 'Предварительная оценка движения по камере телефона, не медицинское заключение. ' + (nChecked ? `Проверено руками: ${nChecked} из ${shownM.length}.` : remote ? 'Тест пройден дома по ссылке, руками пока не проверен.' : 'Выводы о мышцах пока не проверены руками.');
   // занятия дома: комплаенс и боль до/после (если клиент делал комплекс по ссылке)
   const hv = c.progress && c.progress.vas || []; if (hv.length) { const m = vasStats(hv, 30), pairs = hv.filter(r => Number.isFinite(r.pre) && Number.isFinite(r.post));
     sections.push({ h: 'Занятия дома, 30 дней', rows: [{ text: `Выполнено в ${m.activeDays} из 30 дней (${m.compliance}%)` }, ...(m.avgPre != null ? [{ text: `Боль в среднем: ${String(m.avgPre).replace('.', ',')} до занятия → ${String(m.avgPost).replace('.', ',')} после` }] : [])], chart: pairs.slice(-14) }); }
@@ -1421,6 +1422,7 @@ function cleanRemote(r) {
   return { ...base, ...cleanCns(r.vns, r.touch), protocol, comment: str(r.comment, 1000), quality: pick(r.quality, v => n(v) !== undefined ? Math.max(0, Math.min(100, Math.round(v))) : undefined), limits, pain: pick(r.pain, v => n(v) !== undefined ? Math.max(0, Math.min(10, Math.round(v))) : undefined), poses, setup };
 }
 async function addResult(c, r) {
+  if (r && r.beta) throw new Error('demo result');
   r = cleanRemote(r); const prev = (await byClient(c.id)).at(-1); const tpl = TEMPLATES.find(t => t[2].join() === (r.protocol || []).join());
   const a = { id: uid(), clientId: c.id, date: r.date || Date.now(), template: tpl ? tpl[0] : 'custom', templateName: 'По ссылке · ' + (tpl ? tpl[1] : 'свой протокол'), protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, ...(r.main ? { main: r.main } : {}),
     limits: r.limits || {}, pain: r.pain || {}, clientNote: r.comment || '', hyp: {}, plan: null, note: '', nextDate: (r.date || Date.now()) + 30 * DAY, prevId: prev ? prev.id : null, draft: true, source: 'home', ...(r.vns ? { vns: r.vns } : {}), ...(r.touch ? { touch: r.touch } : {}) };
@@ -1562,6 +1564,8 @@ export async function pullResults() {
     if (r && r.type === 'join') { const p0 = r.profile && typeof r.profile === 'object' ? r.profile : {};
       c.selfReport = { complaints: str(p0.complaints, 600), activity: str(p0.activity, 120), dob: /^\d{4}-\d{2}-\d{2}$/.test(p0.dob) ? p0.dob : '', sex: ['M', 'F'].includes(p0.sex) ? p0.sex : '', height: /^\d{2,3}$/.test(p0.height) ? p0.height : '', name: [str(p0.name, 40), str(p0.surname, 60)].filter(Boolean).join(' ') };
       await put('clients', c); r = r.result; if (!r || typeof r !== 'object') { done(item.p); continue; } }
+    // демо-результат без камеры («Пропустить видеотест») в кабинет не принимаем: это не замер
+    if (r && r.beta) { done(item.p); continue; }
     try { await addResult(c, r); got.push(c.name); done(item.p); } catch (e) { console.warn('relay item', e); } }
   if (bx) for (const item of boxes(bx).flatMap(id => data[id] || [])) {
     let m; try { m = await seal.decrypt(bx.key, item.data); } catch (e) { done(item.p); continue; }
@@ -1573,7 +1577,7 @@ export async function pullResults() {
       let c = m.token && (await all('clients')).find(x => x.remoteToken && x.remoteToken === m.token);
             if (!c) c = { id: uid(), created: Date.now(), remoteToken: m.token, notes: '' };
       Object.assign(c, { name: [pr.name, pr.surname].filter(Boolean).join(' ') || 'Без имени', dob: pr.dob || c.dob || '', sex: pr.sex || c.sex || '', height: pr.height || c.height || '', hand: pr.hand || c.hand || 'R', leg: pr.hand || c.leg || 'R', activity: pr.activity || c.activity || '', email: pr.email || c.email || '', complaints: pr.complaints || c.complaints || '' });
-      if (!m.result || typeof m.result !== 'object') throw new Error('no result');
+      if (!m.result || typeof m.result !== 'object' || m.result.beta) throw new Error('no result');
       await put('clients', c); await addResult(c, m.result); got.push(c.name); done(item.p); } catch (e) { console.warn('inbox item', e); } }
   if (got.length) track('result_pulled', { n: got.length }, false);
   return got;

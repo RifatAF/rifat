@@ -89,12 +89,13 @@ export function verdict(top, findings) {
 export function verdictCard(top, findings, empty = 'Явных перекосов не видно', skip = []) {
   const v = verdict(top, findings);
   if (!v.length) return `<div class="card empty">${ic('check')}<b>${empty}</b><span class="sub">Движение симметричное. Повтори тест через месяц.</span></div>`;
-  return `<div class="card" style="padding:4px var(--s4)">${v.map((x, i) => {
+  // камера мерит угол, а мышца выведена из него: метка «замер» стоит у факта, мышца подписана как вероятная причина (аудит, п. 2)
+  return `<div class="card" style="padding:4px var(--s4)"><p class="sub" style="font-size:13px;padding-top:12px">Мышцы ниже: вероятная причина того, что измерила камера. Проверит специалист руками.</p>${v.map((x, i) => {
     const s0 = top.find(s => s.k === x.k && !s.ambiguous), f = s0 && findings.find(f => f.muscles.some(m => m.id === s0.id && (m.side === s0.side || m.side === 'BOTH')));
     const measured = f && s0 && !s0.derived && !s0.byChain, edge = f && / \(на границе нормы\)/.test(f.observed);
     const why = x.why && !skip.includes(x.why) && !(i && v[i - 1].why === x.why) ? `<span>${esc(x.why)}</span>` : '';
     return `<div class="verdict-row"><span class="mark ${x.k}"></span><div style="flex:1;min-width:0"><div class="what"><b>${x.verb}</b> ${esc(x.what)}</div>
-      <div class="why">${measured ? '<span class="src">ИЗМЕРЕНО</span>' : '<span class="src hyp">ГИПОТЕЗА</span>'}${why}${edge ? '<span class="edge">на границе нормы</span>' : ''}</div></div></div>`; }).join('')}</div>`;
+      <div class="why">${measured ? '<span class="src">ЗАМЕР</span>' : '<span class="src hyp">ГИПОТЕЗА</span>'}${why}${edge ? '<span class="edge">на границе нормы</span>' : ''}</div></div></div>`; }).join('')}</div>`;
 }
 export const ex = id => C.exercises[id];
 /** Название упражнения со стороной: «Ягодичный мостик, слева». Сторону не прячем, иначе непонятно, какую ногу качать. */
@@ -203,7 +204,7 @@ export function muscleInfo(key, all, a, { pro = false, onWhat } = {}) {
   d.innerHTML = `<div><div class="row" style="gap:8px"><span class="mark ${x.k}"></span><span style="font-size:13px;font-weight:600;color:${TONE[x.k][5]}">${x.k === 'NT' ? NT_TEXT : x.k === 'OK' ? 'Без отклонений' : x.ambiguous ? 'Признаки противоречат' : TONE[x.k][0]}${x.derived ? ' · гипотеза' : ''}</span></div>
     <h2 style="margin-top:6px">${esc(m.name)} ${side === 'RIGHT' ? 'справа' : 'слева'}</h2>${act && !pro ? `<div style="font-size:14px;margin-top:2px"><b>${act.name}</b>: ${act.does}</div>` : ''}${m.zone ? `<div class="sub" style="font-size:14px">${esc(m.zone)}</div>` : ''}
     ${x.k === 'NT' ? `<p class="sub" style="font-size:15px;margin-top:10px">${NT_TEXT}: ни одно движение этого теста ее не проверяло. Это не значит, что с ней все в порядке.</p>` : x.k !== 'OK' ? `<p style="font-size:15px;line-height:1.45;margin-top:10px">Мышца ${TONE_WHY[x.k]}</p>` : `<p class="sub" style="font-size:15px;margin-top:10px">Этот тест ее проверял: отклонений не видно.</p>`}
-    ${why.length ? `<div style="margin-top:10px;font-size:14px;line-height:1.45"><span class="src">ИЗМЕРЕНО</span> ${why.slice(0, 2).map(esc).join('; ')}</div>` : x.byChain ? `<div style="margin-top:10px;font-size:14px"><span class="src hyp">ГИПОТЕЗА</span> по цепи «${esc(x.byChain)}»</div>` : ''}
+    ${why.length ? `<div style="margin-top:10px;font-size:14px;line-height:1.45"><span class="src">ЗАМЕР</span> ${why.slice(0, 2).map(esc).join('; ')}</div>` : x.byChain ? `<div style="margin-top:10px;font-size:14px"><span class="src hyp">ГИПОТЕЗА</span> по цепи «${esc(x.byChain)}»</div>` : ''}
     ${!['OK', 'NT'].includes(x.k) && m.benefit ? `<p class="sub" style="font-size:14px;line-height:1.45;margin-top:10px">${esc(m.benefit)}</p>` : ''}
     ${test ? `<details class="acc" style="margin-top:10px;font-size:14px;line-height:1.45"><summary style="font-weight:600">${pro ? 'Проверка руками' : 'Как проверить самому'}</summary><p style="margin-top:6px">${esc(test)}</p></details>` : ''}
     ${!['OK', 'NT'].includes(x.k) && onWhat ? `<button class="btn" id="mi_what" style="margin-top:14px">Что делать</button>` : ''}<button class="btn ghost" id="mi_x" style="margin-top:8px">Закрыть</button></div>`;
@@ -336,12 +337,13 @@ export async function prep() {
       <button class="link" id="cant" style="min-height:44px;font-size:14px">Не могу выполнить некоторые движения</button></details>
     ${device.inApp ? `<div class="card row" style="align-items:flex-start">${ic('info')}<span style="font-size:14px;line-height:1.4">Камера может не работать внутри соцсети. Меню «⋯» → «Открыть в браузере».</span></div>` : ''}
    </div>
-   <div class="dock">${swipeHTML('start', 'Начать тест')}${skipBtn()}</div></div>`);
+   <div class="dock"><button class="btn" id="start">${ic('play', 's')}Начать тест</button>${skipBtn()}</div></div>`);
   $('#back').onclick = () => tests().length ? map() : onboarding();
   $('#chg').onclick = () => prepSheet(); $('#cant').onclick = () => prepSheet(true);
   if ($('#skipTest')) $('#skipTest').onclick = () => { track('beta_skip_test'); saveTest(fakeResult(consumerProtocol())); analysisScreen(); };
   if (reopen) prepSheet(false, true);
-  bindSwipe($('#start'), async () => { const r = await launchTest(runTest, e => startError(e, () => launchTest(runTest, () => prep()))); if (r === null && $('#start')) prep(); });
+  // обычная кнопка вместо свайпа: свайп не находили и не понимали (аудит, п. 15)
+  let starting = false; $('#start').onclick = async () => { if (starting) return; starting = true; $('#start').disabled = true; const r = await launchTest(runTest, e => startError(e, () => launchTest(runTest, () => prep()))); if (r === null && $('#start')) prep(); };
 }
 // шторка настроек теста: режим, камера, сила, список шагов с «Не могу». После перерисовки prep() остается открытой
 function prepSheet(toSteps, keep) {
@@ -518,7 +520,7 @@ async function runProtocol0(protocol, opts = {}) {
   await voice.ensure(Object.values(SAY)); voice.warm(Object.values(SAY));
   const pre = opts.pre || {}; const units = sortUnits(protocol); const BAT = units.includes('fwd'); const steps = rowsOf(units.filter(u => !pre[u] || pre[u].alt)); const startedAt = Date.now();
   go(`<div class="cam"><video playsinline muted autoplay></video><canvas id="sil"></canvas><canvas id="sk"></canvas><div class="count" id="cnt"></div>
-   <div class="top"><div class="segs">${steps.map(() => '<div><b></b></div>').join('')}</div>${isBetaMode() && !(INV() || {}).cal ? '<button class="pill glass" id="betaSkip" style="margin-right:8px;color:#fff">Пропустить</button>' : ''}<button class="round glass" id="x" aria-label="Закончить тест">${ic('x')}</button></div>
+   <div class="top"><div class="segs">${steps.map(() => '<div><b></b></div>').join('')}</div>${canFake() && !(INV() || {}).cal ? '<button class="pill glass" id="betaSkip" style="margin-right:8px;color:#fff">Пропустить</button>' : ''}<button class="round glass" id="x" aria-label="Закончить тест">${ic('x')}</button></div>
    <div class="reps" id="reps" hidden><b id="ring">0</b><span id="repn">из 5</span></div>
    <div class="joint-tag" id="jt" hidden><small id="jtn">колено Л</small><b id="jtv">—</b></div>
    <div class="glass">
@@ -531,7 +533,11 @@ async function runProtocol0(protocol, opts = {}) {
    </div></div>`);
   let stop = false, skip = false; const cancel = () => { track('test_cancel'); (opts.onCancel || prep)(); }; const limits = {};
   track('test_start', { n: units.length }, false); const tStart = Date.now();
-  $('#x').onclick = () => { stop = true; try { saveRec(); } catch (e) {} stopCamera(); cancel(); }; $('#skipb').onclick = () => { skip = true; };
+  // крестик сразу обрывал тест: сначала спрашиваем, сколько уже пройдено (аудит, п. 9)
+  $('#x').onclick = () => { if ($('#xconf')) return; const done = [...app.querySelectorAll('.segs b')].filter(b => parseFloat(b.style.width) >= 99).length;
+    $('.cam').insertAdjacentHTML('beforeend', `<div class="cam-confirm" id="xconf" role="dialog" aria-modal="true" aria-labelledby="xct"><div><h2 id="xct">Прервать тест?</h2><p>Пройдено ${done} из ${steps.length}. Результат не сохранится.</p>
+      <button class="btn white" id="xgo">Продолжить тест</button><button class="btn ghost on-dark" id="xstop">Прервать</button></div></div>`);
+    $('#xgo').onclick = () => $('#xconf').remove(); $('#xstop').onclick = () => { stop = true; try { saveRec(); } catch (e) {} stopCamera(); cancel(); }; $('#xgo').focus(); }; $('#skipb').onclick = () => { skip = true; };
   let painStop = false; $('#painb').onclick = () => { painStop = true; skip = true; voice.say(''); track('step_skip', { c: 'pain' }, false); };
   if ($('#betaSkip')) $('#betaSkip').onclick = () => { stop = true; stopCamera(); voice.say(''); track('beta_skip_test', { c: 'camera' }); opts._skipAll({ ...fakeResult(units), poses: {}, vns: opts.vns || null, touch: passiveOn() ? touchSummary() : null }); };
   const video = app.querySelector('video'); const sk = $('#sk');
@@ -773,7 +779,9 @@ async function runProtocol0(protocol, opts = {}) {
 // ---------- бета: пропустить видеотест ----------
 // Только в бета-режиме: правдоподобный результат без камеры, чтобы тестировщики могли смотреть карту, кабинет и отчеты сколько угодно раз.
 const isBetaMode = () => configSync().beta !== false;
-const skipBtn = () => isBetaMode() && !(INV() || {}).cal ? '<button class="btn ghost" id="skipTest" style="margin-top:8px">Пропустить видеотест (бета)</button>' : '';
+// демо-результат без камеры только для владельца и локальной проверки: у клиента он выглядел как настоящий замер (аудит, п. 1)
+const canFake = () => { const u = meSync(); return isBetaMode() && (!!(u && u.admin) || /^(localhost|127\.)/.test(location.hostname)); };
+const skipBtn = () => canFake() && !(INV() || {}).cal ? '<button class="btn ghost" id="skipTest" style="margin-top:8px">Пропустить видеотест (бета)</button>' : '';
 function fakeResult(protocol) {
   const j = (v, k = 1) => Math.round((v + (Math.random() - .5) * 2 * k) * 10) / 10, p = Array.isArray(protocol) && protocol.length ? protocol : ['stand', 'ohs_front', 'sls', 'side'];
   const v2 = p.includes('fwd') ? { fwd: { quality: 'GOOD', f: { fwd_reach: j(.6, .2), fwd_asym: j(3, 2), fwd_asym_side: 1 } }, slb: { quality: 'GOOD', f: { slb_drop_r: j(4, 2), slb_drop_l: j(1.5, 1), slb_sway_r: j(3, 1), slb_sway_l: j(2, 1) } }, trot: { quality: 'GOOD', f: { trot_r: j(38, 6), trot_l: j(45, 6), trot_asym: j(-7, 4) } }, reach: { quality: 'GOOD', f: { reach_r: j(165, 6), reach_l: j(170, 5), reach_asym: j(5, 3), reach_shrug: j(.07, .03), reach_shrug_side: 1 } }, iap: { quality: 'GOOD', f: { rib_flare: j(8, 4), apical_mm: j(9, 4) } } } : {};
@@ -1062,8 +1070,9 @@ export function iapRows(f) {
 }
 function iapCard(a) {
   const rows = iapRows(a.f || {}), m = rows.filter(r => r.ok !== null); if (!m.length) return '';
-  const bad = m.filter(r => !r.ok).length;
-  return `<div class="pad" style="margin-top:16px"><div class="card"><div class="row" style="justify-content:space-between"><div><div class="eyebrow">Дыхание и давление в животе</div><h3 style="margin-top:4px;color:${bad ? 'var(--short-t)' : 'var(--ok-t)'}">${bad ? 'Давление не держится' : 'Давление держится'}</h3></div>
+  // зеленое «держится» только если измерены все три признака; иначе честно «оценено частично» (аудит, п. 6)
+  const bad = m.filter(r => !r.ok).length, part = !bad && m.length < rows.length;
+  return `<div class="pad" style="margin-top:16px"><div class="card"><div class="row" style="justify-content:space-between"><div><div class="eyebrow">Дыхание и давление в животе</div><h3 style="margin-top:4px;color:${bad ? 'var(--short-t)' : part ? 'var(--text)' : 'var(--ok-t)'}">${bad ? 'Давление не держится' : part ? `Оценено ${m.length} из ${rows.length}, отклонений нет` : 'Давление держится'}</h3></div>
     <details class="q"><summary aria-label="Что это">?</summary><div>Диафрагма, мышцы живота и тазового дна держат давление в животе, как корсет изнутри (Коларж). Если вдох делают плечи и шея, а не живот, корсет не работает (Левит). Тогда поясница проваливается под нагрузкой (Макгилл).</div></details></div>
     ${rows.map(r => `<div class="row" style="margin-top:12px;gap:10px"><span style="width:22px;height:22px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;background:${r.ok === null ? 'var(--surface-2)' : r.ok ? 'var(--ok-s)' : 'var(--short-s)'};color:${r.ok === null ? 'var(--faint)' : r.ok ? 'var(--ok-t)' : 'var(--short-t)'}">${r.ok === null ? '·' : r.ok ? ic('check', 's') : '!'}</span><span style="flex:1;font-size:15px">${r.name}</span><span style="font-size:14px;color:${r.ok === false ? 'var(--short-t)' : 'var(--sub)'};text-align:right">${r.val}</span></div>`).join('')}</div></div>`;
 }
@@ -1098,7 +1107,7 @@ export function map() {
    ${!SHARED && INV() ? sentBanner(t) + retestCard() : ''}
    ${!SHARED && SHOW_T && tests().length && SHOW_T !== tests().at(-1).date ? `<div class="pad" style="padding-top:12px"><button class="card row" id="toLast" style="width:100%;border:0;font:inherit;font-size:14px;cursor:pointer;color:inherit">${ic('info', 's')}<span style="flex:1;text-align:left">Это тест из истории</span><b style="color:var(--brand)">К последнему</b></button></div>` : ''}
    ${SHARED ? `<div class="pad" style="padding-top:12px"><div class="card row" style="font-size:14px">${ic('info', 's')}<span>Это результат по ссылке. Ваши данные не меняются.</span></div></div>` : ''}
-   <div class="pad row" style="padding-top:16px;align-items:flex-start"><div style="flex:1;min-width:0"><div class="eyebrow">${new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })} · ${nSteps} ${plural3(nSteps, 'шаг', 'шага', 'шагов')}${qa != null ? ' · качество ' + qa : ''}</div><h1 style="margin-top:6px">${SHARED ? 'Карта тела' : 'Ваша карта тела'}</h1></div>${SHARED ? '' : '<button class="pill" id="cab" style="margin-right:8px">Мой кабинет</button>'}<button class="round" id="set" aria-label="Настройки">${ic('settings')}</button></div>
+   <div class="pad row" style="padding-top:16px;align-items:flex-start"><div style="flex:1;min-width:0"><div class="eyebrow">${new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })} · ${nSteps} ${plural3(nSteps, 'шаг', 'шага', 'шагов')}${qa != null ? ' · качество ' + qa : ''}</div><h1 style="margin-top:6px">${SHARED ? 'Карта тела' : 'Ваша карта тела'}</h1></div>${SHARED ? '' : '<button class="pill" id="cab" style="margin-right:8px">История</button>'}<button class="round" id="set" aria-label="Настройки">${ic('settings')}</button></div>
    ${days >= 7 && !SHARED ? `<div class="pad"><button class="row-link" id="re" style="color:var(--focus);font-weight:600"><span>Прошла неделя: пройдите быстрый тест и сравните</span>${ic('chevron-right', 's')}</button></div>` : ''}
    <div class="pad" style="margin-top:12px"><div class="card" style="border-radius:var(--r-xl);padding:12px 8px 8px">
      <div class="seg" style="margin:0 4px"><button id="vf" class="${!BACK && !MODE3D ? 'on' : ''}">Спереди</button><button id="vb" class="${BACK && !MODE3D ? 'on' : ''}">Сзади</button>${device.webgl2 ? `<button id="v3" class="${MODE3D ? 'on' : ''}">3D</button>` : ''}</div>
@@ -1125,7 +1134,7 @@ export function map() {
   const renderSel = () => { const x = all.find(q => q.key === SEL); const box = $('#selbox'); if (!box) return;
     box.innerHTML = x ? `<div class="group fade" style="padding:var(--s4);background:var(--surface-2)"><div class="row" style="gap:8px"><span class="mark ${x.k}"></span><span style="font-size:13px;font-weight:600;color:${TONE[x.k][5]}">${x.ambiguous ? 'Неоднозначно' : TONE[x.k][0]}</span></div>
         <div style="font-size:17px;font-weight:700;margin-top:6px;line-height:1.25">${title(x)}</div><div style="font-size:13px;color:var(--sub);margin-top:2px">${tech(x)}</div>
-        <div class="why" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:13px;color:var(--sub)">${seen(a, x)[0] ? `<span class="src">ИЗМЕРЕНО</span><span>${esc(seen(a, x)[0].replace(' (на границе нормы)', ''))}</span>${/на границе нормы/.test(seen(a, x)[0]) ? '<span class="edge">на границе нормы</span>' : ''}` : x.k === 'OK' ? 'Здесь все в порядке' : '<span class="src hyp">ГИПОТЕЗА</span><span>Напрямую не измерено</span>'}</div>
+        <div class="why" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:13px;color:var(--sub)">${seen(a, x)[0] ? `<span class="src">ЗАМЕР</span><span>${esc(seen(a, x)[0].replace(' (на границе нормы)', ''))}</span>${/на границе нормы/.test(seen(a, x)[0]) ? '<span class="edge">на границе нормы</span>' : ''}` : x.k === 'OK' ? 'Здесь все в порядке' : '<span class="src hyp">ГИПОТЕЗА</span><span>Напрямую не измерено</span>'}</div>
         ${x.k !== 'OK' ? `<button class="btn line" id="what" style="height:48px;margin-top:12px">Что делать ${ic('chevron-right', 's')}</button>` : ''}</div>` : '';
     const w = $('#what'); if (w) w.onclick = () => muscle(SEL); };
   const pick = (k, from3d) => { SEL = k; if (!all.some(q => q.key === k)) { const [id, sd] = k.split(':'), b = spotFor(id, sd); if (b) all.push(b); }
@@ -1322,7 +1331,7 @@ export function muscle(key) {
    <div class="pad" style="display:flex;flex-direction:column;gap:var(--s4);padding-bottom:var(--s4)">
     <div class="row" style="gap:8px"><span class="mark ${s.k}"></span><span style="font-size:13px;font-weight:600;color:${TONE[s.k][5]}">${TONE[s.k][0]}</span></div>
     <div><h1 style="font-size:26px">${title(s)}</h1><div style="font-size:14px;color:var(--sub);margin-top:4px">${tech(s)}</div></div>
-    ${num ? `<div><div class="measure"><b>${num[1]}</b><u>${num[2] || ''}</u></div><div class="why" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:13px;color:var(--sub)"><span class="src">ИЗМЕРЕНО</span><span>${esc(obs[0].replace(' (на границе нормы)', ''))}</span>${/на границе нормы/.test(obs[0]) ? '<span class="edge">на границе нормы</span>' : ''}</div></div>`
+    ${num ? `<div><div class="measure"><b>${num[1]}</b><u>${num[2] || ''}</u></div><div class="why" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:13px;color:var(--sub)"><span class="src">ЗАМЕР</span><span>${esc(obs[0].replace(' (на границе нормы)', ''))}</span>${/на границе нормы/.test(obs[0]) ? '<span class="edge">на границе нормы</span>' : ''}</div></div>`
       : `<div class="why" style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--sub)"><span class="src hyp">ГИПОТЕЗА</span><span>Напрямую не измерено</span></div>`}
     <div class="card"><div class="eyebrow">Что происходит</div><p style="font-size:16px;line-height:1.45;margin-top:8px">${why}</p></div>
     <details class="acc"><summary style="font-weight:600;font-size:15px">Почему так${s.cause ? ` · ${LAW[s.cause.law]}` : ''}</summary>
@@ -1357,6 +1366,11 @@ function vasSheet(title, init = 0, skip = 'Пропустить', cancel = false
 export async function workout(ids, reasons = {}) {
   const pre = await vasSheet('Оцените уровень боли или дискомфорта прямо сейчас (0–10)', 0, 'Пропустить и начать', true);
   if (pre === undefined) return; // закрыли окно: остаемся на экране, тренировка не начинается
+  // при сильной боли комплекс сам не запускаем: объясняем и даем безопасный шаг (аудит, п. 16)
+  if (pre >= 7) { track('workout_pain_block', { v: pre }, false);
+    go(`<div class="scr fade"><div class="empty" style="flex:1;justify-content:center">${ic('info')}<h1>Сегодня без комплекса</h1>
+      <p class="sub">Боль ${pre} из 10 слишком сильная для упражнений. Отдохните и покажитесь врачу или специалисту, если боль не проходит или нарастает.</p></div>
+      <div class="dock"><button class="btn" id="pbk">Понятно</button></div></div>`); $('#pbk').onclick = () => (tests().length ? map() : clientHome()); return; }
   const list = ids.map(ex).filter(Boolean); let i = 0, closed = false, doneN = 0; voice.unlock(); keepAwake(true);
   const finish = () => done(list, pre, doneN);
   const run = async () => {
@@ -1486,7 +1500,7 @@ async function reportView(code) {
     r = await seal.decrypt(k, await res.text()); if (typeof r.img !== 'string' || !r.img.startsWith('data:image/jpeg;base64,')) throw new Error('bad'); } catch (e) { r = null; }
   if (!r) { go(`<div class="scr pad fade" style="justify-content:center;gap:14px"><h1>Отчет не открылся</h1><p class="sub">Ссылка устарела (отчет хранится 90 дней) или скопирована не целиком. Попросите специалиста прислать ее снова.</p><button class="btn" id="tst">Пройти свой тест движения</button></div>`); $('#tst').onclick = () => { history.replaceState(null, '', location.pathname); onboarding(); }; return; }
   const str = (v, n) => esc(String(v || '').slice(0, n)); saveReport(code, r); const exIds = (Array.isArray(r.ex) ? r.ex : []).filter(id => ex(id));
-  go(`<div class="fade" style="padding-bottom:32px"><div class="pad row" style="padding-top:12px"><span style="flex:1"></span><button class="pill" id="rcab">Мой кабинет</button></div><div class="pad" style="padding-top:4px"><div class="eyebrow">Биомеханический паспорт</div><h1 style="margin-top:6px">${str(r.name, 80)}</h1><p class="sub" style="font-size:14px">${str(r.date, 40)}${r.author ? ' · ' + str(r.author, 80) : ''}</p></div>
+  go(`<div class="fade" style="padding-bottom:32px"><div class="pad row" style="padding-top:12px"><span style="flex:1"></span><button class="pill" id="rcab">История</button></div><div class="pad" style="padding-top:4px"><div class="eyebrow">Биомеханический паспорт</div><h1 style="margin-top:6px">${str(r.name, 80)}</h1><p class="sub" style="font-size:14px">${str(r.date, 40)}${r.author ? ' · ' + str(r.author, 80) : ''}</p></div>
     <div class="pad" style="margin-top:12px"><img src="${r.img}" alt="Отчет" style="width:100%;display:block;border-radius:16px"></div>
     <div class="pad" style="margin-top:14px;display:flex;flex-direction:column;gap:8px">${exIds.length ? `<button class="btn" id="rex">${ic('play', 's')}Начать упражнения · ${totalMin(exIds.map(ex))} мин</button>` : ''}<a class="btn${exIds.length ? ' line' : ''}" id="rdl" href="${r.img}" download="bodypassport-report.jpg" style="text-decoration:none">${ic('download', 's')}Сохранить картинку</a>
     <p class="sub" style="font-size:12px;text-align:center">Отчет сохранен в вашем кабинете на этом телефоне. Он зашифрован, ключ есть только в ссылке.</p></div></div>`);
@@ -1516,7 +1530,7 @@ export function clientHome() {
     .filter(([, a, b]) => Number.isFinite(a) && Number.isFinite(b)).map(([n, a, b]) => { const better = Math.abs(b) < Math.abs(a) - .5, worse = Math.abs(b) > Math.abs(a) + .5;
       return `<div class="row" style="font-size:15px"><span style="flex:1">${n}</span><span class="num" style="color:var(--sub)">${Math.abs(a).toFixed(1)}°</span><span style="margin:0 8px;color:var(--faint)">→</span><b class="num" style="color:${better ? 'var(--ok-t)' : worse ? 'var(--over-t)' : 'var(--text)'}">${Math.abs(b).toFixed(1)}°</b></div>`; }).join('') : '';
   go(`<div class="scr fade" style="padding-bottom:110px"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><span style="flex:1"></span><button class="round" id="cset" aria-label="Настройки">${ic('settings')}</button></div>
-   <div class="pad" style="padding-top:4px">${PROFILE() && PROFILE().name ? `<div class="eyebrow">${esc(PROFILE().name)}</div>` : ''}<h1 style="margin-top:6px">Мой кабинет</h1></div>
+   <div class="pad" style="padding-top:4px">${PROFILE() && PROFILE().name ? `<div class="eyebrow">${esc(PROFILE().name)}</div>` : ''}<h1 style="margin-top:6px">История</h1></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s3)">
     ${spec || next ? card('Мой специалист', `${spec ? `<div class="row" style="gap:12px"><span class="avatar">${esc(spec.slice(0, 1).toUpperCase())}</span><div style="flex:1;min-width:0"><b style="font-size:17px">${esc(spec)}</b>${rep && rep.contact ? `<div class="sub" style="font-size:14px;user-select:text">${esc(rep.contact)}</div>` : ''}</div></div>` : ''}
       ${next ? `<div class="row" style="gap:10px;font-size:15px">${ic('calendar', 's')}<span style="flex:1">Повторный тест</span><b>${fmtD(next)}</b></div>` : ''}

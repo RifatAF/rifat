@@ -167,6 +167,8 @@ const FLAGS = [
   ['cardio', 'Головокружение, обмороки, проблемы с сердцем или давлением'],
   ['fever', 'Температура, общее недомогание, резкая потеря веса'],
   ['preg', 'Беременность'],
+  ['onco', 'Онкологическое заболевание сейчас или за последние 5 лет'],
+  ['osteo', 'Остеопороз или переломы от небольшой нагрузки'],
 ];
 const RF_DAYS = 30;
 export const safetyOk = () => { const t = +localStorage.getItem('bp_rf') || 0; return Date.now() - t < RF_DAYS * 864e5; };
@@ -189,6 +191,8 @@ export function safetyScreen(cont, back, booking) {
       <p class="sub">${urgent ? 'Онемение в паху и проблемы с мочеиспусканием при боли в спине требуют срочного осмотра. Обратись в неотложную помощь.' : 'С такими признаками тест движения сейчас может навредить или показать неверную картину. Покажись врачу, а когда он разрешит нагрузку, возвращайся.'}</p></div>
       <div class="dock">${urgent ? '' : `<a class="btn" style="text-decoration:none" href="${booking || 'https://t.me/BodyPassport_bot'}" target="_blank">Спросить специалиста</a>`}
       <button class="btn ghost" id="sre">Я ошибся в ответах</button></div></div>`);
-    document.getElementById('sre').onclick = () => safetyScreen(cont, back, booking);
+    // стоп не снимается одним нажатием: сначала явное подтверждение, потом снова весь список (аудит, п. 16)
+    document.getElementById('sre').onclick = e => { const b = e.currentTarget; b.insertAdjacentHTML('beforebegin', `<label class="chk-row" style="text-align:left"><input type="checkbox" class="check" id="sreok"><span>Я отметил пункт по ошибке и проверю ответы еще раз</span></label>`);
+      b.textContent = 'Проверить ответы'; b.disabled = true; document.getElementById('sreok').onchange = x => { b.disabled = !x.target.checked; }; b.onclick = () => safetyScreen(cont, back, booking); };
   };
 }
