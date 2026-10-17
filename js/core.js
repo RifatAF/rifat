@@ -53,9 +53,11 @@ const MALE = /dmitr|yuri|юрий|maxim|максим|pavel|павел/i;
 function sysSay(text, done) { try { if (!window.speechSynthesis) return false; const vs = speechSynthesis.getVoices().filter(v => v.lang.startsWith('ru') && MALE.test(v.name) && !/female|жен/i.test(v.name));
   if (!vs.length) { try { track('voice_missing', { c: String(text).slice(0, 60) }, false); } catch (e) {} return false; }
   speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ru-RU'; u.voice = vs[0]; if (done) u.onend = done; speechSynthesis.speak(u); return true; } catch (e) { return false; } }
-addEventListener('pointerup', () => voice.unlock(), { capture: true, passive: true });
-addEventListener('touchend', () => voice.unlock(), { capture: true, passive: true });
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && voice._ac && voice._ac.state !== 'running') voice._ac.resume().catch(() => {}); });
+// звук держим только во время теста и комплекса (voice.armed): иначе телефон отдает приложению аудиосессию
+// и приглушает чужую музыку и видео (Ютуб в фоне) от любого касания
+addEventListener('pointerup', () => { if (voice.armed) voice.unlock(); }, { capture: true, passive: true });
+addEventListener('touchend', () => { if (voice.armed) voice.unlock(); }, { capture: true, passive: true });
+document.addEventListener('visibilitychange', () => { if (voice.armed && document.visibilityState === 'visible' && voice._ac && voice._ac.state !== 'running') voice._ac.resume().catch(() => {}); });
 export const voice = {
   async init() { voiceIdx = await fetch('voice/index.json', { cache: 'no-store' }).then(r => r.json()).catch(() => voiceIdx || {}); },
   /** Проверка перед тестом: все фразы есть в списке записей; если нет — перечитать список. */
@@ -65,8 +67,14 @@ export const voice = {
   // вызывать из обработчика нажатия: разблокирует звук на весь тест
   // iPhone: звук разблокируется только внутри касания, а WebAudio по умолчанию молчит при беззвучном режиме (переключатель сбоку).
   // Поэтому: сессия «playback» (iOS 17+, играет и в беззвучном), разблокировка на каждом касании, общий <audio> как запасной путь
-  unlock() { try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch (e) {}
-    try { if (!this._ac) { this._ac = new (window.AudioContext || window.webkitAudioContext)(); this._ac.onstatechange = () => { if (this._ac.state !== 'running' && document.visibilityState === 'visible') this._ac.resume().catch(() => {}); }; }
+  armed: false, keep: false,
+  /** Тест или комплекс закончился: отдать звук обратно телефону, чужая музыка снова играет в полную громкость. */
+  release() { this.armed = false; if (audio) { audio.stop(); audio = null; } try { speechSynthesis.cancel(); } catch (e) {}
+    try { if (this._ac && this._ac.state === 'running') this._ac.suspend().catch(() => {}); } catch (e) {}
+    try { if (shared) { shared.pause(); shared.removeAttribute('src'); shared.load(); } } catch (e) {}
+    try { if (navigator.audioSession) navigator.audioSession.type = 'ambient'; } catch (e) {} },
+  unlock() { this.armed = true; try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch (e) {}
+    try { if (!this._ac) { this._ac = new (window.AudioContext || window.webkitAudioContext)(); this._ac.onstatechange = () => { if (this.armed && this._ac.state !== 'running' && document.visibilityState === 'visible') this._ac.resume().catch(() => {}); }; }
       if (this._ac.state !== 'running') this._ac.resume().catch(() => {});
       const b = this._ac.createBuffer(1, 1, 22050), s = this._ac.createBufferSource(); s.buffer = b; s.connect(this._ac.destination); s.start(0); } catch (e) {}
     if (unlocked) return; unlocked = true;
@@ -191,7 +199,7 @@ export async function startCamera(video) {
   video.style.transform = cam.back ? 'none' : 'scaleX(-1)'; video.style.objectFit = 'contain';
   cam.running = true; keepAwake(true); loop();
 }
-export function stopCamera() { keepAwake(false); cam.running = false; if (cam.stream) cam.stream.getTracks().forEach(t => t.stop()); cam.stream = null; }
+export function stopCamera() { keepAwake(false); setTimeout(() => { if (!cam.running && !voice.keep) voice.release(); }, 4000); cam.running = false; if (cam.stream) cam.stream.getTracks().forEach(t => t.stop()); cam.stream = null; }
 let lastTs = -1, fpsT = performance.now(), fpsN = 0, loopGen = 0;
 // Фильтр One Euro (Casiez и др., CHI 2012): на медленных движениях сильно гасит дрожание точек, на быстрых почти не запаздывает.
 // Сырые точки модели «дрожат» на 1–2 % кадра даже у неподвижного человека: скелет трясся, а углы и отрыв пятки шумели.
