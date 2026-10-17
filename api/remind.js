@@ -1,7 +1,7 @@
 // Напоминания специалисту: кабинет присылает расписание (дата, тип, имя клиента, без данных о здоровье),
 // раз в день по расписанию Vercel Cron бот пишет в Telegram, что завтра ретест или консультация.
 // Вход через Google: напоминания видны только в приложении (экран «Сегодня» и календарь).
-import { put, get, del, list } from '@vercel/blob';
+import { put, get, del, list } from './_store.js';
 import { currentUser, loadUser, effectivePlan, loadApp } from './_session.js';
 
 const KINDS = { retest: 'Повторный тест', consult: 'Консультация' };

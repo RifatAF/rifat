@@ -2,7 +2,7 @@
 // ключ живет во фрагменте ссылки (#...), который браузер не отправляет на сервер: сервер хранит только шифр.
 // Создать может вошедший специалист (лимит в сутки), открыть может любой, у кого есть ссылка. Хранится 90 дней.
 import crypto from 'node:crypto';
-import { put, get, list } from '@vercel/blob';
+import { put, get, list } from './_store.js';
 import { currentUser } from './_session.js';
 
 const ID = /^[A-Za-z0-9_-]{22}$/;

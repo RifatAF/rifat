@@ -10,7 +10,9 @@ const EVENTS = new Set(['app_open', 'plan_minutes', 'onb_done', 'login_ok', 'saf
   'pro_click', 'vas_done', 'report_link', 'progress_sent',
   'paywall_view', 'limit_hit', 'trial_end', 'trial_end_view', 'balance_pay',
   // поведение: экран (сколько секунд, сколько нажатий, нажатия мимо кнопок), жест «назад»
-  'screen', 'back', 'device']);
+  'screen', 'back', 'device',
+  // результат и обновления: «узнаете себя», блок комплекса при боли, плашка обновления
+  'main_recognize', 'workout_pain_block', 'update_offer']);
 let sid; try { sid = sessionStorage.getItem('bp_sid'); if (!sid) { sid = Math.random().toString(36).slice(2, 12); sessionStorage.setItem('bp_sid', sid); } } catch (e) { sid = Math.random().toString(36).slice(2, 12); }
 const t0 = Date.now(), q = [], seen = new Set(); let errs = 0;
 const role = () => { try { return localStorage.getItem('bp_mode') === 'pro' ? 'pro' : 'client'; } catch (e) { return 'client'; } };
