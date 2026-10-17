@@ -1432,7 +1432,7 @@ export async function workout(ids, reasons = {}) {
     go(`<div class="scr fade"><div class="empty" style="flex:1;justify-content:center">${ic('info')}<h1>Сегодня без комплекса</h1>
       <p class="sub">Боль ${pre} из 10 слишком сильная для упражнений. Отдохните и покажитесь врачу или специалисту, если боль не проходит или нарастает.</p></div>
       <div class="dock"><button class="btn" id="pbk">Понятно</button></div></div>`); $('#pbk').onclick = () => (tests().length ? map() : clientHome()); return; }
-  const list = ids.map(ex).filter(Boolean); let i = 0, closed = false, doneN = 0; voice.unlock(); keepAwake(true);
+  const list = ids.map(ex).filter(Boolean); let i = 0, closed = false, doneN = 0; voice.unlock(); voice.keep = true; keepAwake(true);
   const finish = () => done(list, pre, doneN);
   const run = async () => {
     if (closed) return; if (i >= list.length) return finish();
@@ -1471,7 +1471,7 @@ export async function workout(ids, reasons = {}) {
     const bindCam = () => { if ($('#excam')) $('#excam').onclick = () => { localStorage.setItem('bp_excam', '1'); $('#cambox').innerHTML = camHtml(); bindCam(); camStart(); }; };
     if (rk) { bindCam(); if ($('#exv')) camStart(); }
     const hush = () => { voice.say(''); try { speechSynthesis.cancel(); } catch (er) {} };
-    $('#x').onclick = () => { closed = true; hush(); camOff(); keepAwake(false); if (doneN) finish(); else map(); };
+    $('#x').onclick = () => { closed = true; hush(); camOff(); keepAwake(false); voice.keep = false; voice.release(); if (doneN) finish(); else map(); };
     $('#pv').onclick = () => { token.dead = true; hush(); i = Math.max(0, i - 1); run(); };
     $('#nx').onclick = () => { token.dead = true; hush(); mark(e); doneN++; i++; run(); };
     $('#pp').onclick = () => { playing = !playing; $('#pp').innerHTML = ic(playing ? 'pause' : 'play'); $('#pp').setAttribute('aria-label', playing ? 'Пауза' : 'Продолжить'); };
@@ -1509,7 +1509,7 @@ export async function workout(ids, reasons = {}) {
 function camOff() { cam.onFrame = null; if (cam.running) stopCamera(); }
 function mark(e) { const d = JSON.parse(localStorage.getItem(K('bp_done')) || '[]'); d.push({ id: e.id, t: Date.now() }); localStorage.setItem(K('bp_done'), JSON.stringify(d.slice(-500))); backupSoon(10000); }
 function streak() { const days = new Set(JSON.parse(localStorage.getItem(K('bp_done')) || '[]').map(x => new Date(x.t).toDateString())); let n = 0; const d = new Date(); if (!days.has(d.toDateString())) d.setDate(d.getDate() - 1); while (days.has(d.toDateString())) { n++; d.setDate(d.getDate() - 1); } return n; }
-async function done(list, pre = null, n = list.length) { camOff(); keepAwake(false); const s = Math.max(1, streak());
+async function done(list, pre = null, n = list.length) { camOff(); keepAwake(false); voice.keep = false; setTimeout(() => { if (!cam.running) voice.release(); }, 6000); const s = Math.max(1, streak());
   const post = await vasSheet('Оцените уровень боли после упражнений (0–10)', pre ?? 0);
   const rec = { t: Date.now(), pre: pre ?? undefined, post: post ?? undefined, n, all: list.length }; const log = vasSave(rec, K('bp_vas'));
   const dl = vasDelta(pre, post); track('vas_done', { n, d: dl ?? undefined }, false);

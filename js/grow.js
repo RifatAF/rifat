@@ -151,7 +151,7 @@ export async function installNow(done) {
 /** Строка «Установить приложение» с одной кнопкой. */
 export function installCard() {
   if (!canInstall() || LS.get('bp_inst') === 'done') return '';
-  return `<div class="pad" style="margin-top:16px"><div class="card row" id="inst" style="gap:12px;padding:12px 14px"><img src="icons/bp4-192.png" alt="" width="40" height="40" style="border-radius:10px;flex:none"><b style="flex:1;font-size:15px">Приложение на телефон</b><button class="pill" id="insty" style="background:var(--brand);color:#fff">Установить</button></div></div>`;
+  return `<div class="pad" style="margin-top:16px"><div class="card row" id="inst" style="gap:12px;padding:12px 14px"><img src="icons/bp5-192.png" alt="" width="40" height="40" style="border-radius:10px;flex:none"><b style="flex:1;font-size:15px">Приложение на телефон</b><button class="pill" id="insty" style="background:var(--brand);color:#fff">Установить</button></div></div>`;
 }
 export function bindInstall() {
   const box = document.getElementById('inst'); if (!box) return; track('install_shown');
