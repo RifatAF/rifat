@@ -37,19 +37,21 @@ const FS = `precision highp float;uniform vec2 res;uniform float time,rad,flash,
 float ball(vec2 q,vec2 c,float r){vec2 d=q-c;return r*r/max(dot(d,d),1.);}
 vec2 grad(vec2 q,vec2 c,float r){vec2 d=q-c;float l=dot(d,d)+r*r*.6;return -2.*r*r*d/(l*l);}
 void main(){vec2 q=gl_FragCoord.xy;q.y=res.y-q.y;vec2 uv=q/res;
- vec3 bg=mix(vec3(.024,.075,.09),vec3(.04,.16,.18),smoothstep(1.2,0.,length(uv-vec2(.5,.45))*1.6));
- float a=sin(uv.x*3.+time*.35)*sin(uv.y*2.2-time*.27);bg+=vec3(.0,.10,.08)*smoothstep(.2,1.,a)*.6;
+ vec3 bg=mix(vec3(.024,.05,.12),vec3(.09,.12,.33),smoothstep(1.2,0.,length(uv-vec2(.5,.45))*1.6));
+ float a=sin(uv.x*3.+time*.35)*sin(uv.y*2.2-time*.27);bg+=vec3(.16,.08,.22)*smoothstep(.2,1.,a)*.5;
  float f=ball(q,b0,rad)+ball(q,b1,rad*.78)+ball(q,b2,rad*.6)+ball(q,b3,rad*.45);
- vec3 col=bg+vec3(.17,.83,.55)*min(f,1.)*.18;
+ vec3 col=bg+vec3(.55,.42,1.)*min(f,1.)*.18;
  vec2 g=grad(q,b0,rad)+grad(q,b1,rad*.78)+grad(q,b2,rad*.6)+grad(q,b3,rad*.45);
  // нормаль жидкой поверхности по градиенту поля метаболов; край сглажен, без «лесенки»
  float e=clamp((f-1.)/(f+.6),0.,1.);vec3 n=normalize(vec3(-g*rad*.9,e*1.2+.25));vec3 L=normalize(vec3(-.45,-.6,.65));
  float dif=max(dot(n,L),0.),sp=pow(max(dot(reflect(-L,n),vec3(0.,0.,1.)),0.),28.),rim=pow(1.-n.z,2.);
- vec3 liq=mix(vec3(.04,.36,.30),vec3(.35,.95,.70),dif)+sp*.85+rim*vec3(.3,1.,.75)*.55;
+ // капля в цветах бренда: фиолетовый #6C63FF в тени, коралловый #FF7A45 на свету
+ vec2 o=(q-b0)/rad;vec3 base=mix(vec3(.42,.39,1.),vec3(1.,.48,.27),clamp(.5-(o.x+o.y)*.45,0.,1.));
+ vec3 liq=base*(.78+.3*dif)+sp*.7+rim*vec3(.95,.6,1.)*.3;
  col=mix(col,liq,smoothstep(.9,1.1,f));
  vec2 st=vec2(res.x*.86,res.y*.12),d=q-st;float r=length(d)/(res.x*.05);float ang=atan(d.y,d.x);
  float rays=pow(abs(cos(ang*2.)),36.)*exp(-r*.35)+pow(abs(cos(ang*2.+.785)),60.)*exp(-r*.6);
- col+=flash*(vec3(1.,.98,.9)*exp(-r*r*1.6)+vec3(.7,1.,.9)*rays*.9);
+ col+=flash*(vec3(1.,.97,.95)*exp(-r*r*1.6)+vec3(1.,.75,.65)*rays*.9);
  gl_FragColor=vec4(col*fade,1.);}`;
 /** Сцена загрузчика. WebGL, при его отсутствии — Canvas 2D (простая капля). */
 export function createLiquidScene(canvas) {
@@ -65,8 +67,8 @@ export function createLiquidScene(canvas) {
         dispose() { try { gl.flush(); gl.deleteBuffer(b); gl.deleteProgram(pr); gl.getExtension('WEBGL_lose_context')?.loseContext(); } catch (e) {} } }; } }
   const ctx = canvas.getContext('2d');
   return { kind: '2d', draw({ pts, r, flash = 0, fade = 1 }) { const k = canvas.width / (canvas.clientWidth || 1), W = canvas.clientWidth, H = canvas.clientHeight; ctx.setTransform(k, 0, 0, k, 0, 0);
-      ctx.globalAlpha = 1; ctx.fillStyle = '#06131A'; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = fade;
-      pts.forEach((p, i) => { const rr = r * [1, .78, .6, .45][i]; const g = ctx.createRadialGradient(p.x - rr * .3, p.y - rr * .3, 1, p.x, p.y, rr); g.addColorStop(0, '#C9FFE6'); g.addColorStop(1, '#14A07A'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, rr, 0, 7); ctx.fill(); });
+      ctx.globalAlpha = 1; ctx.fillStyle = '#0B1B3B'; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = fade;
+      pts.forEach((p, i) => { const rr = r * [1, .78, .6, .45][i]; const g = ctx.createRadialGradient(p.x - rr * .3, p.y - rr * .3, 1, p.x, p.y, rr); g.addColorStop(0, '#FF9A6E'); g.addColorStop(1, '#6C63FF'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, rr, 0, 7); ctx.fill(); });
       if (flash > 0) { ctx.fillStyle = `rgba(255,255,240,${flash})`; ctx.beginPath(); ctx.arc(W * .86, H * .12, 18, 0, 7); ctx.fill(); } ctx.globalAlpha = 1; }, dispose() {} };
 }
 

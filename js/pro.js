@@ -287,7 +287,8 @@ export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC
   const h3 = (t, n) => `<h3 class="pad" style="margin:var(--s5) 0 var(--s2)">${t}${n ? ` <span style="color:var(--sub);font-weight:500">${n}</span>` : ''}</h3>`;
   const today = new Date().toLocaleDateString('ru', { weekday: 'long', day: 'numeric', month: 'long' });
   go(`<div class="scr fade"><div style="padding-top:16px">
-    <div class="pad row" style="align-items:flex-start">${myPhoto ? `<img src="${myPhoto}" alt="" width="44" height="44" style="border-radius:50%;object-fit:cover;flex:none;margin:2px 12px 0 0" id="mph">` : ''}<div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--sub)">${esc(name)}${spName ? ' · ' + esc(spName.toLowerCase()) : ''}</div><h1>Сегодня</h1><div style="font-size:14px;color:var(--sub);margin-top:2px">${today[0].toUpperCase() + today.slice(1)}</div></div><button class="round" id="hcal" aria-label="Календарь" style="margin-right:6px">${ic('calendar')}</button><button class="round" id="menu" aria-label="Меню">${ic('menu')}</button></div>
+    <div class="pad row" style="align-items:flex-start">${myPhoto ? `<img src="${myPhoto}" alt="" width="44" height="44" style="border-radius:50%;object-fit:cover;flex:none;margin:2px 12px 0 0" id="mph">` : ''}<div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--sub)">${esc(name)}${spName ? ' · ' + esc(spName.toLowerCase()) : ''}</div><h1>Привет, ${esc(String(name).split(' ')[0])}</h1><div style="font-size:14px;color:var(--sub);margin-top:2px">${today[0].toUpperCase() + today.slice(1)}</div></div></div>
+    ${real.length ? `<div class="pad kpi" style="margin-top:var(--s4)"><div><b>${real.filter(c => { const a = last(c.id); return a && Date.now() - a.date < 60 * DAY; }).length}</b><span>активных</span></div><div><b>${review.length + consults.filter(x => new Date(x.v.t).toDateString() === new Date().toDateString()).length}</b><span>на сегодня</span></div><div><b>${real.length}</b><span>всего</span></div></div>` : ''}
     ${slotWidget(slots((await trackedIds()).size))}
     <div class="pad" style="margin-top:var(--s4);display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <button class="card" id="qa1" style="border:0;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:14px;display:flex;flex-direction:column;gap:6px;background:var(--brand);color:#fff">${ic('camera')}<b style="font-size:16px;line-height:1.2">Оценить клиента</b><span style="font-size:12px;opacity:.75">он рядом, тест на этом телефоне</span></button>
@@ -307,7 +308,7 @@ export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC
     ${iosRisk ? `<div class="pad" style="margin-top:var(--s3)"><div class="card" style="font-size:14px;line-height:1.45"><b>Защитите базу клиентов</b><div style="margin-top:6px">Safari на iPhone может стереть кабинет, если не открывать его неделю. Установите приложение на экран «Домой»: «Поделиться» → «На экран Домой», и раз в неделю сохраняйте копию.</div><button class="btn line" id="bk2" style="height:44px;margin-top:10px">Сохранить копию сейчас</button></div></div>` : ''}
     ${needBackup ? `<div class="pad" style="margin-top:var(--s3)"><button class="link" id="bk" style="width:100%;color:var(--sub);font-weight:500;font-size:13px">Клиенты хранятся только на этом телефоне · <u>сохранить копию с паролем</u></button></div>` : ''}
     ${list.length ? installCard() : ''}
-  </div><div class="dock"><button class="btn line" id="new">Ещё: ретест, отчёт, было → стало</button></div></div>`);
+  </div><div class="dock">${proNav('home')}</div></div>`);
   if (pulled && pulled.length) toast('Пришли результаты по ссылке: ' + pulled.join(', '));
   if ($('#demo')) $('#demo').onclick = openDemo;
   $('#qa1').onclick = () => { useHit('act', 'qs'); quickStart(); }; $('#qa2').onclick = () => { useHit('act', 'join'); sendJoin(); };
@@ -321,7 +322,7 @@ export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC
     // чаще используемое наверху: список подстраивается под специалиста
     d.innerHTML = `<div><h2>Что сделать?</h2><div class="group" style="margin-top:var(--s3)">${byUse('act', acts, x => x[0]).map(x => it(...x)).join('')}</div></div>`;
     document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
-    d.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { d.remove(); const k = b.dataset.act; useHit('act', k); if (k === 'qs') quickStart(); else if (k === 'calq') calibSheet(); else $('#' + k).click(); }); }; $('#join').onclick = sendJoin; $('#menu').onclick = proMenu; $('#hcal').onclick = calendarScreen; if ($('#bk')) $('#bk').onclick = backup; if ($('#bk2')) $('#bk2').onclick = backup;
+    d.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { d.remove(); const k = b.dataset.act; useHit('act', k); if (k === 'qs') quickStart(); else if (k === 'calq') calibSheet(); else $('#' + k).click(); }); }; $('#join').onclick = sendJoin; bindProNav(); if ($('#bk')) $('#bk').onclick = backup; if ($('#bk2')) $('#bk2').onclick = backup;
   // инструменты в одно касание: клиент один — сразу действие, иначе выбор из последних
   const lastTwo = id => asses.filter(a => a.clientId === id).sort((x, y) => x.date - y.date).slice(-2);
   const tool = (title, ok, act) => () => { const cs = sorted.filter(c => ok(lastTwo(c.id))); if (!cs.length) return toast('Пока нет подходящих клиентов'); if (cs.length === 1) return act(cs[0], lastTwo(cs[0].id)); pickClient(title, cs, c => act(c, lastTwo(c.id))); };
@@ -333,6 +334,15 @@ export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC
   document.querySelectorAll('[data-id]').forEach(el => el.onclick = () => clientCard(el.dataset.id));
   document.querySelectorAll('[data-msg]').forEach(el => el.onclick = async () => { const x = soon.find(y => y.c.id === el.dataset.msg); if (x && await retestInvite(x.c, x.a)) proHome(); });
   document.querySelectorAll('.list-item[data-a]').forEach(el => el.onclick = () => result(el.dataset.a));
+}
+/** Нижнее меню кабинета: главная, клиенты, действия (+), календарь, меню. id совпадают со старыми кнопками шапки. */
+export function proNav(on) {
+  const items = [['phome', 'home', 'Главная'], ['nclients', 'users', 'Клиенты'], ['new', 'plus', 'Действия'], ['hcal', 'calendar', 'Календарь'], ['menu', 'menu', 'Меню']];
+  return `<nav class="bnav pro-nav" aria-label="Разделы кабинета">${items.map(([id, i, n]) => `<button id="${id}"${id === on || (on === 'home' && id === 'phome') ? ' aria-current="page"' : ''}${id === 'new' ? ' class="nav-plus"' : ''}>${ic(i, 's')}<span>${n}</span></button>`).join('')}</nav>`;
+}
+function bindProNav() {
+  const b = id => document.getElementById(id); if (b('phome') && !b('phome').getAttribute('aria-current')) b('phome').onclick = () => proHome();
+  if (b('nclients')) b('nclients').onclick = () => allClients(); if (b('hcal')) b('hcal').onclick = calendarScreen; if (b('menu')) b('menu').onclick = proMenu;
 }
 // шторка выбора клиента для инструментов «Сегодня»: 5 последних и поиск
 function pickClient(title, cs, then) {
@@ -476,7 +486,8 @@ async function allClients(query = '', sort = 'recent') {
   go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>Все клиенты · ${clients.length}</b></div></div>
    <div class="pad" style="padding-bottom:var(--s5)"><input id="aq" class="field" style="height:48px" value="${esc(query)}" placeholder="Найти клиента">
     <div class="seg" style="margin-top:10px">${[['recent', 'Недавние'], ['name', 'По имени'], ['retest', 'Ретест']].map(([k, t]) => `<button data-s="${k}" class="${sort === k ? 'on' : ''}">${t}</button>`).join('')}</div>
-    ${list.length ? `<div class="group" style="margin-top:12px">${list.map(x => `<div class="list-item" data-id="${x.c.id}" style="border-radius:0;padding:var(--s3) 0;background:transparent"><span class="avatar">${esc(x.c.name.slice(0, 1).toUpperCase())}</span><div style="flex:1;min-width:0"><b>${esc(x.c.name)}</b><div style="font-size:13px;color:var(--sub)">${sub(x)}</div></div>${ic('chevron-right', 's chev')}</div>`).join('')}</div>` : '<p class="sub" style="margin-top:12px">Никого не нашлось.</p>'}</div></div>`);
+    ${list.length ? `<div class="group" style="margin-top:12px">${list.map(x => `<div class="list-item" data-id="${x.c.id}" style="border-radius:0;padding:var(--s3) 0;background:transparent"><span class="avatar">${esc(x.c.name.slice(0, 1).toUpperCase())}</span><div style="flex:1;min-width:0"><b>${esc(x.c.name)}</b><div style="font-size:13px;color:var(--sub)">${sub(x)}</div></div>${ic('chevron-right', 's chev')}</div>`).join('')}</div>` : '<p class="sub" style="margin-top:12px">Никого не нашлось.</p>'}</div><div class="dock">${proNav('nclients')}</div></div>`);
+  bindProNav(); if ($('#new')) $('#new').onclick = () => proHome().then(() => $('#new') && $('#new').click());
   $('#back').onclick = () => proHome();
   app.querySelectorAll('[data-s]').forEach(b => b.onclick = () => allClients($('#aq').value, b.dataset.s));
   app.querySelectorAll('[data-id]').forEach(el => el.onclick = () => clientCard(el.dataset.id));
@@ -494,7 +505,7 @@ export async function clientCard(id) {
   const rd = last && last.nextDate, rdays = rd ? Math.ceil((rd - now) / DAY) : null;
   // три главные находки рядом со схемой: те же, что в «Итоге» и в отчете
   const cAn = last ? analyze(last, C) : null, cFacts = cAn ? cAn.findings.slice(0, 3).map(f => String(f.observed).replace(' (на границе нормы)', '').replace(/:\s*$/, '')) : [];
-  const cSp = last ? proSpots(last) : [], cNum = cAn ? cAn.findings.slice(0, 3).map((f, i) => { const sp0 = cSp.find(s => f.muscles.some(m => m.id === s.id && (m.side === s.side || m.side === 'BOTH')) && !s.derived); return sp0 ? { key: sp0.key, n: i + 1, title: '', sub: '', color: '#13212B' } : null; }).filter(Boolean) : [];
+  const cSp = last ? proSpots(last) : [], cNum = cAn ? cAn.findings.slice(0, 3).map((f, i) => { const sp0 = cSp.find(s => f.muscles.some(m => m.id === s.id && (m.side === s.side || m.side === 'BOTH')) && !s.derived); return sp0 ? { key: sp0.key, n: i + 1, title: '', sub: '', color: '#0B1B3B' } : null; }).filter(Boolean) : [];
   const when = t => new Date(t).toLocaleDateString('ru', { day: 'numeric', month: 'long' }) + (new Date(t).getHours() || new Date(t).getMinutes() ? ', ' + new Date(t).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }) : '');
   go(`<div class="fade" style="padding-bottom:40px"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><span style="flex:1"></span><button class="pill" id="edit">Изменить</button></div>
    <div class="pad"><h1>${esc(c.name)}</h1><p class="sub" style="font-size:14px;margin-top:4px">${[age != null ? age + ' ' + (age % 10 === 1 && age % 100 !== 11 ? 'год' : [2, 3, 4].includes(age % 10) && ![12, 13, 14].includes(age % 100) ? 'года' : 'лет') : '', c.sex === 'M' ? 'муж' : c.sex === 'F' ? 'жен' : '', c.height ? c.height + ' см' : '', c.activity].filter(Boolean).map(esc).join(' · ')}</p>
@@ -506,7 +517,7 @@ export async function clientCard(id) {
      ${c.calib.note ? `<p style="font-size:14px;line-height:1.4;margin-top:8px">${esc(c.calib.note)}</p>` : ''}
      <button class="pill" id="caledit" style="margin-top:8px">Изменить оценку</button>
      ${c.selfReport ? `<p style="font-size:14px;line-height:1.4;margin-top:8px"><span class="sub">Сам человек:</span> ${esc(c.selfReport.complaints || 'жалобы не написал')}${c.selfReport.activity ? ' · ' + esc(c.selfReport.activity) : ''}</p>` : ''}
-     <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;font-size:14px">${[['Ваша оценка', true], ['Человек прошел тест по ссылке', as.length > 0], ['Данные отправлены на калибровку', !!c.calib.sentAt]].map(([t, ok], i) => `<div class="row" style="gap:8px"><span class="step-n" style="width:20px;color:${ok ? 'var(--ok-t,#2E7D5B)' : 'var(--sub)'}">${ok ? '✓' : i + 1}</span><span style="flex:1;${ok ? '' : 'color:var(--sub)'}">${t}${i === 2 && c.calib.sentAt ? ', ' + new Date(c.calib.sentAt).toLocaleDateString('ru') : ''}</span></div>`).join('')}</div>
+     <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;font-size:14px">${[['Ваша оценка', true], ['Человек прошел тест по ссылке', as.length > 0], ['Данные отправлены на калибровку', !!c.calib.sentAt]].map(([t, ok], i) => `<div class="row" style="gap:8px"><span class="step-n" style="width:20px;color:${ok ? 'var(--ok-t,#15803D)' : 'var(--sub)'}">${ok ? '✓' : i + 1}</span><span style="flex:1;${ok ? '' : 'color:var(--sub)'}">${t}${i === 2 && c.calib.sentAt ? ', ' + new Date(c.calib.sentAt).toLocaleDateString('ru') : ''}</span></div>`).join('')}</div>
      ${as.length ? `<button class="btn" id="calsend" style="margin-top:12px;height:48px">${c.calib.sentAt ? 'Отправить еще раз' : 'Отправить на калибровку'}</button><p class="sub" style="font-size:12px;margin-top:6px">Уйдут ваша оценка, анкета, замеры и запись движения. Имени человека в данных нет.</p>` : `<p class="sub" style="font-size:13px;margin-top:10px">Ждем, пока человек пройдет тест по ссылке. Результат придет сюда сам, когда вы откроете приложение.</p>`}</div></div>` : ''}
    ${last ? `<div class="pad" style="margin-top:12px"><div class="card">
      <div class="row" style="flex-wrap:wrap;gap:8px"><b style="flex:1 1 160px">Карта тела · ${fmtDate(last.date)}</b><div class="seg" style="width:auto"><button id="vf" class="on" style="min-height:32px;padding:0 10px;font-size:13px">Спереди</button><button id="vb" style="min-height:32px;padding:0 10px;font-size:13px">Сзади</button><button id="v3" style="min-height:32px;padding:0 10px;font-size:13px">3D</button></div></div>
@@ -532,7 +543,7 @@ export async function clientCard(id) {
       const q = Object.values(a.quality || {}); const qa = q.length ? Math.round(q.reduce((x, y) => x + y, 0) / q.length) : null;
       const pain = Object.values(a.pain || {}).filter(x => x > 0); return `<div class="list-item" data-a="${a.id}" style="background:var(--surface)"><div style="flex:1"><b>${fmtDate(a.date)}</b><div style="font-size:13px;color:var(--sub)">Тест: ${esc(a.templateName || 'оценка')}${qa != null ? ' · качество ' + qa : ''}${pain.length ? ' · боль до ' + Math.max(...pain) : ''}${a.draft ? ' · не разобран' : ''}</div></div><span class="chev">›</span></div>`; }).join('')
       : '<p class="sub">Пока пусто.</p>'}</div>
-   <div class="pad" style="margin-top:28px"><button class="btn ghost" id="del" style="color:#E5484D;border-color:#F3C9C9">Удалить клиента</button></div></div>`);
+   <div class="pad" style="margin-top:28px"><button class="btn ghost" id="del" style="color:#EF4444;border-color:#F3C9C9">Удалить клиента</button></div></div>`);
   if ($('#calsend')) $('#calsend').onclick = () => calibSend(c, $('#calsend'));
   if ($('#caledit')) $('#caledit').onclick = () => calibSheet(c);
   $('#back').onclick = () => proHome(); $('#edit').onclick = () => clientForm(id);
@@ -582,7 +593,8 @@ async function calendarScreen() {
   go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:18px;flex:1">Календарь</b><button class="pill" id="cics">В календарь телефона</button></div>
     <div class="pad" style="display:flex;flex-direction:column;gap:8px;padding-bottom:32px">${keys.length ? keys.map(k => `<h3 style="margin:14px 0 4px;font-size:16px;${k === 'over' ? 'color:var(--over-t)' : ''}">${title(k)[0].toUpperCase() + title(k).slice(1)}</h3>${groups[k].map(row).join('')}`).join('')
       : '<div class="card empty">' + ic('calendar') + '<b>На ближайшие 2 месяца ничего не запланировано</b><span class="sub" style="font-size:14px">Дату повторного теста и консультации назначают в карточке клиента.</span></div>'}
-    <p class="sub" style="font-size:12px;margin-top:12px">${remindLine()}</p></div></div>`);
+    <p class="sub" style="font-size:12px;margin-top:12px">${remindLine()}</p></div><div class="dock">${proNav('hcal')}</div></div>`);
+  bindProNav(); if ($('#new')) $('#new').onclick = () => proHome().then(() => $('#new') && $('#new').click());
   $('#back').onclick = () => proHome();
   document.querySelectorAll('[data-cc]').forEach(el => el.onclick = e => { if (!e.target.closest('[data-ca]')) clientCard(el.dataset.cc); });
   // действие прямо из календаря, без захода в карточку
@@ -868,7 +880,7 @@ async function experienceScreen(back) {
   go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>Мои проверки</b><small>как часто подтверждаются выводы</small></div></div>
    <div class="pad" style="padding-bottom:var(--s5)"><p class="sub" style="font-size:14px;line-height:1.4;margin:var(--s2) 0 var(--s4)">Считается само по вашим отметкам «Подтверждаю», «Убрать» и правкам мышц. Признаки, которые вы часто подтверждаете, приложение показывает увереннее, часто убираемые осторожнее. Работает от 3 проверок признака.</p>
     ${rows.length ? `<div class="group">${rows.map(([id, o]) => { const n = o.agree + o.disagree, pct = Math.round(o.agree / n * 100);
-      return `<div class="row" style="min-height:56px;gap:8px"><span style="flex:1;font-size:15px;line-height:1.3">${esc(RULE_NAMES[id] || id)}<small style="display:block;font-size:12px;color:var(--sub)">подтвердили ${o.agree} из ${n}${n < 3 ? ' · пока мало проверок' : ''}</small></span><b class="num" style="color:${pct >= 60 ? 'var(--ok-t,#2E7D5B)' : pct < 40 ? 'var(--over-t)' : 'var(--text)'}">${pct}%</b></div>`; }).join('')}</div>`
+      return `<div class="row" style="min-height:56px;gap:8px"><span style="flex:1;font-size:15px;line-height:1.3">${esc(RULE_NAMES[id] || id)}<small style="display:block;font-size:12px;color:var(--sub)">подтвердили ${o.agree} из ${n}${n < 3 ? ' · пока мало проверок' : ''}</small></span><b class="num" style="color:${pct >= 60 ? 'var(--ok-t,#15803D)' : pct < 40 ? 'var(--over-t)' : 'var(--text)'}">${pct}%</b></div>`; }).join('')}</div>`
       : '<div class="card">Пока нет ваших проверок. Отмечайте «Подтверждаю» или «Убрать» у гипотез в разборе, и здесь появится статистика.</div>'}</div></div>`);
   $('#back').onclick = () => (back || proHome)();
 }
@@ -915,7 +927,7 @@ export async function result(aid, view = 'measured') {
   const spotOf = f => sp.find(s => f.muscles.some(m => m.id === s.id && (m.side === s.side || m.side === 'BOTH')) && !s.derived);
   const numOf = t => String(t).match(/(\d+(?:[.,]\d+)?)\s*(°|%)/);
   const plainObs = t => { const m = numOf(t); return String(t).replace(' (на границе нормы)', '').replace(m ? m[0] : '§§', '').replace(/\s+на\s*$/, '').replace(/\s+на\s+(в|при)\s/, ' $1 ').replace(/\s{2,}/g, ' ').trim(); };
-  const numLabels = facts.map((f, i) => { const s = spotOf(f); return s ? { key: s.key, n: i + 1, title: '', sub: '', color: '#13212B' } : null; }).filter(Boolean);
+  const numLabels = facts.map((f, i) => { const s = spotOf(f); return s ? { key: s.key, n: i + 1, title: '', sub: '', color: '#0B1B3B' } : null; }).filter(Boolean);
   const hasBack = numLabels.some(l => sp.find(s => s.key === l.key).back);
   let dock = '';
   if (view === 'measured') { const conf = a.check || {};
@@ -1215,7 +1227,7 @@ async function pairVideo(ghost, cur, top, bottom, legend) {
   const rec = new MediaRecorder(c.captureStream(30), mime ? { mimeType: mime, videoBitsPerSecond: 2.5e6 } : {}), parts = []; rec.ondataavailable = e => e.data.size && parts.push(e.data);
   const wrap = (t, y, size, color) => { x.fillStyle = color; x.font = `600 ${size}px system-ui,sans-serif`; x.textAlign = 'center'; let line = '', yy = y;
     for (const w of String(t).split(' ')) { if (x.measureText(line + w).width > W - 80 && line) { x.fillText(line.trim(), W / 2, yy); line = ''; yy += size * 1.25; } line += w + ' '; } x.fillText(line.trim(), W / 2, yy); };
-  const frame = t => { x.fillStyle = '#0B1A20'; x.fillRect(0, 0, W, H); wrap(top, 110, 44, '#fff');
+  const frame = t => { x.fillStyle = '#0B1B3B'; x.fillRect(0, 0, W, H); wrap(top, 110, 44, '#fff');
     drawPair(sub, ghost, cur, (t / 3.3) % 1, true); x.drawImage(sub, 0, 190);
     x.font = '500 26px system-ui,sans-serif'; x.textAlign = 'center'; x.fillStyle = 'rgba(255,255,255,.55)'; x.fillText(legend[0], W / 2 - 150, 1130); x.fillStyle = '#D4F25A'; x.fillText(legend[1], W / 2 + 150, 1130);
     if (bottom) wrap(bottom, 1185, 32, '#D4F25A'); x.fillStyle = 'rgba(255,255,255,.4)'; x.font = '500 22px system-ui,sans-serif'; x.fillText('BodyPassport', W / 2, H - 28); };
@@ -1613,11 +1625,11 @@ export async function motionViewer(poses, setup, back, titleText) {
   const draw2 = () => { const cv = $('#cv'); if (!cv) return; const ctx = cv.getContext('2d'), W = cv.width = cv.clientWidth * devicePixelRatio, H = cv.height = cv.clientHeight * devicePixelRatio;
     ctx.clearRect(0, 0, W, H); const f = fr2[frameAt()]; if (!f) return; const p = exaggerate(f.p, amp), sc = H / 1.6, ox = W / 2, oy = H * .94, P = l => [ox + l.x * sc, oy + l.y * sc];
     ctx.strokeStyle = '#E0D8CA'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, oy); ctx.lineTo(W, oy); ctx.stroke();
-    ctx.lineCap = 'round'; for (const [i, j] of BONES) { if (p[i].v < .3 || p[j].v < .3) continue; ctx.strokeStyle = [25, 26, 23, 24].includes(i) || [25, 26].includes(j) ? '#E8765A' : '#1E2533'; ctx.lineWidth = 7 * devicePixelRatio; ctx.beginPath(); ctx.moveTo(...P(p[i])); ctx.lineTo(...P(p[j])); ctx.stroke(); }
+    ctx.lineCap = 'round'; for (const [i, j] of BONES) { if (p[i].v < .3 || p[j].v < .3) continue; ctx.strokeStyle = [25, 26, 23, 24].includes(i) || [25, 26].includes(j) ? '#FF7A45' : '#1A2A4F'; ctx.lineWidth = 7 * devicePixelRatio; ctx.beginPath(); ctx.moveTo(...P(p[i])); ctx.lineTo(...P(p[j])); ctx.stroke(); }
     ctx.fillStyle = '#C6E84B'; for (const j of [11, 12, 13, 14, 23, 24, 25, 26, 27, 28]) { ctx.beginPath(); ctx.arc(...P(p[j]), 6 * devicePixelRatio, 0, 7); ctx.fill(); }
-    const h = P(p[0]); ctx.strokeStyle = '#1E2533'; ctx.lineWidth = 5 * devicePixelRatio; ctx.beginPath(); ctx.arc(h[0], h[1], sc * .05, 0, 7); ctx.stroke();
+    const h = P(p[0]); ctx.strokeStyle = '#1A2A4F'; ctx.lineWidth = 5 * devicePixelRatio; ctx.beginPath(); ctx.arc(h[0], h[1], sc * .05, 0, 7); ctx.stroke();
     // Ghost Overlay: зеленая симметричная норма полупрозрачно поверх факта, углы плеч и таза
-    if (ghost) { const g = drawGhost(ctx, p.map(l => { const [x, y] = P(l); return { x, y, visibility: l.v }; }), 0, { fact: false }); if (g) { ctx.fillStyle = '#1E7149'; ctx.font = `600 ${13 * devicePixelRatio}px system-ui`; ctx.fillText(`θ плеч ${g.shoulderDeg}° · θ таза ${g.pelvisDeg}°`, 12 * devicePixelRatio, 20 * devicePixelRatio); } } };
+    if (ghost) { const g = drawGhost(ctx, p.map(l => { const [x, y] = P(l); return { x, y, visibility: l.v }; }), 0, { fact: false }); if (g) { ctx.fillStyle = '#15803D'; ctx.font = `600 ${13 * devicePixelRatio}px system-ui`; ctx.fillText(`θ плеч ${g.shoulderDeg}° · θ таза ${g.pelvisDeg}°`, 12 * devicePixelRatio, 20 * devicePixelRatio); } } };
   const loop = () => { if (!document.getElementById('stage')) return; if (playing) { k = (k + (1 / 60) * speed / dur) % 1; $('#ph').value = Math.round(k * 1000); }
     if (mode === 'flat') draw2(); else if (v3) v3.set(frameAt()); raf = requestAnimationFrame(loop); };
   const open3d = async () => { const THREE = await import('three'); const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');

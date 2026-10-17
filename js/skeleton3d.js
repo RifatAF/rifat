@@ -14,7 +14,7 @@ export async function skeleton3D(box, pose) {
   const ctl = new OrbitControls(camera, renderer.domElement); ctl.target.set(0, .95, 0); ctl.enablePan = false; ctl.enableZoom = false;
   ctl.minPolarAngle = Math.PI * .35; ctl.maxPolarAngle = Math.PI * .6; ctl.update();
   const css = getComputedStyle(document.documentElement), col = (v, d) => new THREE.Color((css.getPropertyValue(v) || d).trim() || d);
-  const boneM = new THREE.MeshStandardMaterial({ color: 0xE9E5DC, roughness: .6 }), hotM = new THREE.MeshStandardMaterial({ color: col('--short', '#C8414A'), roughness: .5 });
+  const boneM = new THREE.MeshStandardMaterial({ color: 0xE9E5DC, roughness: .6 }), hotM = new THREE.MeshStandardMaterial({ color: col('--short', '#EF4444'), roughness: .5 });
   const lineM = new THREE.LineDashedMaterial({ color: 0x8C949B, dashSize: .04, gapSize: .03 });
   const V = (x, y, z = 0) => new THREE.Vector3(x, y, z), geos = [];
   const bone = (par, a, b, r, m = boneM) => { const d = b.clone().sub(a), g = new THREE.CapsuleGeometry(r, Math.max(.001, d.length() - r * 2), 4, 10); geos.push(g);

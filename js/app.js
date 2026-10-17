@@ -65,9 +65,9 @@ export const TONE_HELP = `<details class="q"><summary aria-label="Что зна�
   <span><span class="mark sm SHORT"></span> <b>Гипертонус</b>: мышца зажата. Помогает расслабить и растянуть</span>
   <span><span class="mark sm HYPER"></span> <b>Перерастяжение</b>: мышцу тянет соседняя. Растягивать нельзя</span>
   <span><span class="mark sm WEAK"></span> <b>Слабая</b>: мышца не включается. Помогает укрепить</span>
-  <span style="color:#B9C4CC">В 3D точки бегут к центру мышцы, если она зажата, к краям, если растянута, и мерцают, если слабая</span></div></details>`;
-export const TONE_HEX = { HYPER: '#D9822B', SHORT: '#C8414A', WEAK: '#2F6BD8', OK: '#26775D', NT: '#B9BEC2', DONE: '#3FAE76' };
-export const TONE_TEXT_HEX = { HYPER: '#9E4E0E', SHORT: '#B3343B', WEAK: '#2A5CB8', OK: '#1E7149', NT: '#6B747A', DONE: '#1E7149' };
+  <span style="color:#B6BED0">В 3D точки бегут к центру мышцы, если она зажата, к краям, если растянута, и мерцают, если слабая</span></div></details>`;
+export const TONE_HEX = { HYPER: '#F59E0B', SHORT: '#EF4444', WEAK: '#3B73D9', OK: '#15803D', NT: '#B9BEC2', DONE: '#22C55E' };
+export const TONE_TEXT_HEX = { HYPER: '#9E4E0E', SHORT: '#B42323', WEAK: '#2A5CB8', OK: '#15803D', NT: '#6B747A', DONE: '#15803D' };
 const sideWord = s => s === 'RIGHT' ? 'справа' : 'слева';
 // ---------- итог в три строки: глагол действия, мышца, одна измеренная деталь ----------
 const VERBS = [['WEAK', 'Укрепить'], ['SHORT', 'Расслабить'], ['HYPER', 'Разгрузить']];
@@ -110,7 +110,7 @@ let lastHead = '';
 const callerName = () => { try { const l = (new Error().stack || '').split('\n').map(x => x.trim()).filter(x => x.startsWith('at '));
   for (const x of l.slice(2)) { const m = /^at (?:async )?([\w$.]+)/.exec(x); if (m && !/^(go|Object\.go|HTMLButtonElement|HTMLDivElement|Promise|new Promise)/.test(m[1])) return m[1].replace(/^Object\./, '').slice(0, 40); } } catch (e) {} return 'screen'; };
 export function go(html) { try { screenView(callerName()); } catch (e) {} delete document.documentElement.dataset.theme; document.querySelectorAll('.qpop').forEach(x => x.remove()); if (view3d) { view3d.dispose(); view3d = null; } backFn = null; const head = html.slice(0, 260); if (head === lastHead) html = html.replace(' fade', ''); lastHead = head; app.innerHTML = html; window.scrollTo(0, 0);
-  const tc = document.querySelector('meta[name=theme-color]'); if (tc) tc.content = html.includes('class="cam"') ? '#0A0C0F' : / dark[ "]/.test(html.slice(0, 200)) ? '#13212B' : '#F3F6F6'; }
+  const tc = document.querySelector('meta[name=theme-color]'); if (tc) tc.content = html.includes('class="cam"') ? '#0A0C0F' : / dark[ "]/.test(html.slice(0, 200)) ? '#0B1B3B' : '#F5F6FA'; }
 
 // ---------- «назад»: жест и системная кнопка ведут на шаг назад в приложении, а не закрывают его ----------
 // В истории браузера держим одну запись-ловушку. Жест «назад» снимает ее, мы делаем шаг назад внутри
@@ -142,7 +142,7 @@ export const testLabel = t => `${t.kind || testKind(t.protocol || Object.keys(t.
 export function doneMinutes(log) { const by = {}; for (const r of log) { const e = ex(r.id), d = new Date(r.t).toDateString(); by[d] = (by[d] || 0) + (e ? Math.max(10, e.durationSec) : 60) / 60; } return by; }
 export function heatmap4w(by) {
   const now = new Date(); now.setHours(0, 0, 0, 0); const dow = (now.getDay() + 6) % 7, start = new Date(now - (dow + 21) * 864e5);
-  const lvl = m => !m ? 0 : m < 5 ? 1 : m < 10 ? 2 : m < 20 ? 3 : 4, C4 = ['var(--surface-2)', '#CDEBD9', '#8FD3AE', '#3FAE76', '#1E7149'];
+  const lvl = m => !m ? 0 : m < 5 ? 1 : m < 10 ? 2 : m < 20 ? 3 : 4, C4 = ['var(--surface-2)', '#CDEBD9', '#8FD3AE', '#22C55E', '#15803D'];
   const cells = Array.from({ length: 28 }, (_, i) => { const d = new Date(+start + i * 864e5), m = by[d.toDateString()] || 0, fut = d > now;
     return `<i title="${d.toLocaleDateString('ru', { day: 'numeric', month: 'short' })}: ${Math.round(m)} мин" style="display:block;aspect-ratio:1;border-radius:4px;background:${fut ? 'transparent' : C4[lvl(m)]};${+d === +now ? 'outline:2px solid var(--accent);outline-offset:1px' : ''}"></i>`; });
   const total = Math.round(Object.entries(by).filter(([d]) => new Date(d) >= start).reduce((a, [, m]) => a + m, 0));
@@ -1107,7 +1107,8 @@ export function map() {
    ${!SHARED && INV() ? sentBanner(t) + retestCard() : ''}
    ${!SHARED && SHOW_T && tests().length && SHOW_T !== tests().at(-1).date ? `<div class="pad" style="padding-top:12px"><button class="card row" id="toLast" style="width:100%;border:0;font:inherit;font-size:14px;cursor:pointer;color:inherit">${ic('info', 's')}<span style="flex:1;text-align:left">Это тест из истории</span><b style="color:var(--brand)">К последнему</b></button></div>` : ''}
    ${SHARED ? `<div class="pad" style="padding-top:12px"><div class="card row" style="font-size:14px">${ic('info', 's')}<span>Это результат по ссылке. Ваши данные не меняются.</span></div></div>` : ''}
-   <div class="pad row" style="padding-top:16px;align-items:flex-start"><div style="flex:1;min-width:0"><div class="eyebrow">${new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })} · ${nSteps} ${plural3(nSteps, 'шаг', 'шага', 'шагов')}${qa != null ? ' · качество ' + qa : ''}</div><h1 style="margin-top:6px">${SHARED ? 'Карта тела' : 'Ваша карта тела'}</h1></div>${SHARED ? '' : '<button class="pill" id="cab" style="margin-right:8px">История</button>'}<button class="round" id="set" aria-label="Настройки">${ic('settings')}</button></div>
+   <div class="pad row" style="padding-top:16px;align-items:flex-start"><div style="flex:1;min-width:0"><div class="eyebrow">${new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })} · ${nSteps} ${plural3(nSteps, 'шаг', 'шага', 'шагов')}${qa != null ? ' · качество ' + qa : ''}</div><h1 style="margin-top:6px">Что мы нашли</h1></div></div>
+   ${mainLine(top, a)}
    ${days >= 7 && !SHARED ? `<div class="pad"><button class="row-link" id="re" style="color:var(--focus);font-weight:600"><span>Прошла неделя: пройдите быстрый тест и сравните</span>${ic('chevron-right', 's')}</button></div>` : ''}
    <div class="pad" style="margin-top:12px"><div class="card" style="border-radius:var(--r-xl);padding:12px 8px 8px">
      <div class="seg" style="margin:0 4px"><button id="vf" class="${!BACK && !MODE3D ? 'on' : ''}">Спереди</button><button id="vb" class="${BACK && !MODE3D ? 'on' : ''}">Сзади</button>${device.webgl2 ? `<button id="v3" class="${MODE3D ? 'on' : ''}">3D</button>` : ''}</div>
@@ -1117,13 +1118,14 @@ export function map() {
        <div class="row" id="lay" style="gap:6px;flex-wrap:wrap;justify-content:center;margin-top:6px"><button class="pill on" data-l="">Все слои</button>${LAYER_NAMES.map(([l, n]) => `<button class="pill" data-l="${l}">${n} · ${top.filter(x => layerOf(x.id) === l).length}</button>`).join('')}</div>
        <div class="row" style="gap:6px;flex-wrap:wrap;justify-content:center;margin-top:8px">${[['all', 'Всё тело'], ['head', 'Шея'], ['shoulders', 'Плечи'], ['back', 'Спина'], ['pelvis', 'Таз'], ['knees', 'Колени'], ['feet', 'Стопы']].map(([z, n]) => `<button class="pill" data-z="${z}">${n}</button>`).join('')}</div></details>` : ''}
      <div id="selbox" style="margin:8px 4px 0"></div></div></div>
+   <div class="pad" style="margin-top:16px">${verdictCard(top, a.findings, 'Сильных перекосов не видно')}</div>
    ${postureCard(a)}
-   ${top.length ? `<div class="pad" style="margin-top:16px">${balanceCard(all)}</div>` : ''}
    ${iapCard(a)}
    ${cnsCard(t, a)}
-   <div class="pad" style="margin-top:16px">${verdictCard(top, a.findings, 'Сильных перекосов не видно')}</div>
+   ${top.length ? `<div class="pad" style="margin-top:12px"><details class="acc"><summary style="font-weight:600">Баланс мышц по сторонам, %</summary><div style="margin-top:8px">${balanceCard(all)}</div></details></div>` : ''}
+   <div class="pad row" style="margin-top:12px;gap:16px"><button class="link" id="more">${ic('file-text', 's')} Подробный обзор</button><button class="link" id="lrs">${ic('arrow-right-left', 's')} Левая и правая</button></div>
    <div class="pad row" style="margin-top:12px;gap:8px;font-size:12px;color:var(--sub)">${ic('cpu', 's')}<span>Посчитано на телефоне. Оценка движения, не диагноз</span></div>
-   <div class="dock">${pl.length ? `<button class="btn" id="plan">${ic('play', 's')}Комплекс на сегодня · ${totalMin(pl.map(ex))} мин</button>` : `<button class="btn" id="again">${ic('rotate-ccw', 's')}${SHARED ? 'Пройти свой тест' : 'Пройти тест заново'}</button>`}<nav class="bnav">${[['more', 'file-text', 'Обзор'], ['lrs', 'arrow-right-left', 'Стороны'], ['shr', 'share', 'Поделиться']].map(([id, i, n]) => `<button id="${id}">${ic(i, 's')}<span>${n}</span></button>`).join('')}</nav></div></div>`);
+   <div class="dock">${pl.length ? `<button class="btn" id="plan">${ic('play', 's')}Комплекс на сегодня · ${totalMin(pl.map(ex))} мин</button>` : `<button class="btn" id="again">${ic('rotate-ccw', 's')}${SHARED ? 'Пройти свой тест' : 'Пройти тест заново'}</button>`}${clientNav('home')}</div></div>`);
   if (device.webgl2 && !device.weak && !device.wv) preload3D();
   // подписи: зона и короткий замер цветом состояния
   const labels = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 4)).map(s => ({ key: s.key, title: C.muscles[s.id].zone + (s.side === 'RIGHT' ? ' · П' : ' · Л'), sub: toneText(s, 3).replace('похоже, ', ''), value: shortVal(seen(a, s)[0]), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
@@ -1153,9 +1155,23 @@ export function map() {
   if ($('#again')) $('#again').onclick = again;
   if ($('#re')) $('#re').onclick = () => { FULL = false; prep(); };
   if ($('#resend')) $('#resend').onclick = async () => { const p = await outbox.get().catch(() => null); if (p) sendResult(p); }; bindRetestCard(); if (!SHARED && INV()) addSpecHint();
-  $('#set').onclick = settings; $('#more').onclick = () => moreSheet(cur, top, !!pl.length); $('#lrs').onclick = () => moreSheet(cur, top, !!pl.length, 'lr'); $('#shr').onclick = shareResult; if ($('#rec')) $('#rec').onclick = async () => { const p = await consumerPoses.get(); motionViewer(p, t.setup, map, 'Тест ' + new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })); }; if ($('#cab')) $('#cab').onclick = () => { SHOW_T = null; clientHome(); }; if ($('#toLast')) $('#toLast').onclick = () => { SHOW_T = null; map(); };
+  bindClientNav(); if ($('#set')) $('#set').onclick = settings; $('#more').onclick = () => moreSheet(cur, top, !!pl.length); $('#lrs').onclick = () => moreSheet(cur, top, !!pl.length, 'lr'); if ($('#rec')) $('#rec').onclick = async () => { const p = await consumerPoses.get(); motionViewer(p, t.setup, map, 'Тест ' + new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })); }; if ($('#cab')) $('#cab').onclick = () => { SHOW_T = null; clientHome(); }; if ($('#toLast')) $('#toLast').onclick = () => { SHOW_T = null; map(); };
   // бета и калибровка: сразу после свежего теста короткая анкета «как прошло, что мешало» (один раз на тест)
   if (!SHARED && reveal && Date.now() - t.date < 30 * 60e3 && (isBetaMode() || (INV() || {}).cal)) setTimeout(() => { if (document.getElementById('heat') || document.getElementById('vis')) testSurvey(String(t.date), { cal: !!(INV() || {}).cal, steps: (t.protocol || []).length }); }, 30000);
+}
+// одна человеческая фраза итога сверху: главное наблюдение движения, без диагноза (спецификация UXUI, раздел 5)
+function mainLine(top, a) {
+  const v = verdict(top, a.findings)[0], why = v && v.why ? v.why.replace(/^\S/, c => c.toUpperCase()) : '';
+  return `<div class="pad" style="margin-top:12px"><div class="main-line">${why ? `<b>${esc(why)}</b>` : '<b>Явных перекосов не видно</b>'}<span>Это наблюдение движения, не диагноз. Ниже: что укрепить и что расслабить.</span></div></div>`;
+}
+/** Нижнее меню клиента: итог, история, поделиться, профиль. */
+export function clientNav(on) {
+  const items = SHARED ? [['home', 'activity', 'Итог'], ['shr', 'share', 'Поделиться']] : [['home', 'activity', 'Итог'], ['cab', 'clock', 'История'], ['shr', 'share', 'Поделиться'], ['set', 'user', 'Профиль']];
+  return `<nav class="bnav" aria-label="Разделы">${items.map(([id, i, n]) => `<button id="${id === on ? 'nav-on' : id}" data-nav="${id}"${id === on ? ' aria-current="page"' : ''}>${ic(i, 's')}<span>${n}</span></button>`).join('')}</nav>`;
+}
+function bindClientNav() {
+  app.querySelectorAll('[data-nav]').forEach(b => { if (b.getAttribute('aria-current')) return; const k = b.dataset.nav;
+    b.onclick = k === 'home' ? () => { SHOW_T = null; tests().length ? map() : onboarding(); } : k === 'cab' ? () => { SHOW_T = null; clientHome(); } : k === 'set' ? settings : shareResult; });
 }
 // выбор длительности комплекса перед стартом
 function durationSheet(top, pl, why) {
@@ -1227,63 +1243,63 @@ export function vasChart(g, list, x, y, w, h) {
   for (const v of [0, 5, 10]) { const yy = base - v * k; g.beginPath(); g.moveTo(x + 50, yy); g.lineTo(x + w, yy); g.stroke(); g.fillText(String(v), x, yy + 9); }
   L.forEach((r, i) => { const x0 = x + 60 + i * (bw * 2 + gap);
     g.fillStyle = '#C9CCD1'; g.fillRect(x0, base - r.pre * k, bw - 2, r.pre * k);
-    g.fillStyle = r.post < r.pre ? '#26775D' : r.post > r.pre ? '#C8414A' : '#5A6872'; g.fillRect(x0 + bw, base - r.post * k, bw - 2, r.post * k); });
-  g.font = '400 30px Manrope, sans-serif'; g.fillStyle = '#C9CCD1'; g.fillRect(x + 60, base + 22, 24, 24); g.fillStyle = '#5A6872'; g.fillText('до занятия', x + 94, base + 44);
-  g.fillStyle = '#26775D'; g.fillRect(x + 330, base + 22, 24, 24); g.fillStyle = '#5A6872'; g.fillText('после', x + 364, base + 44);
+    g.fillStyle = r.post < r.pre ? '#15803D' : r.post > r.pre ? '#EF4444' : '#566079'; g.fillRect(x0 + bw, base - r.post * k, bw - 2, r.post * k); });
+  g.font = '400 30px Manrope, sans-serif'; g.fillStyle = '#C9CCD1'; g.fillRect(x + 60, base + 22, 24, 24); g.fillStyle = '#566079'; g.fillText('до занятия', x + 94, base + 44);
+  g.fillStyle = '#15803D'; g.fillRect(x + 330, base + 22, 24, 24); g.fillStyle = '#566079'; g.fillText('после', x + 364, base + 44);
   return y + h + 12;
 }
 export async function passportImage({ eyebrow, name, date, sp, sections = [], delta = null, footer, raw = false }) {
   await ready3D().catch(() => {}); // в отчете та же реалистичная модель, что и на экране
   const W = 1080, M = 72, cv = document.createElement('canvas'); cv.width = W; cv.height = 4200; const g = cv.getContext('2d');
   await document.fonts.ready; try { await document.fonts.load('500 32px "JetBrains Mono"'); } catch (e) {}
-  g.fillStyle = '#F3F6F6'; g.fillRect(0, 0, W, cv.height);
-  let y = M + 32; g.fillStyle = '#5A6872'; g.font = '500 32px "JetBrains Mono", monospace'; g.fillText(eyebrow, M, y);
+  g.fillStyle = '#F5F6FA'; g.fillRect(0, 0, W, cv.height);
+  let y = M + 32; g.fillStyle = '#566079'; g.font = '500 32px "JetBrains Mono", monospace'; g.fillText(eyebrow, M, y);
   // логотип специалиста в правом верхнем углу, вписан в квадрат 110 px над именем
   if (footer && footer.logo) { try { const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = footer.logo; });
     const k = Math.min(110 / im.width, 110 / im.height), lw = im.width * k, lh = im.height * k; g.drawImage(im, W - M - lw, 28 + (110 - lh) / 2, lw, lh); } catch (e) {} }
   // имя целиком: шрифт уменьшается до 56 px, дальше многоточие; справа место под логотип
-  { const maxW = W - M * 2 - (footer && footer.logo ? 140 : 0); let fs = 84, t = String(name).slice(0, 60); g.fillStyle = '#13212B';
+  { const maxW = W - M * 2 - (footer && footer.logo ? 140 : 0); let fs = 84, t = String(name).slice(0, 60); g.fillStyle = '#0B1B3B';
     const fit = () => { g.font = `700 ${fs}px Manrope, sans-serif`; return g.measureText(t).width <= maxW; };
     while (!fit() && fs > 56) fs -= 4; while (!fit() && t.length > 4) t = t.slice(0, -2).trimEnd() + '…';
     y += 96; g.fillText(t, M, y); }
-  y += 56; g.fillStyle = '#5A6872'; g.font = '400 40px Manrope, sans-serif'; g.fillText(date, M, y);
+  y += 56; g.fillStyle = '#566079'; g.font = '400 40px Manrope, sans-serif'; g.fillText(date, M, y);
   // две карты в белых плитках
   y += 48; const tw = (W - M * 2 - 24) / 2, th = tw * 1.45;
   const holder = document.createElement('div'); holder.style.cssText = 'position:fixed;left:-9999px;top:0;width:360px'; document.body.appendChild(holder);
   for (const [i, back] of [[0, false], [1, true]]) { const x = M + i * (tw + 24); g.fillStyle = '#fff'; g.beginPath(); g.roundRect(x, y, tw, th, 48); g.fill();
     const hc = document.createElement('canvas'); hc.style.width = '200px'; holder.appendChild(hc); drawHeat(hc, sp, back, null, [], { reveal: false });
     const ih = th - 120, iw = ih * hc.width / hc.height; g.drawImage(hc, x + (tw - iw) / 2, y + 40, iw, ih);
-    g.fillStyle = '#5A6872'; g.font = '500 32px "JetBrains Mono", monospace'; g.textAlign = 'center'; g.fillText(back ? 'СЗАДИ' : 'СПЕРЕДИ', x + tw / 2, y + th - 32); g.textAlign = 'left'; }
+    g.fillStyle = '#566079'; g.font = '500 32px "JetBrains Mono", monospace'; g.textAlign = 'center'; g.fillText(back ? 'СЗАДИ' : 'СПЕРЕДИ', x + tw / 2, y + th - 32); g.textAlign = 'left'; }
   holder.remove(); y += th + 24; const breaks = [y]; // где можно резать на страницы PDF: между блоками, а не внутри
   const wrap = (t, x0, size, weight, col, lh = 1.3) => { g.font = `${weight} ${size}px Manrope, sans-serif`; g.fillStyle = col; let cur = '';
     for (const w of String(t).split(' ')) { const tt = cur ? cur + ' ' + w : w; if (g.measureText(tt).width > W - x0 - M && cur) { y += size * lh; g.fillText(cur, x0, y); cur = w; } else cur = tt; }
     if (cur) { y += size * lh; g.fillText(cur, x0, y); } };
-  for (const sec of sections) { if (!sec.rows.length && !(sec.chart && sec.chart.length)) continue; breaks.push(y + 12); y += 64; g.fillStyle = '#13212B'; g.font = '700 46px Manrope, sans-serif'; g.fillText(sec.h, M, y); y += 8;
+  for (const sec of sections) { if (!sec.rows.length && !(sec.chart && sec.chart.length)) continue; breaks.push(y + 12); y += 64; g.fillStyle = '#0B1B3B'; g.font = '700 46px Manrope, sans-serif'; g.fillText(sec.h, M, y); y += 8;
     if (sec.chart && sec.chart.length) { y += 24; y = vasChart(g, sec.chart, M, y, W - M * 2, 300); }
-    for (const [ri, r] of sec.rows.entries()) { if (ri) breaks.push(y + 10); y += 16; const y0 = y; if (r.k) { const fs = r.small ? 40 : 56; wrap(r.text, M + 72, fs, r.bold ? 700 : 400, '#13212B', 1.25); drawMark(g, M + 26, y0 + (r.small ? 26 : 36), r.k, { scale: r.small ? 1.7 : 2.2 }); }
-      else wrap(r.text, M, 40, 400, r.col || '#16181C'); } }
-  if (delta) { breaks.push(y + 16); y += 72; g.fillStyle = '#13212B'; g.font = '700 46px Manrope, sans-serif'; g.fillText(delta.h, M, y); y += 40;
-    g.fillStyle = '#5A6872'; g.font = '400 40px Manrope, sans-serif'; g.fillText(delta.name, M, y + 10); y += 150;
+    for (const [ri, r] of sec.rows.entries()) { if (ri) breaks.push(y + 10); y += 16; const y0 = y; if (r.k) { const fs = r.small ? 40 : 56; wrap(r.text, M + 72, fs, r.bold ? 700 : 400, '#0B1B3B', 1.25); drawMark(g, M + 26, y0 + (r.small ? 26 : 36), r.k, { scale: r.small ? 1.7 : 2.2 }); }
+      else wrap(r.text, M, 40, 400, r.col || '#0B1B3B'); } }
+  if (delta) { breaks.push(y + 16); y += 72; g.fillStyle = '#0B1B3B'; g.font = '700 46px Manrope, sans-serif'; g.fillText(delta.h, M, y); y += 40;
+    g.fillStyle = '#566079'; g.font = '400 40px Manrope, sans-serif'; g.fillText(delta.name, M, y + 10); y += 150;
     g.fillStyle = '#868B93'; g.font = '400 68px Manrope, sans-serif'; const was = fmt(delta.was) + delta.u; g.fillText(was, M, y); const wx = M + g.measureText(was).width + 32;
-    g.font = '400 56px Manrope, sans-serif'; g.fillText('→', wx, y - 6); g.fillStyle = '#13212B'; g.font = '600 132px Manrope, sans-serif'; g.fillText(fmt(delta.now) + delta.u, wx + 90, y + 18);
-    if (delta.note) { y += 70; g.fillStyle = delta.state === 'better' ? '#1E7149' : delta.state === 'worse' ? '#B3343B' : '#5A6872'; g.font = '600 40px Manrope, sans-serif'; g.fillText(delta.note, M, y); } }
-  for (const extra of footer.after || []) { breaks.push(y + 16); y += 72; g.fillStyle = '#13212B'; g.font = '700 46px Manrope, sans-serif'; g.fillText(extra.h, M, y); y += 8; wrap(extra.text, M, 40, 400, '#16181C'); }
+    g.font = '400 56px Manrope, sans-serif'; g.fillText('→', wx, y - 6); g.fillStyle = '#0B1B3B'; g.font = '600 132px Manrope, sans-serif'; g.fillText(fmt(delta.now) + delta.u, wx + 90, y + 18);
+    if (delta.note) { y += 70; g.fillStyle = delta.state === 'better' ? '#15803D' : delta.state === 'worse' ? '#B42323' : '#566079'; g.font = '600 40px Manrope, sans-serif'; g.fillText(delta.note, M, y); } }
+  for (const extra of footer.after || []) { breaks.push(y + 16); y += 72; g.fillStyle = '#0B1B3B'; g.font = '700 46px Manrope, sans-serif'; g.fillText(extra.h, M, y); y += 8; wrap(extra.text, M, 40, 400, '#0B1B3B'); }
   // оговорка на каждой картинке: картинку пересылают дальше, а подпись под ней ставит специалист
-  breaks.push(y + 16); y += 64; wrap(footer.note || 'Предварительная оценка движения по камере телефона, не медицинское заключение.', M, 30, 400, '#5A6872');
+  breaks.push(y + 16); y += 64; wrap(footer.note || 'Предварительная оценка движения по камере телефона, не медицинское заключение.', M, 30, 400, '#566079');
   // подвал: фото, имя, специализация, контакты. brand: 'pro' (свой бренд, «Powered by» мелко), 'free' (плашка «Сформировано в BodyPassport»)
   const T = footer.title ? 1 : 0, FH = 220 + T * 44, H = y + M + FH, out = document.createElement('canvas'); out.width = W; out.height = H; const o = out.getContext('2d'); o.drawImage(cv, 0, 0);
-  o.fillStyle = '#13212B'; o.fillRect(0, H - FH, W, FH);
+  o.fillStyle = '#0B1B3B'; o.fillRect(0, H - FH, W, FH);
   // фото специалиста в кружке слева от имени
   let tx = M; if (footer.photo) { try { const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = footer.photo; });
     const D = 132, cx = M + D / 2, cy = H - FH + 92 + T * 14; o.save(); o.beginPath(); o.arc(cx, cy, D / 2, 0, Math.PI * 2); o.clip(); o.drawImage(im, M, cy - D / 2, D, D); o.restore();
     o.strokeStyle = 'rgba(255,255,255,.35)'; o.lineWidth = 3; o.beginPath(); o.arc(cx, cy, D / 2, 0, Math.PI * 2); o.stroke(); tx = M + D + 28; } catch (e) {} }
   o.fillStyle = '#fff'; o.font = '700 46px Manrope, sans-serif'; o.fillText(String(footer.name).slice(0, tx > M ? 30 : 36), tx, H - FH + 76);
-  if (T) { o.fillStyle = '#B9BDC4'; o.font = '400 34px Manrope, sans-serif'; o.fillText(String(footer.title).slice(0, tx > M ? 40 : 48), tx, H - FH + 122); }
+  if (T) { o.fillStyle = '#B6BED0'; o.font = '400 34px Manrope, sans-serif'; o.fillText(String(footer.title).slice(0, tx > M ? 40 : 48), tx, H - FH + 122); }
   if (footer.contact) { o.fillStyle = '#D0D3D8'; o.font = '400 38px Manrope, sans-serif'; o.fillText(String(footer.contact).slice(0, tx > M ? 36 : 44), tx, H - FH + 128 + T * 44); }
   if (footer.brand === 'free') { const t = 'Сформировано в BodyPassport'; o.font = '600 28px Manrope, sans-serif'; const w = o.measureText(t).width + 36;
-    o.fillStyle = '#0E5A6B'; o.beginPath(); o.roundRect(M, H - 66, w, 46, 12); o.fill(); o.fillStyle = '#FFFFFF'; o.fillText(t, M + 18, H - 33);
-    o.fillStyle = '#B9BDC4'; o.font = '400 26px Manrope, sans-serif'; o.fillText('бесплатный тест движения: ' + location.host, M + w + 18, H - 33); }
-  else { o.fillStyle = footer.brand === 'pro' ? '#6E737B' : '#B9BDC4'; o.font = `400 ${footer.brand === 'pro' ? 24 : 30}px Manrope, sans-serif`;
+    o.fillStyle = '#0B1B3B'; o.beginPath(); o.roundRect(M, H - 66, w, 46, 12); o.fill(); o.fillStyle = '#FFFFFF'; o.fillText(t, M + 18, H - 33);
+    o.fillStyle = '#B6BED0'; o.font = '400 26px Manrope, sans-serif'; o.fillText('бесплатный тест движения: ' + location.host, M + w + 18, H - 33); }
+  else { o.fillStyle = footer.brand === 'pro' ? '#6E737B' : '#B6BED0'; o.font = `400 ${footer.brand === 'pro' ? 24 : 30}px Manrope, sans-serif`;
     o.fillText(footer.brand === 'pro' ? 'Powered by BodyPassport' : 'BodyPassport · методика Р. Аюпова · оценка движения', M, H - 36); }
   if (raw) { out.breaks = breaks; return out; }
   return new Promise(r => out.toBlob(r, 'image/png'));
@@ -1387,9 +1403,9 @@ export async function workout(ids, reasons = {}) {
       <div class="eyebrow" style="color:var(--signal);margin-top:18px">${i + 1} из ${list.length}${rs ? ' · для итога' : ''}</div>
       ${rs ? `<div class="row" style="gap:8px;margin-top:6px;font-size:14px;color:var(--cam-sub)"><span class="mark sm ${rs.k}"></span><span>${esc(rs.t)}</span></div>` : ''}
       <h1 style="color:#fff;margin-top:8px">${e.title.split(' (')[0]}</h1>
-      ${exSide(e) ? `<div style="display:inline-block;align-self:flex-start;width:fit-content;margin-top:8px;padding:6px 12px;border-radius:999px;background:var(--signal);color:var(--cam-bg,#0B1A20);font-weight:700;font-size:15px">${exSide(e) === 'слева' ? 'Левая сторона' : 'Правая сторона'}</div>` : ''}
+      ${exSide(e) ? `<div style="display:inline-block;align-self:flex-start;width:fit-content;margin-top:8px;padding:6px 12px;border-radius:999px;background:var(--signal);color:var(--cam-bg,#0B1B3B);font-weight:700;font-size:15px">${exSide(e) === 'слева' ? 'Левая сторона' : 'Правая сторона'}</div>` : ''}
       <div class="row" style="gap:6px;margin-top:12px;flex-wrap:wrap">${[e.dose, e.feel].filter(Boolean).map(x => `<span class="pill" style="background:rgba(255,255,255,.12);color:#fff">${x}</span>`).join('')}</div>
-      ${hasFigure(e.id) ? `<div style="margin-top:16px;background:#F4F7F8;border-radius:var(--r-lg);padding:10px 12px 8px">${exFigure(e.id)}<div style="text-align:center;font-size:13px;color:#4A5A63;margin-top:2px">Повторяйте за фигурой · <span style="color:#C77D12">светится</span> рабочая зона</div></div>` : ''}
+      ${hasFigure(e.id) ? `<div style="margin-top:16px;background:#F5F6FA;border-radius:var(--r-lg);padding:10px 12px 8px">${exFigure(e.id)}<div style="text-align:center;font-size:13px;color:#4A5A63;margin-top:2px">Повторяйте за фигурой · <span style="color:#C77D12">светится</span> рабочая зона</div></div>` : ''}
       ${rk ? `<div id="cambox" style="margin-top:12px">${camHtml()}</div>` : ''}
       <div class="row" style="gap:14px;margin-top:14px;align-items:center"><div style="position:relative;width:${hasFigure(e.id) ? 72 : 200}px;height:${hasFigure(e.id) ? 72 : 200}px;flex:none;margin:${hasFigure(e.id) ? '0' : '8px auto 0'}"><svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg)"><circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="6"/><circle id="arc" cx="50" cy="50" r="45" fill="none" stroke="#D4F25A" stroke-width="6" stroke-linecap="round" stroke-dasharray="283" stroke-dashoffset="283"/></svg>
         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><b id="tm" class="num" style="font-size:${hasFigure(e.id) ? 20 : 56}px;font-weight:600;letter-spacing:-.02em;opacity:.45">${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}</b></div></div><span id="tml" style="font-size:14px;color:var(--cam-sub)">старт после подсказки</span></div>
@@ -1544,13 +1560,13 @@ export function clientHome() {
       ${all.length ? `<div class="group">${all.slice().reverse().slice(0, 8).map(t => `<button class="row-link ctest" data-d="${t.date}"><span style="flex:1;text-align:left"><b style="font-weight:600">${fmtD(t.date)} · ${testLabel(t)}</b><small class="sub" style="display:block;font-size:13px">${zonesOf(t) ? zonesOf(t) + ' ' + plural3(zonesOf(t), 'зона требует', 'зоны требуют', 'зон требуют') + ' внимания' : 'без выраженных перекосов'}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>` : '<p class="sub">Тестов пока нет.</p>'}
       ${all.length === 1 ? '<p class="sub" style="font-size:14px">Пройдите тест еще раз через 3–4 недели, и здесь появится сравнение.</p>' : ''}`)}
     ${reps.length ? card('Отчеты специалиста', `<div class="group">${reps.slice().reverse().map(r => `<button class="row-link crep" data-c="${esc(r.code)}">${ic('file-text', 's')}<span style="flex:1;text-align:left">${esc(r.date || fmtD(r.at))}<small class="sub" style="display:block;font-size:13px">${esc(r.author)}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>`) : ''}
-   </div>${installCard()}<div class="dock"><button class="btn${exIds.length ? ' line' : ''}" id="ctest">${ic('rotate-ccw', 's')}Пройти тест${all.length ? ' снова' : ''}</button></div></div>`);
+   </div>${installCard()}<div class="dock"><button class="btn${exIds.length ? ' line' : ''}" id="ctest">${ic('rotate-ccw', 's')}Пройти тест${all.length ? ' снова' : ''}</button>${all.length ? clientNav('cab') : ''}</div></div>`);
   $('#back').onclick = () => (all.length ? map() : onboarding()); $('#cset').onclick = settings;
   if ($('#cgo')) $('#cgo').onclick = () => workout(exIds);
   app.querySelectorAll('.cex').forEach(b => b.onclick = () => workout([b.dataset.id]));
   app.querySelectorAll('.ctest').forEach(b => b.onclick = () => { SHOW_T = +b.dataset.d; map(); });
   app.querySelectorAll('.crep').forEach(b => b.onclick = () => reportView(b.dataset.c));
-  $('#ctest').onclick = () => { SHOW_T = null; again(); }; bindInstall();
+  $('#ctest').onclick = () => { SHOW_T = null; again(); }; bindInstall(); bindClientNav();
 }
 
 // ---------- настройки ----------
@@ -1635,7 +1651,7 @@ function calibReportScreen(rep, back, docs = []) { const t = rep.totals, K = ['m
       ${rep.muscles.map(m => `<tr>${[esc(m.name), ...K.map(k => m[k] || '·')].map((v, i) => `<td style="padding:4px 6px;border-bottom:1px solid var(--line-2);${i && v !== '·' ? 'font-weight:600' : 'color:var(--sub)'}">${v}</td>`).join('')}</tr>`).join('')}</table>
       <button class="btn line" id="csv" style="margin-top:10px;height:44px">Скачать таблицу (Excel)</button></div>
      <div class="card"><b>Обучение: веса правил</b><p class="sub" style="font-size:13px;line-height:1.4;margin-top:4px">Сколько раз вывод правила подтвердили специалисты (за) и опровергли (против). Новый вес = старый × √((за+2)/(против+2)), от 0,1 до 1,5, нужно минимум 2 мнения. ${C.weightsAt ? 'Сейчас действуют веса от ' + new Date(C.weightsAt).toLocaleString('ru') + '.' : 'Сейчас действуют исходные веса.'}</p>
-      ${lw.length ? lw.map(x => `<div class="row" style="gap:8px;margin-top:8px;font-size:14px;line-height:1.35"><span style="flex:1">${esc(RULE_NAMES[x.rule] || x.rule)} → ${esc(x.name)}<br><small class="sub">за ${wf(x.agree)}, против ${wf(x.disagree)} · источников ${x.sources}</small></span><b class="num" style="color:${x.nw < x.w ? 'var(--over-t)' : 'var(--ok-t,#2E7D5B)'}">${wf(x.w)} → ${wf(x.nw)}</b></div>`).join('') + `<button class="btn" id="wapply" style="margin-top:12px;height:48px">Применить ${lw.length} ${lw.length === 1 ? 'изменение' : lw.length < 5 ? 'изменения' : 'изменений'} для всех</button>` : '<p style="font-size:14px;margin-top:8px">Пока нечего менять: мало мнений по одним и тем же правилам.</p>'}
+      ${lw.length ? lw.map(x => `<div class="row" style="gap:8px;margin-top:8px;font-size:14px;line-height:1.35"><span style="flex:1">${esc(RULE_NAMES[x.rule] || x.rule)} → ${esc(x.name)}<br><small class="sub">за ${wf(x.agree)}, против ${wf(x.disagree)} · источников ${x.sources}</small></span><b class="num" style="color:${x.nw < x.w ? 'var(--over-t)' : 'var(--ok-t,#15803D)'}">${wf(x.w)} → ${wf(x.nw)}</b></div>`).join('') + `<button class="btn" id="wapply" style="margin-top:12px;height:48px">Применить ${lw.length} ${lw.length === 1 ? 'изменение' : lw.length < 5 ? 'изменения' : 'изменений'} для всех</button>` : '<p style="font-size:14px;margin-top:8px">Пока нечего менять: мало мнений по одним и тем же правилам.</p>'}
       ${relRows.length ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line-2)"><b style="font-size:14px">Доверие к сторонним специалистам</b><p class="sub" style="font-size:12px;margin-top:2px">Насколько их проверки совпадают с вашими (или с большинством). С таким весом их мнение идет в обучение.</p>${relRows.map(([id, v]) => `<div class="row" style="font-size:14px;margin-top:6px"><span style="flex:1">${esc(names[id] || id)}</span><b>${v}%</b></div>`).join('')}</div>` : ''}
       <div class="row" style="gap:8px;margin-top:8px"><button class="btn line" id="wundo" style="flex:1;height:44px;font-size:14px">Откатить последнее</button><button class="btn line" id="wreset" style="flex:1;height:44px;font-size:14px">Исходные веса</button></div></div>
      ${rep.cases.map(c => `<div class="card"><b>Случай ${esc(c.label)}</b> <span class="sub" style="font-size:13px">${esc(c.from || '')} · ${String(c.date).slice(0, 10)}</span>
