@@ -276,7 +276,7 @@ export function onboarding() {
   setSession(MODES.SELF);
   go(`<div class="scr welcome fade">
     <img class="welcome-bg" src="img/bp-hero-client.webp" alt="">
-    <div class="row pad" style="padding-top:18px;position:relative"><img src="icons/mark.svg" width="30" height="30" alt=""><b class="brand-name">BodyPassport</b><span style="flex:1"></span>${configSync().beta !== false ? '<span class="tag-dark">бета</span>' : ''}</div>
+    <div class="row pad" style="padding-top:18px;position:relative"><img src="icons/mark.svg" width="36" height="36" alt=""><b class="brand-name">BodyPassport</b><span style="flex:1"></span>${configSync().beta !== false ? '<span class="tag-dark">бета</span>' : ''}</div>
     <div class="pad welcome-txt"><div class="welcome-kicker">Паспорт вашего тела</div><h1>Проверьте, как вы двигаетесь, за&nbsp;4&nbsp;минуты</h1>
       <p>Камера телефона посмотрит на осанку и движения и подскажет, с чего начать. Видео не записывается и не покидает телефон.</p>
       ${INV() ? '' : `<div class="row" style="margin-top:18px;gap:10px"><img src="img/rifat.jpg" alt="Рифат Аюпов" width="36" height="36" style="border-radius:50%;object-fit:cover;flex:none;border:1.5px solid rgba(255,255,255,.4)"><div style="font-size:13px;line-height:1.35"><b style="font-weight:600;display:block">Методика Рифата Аюпова</b><span style="opacity:.7">кинезиотерапевт, биомеханик</span></div></div>`}</div>
