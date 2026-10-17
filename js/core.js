@@ -27,6 +27,11 @@ let voiceIdx = {}, audio = null, unlocked = false;
 // Записи играем через WebAudio: встроенный браузер Telegram и другие WebView не дают играть <audio> без нажатия на каждый звук,
 // а AudioContext, разблокированный кнопкой «Начать тест», работает весь тест. <audio> остается запасным путем.
 const bufs = new Map();
+// короткая тишина для разблокировки <audio> на iPhone
+const SILENT = (() => { try { const b = new ArrayBuffer(46), v = new DataView(b), w = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  w(0, 'RIFF'); v.setUint32(4, 38, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 8000, true); v.setUint32(28, 16000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, 2, true);
+  return URL.createObjectURL(new Blob([b], { type: 'audio/wav' })); } catch (e) { return ''; } })();
+let shared = null; const sharedEl = () => { if (!shared) { shared = new Audio(); shared.setAttribute('playsinline', ''); shared.preload = 'auto'; } return shared; };
 const ctxOk = () => voice._ac && voice._ac.state === 'running';
 async function decode(f) { if (bufs.has(f)) return bufs.get(f);
   const p = fetch('voice/' + f).then(r => r.ok ? r.arrayBuffer() : Promise.reject(r.status)).then(ab => new Promise((ok, no) => voice._ac.decodeAudioData(ab, ok, no)));
@@ -34,8 +39,9 @@ async function decode(f) { if (bufs.has(f)) return bufs.get(f);
 /** Проиграть запись: { done: Promise (true — проиграно, false — не удалось), stop(), dur }. */
 function playFile(f) { let stopped = false, src = null, el = null, res;
   const h = { done: new Promise(r => res = r), dur: 0, stop() { stopped = true; try { src && src.stop(); } catch (e) {} if (el) el.pause(); res(true); } };
-  const viaEl = () => { if (stopped) return; el = new Audio('voice/' + f); el.onended = () => res(true); el.onerror = () => res(false);
+  const viaEl = () => { if (stopped) return; el = sharedEl(); el.src = 'voice/' + f; el.onended = () => res(true); el.onerror = () => res(false);
     el.onloadedmetadata = () => { if (isFinite(el.duration)) h.dur = el.duration; }; el.play().catch(() => res(false)); };
+  if (voice._ac && voice._ac.state !== 'running') voice._ac.resume().catch(() => {});
   if (ctxOk()) decode(f).then(b => { if (stopped) return; h.dur = b.duration; src = voice._ac.createBufferSource(); src.buffer = b; src.connect(voice._ac.destination); src.onended = () => res(true); src.start(); }).catch(viaEl);
   else viaEl();
   return h; }
@@ -45,6 +51,9 @@ const MALE = /dmitr|yuri|юрий|maxim|максим|pavel|павел/i;
 function sysSay(text, done) { try { if (!window.speechSynthesis) return false; const vs = speechSynthesis.getVoices().filter(v => v.lang.startsWith('ru') && MALE.test(v.name) && !/female|жен/i.test(v.name));
   if (!vs.length) { try { track('voice_missing', { c: String(text).slice(0, 60) }, false); } catch (e) {} return false; }
   speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ru-RU'; u.voice = vs[0]; if (done) u.onend = done; speechSynthesis.speak(u); return true; } catch (e) { return false; } }
+addEventListener('pointerup', () => voice.unlock(), { capture: true, passive: true });
+addEventListener('touchend', () => voice.unlock(), { capture: true, passive: true });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && voice._ac && voice._ac.state !== 'running') voice._ac.resume().catch(() => {}); });
 export const voice = {
   async init() { voiceIdx = await fetch('voice/index.json', { cache: 'no-store' }).then(r => r.json()).catch(() => voiceIdx || {}); },
   /** Проверка перед тестом: все фразы есть в списке записей; если нет — перечитать список. */
@@ -52,10 +61,15 @@ export const voice = {
   /** Есть ли запись этой фразы (тем же голосом, что в тесте). */
   has(text) { return !!voiceIdx[String(text || '').trim()]; },
   // вызывать из обработчика нажатия: разблокирует звук на весь тест
-  unlock() { try { this._ac = this._ac || new (window.AudioContext || window.webkitAudioContext)(); this._ac.resume();
+  // iPhone: звук разблокируется только внутри касания, а WebAudio по умолчанию молчит при беззвучном режиме (переключатель сбоку).
+  // Поэтому: сессия «playback» (iOS 17+, играет и в беззвучном), разблокировка на каждом касании, общий <audio> как запасной путь
+  unlock() { try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch (e) {}
+    try { if (!this._ac) { this._ac = new (window.AudioContext || window.webkitAudioContext)(); this._ac.onstatechange = () => { if (this._ac.state !== 'running' && document.visibilityState === 'visible') this._ac.resume().catch(() => {}); }; }
+      if (this._ac.state !== 'running') this._ac.resume().catch(() => {});
       const b = this._ac.createBuffer(1, 1, 22050), s = this._ac.createBufferSource(); s.buffer = b; s.connect(this._ac.destination); s.start(0); } catch (e) {}
+    if (unlocked) return; unlocked = true;
     try { if (window.speechSynthesis) speechSynthesis.speak(Object.assign(new SpeechSynthesisUtterance(' '), { volume: 0 })); } catch (e) {}
-    if (unlocked) return; unlocked = true; const a = new Audio(); a.muted = true; a.play().catch(() => {}); },
+    try { const a = sharedEl(); a.src = SILENT; a.play().then(() => a.pause()).catch(() => {}); } catch (e) {} },
   muted: localStorage.getItem('bp_mute') === '1',
   // занят, пока звучит фраза; ограничено оценкой длины фразы, чтобы сбой или медленная загрузка звука не «вешали» тест
   until: 0, hardUntil: 0,

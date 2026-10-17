@@ -328,7 +328,7 @@ export async function prep() {
       <svg width="34" height="56" viewBox="0 0 34 56" aria-hidden="true"><rect x="2" y="2" width="30" height="52" rx="6" fill="none" stroke="var(--ink)" stroke-width="2.5"/><circle cx="17" cy="9" r="2.5" fill="var(--ink)"/></svg>
       <div style="flex:1;max-width:150px;text-align:center"><div class="measure sm" style="justify-content:center"><b>2–4</b><u>м</u></div><div style="border-top:2px dashed var(--line);margin-top:6px"></div></div>
       <svg width="40" height="76" viewBox="0 0 200 380" aria-hidden="true"><circle cx="100" cy="44" r="24" fill="var(--figure)" stroke="var(--faint)" stroke-width="5"/><path d="M78 72 L122 72 Q140 74 144 92 L156 176 Q158 186 150 188 Q144 188 142 180 L132 112 L128 190 L130 268 L128 352 Q128 362 118 362 Q110 362 110 352 L104 210 L96 210 L90 352 Q90 362 82 362 Q72 362 72 352 L70 268 L72 190 L68 112 L58 180 Q56 188 50 188 Q42 186 44 176 L56 92 Q60 74 78 72 Z" fill="var(--figure)" stroke="var(--faint)" stroke-width="5"/></svg></div>
-      ${[['smartphone', 'Вертикально, на уровне пояса'], ['maximize', 'Видно целиком, от головы до стоп'], ['sun', 'Лицом к свету, одежда по фигуре']].map(([i, t]) => `<div class="row" style="padding:12px 0;border-top:1px solid var(--line-2);font-size:15px"><span style="color:var(--brand)">${ic(i, 's')}</span><span style="flex:1">${t}</span></div>`).join('')}</div>
+      ${[['smartphone', 'Вертикально, на уровне пояса'], ['maximize', 'Видно целиком, от головы до стоп'], ['sun', 'Лицом к свету, одежда по фигуре'], ['volume-2', 'Звук включен: голос ведет весь тест']].map(([i, t]) => `<div class="row" style="padding:12px 0;border-top:1px solid var(--line-2);font-size:15px"><span style="color:var(--brand)">${ic(i, 's')}</span><span style="flex:1">${t}</span></div>`).join('')}</div>
     <div class="group"><div class="row" style="min-height:60px"><div style="flex:1;min-width:0"><b style="font-size:15px">${FULL ? 'Точный тест' : 'Быстрый тест'}</b><div style="font-size:13px;color:var(--sub)">${cam.back ? 'Основная камера' : 'Фронтальная камера'}</div></div><button class="link" id="chg">Изменить</button></div></div>
     <details class="acc" id="compo"><summary style="font-weight:600;font-size:15px">Состав теста</summary>${sortUnits(consumerProtocol()).flatMap(u => UNITS[u] || []).map((r, k) => `<div class="row" style="padding:6px 0"><span class="step-n" style="width:22px;flex:none">${String(k + 1).padStart(2, '0')}</span><span style="flex:1;font-size:15px">${r[0]}</span><span style="font-size:12px;color:var(--sub)">${r[2]} с</span></div>`).join('')}
       <button class="link" id="cant" style="min-height:44px;font-size:14px">Не могу выполнить некоторые движения</button></details>
@@ -474,6 +474,7 @@ const SAY = {
   bendIntro: 'Наклоны в стороны. Руки вдоль тела.', bendR: 'Медленно наклонись вправо.', bendL: 'Теперь наклонись влево.', lower: 'Ниже, рука скользит по бедру', ret: 'Вернись.',
   calfRIntro: 'Встань на правую ногу и поднимайся на носок пятнадцать секунд', calfLIntro: 'Теперь на левой ноге. Поднимайся на носок пятнадцать секунд', calfGo: 'Поднимайся на носок и опускайся. Пятнадцать секунд.', calfHigher: 'Поднимайся выше на носок',
   sideTurn: 'Повернись правым боком к телефону.', backTurn: 'Повернись спиной к телефону.', frontTurn: 'Повернись ко мне лицом.',
+  toPlace: 'Встаньте на место. Начнем по сигналу.', backIntro: 'Следующий присед спиной к телефону, три раза. Я буду считать вслух.',
   armsOverhead: 'Подними прямые руки вверх.', squatGo: 'Приседай. Три раза.', staySide: 'Остаемся боком к телефону. Стопы на ширине плеч.',
   // фразы батареи v2: в SAY, чтобы записи загрузились заранее и голос не замолкал на загрузке перед шагом
   fwdIntro: 'Стойте лицом к телефону. Наклонитесь вперед, к телефону. Колени прямые, руки тянутся к полу.', slbIntro: 'Руки на поясе. Встаньте на правую ногу, левую согните назад.', slbSwap: 'Смена ноги. Теперь на левой.',
@@ -624,7 +625,12 @@ async function runProtocol0(protocol, opts = {}) {
   // счет идет с первого слова команды: люди начинают приседать на «Приседай», и раньше, пока голос договаривал, первые повторы терялись, а лишние засчитывались после
   // четкий старт: крупный отсчет 3-2-1 голосом и на экране, затем сигнал. Движение начинается только после сигнала
   // Pacing Guard: без счета «3-2-1». Инструкция (желтая рамка) → сигнал «Пип» и зеленый экран с глаголом → запись
-  const countdown = async (word = GO_WORD.hold) => { if (stop || skip) return; demo(null); await pg.signal(word, () => voice.beep('start')); };
+  // перед сигналом время вернуться на место: люди подходят к телефону рассмотреть схему. Схема остается на экране,
+  // крупный обратный отсчет виден издалека; на первых двух упражнениях дольше
+  let nCount = 0;
+  const countdown = async (word = GO_WORD.hold) => { if (stop || skip) return; const T = nCount++ < 2 ? 7 : 5; say(SAY.toPlace);
+    const t0 = Date.now(); $('#reps').hidden = false; $('#repn').textContent = 'сек'; while (!stop && !skip && Date.now() - t0 < T * 1000) { const left = Math.ceil(T - (Date.now() - t0) / 1000); $('#ring').textContent = left; bar((Date.now() - t0) / (T * 1000), `На место: ${left} с`); await sleep(100); }
+    $('#reps').hidden = true; if (stop || skip) return; demo(null); await pg.signal(word, () => voice.beep('start')); };
   const goReps = async (phrase, key, an, deep, N) => { await countdown(GO_WORD.squat); if (stop || skip) return { f: {}, reps: 0, quality: 'RETAKE' }; const sp = say(phrase); const r = await reps(key, an, deep, N, true); await sp; return r; };
   // схема движения крупно на экране, пока звучит объяснение: видно, как встать и насколько садиться
   const demo = (id, fc) => { const old = app.querySelector('.cam .demo'); if (old) old.remove(); if (!id) return; const d = document.createElement('div'); d.className = 'demo';
@@ -725,7 +731,8 @@ async function runProtocol0(protocol, opts = {}) {
       await countdown(GO_WORD.reach); const fr = await armReps('reach', 3); if (skipped()) return; moves.reach = overheadReach(fr); await say(SAY.armsDown); k++; }
     if (u === 'chair') { await face('front'); fsOff = true; step(k, 'Вставание со стула', 'Сядьте на стул боком к камере, руки на груди. Вставайте и садитесь 30 секунд'); demo('test_chair', 'side'); await say(SAY.chairIntro); if (skipped()) return;
       await countdown(GO_WORD.chair); moves.chair = await reps('chair', fr => chairStand(fr), .1, 99, true, 30000); moves.chair.quality = moves.chair.reps ? 'GOOD' : 'RETAKE'; await say(SAY.good); k++; fsOff = false; }
-    if (u === 'back') { await face('back'); step(k, 'Спиной: присед', 'Стопы чуть шире плеч, руки вверх, 3 раза', FOC.squat); await say(SAY.wide); await say(SAY.armsOverhead); if (skipped()) return; 
+    // спиной экран не видно: сначала показываем и объясняем лицом к телефону, потом поворот; дальше ведет голос и счет
+    if (u === 'back') { await face('front'); step(k, 'Спиной: присед', 'Стопы чуть шире плеч, руки вверх, 3 раза. Голос считает', FOC.squat); demo('test_squat', 'back'); await say(SAY.backIntro); await say(SAY.armsOverhead); await face('back'); if (skipped()) return; 
       moves.ohs_back = await goReps(SAY.squatGo, 'ohs_back', fr => Movement.back(fr), .12, 3); if (skipped()) return; await say(SAY.stop); k++; }
   };
   // облегченный вариант после «Не могу»
