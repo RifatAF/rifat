@@ -1889,10 +1889,24 @@ startPassive(); // фоновый сбор касаний и ритма набо
   { const ml = await mailLinkLogin(); if (ml && ml.error) toast('Ссылка для входа устарела: запросите новое письмо'); else if (ml && ml.role === 'specialist') localStorage.setItem('bp_mode', 'pro'); }
   await Promise.all([getMe(), config()]); claimLegacy(); await restoreIfEmpty().catch(() => 0); mountBetaBar(); if (localStorage.getItem('bp_mode') !== 'pro') checkInvAlive();
   if ('serviceWorker' in navigator) {
-    // когда выходит новая версия, страница один раз перезагружается сама
-    let reloaded = false; const had = !!navigator.serviceWorker.controller;
-    navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !reloaded && !cam.running) { reloaded = true; location.reload(); } });
-    navigator.serviceWorker.register('sw.js').then(r => r.update()).catch(() => {});
+    // новая версия ждет, пока человек нажмет «Обновить»: молчаливая перезагрузка сбивала тест и формы
+    let reloaded = false, asked = false; const had = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && asked && !reloaded) { reloaded = true; location.reload(); } });
+    const offer = w => { if (!w || !had || document.getElementById('updbar')) return;
+      const show = () => { if (cam.running || document.querySelector('.cam')) return setTimeout(show, 5000);
+        const d = document.createElement('div'); d.id = 'updbar'; d.setAttribute('role', 'status');
+        d.innerHTML = `<span>${ic('download', 's')}Есть обновление</span><button id="updgo">Обновить</button><button id="updx" aria-label="Позже">${ic('x', 's')}</button>`;
+        document.body.appendChild(d); track('update_offer', {}, false);
+        d.querySelector('#updgo').onclick = () => { asked = true; d.querySelector('#updgo').textContent = 'Обновляю…'; w.postMessage('skip'); setTimeout(() => { if (!reloaded) location.reload(); }, 3000); };
+        d.querySelector('#updx').onclick = () => d.remove(); };
+      show(); };
+    navigator.serviceWorker.register('sw.js').then(r => {
+      if (r.waiting) offer(r.waiting);
+      r.addEventListener('updatefound', () => { const w = r.installing; if (w) w.addEventListener('statechange', () => { if (w.state === 'installed') offer(w); }); });
+      r.update().catch(() => {});
+      // приложение может висеть открытым днями: проверяем обновление при возврате и раз в полчаса
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) r.update().catch(() => {}); }); setInterval(() => r.update().catch(() => {}), 30 * 60e3);
+    }).catch(() => {});
   }
   if (location.hash.startsWith('#tgAuthResult=')) { let data = null;
     try { const b = location.hash.slice(14).replace(/-/g, '+').replace(/_/g, '/'); data = JSON.parse(decodeURIComponent(escape(atob(b + '==='.slice((b.length + 3) % 4))))); } catch (e) {}
