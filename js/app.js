@@ -17,7 +17,7 @@ import { sayText } from './saytext.js';
 import { BATTERY_UNITS, forwardBend, singleBalance, thoracicRotation, trotSweep, overheadReach, chairStand, retroGait, autoScale } from './test-battery.js';
 import { mountPacing, falseStart, matchScore, PHASE, SHORT_CMD, GO_WORD, COUNT_WORDS, numWord, ZERO_CLICK } from './pacing-guard.js';
 import { pinhole, fpsGuard, flushGL } from './hardware-adapter.js';
-import { setSession, MODES, passiveOn } from './session-controller.js';
+import { setSession, MODES, passiveOn, syncThemeColor } from './session-controller.js';
 import { touchSummary, resetTouch, startPassive, rememberBaseline } from './touch-tracker.js';
 import { runLoader, vnsSummary } from './vns-phenotype.js';
 import { ribFlare, apicalBreath, buttWink } from './biomechanics-engine.js';
@@ -76,25 +76,29 @@ const lc = t => t ? t[0].toLowerCase() + t.slice(1) : t;
 const acc = t => t.split(' ').map(w => { const m = w.match(/^(.*?)([,.]?)$/), x = m[1];
   for (const [a, b] of [['ая', 'ую'], ['яя', 'юю'], ['ца', 'цу'], ['ия', 'ию']]) if (x.endsWith(a)) return x.slice(0, -a.length) + b + m[2];
   return w; }).join(' ');
-export function verdict(top, findings) {
+// plain: клиенту бытовые зоны («ягодица сбоку справа») вместо анатомических названий
+export function verdict(top, findings, plain = false) {
   return VERBS.map(([k, verb]) => { const items = top.filter(s => s.k === k && !s.ambiguous).slice(0, 12); if (!items.length) return null;
     const s0 = items[0], f = findings.find(f => f.muscles.some(m => m.id === s0.id && (m.side === s0.side || m.side === 'BOTH')));
     // одна мышца с двух сторон: «с двух сторон» вместо двух строк
     const ids = [...new Set(items.map(s => s.id))], names = ids.map(id => { const sd = items.filter(s => s.id === id).map(s => s.side);
-      return acc(lc(C.muscles[id].name)) + ' ' + (sd.length > 1 ? 'с двух сторон' : sideWord(sd[0])); });
-    return { k, verb, what: names.join(', '), why: f ? f.observed.replace(' (на границе нормы)', '') : s0.byChain ? `Возможно, по цепи «${s0.byChain}»` : '' }; }).filter(Boolean);
+      return (plain ? lc(C.muscles[id].zone || C.muscles[id].name) : acc(lc(C.muscles[id].name))) + ' ' + (sd.length > 1 ? 'с двух сторон' : sideWord(sd[0])); });
+    if (plain) { const uniq = [...new Set(names)]; names.length = 0; names.push(...uniq.slice(0, 3)); }
+    return { k, verb, f, what: names.join(', '), why: f ? f.observed.replace(' (на границе нормы)', '') : s0.byChain ? `Возможно, по цепи «${s0.byChain}»` : '' }; }).filter(Boolean);
 }
 // skip: причины, которые уже показаны выше на экране (блок «Измерено»), под решениями не повторяем.
 // У каждой строки метка источника: ИЗМЕРЕНО (опирается на замер) или ГИПОТЕЗА (вывод по цепи). «На границе нормы» показываем, а не вырезаем.
-export function verdictCard(top, findings, empty = 'Явных перекосов не видно', skip = []) {
-  const v = verdict(top, findings);
+// что значит каждое действие простыми словами: «вот почему мне так говорили»
+const VERB_WHY = { WEAK: 'Эти мышцы недорабатывают, и их работу берут на себя соседние. Отсюда усталость и перекос.', SHORT: 'Эти мышцы зажаты и тянут сустав на себя. Отсюда скованность и тянущие ощущения.', HYPER: 'Эти мышцы работают за других и перегружены. Их нужно разгрузить, а не тянуть.' };
+export function verdictCard(top, findings, empty = 'Явных перекосов не видно', skip = [], plain = false) {
+  const v = verdict(top, findings, plain);
   if (!v.length) return `<div class="card empty">${ic('check')}<b>${empty}</b><span class="sub">Движение симметричное. Повтори тест через месяц.</span></div>`;
   // камера мерит угол, а мышца выведена из него: метка «замер» стоит у факта, мышца подписана как вероятная причина (аудит, п. 2)
-  return `<div class="card" style="padding:4px var(--s4)"><p class="sub" style="font-size:13px;padding-top:12px">Мышцы ниже: вероятная причина того, что измерила камера. Проверит специалист руками.</p>${v.map((x, i) => {
+  return `<div class="card" style="padding:4px var(--s4)"><p class="sub" style="font-size:13px;padding-top:12px">${plain ? 'Что мешает телу двигаться ровно. Это вероятная причина того, что увидела камера.' : 'Мышцы ниже: вероятная причина того, что измерила камера. Проверит специалист руками.'}</p>${v.map((x, i) => {
     const s0 = top.find(s => s.k === x.k && !s.ambiguous), f = s0 && findings.find(f => f.muscles.some(m => m.id === s0.id && (m.side === s0.side || m.side === 'BOTH')));
     const measured = f && s0 && !s0.derived && !s0.byChain, edge = f && / \(на границе нормы\)/.test(f.observed);
     const why = x.why && !skip.includes(x.why) && !(i && v[i - 1].why === x.why) ? `<span>${esc(x.why)}</span>` : '';
-    return `<div class="verdict-row"><span class="mark ${x.k}"></span><div style="flex:1;min-width:0"><div class="what"><b>${x.verb}</b> ${esc(x.what)}</div>
+    return `<div class="verdict-row"><span class="mark ${x.k}"></span><div style="flex:1;min-width:0"><div class="what"><b>${x.verb}${plain ? ':' : ''}</b> ${esc(x.what)}</div>${plain ? `<div style="font-size:14px;line-height:1.4;color:var(--sub);margin-top:4px">${VERB_WHY[x.k]}</div>` : ''}
       <div class="why">${measured ? '<span class="src">ЗАМЕР</span>' : '<span class="src hyp">ГИПОТЕЗА</span>'}${why}${edge ? '<span class="edge">на границе нормы</span>' : ''}</div></div></div>`; }).join('')}</div>`;
 }
 export const ex = id => C.exercises[id];
@@ -109,7 +113,7 @@ let view3d = null;
 let lastHead = '';
 const callerName = () => { try { const l = (new Error().stack || '').split('\n').map(x => x.trim()).filter(x => x.startsWith('at '));
   for (const x of l.slice(2)) { const m = /^at (?:async )?([\w$.]+)/.exec(x); if (m && !/^(go|Object\.go|HTMLButtonElement|HTMLDivElement|Promise|new Promise)/.test(m[1])) return m[1].replace(/^Object\./, '').slice(0, 40); } } catch (e) {} return 'screen'; };
-export function go(html) { try { screenView(callerName()); } catch (e) {} delete document.documentElement.dataset.theme; document.querySelectorAll('.qpop').forEach(x => x.remove()); if (view3d) { view3d.dispose(); view3d = null; } backFn = null; const head = html.slice(0, 260); if (head === lastHead) html = html.replace(' fade', ''); lastHead = head; app.innerHTML = html; window.scrollTo(0, 0);
+export function go(html) { try { screenView(callerName()); } catch (e) {} delete document.documentElement.dataset.theme; document.querySelectorAll('.qpop').forEach(x => x.remove()); if (view3d) { view3d.dispose(); view3d = null; } backFn = null; const head = html.slice(0, 260); if (head === lastHead) html = html.replace(' fade', ''); lastHead = head; app.innerHTML = html; window.scrollTo(0, 0); syncThemeColor();
   const tc = document.querySelector('meta[name=theme-color]'); if (tc) tc.content = html.includes('class="cam"') ? '#0A0C0F' : / dark[ "]/.test(html.slice(0, 200)) ? '#0B1B3B' : '#F5F6FA'; }
 
 // ---------- «назад»: жест и системная кнопка ведут на шаг назад в приложении, а не закрывают его ----------
@@ -1013,7 +1017,7 @@ function reasonsOf(ids, top) { const out = {};
     const list = s.k === 'WEAK' ? ((m.plan && m.plan.isolate) || m.activate || []) : releaseFor(m, s.k, ex);
     if (!out[id] && list.some(x => x.replace('{s}', sk) === id)) out[id] = { k: s.k, t: `${VERB_OF[s.k]} ${acc(lc(m.name))} ${sideWord(s.side)}` }; }
   return out; }
-// «Как вас ведет»: перекосы позы простыми словами и схемой, которая плавно уходит из ровной стойки в позу человека.
+// «Ваша осанка»: перекосы позы простыми словами и схемой, которая плавно уходит из ровной стойки в позу человека.
 // Схема спереди: правая сторона человека слева на экране. Наклоны на схеме усилены в 3 раза, чтобы их было видно.
 const POSE_PAT = { shoulder_tilt: 'tilt', trunk_shift: 'tilt', pelvis_tilt: 'pelvis', head_tilt: 'head', trot_asym: 'twist', fwd_adams: 'twist', head_forward: 'fwd', trunk_forward: 'fwd', sq_lean: 'fwd', reach_shrug: 'shrug' };
 export function posturePatterns(findings) {
@@ -1048,10 +1052,10 @@ function poseOf(pats) {
   if (g('fwd')) { const fd = g('fwd').fd; if (fd.rule.id === 'head_forward') o.headFwd = 1; else o.fwd = 14; }
   if (g('shrug')) o.shrug = 1; return o;
 }
-// «Как вас ведет» в раскрывающемся блоке: объемный скелет уходит из ровной стойки в позу человека, рядом подписи
+// «Ваша осанка» в раскрывающемся блоке: объемный скелет уходит из ровной стойки в позу человека, рядом подписи
 function postureCard(a) {
   const pats = posturePatterns(a.findings);
-  return `<div class="pad" style="margin-top:16px"><details class="acc card" id="posacc"><summary style="font-weight:600;min-height:40px"><span style="flex:1">Как вас ведет</span><span style="font-size:14px;font-weight:500;color:${pats.length ? 'var(--short-t)' : 'var(--ok-t)'};margin-right:8px">${pats.length ? esc(pats[0].label) : 'Ровно'}</span></summary>
+  return `<div class="pad" style="margin-top:16px"><details class="acc card" id="posacc"><summary style="font-weight:600;min-height:40px"><span style="flex:1">Ваша осанка</span><span style="font-size:14px;font-weight:500;color:${pats.length ? 'var(--short-t)' : 'var(--ok-t)'};margin-right:8px">${pats.length ? esc(pats[0].label) : 'Ровно'}</span></summary>
     <div class="row" style="gap:12px;align-items:center;margin-top:8px">${device.webgl2 ? '<div id="pos3d" style="width:150px;height:240px;flex:none;position:relative"></div>' : postureFigure(pats)}
       <div style="flex:1;min-width:0">${pats.length ? pats.map(p => `<div style="margin-top:10px"><b style="font-size:16px">${p.label}</b><div style="font-size:13px;color:var(--sub);line-height:1.35">${esc(p.sub)}</div></div>`).join('') : '<div style="font-size:15px;line-height:1.4">Крена, скручивания и наклона вперед не видно</div>'}
         <div style="font-size:12px;color:var(--faint);margin-top:12px">Отклонения на скелете усилены. Скелет можно крутить пальцем</div></div></div></details></div>`;
@@ -1118,7 +1122,7 @@ export function map() {
        <div class="row" id="lay" style="gap:6px;flex-wrap:wrap;justify-content:center;margin-top:6px"><button class="pill on" data-l="">Все слои</button>${LAYER_NAMES.map(([l, n]) => `<button class="pill" data-l="${l}">${n} · ${top.filter(x => layerOf(x.id) === l).length}</button>`).join('')}</div>
        <div class="row" style="gap:6px;flex-wrap:wrap;justify-content:center;margin-top:8px">${[['all', 'Всё тело'], ['head', 'Шея'], ['shoulders', 'Плечи'], ['back', 'Спина'], ['pelvis', 'Таз'], ['knees', 'Колени'], ['feet', 'Стопы']].map(([z, n]) => `<button class="pill" data-z="${z}">${n}</button>`).join('')}</div></details>` : ''}
      <div id="selbox" style="margin:8px 4px 0"></div></div></div>
-   <div class="pad" style="margin-top:16px">${verdictCard(top, a.findings, 'Сильных перекосов не видно')}</div>
+   <div class="pad" style="margin-top:16px">${verdictCard(top, a.findings, 'Сильных перекосов не видно', [], true)}</div>
    ${postureCard(a)}
    ${iapCard(a)}
    ${cnsCard(t, a)}
@@ -1155,6 +1159,7 @@ export function map() {
   if ($('#again')) $('#again').onclick = again;
   if ($('#re')) $('#re').onclick = () => { FULL = false; prep(); };
   if ($('#resend')) $('#resend').onclick = async () => { const p = await outbox.get().catch(() => null); if (p) sendResult(p); }; bindRetestCard(); if (!SHARED && INV()) addSpecHint();
+  if ($('#mainl')) $('#mainl').onclick = () => mainSheet(top, a, pl.length ? () => durationSheet(top, pl, why) : null);
   bindClientNav(); if ($('#set')) $('#set').onclick = settings; $('#more').onclick = () => moreSheet(cur, top, !!pl.length); $('#lrs').onclick = () => moreSheet(cur, top, !!pl.length, 'lr'); if ($('#rec')) $('#rec').onclick = async () => { const p = await consumerPoses.get(); motionViewer(p, t.setup, map, 'Тест ' + new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })); }; if ($('#cab')) $('#cab').onclick = () => { SHOW_T = null; clientHome(); }; if ($('#toLast')) $('#toLast').onclick = () => { SHOW_T = null; map(); };
   // бета и калибровка: сразу после свежего теста короткая анкета «как прошло, что мешало» (один раз на тест)
   if (!SHARED && reveal && Date.now() - t.date < 30 * 60e3 && (isBetaMode() || (INV() || {}).cal)) setTimeout(() => { if (document.getElementById('heat') || document.getElementById('vis')) testSurvey(String(t.date), { cal: !!(INV() || {}).cal, steps: (t.protocol || []).length }); }, 30000);
@@ -1162,11 +1167,29 @@ export function map() {
 // одна человеческая фраза итога сверху: главное наблюдение движения, без диагноза (спецификация UXUI, раздел 5)
 function mainLine(top, a) {
   const v = verdict(top, a.findings)[0], why = v && v.why ? v.why.replace(/^\S/, c => c.toUpperCase()) : '';
-  return `<div class="pad" style="margin-top:12px"><div class="main-line">${why ? `<b>${esc(why)}</b>` : '<b>Явных перекосов не видно</b>'}<span>Это наблюдение движения, не диагноз. Ниже: что укрепить и что расслабить.</span></div></div>`;
+  if (!why) return `<div class="pad" style="margin-top:12px"><div class="main-line"><b>Явных перекосов не видно</b><span>Тело двигается ровно. Повторите тест через месяц.</span></div></div>`;
+  return `<div class="pad" style="margin-top:12px"><button class="main-line" id="mainl" aria-label="Подробнее: что это значит"><span class="ml-k">Главное</span><b>${esc(why)}</b><span class="ml-more">Что это значит и что с этим делать ${ic('chevron-right', 's')}</span></button></div>`;
+}
+// шторка по главной находке: что увидели, что это значит, почему вам так говорили, что сделаем
+function mainSheet(top, a, start) {
+  const v = verdict(top, a.findings, true), f = v[0] && v[0].f; if (!f) return;
+  const ms = (f.muscles || []).map(m => ({ ...m, mm: C.muscles[m.id] })).filter(m => m.mm), ben = [...new Set(ms.map(m => m.mm.benefit).filter(Boolean))].slice(0, 2);
+  const zone = m => lc(m.mm.zone || m.mm.name) + ' ' + (m.side === 'BOTH' ? 'с двух сторон' : sideWord(m.side));
+  const DO = { WEAK: 'Укрепим', SHORT: 'Расслабим', OVERLOAD: 'Разгрузим', HYPER: 'Разгрузим' };
+  const groups = Object.entries(ms.reduce((o, m) => { const k = DO[m.state] || 'Проверим'; (o[k] = o[k] || []).push(zone(m)); return o; }, {}));
+  const d = document.createElement('div'); d.className = 'sheet';
+  d.innerHTML = `<div><button class="sheet-x" aria-label="Закрыть">✕</button><div class="eyebrow">Что увидела камера</div><h2 style="margin-top:6px">${esc(f.observed.replace(' (на границе нормы)', ''))}</h2>
+    <div class="ms-block"><div class="ms-h">${ic('info', 's')}Что это значит</div><p>${esc(f.meaning || '')}</p></div>
+    ${ben.length ? `<div class="ms-block"><div class="ms-h">${ic('check', 's')}Что изменится, если поработать</div>${ben.map(b => `<p>${esc(b)}</p>`).join('')}</div>` : ''}
+    ${groups.length ? `<div class="ms-block"><div class="ms-h">${ic('activity', 's')}Что сделаем в комплексе</div>${groups.map(([k, z]) => `<p><b>${k}:</b> ${esc([...new Set(z)].slice(0, 3).join(', '))}</p>`).join('')}</div>` : ''}
+    <p class="sub" style="font-size:13px;margin-top:12px">Это наблюдение движения, не диагноз. Если что-то болит, покажитесь врачу или специалисту.</p>
+    ${start ? `<button class="btn" id="msgo" style="margin-top:16px">${ic('play', 's')}Начать комплекс</button>` : ''}</div>`;
+  document.body.appendChild(d); const close = () => d.remove(); d.onclick = e => { if (e.target === d) close(); }; d.querySelector('.sheet-x').onclick = close;
+  if (start) d.querySelector('#msgo').onclick = () => { close(); start(); };
 }
 /** Нижнее меню клиента: итог, история, поделиться, профиль. */
 export function clientNav(on) {
-  const items = SHARED ? [['home', 'activity', 'Итог'], ['shr', 'share', 'Поделиться']] : [['home', 'activity', 'Итог'], ['cab', 'clock', 'История'], ['shr', 'share', 'Поделиться'], ['set', 'user', 'Профиль']];
+  const items = SHARED ? [['home', 'activity', 'Результат'], ['shr', 'share', 'Поделиться']] : [['home', 'activity', 'Результат'], ['cab', 'clock', 'История'], ['shr', 'share', 'Поделиться'], ['set', 'user', 'Профиль']];
   return `<nav class="bnav" aria-label="Разделы">${items.map(([id, i, n]) => `<button id="${id === on ? 'nav-on' : id}" data-nav="${id}"${id === on ? ' aria-current="page"' : ''}>${ic(i, 's')}<span>${n}</span></button>`).join('')}</nav>`;
 }
 function bindClientNav() {

@@ -1,9 +1,10 @@
 // Быстрый вход (Google, Telegram), согласие на обработку данных и проверка противопоказаний перед тестом.
 import { device, ic } from './core.js';
 import { track } from './track.js';
+import { syncThemeColor } from './session-controller.js';
 
 const app = () => document.querySelector('#app');
-const show = html => { app().innerHTML = html; window.scrollTo(0, 0); };
+const show = html => { app().innerHTML = html; window.scrollTo(0, 0); syncThemeColor(); };
 const esc = v => String(v ?? '').replace(/[&<>"'`]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' })[c]);
 // ключ меняется вместе с версией политики: при новой версии согласие спрашивается заново
 const CONSENT_KEY = 'bp_consent_2026-10-b2';
@@ -90,7 +91,7 @@ export function loginScreen(role, cont, opts = {}) {
   const consented = () => ['cons', 'consh'].every(id => document.getElementById(id) && document.getElementById(id).checked);
   if (pro) document.documentElement.dataset.theme = 'pro'; else delete document.documentElement.dataset.theme;
   show(`<div class="scr fade"><div class="top-bar">${opts.back ? `<button class="round" id="lback" aria-label="Назад">${ic('chevron-left')}</button>` : '<div style="height:48px"></div>'}<span style="flex:1"></span>${pro ? '' : ''}</div>
-   ${pro ? '<div class="pro-hero"><img src="img/bp-pro-body.webp" alt=""></div>' : ''}<div class="pad" style="flex:1;display:flex;flex-direction:column;gap:var(--s3)">
+   ${pro ? '<div class="pro-hero"><img src="img/bp-pro-body.webp" alt=""></div>' : '<div class="pro-hero client-hero"><img src="img/bp-hero-client.webp" alt=""><div class="ch-txt"><img src="icons/mark.svg" width="28" height="28" alt=""><b>BodyPassport</b></div></div>'}<div class="pad" style="flex:1;display:flex;flex-direction:column;gap:var(--s3)">
     <div class="eyebrow">${pro ? 'Кабинет специалиста' : 'Вход'}${configSync().beta !== false ? ' · бета' : ''}</div>
     <h1>${pro ? 'Вход в кабинет' : 'Вход в BodyPassport'}</h1>
     <p class="sub">${pro ? 'Кабинет привязан к вашему аккаунту. Результаты клиентов видите только вы.' : 'Аккаунт сохранит ваши результаты и историю тестов. Пароль не нужен: вход через Google, Telegram или код на почту.'}</p>
