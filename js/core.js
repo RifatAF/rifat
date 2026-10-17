@@ -14,6 +14,8 @@ export function applyRuleWeights(rules, w, t) { for (const r of rules) { for (co
 export async function loadContent() {
   const get = n => fetch('data/' + n + '.json').then(r => r.json());
   const [mus, bm, ch, ex] = await Promise.all([get('muscles'), get('bodymap'), get('chains'), get('exercises')]);
+  // тексты для клиента простым языком: без них экран результата работает на технических формулировках
+  fetch('data/plain.json').then(r => r.ok ? r.json() : null).then(j => { C.plain = (j && j.rules) || {}; }).catch(() => { C.plain = {}; });
   C.muscles = mus.muscles; C.bodymap = bm; C.chains = ch.chains; C.exercises = Object.fromEntries(ex.exercises.map(e => [e.id, e])); C.booking = 'https://t.me/BodyPassport_bot';
   // веса «правило → мышца», выученные по калибровкам специалистов (Администрирование → Калибровки): без сети остаются исходные из базы
   // ждем не дольше 2,5 с: иначе клиент и специалист разбирали один тест с разными весами и видели разные мышцы
@@ -306,7 +308,7 @@ function bodyParts() { const e = (x, y, rx, ry) => { const p = new Path2D(); p.e
 // пять опорных точек: норма нейтральная (цвет фигуры), карта показывает только отклонения
 const RAMP = [[-1, 0x3B73D9], [-.45, 0x8FB0F0], [0, 0xCEDBF2], [.45, 0xF8B860], [1, 0xEF4444]];
 // цвет мышцы по состоянию, а не по знаку: гипертонус красный, перерастяжение оранжевый, слабая синяя; сила отклонения дает насыщенность
-const STATE_RGB = { HYPER: [245, 158, 11], SHORT: [239, 68, 68], WEAK: [59, 115, 217], DONE: [34, 197, 94] }, BASE_LIGHT = [206, 219, 242], BASE_DARK = [86, 120, 178];
+const STATE_RGB = { HYPER: [245, 158, 11], SHORT: [239, 68, 68], WEAK: [59, 115, 217], DONE: [34, 197, 94] }, BASE_LIGHT = [206, 219, 242], BASE_DARK = [184, 202, 236];
 // в кабинете специалиста (navy) фигура холодная синяя, у клиента светлая
 const darkUI = () => document.documentElement.dataset.session === 'SPECIALIST_OPERATED' || document.documentElement.dataset.theme === 'pro';
 const baseRGB = () => darkUI() ? BASE_DARK : BASE_LIGHT;
@@ -414,10 +416,10 @@ export function drawHeat(cv, spots0, back, selected, labels = [], opts = {}) {
   const render = (figA, toneK, markT, labA) => {
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); ctx.scale(sc, sc); ctx.save(); ctx.translate(ox, 0); ctx.globalAlpha = figA;
     if (fig3) { ctx.drawImage(fig3.img, 0, 0, 200, 440); ctx.globalAlpha = 1; } else {
-    ctx.fillStyle = darkUI() ? '#4E6FA6' : '#CEDBF2'; parts.forEach(pp => ctx.fill(pp));
+    ctx.fillStyle = darkUI() ? '#B8CAEC' : '#CEDBF2'; parts.forEach(pp => ctx.fill(pp));
     ctx.strokeStyle = 'rgba(17,20,24,.10)'; ctx.lineWidth = .8; for (const pp of parts) { ctx.save(); ctx.clip(pp); outline.forEach(e => ctx.stroke(e)); ctx.restore(); }
     if (toneK > 0) { const fs = fillShapes(toneK); for (const pp of parts) { ctx.save(); ctx.clip(pp); ctx.globalAlpha = figA * .88; for (const [e, c] of fs) { ctx.fillStyle = c; ctx.fill(e); } ctx.restore(); } ctx.globalAlpha = figA; }
-    ctx.strokeStyle = darkUI() ? '#7FA0D8' : '#AFC2E6'; ctx.lineWidth = 1.2; parts.forEach(pp => ctx.stroke(pp)); ctx.globalAlpha = 1; }
+    ctx.strokeStyle = darkUI() ? '#93ACDA' : '#AFC2E6'; ctx.lineWidth = 1.2; parts.forEach(pp => ctx.stroke(pp)); ctx.globalAlpha = 1; }
     marks.forEach((s, i) => { const t = markT(i); if (t <= 0) return; const sc2 = t < .7 ? .4 + (1.15 - .4) * (t / .7) : 1.15 - .15 * ((t - .7) / .3);
       drawMark(ctx, s.x * 200, s.y * 440, s.k, { derived: s.derived && !s.edited, scale: t >= 1 ? 1 : sc2, alpha: Math.min(1, t * 2) }); });
     for (const l of shown.filter(l => l.n)) { const s = mine.find(q => q.key === l.key); ctx.globalAlpha = Math.min(1, labA * 2 + (markT(0) > 0 ? 1 : 0));
@@ -558,7 +560,7 @@ function paintMesh(m, spots, out) { const order = m.meta.order, lin = c => (c / 
 const ALIAS3D = { piriformis: 'glute_max', supraspinatus: 'upper_trap', soleus: 'calf' };
 const alias3d = (spots, order) => (spots || []).map(s => order.indexOf(s.id) >= 0 || !ALIAS3D[s.id] || (spots.some(o => o.id === ALIAS3D[s.id] && o.side === s.side && o.k !== 'OK')) ? s : { ...s, id: ALIAS3D[s.id] });
 export async function body3D(container, spots0, onPick, opts = {}) {
-  container.style.borderRadius = '32px'; container.style.overflow = 'hidden'; container.style.background = '#fff';
+  container.style.borderRadius = '24px'; container.style.overflow = 'hidden'; const bg3 = darkUI() ? 0x101A2E : 0xFFFFFF; container.style.background = '#' + bg3.toString(16).padStart(6, '0');
   container.innerHTML = '<div class="skel" style="height:100%"></div>';
   const THREE = await import('three');
   const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
@@ -573,7 +575,7 @@ export async function body3D(container, spots0, onPick, opts = {}) {
     n2[i * 3] = m.nrm[i * 3] / 127; n2[i * 3 + 1] = m.nrm[i * 3 + 2] / 127; n2[i * 3 + 2] = -m.nrm[i * 3 + 1] / 127; }
   geo.setAttribute('position', new THREE.BufferAttribute(p2, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(n2, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); let curIx = meshIndex(m, spots); geo.setIndex(new THREE.BufferAttribute(curIx, 1));
-  const scene = new THREE.Scene(); scene.background = new THREE.Color(0xFFFFFF);
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(bg3);
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .85, metalness: 0, side: THREE.DoubleSide });
   const obj = new THREE.Mesh(geo, mat); const cz = (m.meta.zmin + m.meta.zmax) / 2; obj.position.y = -cz; const root = new THREE.Group(); root.add(obj); root.scale.setScalar(2 / (m.meta.zmax - m.meta.zmin)); scene.add(root);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x8a7f70, 1.1)); const dl = new THREE.DirectionalLight(0xffffff, 2.2); dl.position.set(1, 2, 3); scene.add(dl); const bl = new THREE.DirectionalLight(0xffffff, 1.2); bl.position.set(-1, 1, -3); scene.add(bl);

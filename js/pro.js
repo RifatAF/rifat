@@ -401,6 +401,7 @@ async function proMenu() {
       ${r('msp', 'settings', 'Специализация: ' + esc(((SPECIALTIES.find(x => x[0] === localStorage.getItem('bp_sp')) || ['', 'не выбрана'])[1]).split(',')[0]))}
       ${r('mref', 'user-plus', isBeta() ? 'Пригласить коллегу' : 'Пригласить коллегу: 20% его оплат вам')}${isBeta() ? '' : r('mbal', 'download', 'Баланс: ' + ((u && u.balance) || 0).toLocaleString('ru') + ' ₽')}</div>
     ${he}${h('Данные')}<div class="group">
+      <div class="row-link" style="cursor:default">${ic('cpu', 's')}<span>Улучшать точность анонимно<br><small class="sub" style="font-size:12px">ваши проверки руками без имен клиентов</small></span><button class="pill" id="macal">${localStorage.getItem('bp_autocal') === '0' ? 'Выкл' : 'Вкл'}</button></div>
       ${r('mb', 'download', 'Сохранить копию с паролем')}
       <label class="row-link">${ic('upload', 's')}<span>Восстановить из копии</span>${ic('chevron-right', 's chev')}<input type="file" id="mr" accept=".json,.bpbackup,application/json" style="display:none"></label>
       ${hasSnap ? r('mund', 'rotate-ccw', 'Отменить последнее восстановление') : ''}</div>
@@ -437,6 +438,7 @@ async function proMenu() {
   if (d.querySelector('#mo')) d.querySelector('#mo').onclick = async () => { d.remove(); const out = async () => { await logout(); localStorage.removeItem('bp_mode'); onboarding(); }; if (isBeta()) exitSurvey('logout', out); else out(); };
   d.querySelector('#mx').onclick = () => d.remove();
   d.querySelector('#mcal').onclick = () => { d.remove(); calendarScreen(); };
+  d.querySelector('#macal').onclick = e => { const on = localStorage.getItem('bp_autocal') === '0'; localStorage.setItem('bp_autocal', on ? '1' : '0'); e.target.textContent = on ? 'Вкл' : 'Выкл'; if (on) { autoCalAt = 0; syncAutoCalib().catch(() => {}); } };
   d.querySelector('#mntf').onclick = e => { const on = localStorage.getItem('bp_ntf') === '0'; localStorage.setItem('bp_ntf', on ? '1' : '0'); e.target.textContent = on ? 'Вкл' : 'Выкл'; syncReminders().catch(() => {}); };
 }
 
@@ -1490,7 +1492,8 @@ function verdictsOf(a) { const out = new Map(), raw = (() => { try { return spot
   return [...out.values()]; }
 /** Фоновая калибровка (бета): проверки специалиста в разборах уходят без имени, как только изменились. Раз в 10 минут, при открытии главной. */
 let autoCalAt = 0;
-async function syncAutoCalib() { if (!isBeta() || !meSync() || Date.now() - autoCalAt < 10 * 60e3) return; autoCalAt = Date.now();
+// работает и после беты: каждый специалист, не выключивший «Улучшать точность», пополняет общую базу; веса пересчитываются раз в сутки (api/_autolearn.js)
+async function syncAutoCalib() { if (!meSync() || localStorage.getItem('bp_autocal') === '0' || Date.now() - autoCalAt < 10 * 60e3) return; autoCalAt = Date.now();
   const as = (await all('assessments').catch(() => [])).filter(a => !a.demo);
   for (const a of as) { const v = verdictsOf(a); if (!v.length) continue; const h = JSON.stringify(v); if (a.autoCal === h) continue;
     const c = await get('clients', a.clientId).catch(() => null); if (!c || c.demo) continue;

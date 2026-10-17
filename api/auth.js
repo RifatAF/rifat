@@ -97,7 +97,7 @@ async function signIn(req, res, ident) {
   if ((!old || old.consentVersion !== CONSENT_VERSION) && !fresh) return res.status(400).json({ error: 'нужно согласие на обработку данных', consent: CONSENT_VERSION });
   const now = Date.now();
   const u = { ...(old || { created: now, consentAt: now, consentVersion: CONSENT_VERSION }), ...ident, lastLogin: now,
-    role: (old && old.role) || (ROLES.includes(b.role) ? b.role : null), ref: (old && old.ref) || clip(b.ref, 40) || null };
+    role: (old && old.role) || (ROLES.includes(b.role) ? b.role : null), ref: old ? (old.ref || null) : (clip(b.ref, 40) || null) }; // приглашение засчитываем только новому аккаунту: старые пользователи по чужой ссылке не «приходят»
   if (fresh && (!old || old.consentVersion !== CONSENT_VERSION)) { u.consentAt = now; u.consentVersion = CONSENT_VERSION; u.healthConsentAt = now; }
   await ensureRefIndex(u); await creditReferral(u, !old).catch(e => console.error('ref', e));
   await saveUser(u); setSession(res, u.id);
