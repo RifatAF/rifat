@@ -122,16 +122,20 @@ export function go(html) { try { screenView(callerName()); } catch (e) {} delete
 let backFn = null;
 export const setBack = fn => { backFn = fn; };
 const BACK_SEL = ['#x', '#back', '#lback', '#sback', '#sre'];
-const armBack = () => { if (!(history.state && history.state.bpTrap)) history.pushState({ bpTrap: 1 }, ''); };
+// ловушек держим три: после жеста «назад» новую запись Chrome тоже считает созданной без касания и пропускает,
+// а во время теста человек экрана не касается. Запас из записей, поставленных по касанию, переживает несколько жестов подряд.
+const TRAPS = 3, trapLvl = () => (history.state && history.state.bpTrap) || 0;
+const armBack = () => { for (let k = trapLvl(); k < TRAPS; k++) history.pushState({ bpTrap: k + 1 }, ''); };
 function stepBack() {
   const sheet = [...document.querySelectorAll('.sheet')].pop();
   if (sheet) { sheet.remove(); return true; }
+  const dlg = app.querySelector('.cam-confirm'); if (dlg) { dlg.remove(); return true; } // повторный «назад» закрывает вопрос и продолжает тест
   if (backFn) { const f = backFn; backFn = null; f(); return true; }
   const b = BACK_SEL.map(s => app.querySelector(s)).find(x => x && x.offsetParent !== null);
   if (b) { b.click(); return true; }
   return false;
 }
-addEventListener('popstate', () => { if (stepBack()) armBack(); else history.back(); });
+addEventListener('popstate', () => { if (stepBack()) { if (!trapLvl()) history.pushState({ bpTrap: 1 }, ''); } else history.back(); });
 // Chrome пропускает при жесте «назад» записи, добавленные до первого касания страницы, и сразу закрывает вкладку.
 // Поэтому ловушку ставим только по касанию: тогда запись считается созданной пользователем.
 addEventListener('pointerdown', armBack, true);
