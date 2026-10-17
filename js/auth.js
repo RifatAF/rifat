@@ -88,8 +88,9 @@ export function linkConsent(cont, who) {
 export function loginScreen(role, cont, opts = {}) {
   const pro = role === 'specialist';
   const consented = () => ['cons', 'consh'].every(id => document.getElementById(id) && document.getElementById(id).checked);
+  if (pro) document.documentElement.dataset.theme = 'pro'; else delete document.documentElement.dataset.theme;
   show(`<div class="scr fade"><div class="top-bar">${opts.back ? `<button class="round" id="lback" aria-label="Назад">${ic('chevron-left')}</button>` : '<div style="height:48px"></div>'}<span style="flex:1"></span>${pro ? '' : ''}</div>
-   <div class="pad" style="flex:1;display:flex;flex-direction:column;gap:var(--s3)">
+   ${pro ? '<div class="pro-hero"><img src="img/bp-pro-body.webp" alt=""></div>' : ''}<div class="pad" style="flex:1;display:flex;flex-direction:column;gap:var(--s3)">
     <div class="eyebrow">${pro ? 'Кабинет специалиста' : 'Вход'}${configSync().beta !== false ? ' · бета' : ''}</div>
     <h1>${pro ? 'Вход в кабинет' : 'Вход в BodyPassport'}</h1>
     <p class="sub">${pro ? 'Кабинет привязан к вашему аккаунту. Результаты клиентов видите только вы.' : 'Аккаунт сохранит ваши результаты и историю тестов. Пароль не нужен: вход через Google, Telegram или код на почту.'}</p>

@@ -306,9 +306,12 @@ function bodyParts() { const e = (x, y, rx, ry) => { const p = new Path2D(); p.e
 // пять опорных точек: норма нейтральная (цвет фигуры), карта показывает только отклонения
 const RAMP = [[-1, 0x2A5CB8], [-.45, 0x7FA6EE], [0, 0xE9E7E1], [.45, 0xF0A36A], [1, 0xD9484F]];
 // цвет мышцы по состоянию, а не по знаку: гипертонус красный, перерастяжение оранжевый, слабая синяя; сила отклонения дает насыщенность
-const STATE_RGB = { HYPER: [217, 130, 43], SHORT: [200, 65, 74], WEAK: [47, 107, 216], DONE: [63, 174, 118] }, BASE_RGB = [233, 231, 225];
+const STATE_RGB = { HYPER: [217, 130, 43], SHORT: [200, 65, 74], WEAK: [47, 107, 216], DONE: [63, 174, 118] }, BASE_LIGHT = [206, 219, 242], BASE_DARK = [86, 120, 178];
+// в кабинете специалиста (navy) фигура холодная синяя, у клиента светлая
+const darkUI = () => document.documentElement.dataset.session === 'SPECIALIST_OPERATED' || document.documentElement.dataset.theme === 'pro';
+const baseRGB = () => darkUI() ? BASE_DARK : BASE_LIGHT;
 export function stateRGB(k, tone) { const c = STATE_RGB[k] || (tone < 0 ? STATE_RGB.WEAK : STATE_RGB.HYPER); const t = k === 'OK' ? 0 : Math.max(.55, Math.min(1, Math.abs(tone) * 1.3));
-  return BASE_RGB.map((b, i) => Math.round(b + (c[i] - b) * t)); }
+  return baseRGB().map((b, i) => Math.round(b + (c[i] - b) * t)); }
 export function ramp(v) { const x = Math.max(-1, Math.min(1, v)); let i = RAMP.findLastIndex(r => r[0] <= x); i = Math.max(0, Math.min(RAMP.length - 2, i));
   const [a, ca] = RAMP[i], [b, cb] = RAMP[i + 1], t = Math.max(0, Math.min(1, (x - a) / (b - a))); const ch = (c, s) => (c >> s) & 255; const mix = s => Math.round(ch(ca, s) + (ch(cb, s) - ch(ca, s)) * t);
   return [mix(16), mix(8), mix(0)]; }
@@ -411,14 +414,14 @@ export function drawHeat(cv, spots0, back, selected, labels = [], opts = {}) {
   const render = (figA, toneK, markT, labA) => {
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); ctx.scale(sc, sc); ctx.save(); ctx.translate(ox, 0); ctx.globalAlpha = figA;
     if (fig3) { ctx.drawImage(fig3.img, 0, 0, 200, 440); ctx.globalAlpha = 1; } else {
-    ctx.fillStyle = '#E9E7E1'; parts.forEach(pp => ctx.fill(pp));
+    ctx.fillStyle = darkUI() ? '#4E6FA6' : '#CEDBF2'; parts.forEach(pp => ctx.fill(pp));
     ctx.strokeStyle = 'rgba(17,20,24,.10)'; ctx.lineWidth = .8; for (const pp of parts) { ctx.save(); ctx.clip(pp); outline.forEach(e => ctx.stroke(e)); ctx.restore(); }
     if (toneK > 0) { const fs = fillShapes(toneK); for (const pp of parts) { ctx.save(); ctx.clip(pp); ctx.globalAlpha = figA * .88; for (const [e, c] of fs) { ctx.fillStyle = c; ctx.fill(e); } ctx.restore(); } ctx.globalAlpha = figA; }
-    ctx.strokeStyle = '#D5D2CA'; ctx.lineWidth = 1.2; parts.forEach(pp => ctx.stroke(pp)); ctx.globalAlpha = 1; }
+    ctx.strokeStyle = darkUI() ? '#7FA0D8' : '#AFC2E6'; ctx.lineWidth = 1.2; parts.forEach(pp => ctx.stroke(pp)); ctx.globalAlpha = 1; }
     marks.forEach((s, i) => { const t = markT(i); if (t <= 0) return; const sc2 = t < .7 ? .4 + (1.15 - .4) * (t / .7) : 1.15 - .15 * ((t - .7) / .3);
       drawMark(ctx, s.x * 200, s.y * 440, s.k, { derived: s.derived && !s.edited, scale: t >= 1 ? 1 : sc2, alpha: Math.min(1, t * 2) }); });
     for (const l of shown.filter(l => l.n)) { const s = mine.find(q => q.key === l.key); ctx.globalAlpha = Math.min(1, labA * 2 + (markT(0) > 0 ? 1 : 0));
-      ctx.fillStyle = '#13212B'; ctx.beginPath(); ctx.arc(s.x * 200, s.y * 440, 12, 0, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '700 14px Onest, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#13212B'; ctx.beginPath(); ctx.arc(s.x * 200, s.y * 440, 12, 0, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '700 14px Manrope, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(String(l.n), s.x * 200, s.y * 440 + 1); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1; }
     // выбранная мышца видна в карточке под схемой: черное кольцо на схеме путали с еще одним состоянием
     ctx.restore();
@@ -444,15 +447,15 @@ function callouts(ctx, labels, mine, alpha) {
   for (const l of labels.sort((a, b) => pos(a).y - pos(b).y)) {
     const h = pos(l), left = h.x < .5, side = left ? 'L' : 'R', px = h.x * 200 + OX, zy = h.y * 440; let py = zy;
     for (const q of placed[side]) if (Math.abs(q - py) < 36) py = q + 36; placed[side].push(py);
-    const maxW = OX + 18; ctx.font = '400 12px Onest, sans-serif';
+    const maxW = OX + 18; ctx.font = '400 12px Manrope, sans-serif';
     let title = l.title; while (ctx.measureText(title).width > maxW && title.length > 4) title = title.slice(0, -2) + '…';
-    const val = l.value || l.sub || ''; ctx.font = l.value ? '500 13px "JetBrains Mono", monospace' : '600 12px Onest, sans-serif';
+    const val = l.value || l.sub || ''; ctx.font = l.value ? '500 13px "JetBrains Mono", monospace' : '600 12px Manrope, sans-serif';
     let v = val; while (ctx.measureText(v).width > maxW && v.length > 4) v = v.slice(0, -2) + '…';
-    const tw = Math.max(ctx.measureText(v).width, (ctx.font = '400 12px Onest, sans-serif', ctx.measureText(title).width));
+    const tw = Math.max(ctx.measureText(v).width, (ctx.font = '400 12px Manrope, sans-serif', ctx.measureText(title).width));
     const bx = left ? 4 : VW - 4 - tw, ex = left ? bx + tw + 4 : bx - 4;
     ctx.strokeStyle = l.color; ctx.globalAlpha = alpha * .6; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px, zy); ctx.lineTo(ex, py); ctx.stroke(); ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#5A6872'; ctx.font = '400 12px Onest, sans-serif'; ctx.fillText(title, bx, py - 3);
-    ctx.fillStyle = l.text || l.color; ctx.font = l.value ? '500 13px "JetBrains Mono", monospace' : '600 12px Onest, sans-serif'; ctx.fillText(v, bx, py + 12);
+    ctx.fillStyle = '#5A6872'; ctx.font = '400 12px Manrope, sans-serif'; ctx.fillText(title, bx, py - 3);
+    ctx.fillStyle = l.text || l.color; ctx.font = l.value ? '500 13px "JetBrains Mono", monospace' : '600 12px Manrope, sans-serif'; ctx.fillText(v, bx, py + 12);
   }
   ctx.globalAlpha = 1;
 }
@@ -536,7 +539,7 @@ async function loadMeshM() {
 export function preload3D() { const go = () => { import('three'); import('three/addons/controls/OrbitControls.js'); ready3D().catch(() => {}); };
   if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 3000 }); else setTimeout(go, 1500); }
 // раскраска сетки по тону: и для живой 3D-модели, и для снимков схемы
-function paintMesh(m, spots, out) { const order = m.meta.order, lin = c => (c / 255) ** 2.2, BASE3 = BASE_RGB.map(lin);
+function paintMesh(m, spots, out) { const order = m.meta.order, lin = c => (c / 255) ** 2.2, BASE3 = baseRGB().map(lin);
   // группа сетки → цвет мышцы по состоянию; соседям достается слабый край того же цвета, чтобы граница читалась
   const col = new Map(); for (const s of spots) { const o = order.indexOf(s.id); if (o < 0 || s.k === 'OK' || Math.abs(s.tone) < .02) continue; col.set(1 + o * 2 + (s.side === 'RIGHT' ? 1 : 0), stateRGB(s.k, s.tone).map(lin)); }
   // глубокие мышцы закрыты поверхностными (ромбовидные под трапецией, малая грудная под большой): их цвет просвечивает четким пятном над ними

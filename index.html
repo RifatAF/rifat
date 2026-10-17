@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>BodyPassport — карта тела по камере телефона</title>
 <meta name="description" content="Тест осанки и движения по камере телефона за 2–5 минут. Подсказывает, какие мышцы, вероятно, перегружены или недорабатывают, и дает упражнения. Бета-версия. Это оценка, не диагноз.">
-<meta name="theme-color" content="#F3F6F6">
+<meta name="theme-color" content="#F5F6FA">
 <meta property="og:title" content="BodyPassport — карта тела по камере телефона">
 <meta property="og:description" content="Короткий видеотест по камере: какие мышцы, вероятно, перегружены, какие недорабатывают, и что с этим делать. Бета.">
 <meta property="og:image" content="https://bodypassport.app/img/og.jpg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
@@ -16,52 +16,65 @@
 <link rel="apple-touch-icon" href="icons/bp-apple-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="BodyPassport"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="format-detection" content="telephone=no">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <script>if (/tgWebApp/.test(location.hash + location.search) || sessionStorage.getItem('bp_tg')) { sessionStorage.setItem('bp_tg', '1'); document.write('<script src="https://telegram.org/js/telegram-web-app.js"><\/script>'); }</script>
 <style>
 /* BodyPassport — дизайн-система v3. Заменяет весь блок <style> в index.html.
    Сетка 8pt, 6 радиусов, 3 тени, единая шкала шрифтов. Контраст текста ≥4.5:1 на --bg и --surface. */
 :root{
-  /* поверхность */
-  --bg:#F3F6F6;--surface:#FFFFFF;--surface-2:#E9EFF0;--line:#DCE4E6;--line-2:#E6ECEE;--figure:#E3EAEC;
-  /* текст */
-  --ink:#13212B;--text:#13212B;--sub:#5A6872;--faint:#8796A0;/* --faint только иконки и линии */
-  --focus:#0E5A6B;
-  /* бренд: петроль для кнопок и активных элементов; лайм (--signal) только на тёмном фоне камеры */
-  --brand:#0E5A6B;--brand-s:#E3EEF0;--accent:#E9A23B;
-  /* источник вывода */
-  --src-measured:#13212B;--src-hyp:#2A5CB8;
-  /* состояния мышц: заливка / текст / подложка */
-  --over:#C8414A;--over-t:#A8323B;--over-s:#FBE6E4;
-  --short:#C8414A;--short-t:#B3343B;--short-s:#FBE4E5;
-  --weak:#2F6BD8;--weak-t:#24539F;--weak-s:#E3EBFA;
-  --ok:#26775D;--ok-t:#1E6A51;--ok-s:#DFF1E7;
-  --edge:#8A6A00;--edge-s:#F6EFD6;
+  /* BodyPassport v4: клиент светлый, кабинет специалиста navy (html[data-session=SPECIALIST_OPERATED]). Раскадровка UXUI v2 */
+  --bg:#F5F6FA;--surface:#FFFFFF;--surface-2:#EEF0F6;--line:#E1E4EE;--line-2:#ECEEF4;--figure:#E6E9F2;
+  --ink:#0B1B3B;--text:#0B1B3B;--sub:#566079;--faint:#8A92A8;
+  --focus:#6C63FF;
+  /* бренд: navy для главной кнопки, коралловый и фиолетовый акценты; лайм (--signal) только на тёмном фоне камеры */
+  --brand:#0B1B3B;--brand-s:#E9EAF8;--accent:#FF7A45;--violet:#6C63FF;--violet-s:#EDECFF;
+  --grad:linear-gradient(135deg,#FF7A45 0%,#C255C9 50%,#6C63FF 100%);
+  --hero-bg:radial-gradient(120% 80% at 70% 20%,#23306B 0%,#0B1B3B 45%,#060D1F 100%);
+  --src-measured:#0B1B3B;--src-hyp:#5148E0;
+  /* состояния: заливка / текст / подложка; цвет всегда дублируется формой и словом */
+  --over:#EF4444;--over-t:#B42323;--over-s:#FDE8E8;
+  --short:#EF4444;--short-t:#B42323;--short-s:#FDE8E8;
+  --weak:#3B73D9;--weak-t:#2557B0;--weak-s:#E5EDFB;
+  --ok:#22C55E;--ok-t:#15803D;--ok-s:#DCF7E5;
+  --edge:#92580A;--edge-s:#FEF1D8;
   /* тёмная тема: камера, упражнения, плашки 3D */
-  --cam-bg:#0A0C0F;--cam-glass:rgba(14,16,20,.74);--cam-line:rgba(255,255,255,.14);
-  --cam-text:#F5F6F7;--cam-sub:#B9BDC4;--signal:#D4F25A;--cam-warn:#FFB547;--dark:#13212B;
+  --cam-bg:#070C18;--cam-glass:rgba(11,18,36,.78);--cam-line:rgba(255,255,255,.14);
+  --cam-text:#F5F7FB;--cam-sub:#B6BED0;--signal:#D4F25A;--cam-warn:#F59E0B;--dark:#0B1B3B;
   /* шрифт */
-  --font:Onest,system-ui,-apple-system,sans-serif;--mono:'JetBrains Mono',ui-monospace,SFMono-Regular,monospace;
+  --font:Manrope,system-ui,-apple-system,sans-serif;--mono:'JetBrains Mono',ui-monospace,SFMono-Regular,monospace;
   --fs-num:56px;--fs-h1:30px;--fs-h2:22px;--fs-h3:17px;--fs-body:16px;--fs-sm:14px;--fs-xs:12px;--fs-cam:44px;--fs-cam-sub:20px;
   /* отступы */
   --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;--s8:64px;--gutter:20px;--tap:48px;--btn-h:56px;
   /* радиусы */
-  --r-xs:8px;--r-sm:12px;--r-md:16px;--r-lg:24px;--r-xl:32px;--r-pill:999px;
+  --r-xs:8px;--r-sm:12px;--r-md:16px;--r-lg:20px;--r-xl:28px;--r-pill:999px;
   /* тени */
-  --sh-1:0 1px 2px rgba(17,20,24,.04),0 1px 1px rgba(17,20,24,.03);
-  --sh-2:0 8px 24px rgba(17,20,24,.08),0 1px 3px rgba(17,20,24,.05);
-  --sh-3:0 -12px 40px rgba(17,20,24,.16);
+  --sh-1:0 1px 2px rgba(11,27,59,.05),0 2px 8px rgba(11,27,59,.04);
+  --sh-2:0 10px 30px rgba(11,27,59,.10),0 2px 6px rgba(11,27,59,.05);
+  --sh-3:0 -12px 40px rgba(11,27,59,.18);
   /* движение */
   --ease-out:cubic-bezier(.2,.8,.2,1);--ease-io:cubic-bezier(.65,0,.35,1);--spring:cubic-bezier(.34,1.32,.64,1);
-  --d1:120ms;--d2:200ms;--d3:320ms;--d4:560ms;--stagger:60ms;
+  --d1:120ms;--d2:200ms;--d3:240ms;--d4:560ms;--stagger:60ms;
 
-  /* АЛИАСЫ v2 → v3: старые имена в app.js/pro.js продолжают работать. Удалить после шагов 3–4. */
-  --ink2:#1E2533;--coral:var(--short);--coralT:var(--short-t);
+  /* АЛИАСЫ v2 → v3: старые имена в app.js/pro.js продолжают работать */
+  --ink2:#1A2A4F;--coral:var(--short);--coralT:var(--short-t);
   --green:var(--ok);--peach:var(--short-s);--seg:var(--surface-2);
-  --hyper:#D9822B;--hyperS:#FCEBDC;--hyperT:#9E4E0E;--shortS:var(--short-s);--shortT:var(--short-t);
+  --hyper:#F59E0B;--hyperS:#FEF1D8;--hyperT:#92580A;--shortS:var(--short-s);--shortT:var(--short-t);
   --weakS:var(--weak-s);--weakT:var(--weak-t);--okS:var(--ok-s);--okT:var(--ok-t);
   --r1:var(--r-sm);--r2:var(--r-md);--r3:var(--r-lg);--r4:var(--r-xl);--sh1:var(--sh-1);--sh2:var(--sh-2);
   --ease:var(--ease-out);--t1:var(--d1);--t2:var(--d3);
+}
+/* кабинет специалиста: глубокий navy */
+:root[data-session=SPECIALIST_OPERATED]{
+  color-scheme:dark;
+  --bg:#0B1220;--surface:#121C31;--surface-2:#1A2640;--line:#26334F;--line-2:#1E2A44;--figure:#1E2A44;
+  --ink:#EEF2FA;--text:#EEF2FA;--sub:#9FAAC2;--faint:#6E7A94;--focus:#8F88FF;
+  --brand:#6C63FF;--brand-s:rgba(108,99,255,.2);--violet-s:rgba(108,99,255,.18);
+  --src-measured:#EEF2FA;--src-hyp:#9C96FF;
+  --over-t:#FF8F8F;--over-s:rgba(239,68,68,.16);--short-t:#FF8F8F;--short-s:rgba(239,68,68,.16);
+  --weak-t:#93B4FF;--weak-s:rgba(59,115,217,.2);--ok-t:#5BDB8A;--ok-s:rgba(34,197,94,.16);
+  --edge:#F6B54A;--edge-s:rgba(245,158,11,.16);--hyperT:#F6B54A;--hyperS:rgba(245,158,11,.16);
+  --ink2:#1A2640;
+  --sh-1:0 0 0 1px rgba(255,255,255,.04);--sh-2:0 12px 32px rgba(0,0,0,.45);--sh-3:0 -12px 40px rgba(0,0,0,.5);
 }
 @media (prefers-reduced-motion:reduce){:root{--d1:1ms;--d2:1ms;--d3:1ms;--d4:160ms;--stagger:0ms}}
 
@@ -100,8 +113,8 @@ button,a,.list-item,[data-k],[data-id]{transition:transform var(--d1) var(--ease
 .link{background:none;border:0;padding:0;min-height:var(--tap);font:600 15px var(--font);color:var(--focus);cursor:pointer}
 
 /* нижняя зона большого пальца */
-.dock{position:sticky;bottom:0;margin-top:auto;padding:var(--s3) var(--gutter) calc(env(safe-area-inset-bottom) + 28px);display:flex;flex-direction:column;gap:var(--s1);background:linear-gradient(rgba(244,243,239,0),var(--bg) 24%);z-index:4}
-.dock.bar{flex-direction:row;gap:var(--s2);border-top:1px solid var(--line-2);background:rgba(244,243,239,.92);backdrop-filter:blur(16px) saturate(1.3);-webkit-backdrop-filter:blur(16px) saturate(1.3)}
+.dock{position:sticky;bottom:0;margin-top:auto;padding:var(--s3) var(--gutter) calc(env(safe-area-inset-bottom) + 28px);display:flex;flex-direction:column;gap:var(--s1);background:linear-gradient(rgba(245,246,250,0),var(--bg) 24%);z-index:4}
+.dock.bar{flex-direction:row;gap:var(--s2);border-top:1px solid var(--line-2);background:rgba(245,246,250,.92);backdrop-filter:blur(16px) saturate(1.3);-webkit-backdrop-filter:blur(16px) saturate(1.3)}
 
 /* поверхности */
 .card{background:var(--surface);border-radius:var(--r-lg);padding:var(--s4)}
@@ -211,8 +224,8 @@ details>summary{cursor:pointer;list-style:none;min-height:var(--tap);display:fle
 /* шторка */
 .sheet{position:fixed;inset:0;background:rgba(10,12,16,.4);display:flex;align-items:flex-end;z-index:20;animation:fdin var(--d3) var(--ease-out)}
 .sheet>div{background:var(--bg);width:100%;max-width:480px;max-height:92dvh;overflow:auto;margin:0 auto;border-radius:var(--r-xl) var(--r-xl) 0 0;padding:28px var(--gutter) calc(env(safe-area-inset-bottom) + 28px);position:relative;animation:up var(--d3) var(--ease-out);box-shadow:var(--sh-3)}
-#betabar{position:fixed;top:0;left:0;right:0;z-index:20;height:calc(30px + env(safe-area-inset-top));padding:env(safe-area-inset-top) 12px 0;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--brand);color:#fff;font:500 12px Onest,sans-serif}
-#betabar button{border:0;background:#fff;color:var(--brand);border-radius:999px;padding:4px 10px;font:600 11px Onest,sans-serif;cursor:pointer}
+#betabar{position:fixed;top:0;left:0;right:0;z-index:20;height:calc(30px + env(safe-area-inset-top));padding:env(safe-area-inset-top) 12px 0;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--brand);color:#fff;font:500 12px Manrope,sans-serif}
+#betabar button{border:0;background:#fff;color:var(--brand);border-radius:999px;padding:4px 10px;font:600 11px Manrope,sans-serif;cursor:pointer}
 /* платформы и экраны: длинные блоки кнопок не прилипают к низу; планшет и компьютер шире; телефон боком во время теста */
 .dock.flow{position:static;background:none}
 @media (min-width:768px){#app{max-width:720px}:root{--gutter:32px}.sheet{align-items:center}.sheet>div{max-width:560px;border-radius:var(--r-xl);max-height:86dvh}}
@@ -221,7 +234,7 @@ details>summary{cursor:pointer;list-style:none;min-height:var(--tap);display:fle
 input,select,textarea{font-size:max(16px,1em)} /* iOS не увеличивает страницу при вводе */
 body.beta #app{padding-top:calc(30px + env(safe-area-inset-top))}body.beta .scr{min-height:calc(100dvh - 30px - env(safe-area-inset-top))}
 body:has(.cam) #betabar{display:none}body.beta:has(.cam) #app{padding-top:0}
-#bugtab{position:fixed;right:0;top:46%;z-index:15;writing-mode:vertical-rl;transform:rotate(180deg);background:var(--ink);color:#fff;border:0;border-radius:0 10px 10px 0;padding:10px 5px;font:600 11px Onest;letter-spacing:.04em;opacity:.55;cursor:pointer}
+#bugtab{position:fixed;right:0;top:46%;z-index:15;writing-mode:vertical-rl;transform:rotate(180deg);background:var(--ink);color:#fff;border:0;border-radius:0 10px 10px 0;padding:10px 5px;font:600 11px Manrope;letter-spacing:.04em;opacity:.55;cursor:pointer}
 #bugtab:hover,#bugtab:focus-visible{opacity:1}
 body:has(.cam) #bugtab,body:has(.sheet) #bugtab{display:none}
 .sheet>div::before{content:'';position:absolute;top:8px;left:50%;width:36px;height:5px;margin-left:-18px;border-radius:3px;background:var(--line)}
@@ -311,6 +324,46 @@ details.q>div .mark{vertical-align:middle}
 .seg.sm button{min-height:34px;font-size:13px;padding:0 12px}
 .btn.glass{flex:1;height:48px;background:rgba(255,255,255,.08);border:1px solid var(--cam-line);color:var(--cam-text);font:600 15px var(--font)}.btn.glass:active{background:rgba(255,255,255,.16)}
 .ctl3d{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px;z-index:3}.ctl3d button{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.92);font:600 20px var(--font);color:var(--ink);box-shadow:var(--sh-1);cursor:pointer}.ctl3d button:active{transform:scale(.94);background:var(--surface-2)}
+
+/* ===== v4: раскадровка UXUI v2 ===== */
+/* ярлык «Отзыв» перекрывал содержимое и дублировал «Оценить работу» в верхней плашке (аудит, п. 33) */
+#bugtab{display:none!important}
+:root[data-theme=pro]{color-scheme:dark;--bg:#0B1220;--surface:#121C31;--surface-2:#1A2640;--line:#26334F;--line-2:#1E2A44;--ink:#EEF2FA;--text:#EEF2FA;--sub:#9FAAC2;--faint:#6E7A94;--focus:#8F88FF;--brand:#6C63FF;--brand-s:rgba(108,99,255,.2)}
+h1{letter-spacing:-.025em;font-weight:800}h2,h3{font-weight:700}
+.btn{border-radius:16px;box-shadow:0 6px 18px rgba(11,27,59,.18)}
+.btn.line,.btn.ghost,.btn.glass{box-shadow:none}
+.btn.white{background:#fff;color:#0B1B3B;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.btn.grad{background:var(--grad);color:#fff}
+.card,.list-item,.group,.kpi div,.tile,.tool{box-shadow:var(--sh-1)}
+.list-item.on,.pill.on{border-color:var(--violet)}
+.seg button.on{color:var(--ink)}
+.eyebrow,.caps{font-family:var(--font);font-weight:600;letter-spacing:.02em;text-transform:none;font-size:13px}
+/* первый экран */
+.welcome{position:relative;background:var(--hero-bg);color:#fff;overflow:hidden;min-height:100dvh}
+.welcome-bg{position:absolute;left:0;right:0;top:0;width:100%;height:78%;object-fit:cover;object-position:50% 12%;-webkit-mask-image:linear-gradient(#000 50%,transparent);mask-image:linear-gradient(#000 50%,transparent);pointer-events:none}
+.brand-name{font-size:19px;font-weight:800;letter-spacing:-.02em}
+.tag-dark{font:600 12px var(--font);padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18)}
+.welcome-txt{position:relative;margin-top:auto;padding-top:46vh}
+.welcome-kicker{display:inline-block;font-size:13px;font-weight:600;letter-spacing:.02em;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:8px}
+.welcome h1{font-size:34px;line-height:1.08;color:#fff}
+.welcome p{margin-top:12px;font-size:16px;line-height:1.5;color:rgba(255,255,255,.78)}
+.dock.dark-dock{position:relative;background:none;margin-top:0;padding-top:24px}
+.on-dark{color:rgba(255,255,255,.82)!important}.link.on-dark{font-size:14px;font-weight:600}
+/* кабинет: шапка с силуэтом на экране входа */
+.pro-hero{position:relative;height:220px;margin:0 var(--gutter);border-radius:var(--r-lg);overflow:hidden;background:#0B1220}
+.pro-hero img{width:100%;height:100%;object-fit:cover;object-position:50% 20%;opacity:.95}
+.pro-hero::after{content:'';position:absolute;inset:0;background:linear-gradient(transparent 55%,#0B1220)}
+/* нижняя навигация */
+.bnav>button{color:var(--faint)}.bnav>button.on,.bnav>button[aria-current]{color:var(--ink)}
+/* кабинет специалиста: тёмные исключения */
+:root[data-session=SPECIALIST_OPERATED] .toast,:root[data-session=SPECIALIST_OPERATED] .qpop{background:#26334F;color:#fff}
+:root[data-session=SPECIALIST_OPERATED] .src{color:#0B1220}
+:root[data-session=SPECIALIST_OPERATED] .dock{background:linear-gradient(rgba(11,18,32,0),var(--bg) 24%)}
+:root[data-session=SPECIALIST_OPERATED] .dock.bar{background:rgba(11,18,32,.92)}
+:root[data-session=SPECIALIST_OPERATED] .btn.line{background:var(--surface-2);border-color:var(--line);color:var(--text)}
+:root[data-session=SPECIALIST_OPERATED] .ctl3d button{background:rgba(26,38,64,.92);color:var(--text);border-color:var(--line)}
+:root[data-session=SPECIALIST_OPERATED] .tip>div{background:var(--surface)}
+:root[data-session=SPECIALIST_OPERATED] .sheet{background:rgba(0,0,0,.55)}
 </style>
 </head>
 <body>
