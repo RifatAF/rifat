@@ -14,6 +14,7 @@ import { meSync, logout, getMe } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
 import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS } from './plans.js';
 import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast, preload3D, saveBlob , setBodySex } from './core.js';
+import { baBlock, bindBa } from './app.js';
 import { cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, mainOf, TONE_HELP, applyMain, fromMain, muscleInfo, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen, TIP_ACT } from './app.js';
 
 // активные клиенты занимают слоты; пример и закрытые (пришли сверх лимита) не считаются
@@ -1275,6 +1276,7 @@ export async function compare(prevId, curId) {
   const badge = st => st === 'better' ? `<span style="color:var(--ok-t);display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:600">${ic('check', 's')}лучше</span>` : st === 'worse' ? '<span style="color:var(--over-t);display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600"><i class="dia"></i>хуже</span>' : '<span style="color:var(--sub);font-size:13px">без изм.</span>';
   go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>Было → стало</b><small>${esc(c.name)} · ${fmtDate(pa.date)} → ${fmtDate(ca.date)}</small></div></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s2);padding-bottom:var(--s4)">
+   ${baBlock('bap')}
    ${keys.length ? `<div style="position:relative;height:260px;border-radius:var(--r-lg);background:var(--cam-bg);overflow:hidden"><canvas id="cv" style="width:100%;height:100%;display:block"></canvas>
        <span class="eyebrow" style="position:absolute;right:14px;top:12px;color:var(--cam-sub)">${REP_TESTS.includes(key) ? 'нижняя точка приседа' : esc(QNAMES[key] || key)}</span>
        <div style="position:absolute;left:14px;bottom:12px;font-size:12px;color:var(--cam-sub);display:flex;gap:12px"><span>— — ${new Date(pa.date).toLocaleDateString('ru', { day: 'numeric', month: 'short' })}</span><span style="color:var(--signal)">▬ сегодня</span></div>
@@ -1289,6 +1291,7 @@ export async function compare(prevId, curId) {
    </div><div class="dock"><button class="btn" id="rep">Отправить клиенту</button></div></div>`);
   track('compare_open', { c: setupOk ? 'ok' : 'setup' }, false);
   $('#back').onclick = () => { cancelAnimationFrame(raf); result(curId); };
+  bindBa('bap', pa, ca);
   $('#rep').onclick = () => report(curId);
   if (!keys.length) return;
   let ghost, cur; const load = () => { ghost = prepTrack(pp.poses[key], pa, key); cur = prepTrack(cp.poses[key], ca, key); };

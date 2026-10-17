@@ -1060,6 +1060,19 @@ function postureCard(a) {
       <div style="flex:1;min-width:0">${pats.length ? pats.map(p => `<div style="margin-top:10px"><b style="font-size:16px">${p.label}</b><div style="font-size:13px;color:var(--sub);line-height:1.35">${esc(p.sub)}</div></div>`).join('') : '<div style="font-size:15px;line-height:1.4">Крена, скручивания и наклона вперед не видно</div>'}
         <div style="font-size:12px;color:var(--faint);margin-top:12px">Отклонения на скелете усилены. Скелет можно крутить пальцем</div></div></div></details></div>`;
 }
+// «Было → стало» на объемной фигуре: полупрозрачный силуэт в позе прошлого теста, цветная фигура переходит в позу нынешнего.
+// Зеленым то, что выровнялось, красным то, что осталось или усилилось. Без WebGL блок не показывается, остаются цифры.
+export function baBlock(id) {
+  if (!device.webgl2) return '';
+  return `<div class="ba3d"><div id="${id}" class="ba3d-box"></div><div class="ba3d-cap"><b id="${id}-ph">Было</b><span>Серый силуэт: как было. Цветная фигура: как стало</span>
+    <span class="ba3d-leg"><i style="background:var(--ok)"></i>выровнялось<i style="background:var(--short)"></i>осталось</span></div></div>`;
+}
+export async function bindBa(id, prevT, curT) {
+  const box = document.getElementById(id); if (!box || box.dataset.on) return; box.dataset.on = '1';
+  const pz = t => poseOf(posturePatterns(analyze(t, C).findings)), ph = document.getElementById(id + '-ph');
+  try { const { skeleton3D } = await import('./skeleton3d.js'); await skeleton3D(box, pz(curT), { from: pz(prevT), onPhase: p => { if (ph) ph.textContent = p === 'was' ? 'Было' : p === 'now' ? 'Стало' : 'Было → стало'; } }); }
+  catch (e) { box.closest('.ba3d').remove(); }
+}
 function bindPosture(a) {
   const acc = $('#posacc'), box = $('#pos3d'); if (!acc || !box) return; let s3 = null;
   acc.addEventListener('toggle', async () => { if (acc.open && !s3) { try { const { skeleton3D } = await import('./skeleton3d.js'); s3 = await skeleton3D(box, poseOf(posturePatterns(a.findings))); } catch (e) { box.outerHTML = postureFigure(posturePatterns(a.findings)); } } });
@@ -1230,7 +1243,7 @@ function moreSheet({ t, a }, top, hasPlan, only) {
   // первый тест: сравнивать не с чем, он сам становится точкой отсчета
   const dd = x => new Date(x.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' });
   const word = (x, y) => !Number.isFinite(x) || !Number.isFinite(y) ? '' : Math.abs(y) < Math.abs(x) - .5 ? '<span style="color:var(--ok-t);font-size:13px;font-weight:600">ровнее</span>' : Math.abs(y) > Math.abs(x) + .5 ? '<span style="color:var(--over-t);font-size:13px;font-weight:600">сильнее</span>' : '<span class="sub" style="font-size:13px">так же</span>';
-  const ba = all_t.length >= 2 && t.snapshot && first !== t && first.snapshot ? acc('Было → стало', `<p class="sub" style="font-size:13px;margin-top:6px">Первый тест ${dd(first)} → этот тест ${dd(t)}. Меньше градусов: тело стоит ровнее.</p>` + [['Наклон плеч', first.snapshot.shoulderTilt, t.snapshot.shoulderTilt], ['Наклон таза', first.snapshot.pelvicTilt, t.snapshot.pelvicTilt]].map(([n, x, y]) => `<div class="row" style="margin-top:10px;gap:8px"><span style="flex:1;font-size:15px">${n}</span><s style="color:var(--sub)">${fmt(x)}°</s>${ic('chevron-right', 's')}<b style="font-size:20px">${fmt(y)}°</b>${word(x, y)}</div>`).join(''))
+  const ba = all_t.length >= 2 && t.snapshot && first !== t && first.snapshot ? acc('Было → стало', baBlock('ba3d') + `<p class="sub" style="font-size:13px;margin-top:6px">Первый тест ${dd(first)} → этот тест ${dd(t)}. Меньше градусов: тело стоит ровнее.</p>` + [['Наклон плеч', first.snapshot.shoulderTilt, t.snapshot.shoulderTilt], ['Наклон таза', first.snapshot.pelvicTilt, t.snapshot.pelvicTilt]].map(([n, x, y]) => `<div class="row" style="margin-top:10px;gap:8px"><span style="flex:1;font-size:15px">${n}</span><s style="color:var(--sub)">${fmt(x)}°</s>${ic('chevron-right', 's')}<b style="font-size:20px">${fmt(y)}°</b>${word(x, y)}</div>`).join(''))
     : acc('Было → стало', `<p style="font-size:15px;line-height:1.45;margin-top:6px">${SHARED ? 'Сравнение появится после следующего теста.' : 'Это ваш первый тест: он станет точкой отсчета. Пройдите тест снова через 2–4 недели, и здесь будет видно, что изменилось.'}</p>`);
   const lim = t.limits && Object.keys(t.limits).length ? acc('Не получилось выполнить', Object.entries(t.limits).map(([u, l]) => `<div style="margin-top:8px;font-size:14px"><b>${esc(LIMIT_NAMES[u] || u)}</b>: ${esc([l.level, ...(l.reasons || [])].filter(Boolean).join(', '))}</div>`).join('')) : '';
   const zones = top.length ? acc(`Все зоны · ${top.length}`, `<div class="stack" style="margin-top:6px">${top.map(s => `<div class="list-item" data-k="${s.key}" style="background:var(--bg);min-height:52px"><span class="mark ${s.k}"></span><div style="flex:1;min-width:0"><b style="font-size:15px">${title(s)}</b></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div>`, true) : '';
@@ -1241,6 +1254,7 @@ function moreSheet({ t, a }, top, hasPlan, only) {
     <button class="btn" id="mx" style="margin-top:var(--s4)">Закрыть</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) close(); };
   const q = s => d.querySelector(s);
+  { const bx = q('#ba3d'), det = bx && bx.closest('details'); if (det) det.addEventListener('toggle', () => { if (det.open) bindBa('ba3d', first, t); }); }
   q('#mx').onclick = close; bindRate('map');
   d.querySelectorAll('.list-item[data-k]').forEach(el => el.onclick = () => { close(); muscle(el.dataset.k); });
   q('#shareRes').onclick = () => { close(); shareResult(); };
@@ -1587,7 +1601,7 @@ export function clientHome() {
       <button class="btn" id="cgo">${ic('play', 's')}Начать комплекс · ${totalMin(exIds.map(ex))} мин</button>`) : ''}
     ${card('Занятия за 4 недели', `${heatmap4w(doneMinutes(JSON.parse(localStorage.getItem(K('bp_done')) || '[]')))}
       <div class="row" style="font-size:15px;gap:16px;flex-wrap:wrap"><span><b class="num">${st.activeDays || 0}</b> <span class="sub">дн. из 30</span></span>${st.avgPre != null && st.avgPost != null ? `<span><span class="sub">боль</span> <b class="num">${(+st.avgPre).toFixed(1)} → ${(+st.avgPost).toFixed(1)}</b></span>` : ''}</div>`)}
-    ${card('Мои изменения', `${delta ? `<div style="display:flex;flex-direction:column;gap:8px"><div class="sub" style="font-size:13px">Первый тест → последний</div>${delta}</div>` : ''}
+    ${card('Мои изменения', `${delta ? `${baBlock('bah')}<div style="display:flex;flex-direction:column;gap:8px"><div class="sub" style="font-size:13px">Первый тест → последний</div>${delta}</div>` : ''}
       ${all.length ? `<div class="group">${all.slice().reverse().slice(0, 8).map(t => `<button class="row-link ctest" data-d="${t.date}"><span style="flex:1;text-align:left"><b style="font-weight:600">${fmtD(t.date)} · ${testLabel(t)}</b><small class="sub" style="display:block;font-size:13px">${zonesOf(t) ? zonesOf(t) + ' ' + plural3(zonesOf(t), 'зона требует', 'зоны требуют', 'зон требуют') + ' внимания' : 'без выраженных перекосов'}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>` : '<p class="sub">Тестов пока нет.</p>'}
       ${all.length === 1 ? '<p class="sub" style="font-size:14px">Пройдите тест еще раз через 3–4 недели, и здесь появится сравнение.</p>' : ''}`)}
     ${reps.length ? card('Отчеты специалиста', `<div class="group">${reps.slice().reverse().map(r => `<button class="row-link crep" data-c="${esc(r.code)}">${ic('file-text', 's')}<span style="flex:1;text-align:left">${esc(r.date || fmtD(r.at))}<small class="sub" style="display:block;font-size:13px">${esc(r.author)}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>`) : ''}
@@ -1598,6 +1612,7 @@ export function clientHome() {
   app.querySelectorAll('.ctest').forEach(b => b.onclick = () => { SHOW_T = +b.dataset.d; map(); });
   app.querySelectorAll('.crep').forEach(b => b.onclick = () => reportView(b.dataset.c));
   $('#ctest').onclick = () => { SHOW_T = null; again(); }; bindInstall(); bindClientNav();
+  if (delta && $('#bah')) bindBa('bah', all[0], last);
 }
 
 // ---------- настройки ----------
@@ -1780,6 +1795,7 @@ export async function adminScreen(back) {
       <button class="row-link" id="aexp">${ic('download', 's')}<span>Выгрузить данные для анализа</span>${ic('chevron-right', 's chev')}</button>
       <button class="row-link" id="acal">${ic('star', 's')}<span>Калибровки от специалистов</span>${ic('chevron-right', 's chev')}</button>
       <button class="row-link" id="anorm">${ic('cpu', 's')}<span>Нормы по базе и пороги</span>${ic('chevron-right', 's chev')}</button>
+      <button class="row-link" id="astore">${ic('download', 's')}<span>Хранилище: где лежат данные, копия</span>${ic('chevron-right', 's chev')}</button>
       ${device.webgl2 ? `<button class="row-link" id="a3d">${ic('search', 's')}<span>Проверка 3D-модели: какая мышца где</span>${ic('chevron-right', 's chev')}</button>` : ''}</div>
      <div class="card" style="border:1px solid var(--over-t)"><b>Сбросить статистику и отзывы</b><p class="sub" style="font-size:13px;margin-top:4px">Удаляет все события и отзывы на сервере. Аккаунты и клиенты не трогает. Перед сбросом сделайте выгрузку.</p>
       <input id="rsw" class="field" style="margin-top:10px;height:48px" placeholder="Напишите СБРОС" autocomplete="off"><button class="btn line" id="rsb" style="margin-top:8px;height:48px;color:var(--over-t)" disabled>Сбросить</button></div>
@@ -1791,6 +1807,13 @@ export async function adminScreen(back) {
   $('#afun').onclick = () => funnelScreen();
   $('#acal').onclick = () => calibInbox(() => adminScreen(back));
   $('#anorm').onclick = () => normsScreen(() => adminScreen(back));
+  // хранилище сервера: основное и копии (Vercel Blob, Cloudflare R2, домашний сервер); перенос пачками до конца
+  $('#astore').onclick = async () => { let info; try { const r = await fetch('/api/store'); info = await r.json(); if (!r.ok) throw new Error(info.error || r.status); } catch (e) { return toast('Не удалось узнать: ' + e.message); }
+    const N = { blob: 'Vercel Blob', s3: 'S3 (Cloudflare R2 или другое)', backup: 'резервное S3 (домашний сервер)' };
+    if (!info.mirrors.length) return toast(`Данные в ${N[info.primary]}. Копии не настроены: добавьте S3_* или BACKUP_S3_* в Vercel`);
+    if (!confirm(`Основное: ${N[info.primary]}. Копии: ${info.mirrors.map(m => N[m]).join(', ')}. Скопировать все старые данные в копии?`)) return;
+    let cur = '', n = 0; try { do { const r = await fetch('/api/store?a=copy' + (cur ? '&cursor=' + encodeURIComponent(cur) : '')); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); n += j.copied; cur = j.cursor; toast('Скопировано файлов: ' + n); } while (cur); toast('Готово, скопировано файлов: ' + n); }
+    catch (e) { toast('Остановилось на ' + n + ': ' + e.message); } };
   if ($('#a3d')) $('#a3d').onclick = () => check3D(() => adminScreen(back));
   $('#aexp').onclick = async () => { const b = $('#aexp'); b.style.opacity = .5; try { await exportData(); } catch (e) { toast('Не удалось выгрузить: ' + e.message); } b.style.opacity = 1; };
   $('#rsw').oninput = e => { $('#rsb').disabled = e.target.value.trim().toUpperCase() !== 'СБРОС'; };

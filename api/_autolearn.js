@@ -2,7 +2,7 @@
 // проверкам специалистов (явные и фоновые разборы из /api/calib). Без участия администратора, но осторожно:
 // связь меняется, только когда за нее не меньше 3 взвешенных мнений, и не больше чем на 0,15 за сутки.
 // Ручные веса администратора остаются, автоматические правки и откат видны в истории config/weights.json.
-import { list, get, put } from '@vercel/blob';
+import { list, get, put } from './_store.js';
 import { learnWeights } from '../js/calibreport.js';
 
 const W = 'config/weights.json', MAX_DOCS = 3000, STEP = .15, MIN_N = 3;

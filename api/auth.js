@@ -57,9 +57,9 @@ async function widgetReady(host) {
 }
 
 const codePath = e => `mailcode/${sha('mail:' + e)}.json`;
-async function readJson(p) { try { const { get } = await import('@vercel/blob'); const r = await get(p, { access: 'private', useCache: false }); if (!r || !r.stream) return null;
+async function readJson(p) { try { const { get } = await import('./_store.js'); const r = await get(p, { access: 'private', useCache: false }); if (!r || !r.stream) return null;
   const ch = []; for await (const c of r.stream) ch.push(Buffer.from(c)); return JSON.parse(Buffer.concat(ch).toString('utf8')); } catch (e) { return null; } }
-async function writeJson(p, o) { const { put } = await import('@vercel/blob'); await put(p, JSON.stringify(o), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true }); }
+async function writeJson(p, o) { const { put } = await import('./_store.js'); await put(p, JSON.stringify(o), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true }); }
 /** Код на почту: 6 цифр, 10 минут, 5 попыток; не чаще раза в минуту и не больше 5 писем в час на адрес. */
 async function sendMailCode(email, origin, extra = {}) {
   const e = String(email || '').trim().toLowerCase().slice(0, 120); if (!EMAIL.test(e)) return { status: 400, error: 'проверьте адрес почты' };
@@ -157,7 +157,7 @@ export default async function handler(req, res) {
       u.balanceLog = [...(u.balanceLog || []), { t: Date.now(), a: -PRO_PRICE, k: 'pro' }].slice(-100); await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
     if (a === 'logout') { clearSession(res); return res.status(200).json({ ok: true }); }
     if (a === 'delete') { // аккаунт, расписание напоминаний и ящики с результатами клиентов
-      const { purgeOwner } = await import('./relay.js'); const { del } = await import('@vercel/blob');
+      const { purgeOwner } = await import('./relay.js'); const { del } = await import('./_store.js');
       await purgeOwner(u.id).catch(e => console.error('purge', e)); await del(`remind/${u.id}.json`).catch(() => {}); await del(`backups/${u.id}.json`).catch(() => {});
       await deleteUser(u.id); clearSession(res); return res.status(200).json({ ok: true }); }
     if (a === 'users') { if (!isAdmin(u)) return res.status(403).json({ error: 'forbidden' });

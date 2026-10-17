@@ -5,7 +5,7 @@
 // иначе по почте покупателя: почта входа Google или «почта для оплаты», которую специалист указал в приложении.
 // Не нашли человека: платеж лежит в lava/unmatched, администратору приходит сообщение в Telegram.
 import crypto from 'node:crypto';
-import { put, get } from '@vercel/blob';
+import { put, get } from './_store.js';
 import { loadUser, saveUser, allUsers, REF_SHARE, REF_MONTHS } from './_session.js';
 
 const PRO_DAYS = 31, YEAR_DAYS = 365, YEAR_MIN = 5000; // годовой: свой продукт (LAVA_YEAR_PRODUCT_ID) или сумма от 5000 ₽

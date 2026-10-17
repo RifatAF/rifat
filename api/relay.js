@@ -4,7 +4,7 @@
 // Отправить может любой, у кого есть ссылка (клиенту вход не обязателен), но только в подписанный ящик.
 // Забрать и удалить может только владелец ящика.
 import crypto from 'node:crypto';
-import { put, list, get, del } from '@vercel/blob';
+import { put, list, get, del } from './_store.js';
 import { currentUser, saveUser } from './_session.js';
 
 const ID = /^[A-Za-z0-9_-]{16,64}$/;

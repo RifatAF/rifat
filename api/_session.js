@@ -1,6 +1,6 @@
 // Сессия в подписанной cookie (HMAC-SHA256). Сервер не хранит сессии, только профили пользователей в приватном Blob.
 import crypto from 'node:crypto';
-import { put, get, del, list } from '@vercel/blob';
+import { put, get, del, list } from './_store.js';
 
 const SECRET = process.env.SESSION_SECRET || '';
 const COOKIE = 'bp_s';

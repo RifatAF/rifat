@@ -1,7 +1,7 @@
 // Отзывы из приложения: оценка (1–5 после теста или 0–10 «порекомендуете ли»), текст, где оставлен.
 // Имя и контакт сохраняются, только если человек сам отметил «можно со мной связаться».
 // Список видит только администратор беты: GET /api/feedback?days=90.
-import { put, list, get } from '@vercel/blob';
+import { put, list, get } from './_store.js';
 import { currentUser, isAdmin } from './_session.js';
 
 const KINDS = { result: [1, 5], nps: [0, 10], free: [0, 5], bug: [0, 0], exit: [1, 5], test: [1, 5] };
