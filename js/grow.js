@@ -123,9 +123,10 @@ export function referralSheet() {
   const u = meSync();
   if (!u || !u.refCode) { sheet('<h2 style="font-size:21px">Пригласить коллегу</h2><p class="sub" style="margin-top:8px">Войдите в кабинет, чтобы получить личную ссылку.</p><button class="btn" id="rfx" style="margin-top:16px">Понятно</button>').querySelector('#rfx').onclick = e => e.target.closest('.sheet').remove(); return; }
   const url = refLink(), beta = configSync().beta !== false;
-  const d = sheet(`<div class="eyebrow">Пригласить коллегу</div><h2 style="font-size:22px;margin-top:6px">${beta ? 'Поделитесь BodyPassport с коллегой' : '20% оплат коллеги на ваш баланс'}</h2>
-    <p class="sub" style="font-size:14px;margin-top:8px">${beta ? 'Пока идет бета, все возможности открыты для всех. Приглашенные коллеги закрепятся за вами.' : 'Коллега заходит по вашей ссылке и оплачивает PRO: 20% каждой его оплаты 24 месяца приходят на ваш баланс. Баланс тратится на ваш PRO.'}</p>
-    <div class="kpi" style="margin-top:14px"><div><b>${u.invited || 0}</b><span>пришли по ссылке</span></div><div><b>${u.invitedPro || 0}</b><span>коллег</span></div><div><b style="color:var(--ok-t)">${beta ? '—' : (u.balance || 0).toLocaleString('ru') + ' ₽'}</b><span>на балансе</span></div></div>
+  const d = sheet(`<div class="eyebrow">Пригласить коллегу</div><h2 style="font-size:22px;margin-top:6px">Приглашайте коллег, получайте PRO</h2>
+    <div class="ref-steps"><div><b>1</b><span>Отправьте коллеге свою ссылку</span></div><div><b>2</b><span>Он входит по ней в кабинет специалиста и закрепляется за вами навсегда</span></div>
+      <div><b>3</b><span>${beta ? 'После беты' : 'Каждый раз, когда он платит за PRO,'} 20% его оплаты 24 месяца приходят вам на баланс. Балансом оплачивается ваш PRO</span></div></div>
+    <div class="kpi" style="margin-top:14px"><div><b>${u.invited || 0}</b><span>вошли по ссылке</span></div><div><b>${u.invitedPro || 0}</b><span>из них специалисты</span></div><div><b style="color:var(--ok-t)">${(u.balance || 0).toLocaleString('ru')} ₽</b><span>на балансе${beta ? ', начисления после беты' : ''}</span></div></div>
     <div class="card row" style="margin-top:12px;padding:12px 14px"><span style="flex:1;font-size:14px;word-break:break-all">${esc(url)}</span></div>
     <button class="btn" id="rfs" style="margin-top:12px">Пригласить</button><button class="btn ghost" id="rfx" style="margin-top:8px;border:0">Закрыть</button>`);
   d.querySelector('#rfx').onclick = () => d.remove();
@@ -150,7 +151,7 @@ export async function installNow(done) {
 /** Строка «Установить приложение» с одной кнопкой. */
 export function installCard() {
   if (!canInstall() || LS.get('bp_inst') === 'done') return '';
-  return `<div class="pad" style="margin-top:16px"><div class="card row" id="inst" style="gap:12px;padding:12px 14px"><img src="icons/bp-192.png" alt="" width="40" height="40" style="border-radius:10px;flex:none"><b style="flex:1;font-size:15px">Приложение на телефон</b><button class="pill" id="insty" style="background:var(--brand);color:#fff">Установить</button></div></div>`;
+  return `<div class="pad" style="margin-top:16px"><div class="card row" id="inst" style="gap:12px;padding:12px 14px"><img src="icons/bp4-192.png" alt="" width="40" height="40" style="border-radius:10px;flex:none"><b style="flex:1;font-size:15px">Приложение на телефон</b><button class="pill" id="insty" style="background:var(--brand);color:#fff">Установить</button></div></div>`;
 }
 export function bindInstall() {
   const box = document.getElementById('inst'); if (!box) return; track('install_shown');
