@@ -304,9 +304,9 @@ function bodyParts() { const e = (x, y, rx, ry) => { const p = new Path2D(); p.e
   const neck = new Path2D(); neck.rect(90, 50, 20, 36);
   return [...BODY.map(d => new Path2D(d)), e(100, 34, 20, 24), neck, e(72, 428, 14, 6), e(128, 428, 14, 6)]; }
 // пять опорных точек: норма нейтральная (цвет фигуры), карта показывает только отклонения
-const RAMP = [[-1, 0x2A5CB8], [-.45, 0x7FA6EE], [0, 0xE9E7E1], [.45, 0xF0A36A], [1, 0xD9484F]];
+const RAMP = [[-1, 0x3B73D9], [-.45, 0x8FB0F0], [0, 0xCEDBF2], [.45, 0xF8B860], [1, 0xEF4444]];
 // цвет мышцы по состоянию, а не по знаку: гипертонус красный, перерастяжение оранжевый, слабая синяя; сила отклонения дает насыщенность
-const STATE_RGB = { HYPER: [217, 130, 43], SHORT: [200, 65, 74], WEAK: [47, 107, 216], DONE: [63, 174, 118] }, BASE_LIGHT = [206, 219, 242], BASE_DARK = [86, 120, 178];
+const STATE_RGB = { HYPER: [245, 158, 11], SHORT: [239, 68, 68], WEAK: [59, 115, 217], DONE: [34, 197, 94] }, BASE_LIGHT = [206, 219, 242], BASE_DARK = [86, 120, 178];
 // в кабинете специалиста (navy) фигура холодная синяя, у клиента светлая
 const darkUI = () => document.documentElement.dataset.session === 'SPECIALIST_OPERATED' || document.documentElement.dataset.theme === 'pro';
 const baseRGB = () => darkUI() ? BASE_DARK : BASE_LIGHT;
@@ -316,7 +316,7 @@ export function ramp(v) { const x = Math.max(-1, Math.min(1, v)); let i = RAMP.f
   const [a, ca] = RAMP[i], [b, cb] = RAMP[i + 1], t = Math.max(0, Math.min(1, (x - a) / (b - a))); const ch = (c, s) => (c >> s) & 255; const mix = s => Math.round(ch(ca, s) + (ch(cb, s) - ch(ca, s)) * t);
   return [mix(16), mix(8), mix(0)]; }
 export const RAMP_CSS = 'linear-gradient(90deg,' + RAMP.map(([v, c]) => '#' + c.toString(16).padStart(6, '0') + ' ' + ((v + 1) * 50) + '%').join(',') + ')';
-export const MARK_HEX = { HYPER: '#D9822B', SHORT: '#C8414A', WEAK: '#2F6BD8', DONE: '#3FAE76' };
+export const MARK_HEX = { HYPER: '#F59E0B', SHORT: '#EF4444', WEAK: '#3B73D9', DONE: '#22C55E' };
 /** Маркер состояния формой: перегрузка — круг, укорочение — ромб, слабость — кольцо. derived: пунктир без ореола. */
 export function drawMark(ctx, x, y, k, o = {}) {
   const c = MARK_HEX[k]; if (!c) return; const sc = o.scale ?? 1; ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
@@ -421,7 +421,7 @@ export function drawHeat(cv, spots0, back, selected, labels = [], opts = {}) {
     marks.forEach((s, i) => { const t = markT(i); if (t <= 0) return; const sc2 = t < .7 ? .4 + (1.15 - .4) * (t / .7) : 1.15 - .15 * ((t - .7) / .3);
       drawMark(ctx, s.x * 200, s.y * 440, s.k, { derived: s.derived && !s.edited, scale: t >= 1 ? 1 : sc2, alpha: Math.min(1, t * 2) }); });
     for (const l of shown.filter(l => l.n)) { const s = mine.find(q => q.key === l.key); ctx.globalAlpha = Math.min(1, labA * 2 + (markT(0) > 0 ? 1 : 0));
-      ctx.fillStyle = '#13212B'; ctx.beginPath(); ctx.arc(s.x * 200, s.y * 440, 12, 0, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '700 14px Manrope, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#0B1B3B'; ctx.beginPath(); ctx.arc(s.x * 200, s.y * 440, 12, 0, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '700 14px Manrope, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(String(l.n), s.x * 200, s.y * 440 + 1); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1; }
     // выбранная мышца видна в карточке под схемой: черное кольцо на схеме путали с еще одним состоянием
     ctx.restore();
@@ -454,7 +454,7 @@ function callouts(ctx, labels, mine, alpha) {
     const tw = Math.max(ctx.measureText(v).width, (ctx.font = '400 12px Manrope, sans-serif', ctx.measureText(title).width));
     const bx = left ? 4 : VW - 4 - tw, ex = left ? bx + tw + 4 : bx - 4;
     ctx.strokeStyle = l.color; ctx.globalAlpha = alpha * .6; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px, zy); ctx.lineTo(ex, py); ctx.stroke(); ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#5A6872'; ctx.font = '400 12px Manrope, sans-serif'; ctx.fillText(title, bx, py - 3);
+    ctx.fillStyle = '#566079'; ctx.font = '400 12px Manrope, sans-serif'; ctx.fillText(title, bx, py - 3);
     ctx.fillStyle = l.text || l.color; ctx.font = l.value ? '500 13px "JetBrains Mono", monospace' : '600 12px Manrope, sans-serif'; ctx.fillText(v, bx, py + 12);
   }
   ctx.globalAlpha = 1;
@@ -580,7 +580,7 @@ export async function body3D(container, spots0, onPick, opts = {}) {
   const W = container.clientWidth, H = container.clientHeight;
   const camera = new THREE.PerspectiveCamera(30, W / H, .1, 50); camera.position.set(0, 0, 4.2);
   const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(device.weak ? 1.25 : 1.75, devicePixelRatio)); renderer.setSize(W, H); container.innerHTML = ''; container.appendChild(renderer.domElement); if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
-  container.insertAdjacentHTML('beforeend', '<a href="/licenses" target="_blank" style="position:absolute;right:12px;bottom:6px;font-size:12px;color:#5A6872;text-decoration:none">3D: Z-Anatomy, CC BY-SA 4.0</a><div class="hint3d">Один палец: повернуть · два: приблизить</div><div class="ctl3d"><button data-c="in" aria-label="Приблизить">+</button><button data-c="out" aria-label="Отдалить">−</button><button data-c="turn" aria-label="Повернуть на 180°">↻</button><button data-c="home" aria-label="Все тело">⌂</button></div>');
+  container.insertAdjacentHTML('beforeend', '<a href="/licenses" target="_blank" style="position:absolute;right:12px;bottom:6px;font-size:12px;color:#566079;text-decoration:none">3D: Z-Anatomy, CC BY-SA 4.0</a><div class="hint3d">Один палец: повернуть · два: приблизить</div><div class="ctl3d"><button data-c="in" aria-label="Приблизить">+</button><button data-c="out" aria-label="Отдалить">−</button><button data-c="turn" aria-label="Повернуть на 180°">↻</button><button data-c="home" aria-label="Все тело">⌂</button></div>');
   setTimeout(() => { const h = container.querySelector('.hint3d'); if (h) h.style.opacity = 0; }, 3000);
   // масштаб к точке под пальцами, сдвиг двумя пальцами: можно рассмотреть шею или стопу, а не только центр
   const ctl = new OrbitControls(camera, renderer.domElement); ctl.enablePan = true; ctl.screenSpacePanning = true; ctl.zoomToCursor = true;

@@ -28,7 +28,7 @@ const contactBox = () => meSync() ? `<label class="row" style="margin-top:12px;f
 export function feedbackSheet(where = 'menu', preset = {}) {
   const d = sheet(`<h2 style="font-size:21px">Отзыв или идея</h2>
     <p class="sub" style="font-size:14px;margin-top:6px">Что понравилось, что неудобно, чего не хватает. Читаю каждый отзыв лично.</p>${devCard()}
-    <textarea id="fbt" rows="5" maxlength="2000" placeholder="Например: не понял, куда встать на втором шаге…" style="width:100%;margin-top:14px;border-radius:16px;border:1px solid var(--line);padding:12px 14px;font:16px Manrope;background:#fff;resize:vertical">${esc(preset.t || '')}</textarea>
+    <textarea id="fbt" rows="5" maxlength="2000" placeholder="Например: не понял, куда встать на втором шаге…" style="width:100%;margin-top:14px;border-radius:16px;border:1px solid var(--line);padding:12px 14px;font:16px Manrope;background:var(--surface);resize:vertical">${esc(preset.t || '')}</textarea>
     ${contactBox()}
     <p id="fbe" class="sub" style="font-size:13px;min-height:18px;margin-top:6px;color:var(--over-t)"></p>
     <button class="btn" id="fbs" style="margin-top:6px">Отправить</button><button class="btn ghost" id="fbx" style="margin-top:8px;border:0">Отмена</button>`);
@@ -47,7 +47,7 @@ export async function bugSheet() {
   const d = sheet(`<h2 style="font-size:21px">Ошибка, неудобство или идея?</h2>
     <p class="sub" style="font-size:14px;margin-top:6px">Пара слов о том, что на этом экране не так или как сделать удобнее. Каждое сообщение читаю в тот же день.</p>${devCard('отвечаю сам')}
     <div class="row" style="flex-wrap:wrap;gap:8px;margin-top:12px">${['Ошибка', 'Неудобно', 'Непонятно', 'Идея'].map(t => `<button class="pill" data-bk="${t}">${t}</button>`).join('')}</div>
-    <textarea id="bgt" rows="4" maxlength="1500" placeholder="Например: на шаге «одна нога» зависло, кнопка «Ещё раз» не нажималась" style="width:100%;margin-top:14px;border-radius:16px;border:1px solid var(--line);padding:12px 14px;font:16px Manrope;background:#fff;resize:vertical"></textarea>
+    <textarea id="bgt" rows="4" maxlength="1500" placeholder="Например: на шаге «одна нога» зависло, кнопка «Ещё раз» не нажималась" style="width:100%;margin-top:14px;border-radius:16px;border:1px solid var(--line);padding:12px 14px;font:16px Manrope;background:var(--surface);resize:vertical"></textarea>
     <label class="row" style="margin-top:12px;font-size:14px;align-items:flex-start;gap:10px"><input type="checkbox" id="bgd" checked style="width:20px;height:20px;flex:none;accent-color:var(--ink);margin-top:1px"><span>Приложить сведения о телефоне и последние нажатия. Без имен клиентов, видео и результатов.</span></label>
     ${contactBox()}
     <p id="bge" class="sub" style="font-size:13px;min-height:18px;margin-top:6px;color:var(--over-t)"></p>
@@ -77,7 +77,7 @@ export function mountBugTab() {
 export function rateCard(key) {
   if (LS.get('bp_rate_' + key)) return '';
   return `<div class="card" id="rate" data-key="${esc(key)}" style="text-align:center;padding:16px"><b style="font-size:16px">Насколько полезен результат?</b>
-    <div class="row" style="justify-content:center;gap:8px;margin-top:12px">${[1, 2, 3, 4, 5].map(n => `<button data-rate="${n}" aria-label="${n} из 5" style="width:48px;height:48px;border-radius:14px;border:1px solid var(--line);background:#fff;font:600 18px Manrope;color:var(--text);cursor:pointer">${n}</button>`).join('')}</div>
+    <div class="row" style="justify-content:center;gap:8px;margin-top:12px">${[1, 2, 3, 4, 5].map(n => `<button data-rate="${n}" aria-label="${n} из 5" style="width:48px;height:48px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font:600 18px Manrope;color:var(--text);cursor:pointer">${n}</button>`).join('')}</div>
     <div class="row" style="justify-content:space-between;font-size:12px;color:var(--sub);margin:6px 6px 0"><span>бесполезно</span><span>очень полезно</span></div></div>`;
 }
 export function bindRate(where = 'map') {
@@ -94,7 +94,7 @@ export function bindRate(where = 'map') {
 export function npsCard(ownAssessments) {
   const last = +LS.get('bp_nps') || 0; if (ownAssessments < 3 || Date.now() - last < 60 * 864e5) return '';
   return `<div class="pad" style="margin-top:16px"><div class="card" id="nps"><b style="font-size:16px">Порекомендуете BodyPassport коллеге?</b>
-    <div style="display:grid;grid-template-columns:repeat(11,1fr);gap:4px;margin-top:12px">${Array.from({ length: 11 }, (_, n) => `<button data-nps="${n}" aria-label="${n} из 10" style="height:44px;border-radius:10px;border:1px solid var(--line);background:#fff;font:600 14px Manrope;color:var(--text);padding:0;cursor:pointer">${n}</button>`).join('')}</div>
+    <div style="display:grid;grid-template-columns:repeat(11,1fr);gap:4px;margin-top:12px">${Array.from({ length: 11 }, (_, n) => `<button data-nps="${n}" aria-label="${n} из 10" style="height:44px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font:600 14px Manrope;color:var(--text);padding:0;cursor:pointer">${n}</button>`).join('')}</div>
     <div class="row" style="justify-content:space-between;font-size:12px;color:var(--sub);margin-top:6px"><span>точно нет</span><span>точно да</span></div>
     <button id="npsx" style="margin-top:8px;background:none;border:0;font:500 13px Manrope;color:var(--sub);text-decoration:underline;padding:6px 0">Не сейчас</button></div></div>`;
 }

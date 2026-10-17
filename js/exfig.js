@@ -141,7 +141,7 @@ const PROPS = {
 
 let UID = 0;
 // палитра персонажа: футболка в цвет бренда, темные леггинсы, теплая кожа; дальние конечности темнее
-const PAL = { skin: '#EDC3A2', skinF: '#D9A887', shirt: '#0E5A6B', shirtF: '#0A4453', pants: '#25343E', pantsF: '#1A252D', shoe: '#E9A23B', shoeF: '#C9862A', hair: '#2B211C' };
+const PAL = { skin: '#EDC3A2', skinF: '#D9A887', shirt: '#0B1B3B', shirtF: '#0A4453', pants: '#25343E', pantsF: '#1A252D', shoe: '#FF7A45', shoeF: '#C9862A', hair: '#2B211C' };
 
 /** SVG-схема упражнения. animate: анимация движения; иначе статичный кадр (конечная поза поверх бледной исходной). */
 export function exFigure(id, { dark = false, animate = true, size = '100%', ghost: withGhost = true } = {}) {
@@ -173,20 +173,20 @@ export function exFigure(id, { dark = false, animate = true, size = '100%', ghos
   const glow = C(j => hlPoint(j, spec.hl), 15, `url(#${uid}g)`, spec.pulse ? 'opacity=".9"' : '');
   // тень на полу и коврик для упражнений лежа
   const lying = !front && !top && spec.a.hy >= 125;
-  const floor = top ? '' : `<path d="M10 ${G + 3} H190" stroke="${dark ? 'rgba(255,255,255,.16)' : '#DCE4E6'}" stroke-width="2" stroke-linecap="round"/>`;
-  const mat = lying ? `<rect x="22" y="${G - 1}" width="164" height="6" rx="3" fill="${dark ? 'rgba(126,209,199,.28)' : '#CFE4E7'}"/>` : '';
+  const floor = top ? '' : `<path d="M10 ${G + 3} H190" stroke="${dark ? 'rgba(255,255,255,.16)' : '#E1E4EE'}" stroke-width="2" stroke-linecap="round"/>`;
+  const mat = lying ? `<rect x="22" y="${G - 1}" width="164" height="6" rx="3" fill="${dark ? 'rgba(126,209,199,.28)' : '#E9EAF8'}"/>` : '';
   const shadow = top ? '' : `<ellipse cy="${G + 2}" rx="${lying ? 60 : 26}" ry="3.2" fill="${dark ? 'rgba(0,0,0,.35)' : 'rgba(19,33,43,.10)'}" cx="${f1(end.H[0])}">${anim('cx', seq.map(j => f1(j.H[0])))}</ellipse>`;
-  const c = { prop: dark ? 'rgba(255,255,255,.28)' : '#C9D3D6' };
+  const c = { prop: dark ? 'rgba(255,255,255,.28)' : '#D5DAE6' };
   const props = (spec.a.props || []).map(p => PROPS[p] ? PROPS[p](c) : '').join('');
   // тень исходной позы в статичном кадре: видно, откуда и куда движение
-  const gh = dark ? 'rgba(255,255,255,.14)' : '#E3EAEC';
+  const gh = dark ? 'rgba(255,255,255,.14)' : '#E6E9F2';
   const ghost = animate || !withGhost ? '' : `<g fill="${gh}">${[ua('aF'), fa('aF'), th('lF'), sh('lF'), th('lN'), sh('lN'), torso, ua('aN'), fa('aN')].map(f => `<path d="${f(start)}"/>`).join('')}<circle cx="${f1(start.hc[0])}" cy="${f1(start.hc[1])}" r="10.4"/></g>`;
   const towel = (spec.a.props || []).includes('towel') ? P(j => seg(j.aN[2], j.lN[3], 1.3, 1.3), PAL.shoe) : (spec.a.props || []).includes('towelh') ? P(j => seg(j.aN[2], j.aF[2], 1.8, 1.8), PAL.shoe) : '';
   const figure = front
     ? limbLeg('lN') + limbLeg('lF') + P(neck, PAL.skin) + P(torso, PAL.shirt) + limbArm('aN') + limbArm('aF') + head
     : limbArm('aF', 1) + limbLeg('lF', 1) + P(neck, PAL.skin) + P(torso, PAL.shirt) + limbLeg('lN') + head + limbArm('aN');
   return `<svg viewBox="0 0 200 160" width="${size}" style="display:block;max-width:100%" role="img" aria-label="Схема упражнения">
-    <defs><radialGradient id="${uid}g"><stop offset="0" stop-color="#FFB547" stop-opacity=".75"/><stop offset=".55" stop-color="#E9A23B" stop-opacity=".35"/><stop offset="1" stop-color="#E9A23B" stop-opacity="0"/></radialGradient></defs>
+    <defs><radialGradient id="${uid}g"><stop offset="0" stop-color="#FFB547" stop-opacity=".75"/><stop offset=".55" stop-color="#FF7A45" stop-opacity=".35"/><stop offset="1" stop-color="#FF7A45" stop-opacity="0"/></radialGradient></defs>
     <g${mirror ? ' transform="translate(200 0) scale(-1 1)"' : ''}>${floor}${mat}${shadow}${props}${ghost}${figure}${towel}${glow}</g></svg>`;
 }
 export const hasFigure = id => !!EX[String(id).replace(/_(left|right)$/, '')];
