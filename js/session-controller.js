@@ -7,6 +7,8 @@ export const MODES = Object.freeze({ SELF: 'SELF_TEST', SPEC: 'SPECIALIST_OPERAT
 const KEY = 'bp_session_mode';
 const listeners = new Set();
 let mode = (() => { try { return sessionStorage.getItem(KEY) === MODES.SPEC ? MODES.SPEC : MODES.SELF; } catch (e) { return MODES.SELF; } })();
+// по режиму выбирается тема: клиент светлый, кабинет специалиста navy
+try { document.documentElement.dataset.session = mode; } catch (e) {}
 
 /** Установить режим. Любое значение, кроме SPECIALIST_OPERATED, означает SELF_TEST. */
 export function setSession(m) {
