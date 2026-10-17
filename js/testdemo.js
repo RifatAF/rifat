@@ -41,8 +41,11 @@ function trotPlan() {
 export function testDemo(id, facing = 'front') {
   const chip = `<div style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:${BRAND};color:#fff;font:600 15px Manrope,sans-serif">${FACE[facing] || FACE.front}</div>`;
   if (id === 'test_trot') return `<div style="text-align:center">${chip}<div style="font:600 17px Manrope,sans-serif;color:${INK};margin-top:8px">Плечи вправо и влево, как будто смотрите за спину</div>${trotPlan()}</div>`;
-  // схема сбоку, а человек стоит лицом: телефон рисуем перед фигурой, чтобы было видно, куда наклоняться
-  const front = facing === 'front' && /^test_(fwd|breath|slb|squat)$/.test(id);
+  // человек повторяет картинку: стоит лицом или спиной к телефону, значит и фигура нарисована спереди, а не в профиль
+  const FV = { test_squat: 'test_squat_f', test_slb: 'test_slb_f', test_sls: 'test_sls_f', test_sls_left: 'test_sls_f_right' };
+  if (facing !== 'side' && FV[id]) id = FV[id];
+  // наклон и дыхание остаются в профиль (спереди наклон не виден): телефон рисуем перед фигурой, чтобы было видно, куда наклоняться
+  const front = facing === 'front' && /^test_(fwd|breath)$/.test(id);
   return `<div>${chip}<div style="display:flex;align-items:center;gap:8px;margin-top:8px">
     <div style="flex:1;min-width:0;position:relative">${exFigure(id, { size: '100%' })}${front ? `<div style="position:absolute;right:0;top:50%;transform:translateY(-50%);text-align:center"><svg width="26" height="40" viewBox="-13 -20 26 40">${phone(0, 0)}</svg><div style="font:500 10px Manrope,sans-serif;color:#566079">телефон</div></div>` : ''}</div>
     <div style="flex:none">${planView(facing)}</div></div></div>`;
