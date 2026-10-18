@@ -12,6 +12,7 @@ import { applyRuleWeights } from './core.js';
 import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, mailLinkLogin, logout, deleteAccount, betaUsers, providers, config, setAppMode } from './auth.js';
 import { exFigure, hasFigure } from './exfig.js';
 import { testDemo } from './testdemo.js';
+import { coachPlan, coachSec, cuesOf, PH, REST_NEXT, REST_SIDE, exName } from './coach.js';
 import { painWord, PAIN_SCALE } from './vas.js';
 import { sayText } from './saytext.js';
 import { BATTERY_UNITS, forwardBend, singleBalance, thoracicRotation, trotSweep, overheadReach, chairStand, retroGait, autoScale } from './test-battery.js';
@@ -105,7 +106,7 @@ export const ex = id => C.exercises[id];
 /** Название упражнения со стороной: «Ягодичный мостик, слева». Сторону не прячем, иначе непонятно, какую ногу качать. */
 export const exSide = e => { const m = /\((левая|правая) сторона\)/.exec(e.title); return m ? (m[1] === 'левая' ? 'слева' : 'справа') : ''; };
 export const exLabel = e => e.title.split(' (')[0] + (exSide(e) ? ', ' + exSide(e) : '');
-const exSec = e => Math.max(10, e.durationSec) + 20;
+const exSec = e => coachSec(e) + REST_NEXT + 15; // подходы и отдых по плану тренера, переход и короткое объяснение
 export const minutes = e => Math.max(1, Math.ceil(exSec(e) / 60));
 export const totalMin = list => Math.max(1, Math.round(list.reduce((x, e) => x + exSec(e), 0) / 60));
 let view3d = null;
@@ -243,8 +244,13 @@ export function planFor(top, minutes) { const worked = workedToday(), pool = [];
   if (!pool.length) return plan(top); const out = []; let sec = 0, k = 0;
   while (sec < minutes * 60 && k < 200) { const id = pool[k % pool.length]; out.push(id); sec += Math.max(10, ex(id).durationSec) + 15; k++; }
   return out; }
-export function plan(top) { const ids = []; for (const s of top.slice(0, 3)) { const m = C.muscles[s.id], sk = s.side === 'RIGHT' ? 'right' : 'left';
-  const pick = s.k === 'WEAK' ? ((m.plan && m.plan.isolate) || m.activate || [])[0] : releaseFor(m, s.k, ex)[0]; const id = pick && pick.replace('{s}', sk); if (id && ex(id) && !ids.includes(id)) ids.push(id); } return ids.slice(0, 4); }
+// комплекс: 3–4 упражнения по найденным зонам; зон мало — второе упражнение для главных зон
+export function plan(top) { const ids = [], opts = s => { const m = C.muscles[s.id], sk = s.side === 'RIGHT' ? 'right' : 'left';
+    return (s.k === 'WEAK' ? [...((m.plan && m.plan.isolate) || []), ...(m.activate || [])] : releaseFor(m, s.k, ex)).map(x => x.replace('{s}', sk)).filter(id => ex(id)); };
+  const add = id => { if (id && !ids.includes(id) && ids.length < 4) ids.push(id); };
+  for (const s of top.slice(0, 4)) add(opts(s)[0]);
+  for (const s of top.slice(0, 3)) if (ids.length < 3) opts(s).slice(1).forEach(add);
+  return ids; }
 // кабинет специалиста только после входа
 export async function openPro() { if (await ensureLogin('specialist', openPro, { back: onboarding })) proHome(); }
 let SHARED = null; // результат, открытый по чужой ссылке
@@ -509,6 +515,13 @@ const SAY = {
   noFeet: 'Не вижу ноги. Отойди назад', noHead: 'Не вижу голову. Отойди назад', farther: 'Отойди чуть дальше', closer: 'Подойди чуть ближе',
   goLeft: 'Сделай шаг влево', goRight: 'Сделай шаг вправо', tilt: 'Телефон стоит криво. Выровняй его', dark: 'Мало света. Встань лицом к окну или включи свет',
 };
+// повторный тест: человек уже знает движения и хочет быстрее. Длинные объяснения заменяем короткими, «встаньте на место» убираем.
+// null — фраза не звучит (текст шага все равно на экране)
+const BRIEF = { setup: 'Поставьте телефон и отойдите, как в прошлый раз.', standIntro: null, wide: null, ohsIntro: 'Присед, руки вверх.',
+  slsRIntro: 'Правая нога, три приседа.', slsLIntro: 'Левая нога, три приседа.', toPlace: null, backIntro: 'Присед спиной, три раза.',
+  fwdIntro: 'Наклон вперед, к телефону.', trotIntro: 'Повороты корпуса, таз на месте.', chairIntro: 'Вставание со стула, тридцать секунд.',
+  calfRIntro: 'Правая нога, на носок.', calfLIntro: 'Левая нога, на носок.', staySide: null };
+export const BRIEF_PHRASES = Object.values(BRIEF).filter(Boolean);
 
 const RETAKE_KEYS = { ohs_front: ['ohs_front'], sls: ['sls_r', 'sls_l'], side: ['ohs_side'], back: ['ohs_back'], fwd: ['fwd'], slb: ['slb'], trot: ['trot'], reach: ['reach'] };
 const retakeOf = (u, moves) => (RETAKE_KEYS[u] || []).some(k => moves[k] && moves[k].quality === 'RETAKE');
@@ -536,7 +549,9 @@ async function runProtocol0(protocol, opts = {}) {
   if (acute === undefined) return (opts.onCancel || prep)();
   if (acute >= 7) { toast('При сильной боли сделаем только безопасный тест: вставание со стула'); protocol = ['chair']; }
 
-  await voice.ensure(Object.values(SAY)); voice.warm(Object.values(SAY));
+  // повторный тест этого человека: короче объяснения и отсчет
+  const REPEAT = opts.repeat ?? (!opts.specialist && tests().length > 0);
+  await voice.ensure(Object.values(SAY)); voice.warm([...Object.values(SAY), ...(REPEAT ? BRIEF_PHRASES : [])]);
   const pre = opts.pre || {}; const units = sortUnits(protocol); const BAT = units.includes('fwd'); const steps = rowsOf(units.filter(u => !pre[u] || pre[u].alt)); const startedAt = Date.now();
   go(`<div class="cam"><video playsinline muted autoplay></video><canvas id="sil"></canvas><canvas id="sk"></canvas><div class="count" id="cnt"></div>
    <div class="top"><div class="segs">${steps.map(() => '<div><b></b></div>').join('')}</div>${canFake() && !(INV() || {}).cal ? '<button class="pill glass" id="betaSkip" style="margin-right:8px;color:#fff">Пропустить</button>' : ''}<button class="round glass" id="x" aria-label="Закончить тест">${ic('x')}</button></div>
@@ -599,7 +614,8 @@ async function runProtocol0(protocol, opts = {}) {
   const segs = [...app.querySelectorAll('.segs b')]; let si = -1;
   const step = (i, title, sub, fc) => { pg.instr(); fs.reset(); if (i !== null) { si = i; segs.forEach((b, k) => b.style.width = k < i ? '100%' : k === i ? '8%' : '0'); stepLabel = `Шаг ${i + 1} из ${steps.length}`; lastStatus = ''; } if (fc !== undefined) focus = fc; $('#tt').textContent = title; $('#cue').textContent = sub || ''; bar(0, ''); $('#reps').hidden = true; };
   const bar = (frac, label) => { $('#pbf').style.width = Math.max(0, Math.min(1, frac)) * 100 + '%'; if (label !== undefined) $('#pbt').textContent = label; if (segs[si]) segs[si].style.width = Math.max(8, frac * 100) + '%'; };
-  const say = async text => { if (stop) return; $('#cue').textContent = text; await voice.speak(text); };
+  const short = new Map(REPEAT ? Object.entries(BRIEF).map(([k, v]) => [SAY[k], v]) : []);
+  const say = async text => { if (stop) return; if (short.has(text)) { text = short.get(text); if (!text) return; } $('#cue').textContent = text; await voice.speak(text); };
   let lastHint = '', lastHintAt = 0, hints = 0; const fpsS = [];
   // подсказки не давят: не перебивают говорящий голос, любая не чаще раза в 6 с, та же фраза не чаще раза в 12 с
   const hint = (text, gap = 6000, force = false) => { const now = Date.now(); if (!force && (voice.busy() || now - lastHintAt < gap || (text === lastHint && now - lastHintAt < 12000))) return; lastHint = text; lastHintAt = now; hints++; lastIssue = text; $('#cue').textContent = text; voice.say(text); };
@@ -655,7 +671,7 @@ async function runProtocol0(protocol, opts = {}) {
   // перед сигналом время вернуться на место: люди подходят к телефону рассмотреть схему. Схема остается на экране,
   // крупный обратный отсчет виден издалека; на первых двух упражнениях дольше
   let nCount = 0;
-  const countdown = async (word = GO_WORD.hold) => { if (stop || skip) return; const T = nCount++ < 2 ? 7 : 5; say(SAY.toPlace);
+  const countdown = async (word = GO_WORD.hold) => { if (stop || skip) return; const T = REPEAT ? 4 : nCount++ < 2 ? 7 : 5; say(SAY.toPlace);
     const t0 = Date.now(); $('#reps').hidden = false; $('#repn').textContent = 'сек'; while (!stop && !skip && Date.now() - t0 < T * 1000) { const left = Math.ceil(T - (Date.now() - t0) / 1000); $('#ring').textContent = left; bar((Date.now() - t0) / (T * 1000), `На место: ${left} с`); await sleep(100); }
     $('#reps').hidden = true; if (stop || skip) return; demo(null); await pg.signal(word, () => voice.beep('start')); };
   const goReps = async (phrase, key, an, deep, N) => { await countdown(GO_WORD.squat); if (stop || skip) return { f: {}, reps: 0, quality: 'RETAKE' }; const sp = say(phrase); const r = await reps(key, an, deep, N, true); await sp; return r; };
@@ -832,7 +848,9 @@ export function bindSwipe(el, onDone) {
 }
 async function runTest(vns = null, acute) {
   const r = await runProtocol(consumerProtocol(), { pre: PRE, vns, acute }); if (!r) return;
-  const { poses, ...light } = r; saveTest(light); rememberBaseline(light.touch); resetTouch(); analysisScreen();
+  const { poses, ...light } = r; saveTest(light); rememberBaseline(light.touch); resetTouch();
+  const rt = +localStorage.getItem(K('bp_retest')); localStorage.removeItem(K('bp_retest')); if (rt) return afterWorkout(rt);
+  analysisScreen();
 }
 
 function cameraHelp() {
@@ -1483,18 +1501,18 @@ export async function workout(ids, reasons = {}) {
     const camHtml = () => localStorage.getItem('bp_excam') === '1' ? `<div style="position:relative;border-radius:var(--r-lg);overflow:hidden;background:#000;height:190px"><video id="exv" playsinline muted style="width:100%;height:100%;object-fit:cover"></video>
       <div style="position:absolute;left:10px;top:8px;background:rgba(0,0,0,.55);border-radius:12px;padding:4px 10px;color:#fff"><b id="exn" class="num" style="font-size:28px">0</b><span style="font-size:14px;opacity:.8"> / ${tgt}${sets > 1 ? ' · подход <span id="exs">1</span> из ' + sets : ''}</span></div>
       <button class="pill" id="excoff" style="position:absolute;right:8px;top:8px;background:rgba(0,0,0,.55);color:#fff">Выключить</button><div id="exhint" style="position:absolute;left:10px;right:10px;bottom:8px;color:#fff;font-size:14px;text-shadow:0 1px 3px #000"></div></div>`
-      : `<button class="btn line" id="excam" style="height:44px;color:#fff;border-color:rgba(255,255,255,.3)">${ic('camera', 's')}Считать повторы камерой</button>`;
+      : `<button class="btn line" id="excam" style="height:44px;color:#fff;background:transparent;border-color:rgba(255,255,255,.3)">${ic('camera', 's')}Считать повторы камерой</button>`;
     go(`<div class="scr dark fade" style="padding:16px 20px 28px">
       <div class="row"><div class="segs" style="flex:1">${list.map((_, k) => `<div><b style="width:${k <= i ? 100 : 0}%;background:${k === i ? '#fff' : 'var(--signal)'}"></b></div>`).join('')}</div><button class="round glass" id="x" aria-label="Закончить">${ic('x')}</button></div>
       <div class="eyebrow" style="color:var(--signal);margin-top:18px">${i + 1} из ${list.length}${rs ? ' · для итога' : ''}</div>
       ${rs ? `<div class="row" style="gap:8px;margin-top:6px;font-size:14px;color:var(--cam-sub)"><span class="mark sm ${rs.k}"></span><span>${esc(rs.t)}</span></div>` : ''}
       <h1 style="color:#fff;margin-top:8px">${e.title.split(' (')[0]}</h1>
       ${exSide(e) ? `<div style="display:inline-block;align-self:flex-start;width:fit-content;margin-top:8px;padding:6px 12px;border-radius:999px;background:var(--signal);color:var(--cam-bg,#0B1B3B);font-weight:700;font-size:15px">${exSide(e) === 'слева' ? 'Левая сторона' : 'Правая сторона'}</div>` : ''}
-      <div class="row" style="gap:6px;margin-top:12px;flex-wrap:wrap">${[e.dose, e.feel].filter(Boolean).map(x => `<span class="pill" style="background:rgba(255,255,255,.12);color:#fff">${x}</span>`).join('')}</div>
+      <div class="row" style="gap:6px;margin-top:12px;flex-wrap:wrap">${[planText(e), e.feel].filter(Boolean).map(x => `<span class="pill" style="background:rgba(255,255,255,.12);color:#fff">${x}</span>`).join('')}</div>
       ${hasFigure(e.id) ? `<div style="margin-top:16px;background:#F5F6FA;border-radius:var(--r-lg);padding:10px 12px 8px">${exFigure(e.id)}<div style="text-align:center;font-size:13px;color:#4A5A63;margin-top:2px">Повторяйте за фигурой · <span style="color:#C77D12">светится</span> рабочая зона</div></div>` : ''}
       ${rk ? `<div id="cambox" style="margin-top:12px">${camHtml()}</div>` : ''}
       <div class="row" style="gap:14px;margin-top:14px;align-items:center"><div style="position:relative;width:${hasFigure(e.id) ? 72 : 200}px;height:${hasFigure(e.id) ? 72 : 200}px;flex:none;margin:${hasFigure(e.id) ? '0' : '8px auto 0'}"><svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg)"><circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="6"/><circle id="arc" cx="50" cy="50" r="45" fill="none" stroke="#D4F25A" stroke-width="6" stroke-linecap="round" stroke-dasharray="283" stroke-dashoffset="283"/></svg>
-        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><b id="tm" class="num" style="font-size:${hasFigure(e.id) ? 20 : 56}px;font-weight:600;letter-spacing:-.02em;opacity:.45">${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}</b></div></div><span id="tml" style="font-size:14px;color:var(--cam-sub)">старт после подсказки</span></div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><b id="tm" class="num" style="font-size:${hasFigure(e.id) ? 20 : 56}px;font-weight:600;letter-spacing:-.02em;opacity:.45">${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}</b></div></div><span id="tml" style="font-size:14px;color:var(--cam-sub)">старт после подсказки</span><b id="ccue" style="flex:1;font-size:20px;line-height:1.25;color:var(--signal)"></b></div>
       <div style="flex:1;margin-top:20px;display:flex;flex-direction:column;gap:12px">${e.steps.slice(0, 3).map((s, k) => `<div class="row st" style="opacity:.45;align-items:flex-start"><span class="step-n" style="color:var(--signal);width:22px;padding-top:2px">${String(k + 1).padStart(2, '0')}</span><span style="font-size:16px;line-height:1.35;flex:1">${s}</span></div>`).join('')}
         ${e.check ? `<div class="row" style="background:rgba(255,255,255,.08);border-radius:var(--r-md);padding:12px;align-items:flex-start;gap:10px"><span style="color:var(--signal)">${ic('info', 's')}</span><span style="font-size:14px;line-height:1.4">${e.check}</span></div>` : ''}
         <div class="row" id="exctl" style="gap:8px"><button class="btn glass" id="exrep">${ic('volume-2', 's')}Повторить</button><button class="btn glass" id="exskip">Сразу начать${ic('chevron-right', 's')}</button></div></div>
@@ -1521,8 +1539,10 @@ export async function workout(ids, reasons = {}) {
     // есть мужская запись этого упражнения (тот же голос, что в тесте): играем ее, шаги подсвечиваем по ходу записи
     // запись на «вы» со стороной (озвучивается при сборке), иначе старая запись, иначе голос телефона по шагам
     // объяснение можно пропустить или послушать заново; после него короткий сигнал «Пип» и пошел таймер
-    let exTok = 0, ready; const started = new Promise(r => ready = r);
+    let exTok = 0, ready, full = false; const started = new Promise(r => ready = r);
     const explain = async () => { const my = ++exTok, dead = () => myTok.dead || closed || my !== exTok;
+      // упражнение уже делали два раза и больше: только название, подробности по кнопке «Повторить»
+      if (!full && timesDone(e) >= 2) { await voice.speak(exName(e) + (exSide(e) ? ', ' + (exSide(e) === 'слева' ? 'левая сторона' : 'правая сторона') : '')); full = true; if (!dead()) ready(); return; }
       const rec = [sayText(e)].find(x => x && voice.has(x));
       if (rec) { const nS = Math.min(3, e.steps.length), t0 = Date.now(), per = (rec.length * 65) / (nS + (e.check ? 1 : 0));
         const tick = setInterval(() => { if (dead()) return clearInterval(tick); lit(Math.min(nS - 1, Math.floor((Date.now() - t0) / per))); }, 300);
@@ -1532,22 +1552,49 @@ export async function workout(ids, reasons = {}) {
         if (e.check && !dead()) await voice.speak(e.check); }
       if (!dead()) ready(); };
     $('#exskip').onclick = () => { exTok++; hush(); ready(); };
-    $('#exrep').onclick = () => { hush(); lit(-1); explain(); };
+    $('#exrep').onclick = () => { hush(); lit(-1); full = true; explain(); };
     explain(); await started; if ($('#exctl')) $('#exctl').hidden = true;
     if (!myTok.dead && !closed) { voice.beep('start'); await sleep(400); }
-    const blind = /лежа|лёжа|ляг|спиной|на живот|на бок|на спину/i.test(e.title + ' ' + e.steps.join(' ')), hold = hm ? +hm[2] : 0;
-    if (myTok.dead || closed) return; lit(-1); playing = true; $('#tm').style.opacity = 1; $('#tml').textContent = 'осталось';
-    while (left > 0) { await sleep(1000); if (myTok.dead || closed) return; if (!playing) continue; left--;
-      $('#tm').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`; $('#arc').style.strokeDashoffset = 283 * (left / total);
-      const cur = Math.min(e.steps.length - 1, Math.floor((total - left) * Math.min(3, e.steps.length) / total)); app.querySelectorAll('.st').forEach((el, k) => el.style.opacity = k <= cur ? 1 : .45);
-      if (left <= 3 && left > 0) voice.say(numWord(left));
-      else if (hold && (total - left) % hold === 0) voice.say(`${(total - left) / hold} из ${total / hold}. Расслабьтесь на вдох и снова`);
-      else if (blind && left > 5 && (total - left) % 10 === 0) voice.say(`Прошло ${total - left} секунд`); }
-    voice.say(i + 1 < list.length ? 'Отлично. Отдых, готовим следующее' : 'Отлично'); mark(e); doneN++; i++; await sleep(i < list.length ? 2500 : 700); run();
+    // дальше ведет тренер: подходы, счет повторов, подсказки по технике, отдых между подходами и упражнениями
+    if (myTok.dead || closed) return; lit(-1); playing = true; $('#tm').style.opacity = 1;
+    const P = coachPlan(e), cues = cuesOf(e), dead = () => myTok.dead || closed, cueEl = () => $('#ccue');
+    const show = (big, label, frac) => { $('#tm').textContent = big; $('#tml').textContent = label; if (frac != null) $('#arc').style.strokeDashoffset = 283 * frac; };
+    const tick = async () => { do { await sleep(250); if (dead()) return false; } while (!playing); return true; };
+    const wait = async sec => { const t1 = Date.now() + sec * 1000; while (Date.now() < t1) { if (!(await tick())) return false; } return true; };
+    const cue = t => { if (cueEl()) cueEl().textContent = t; voice.say(t); };
+    // отдых с обратным отсчетом; за 3 секунды «Приготовились» и счет
+    const rest = async (sec, phrase) => { if (!sec) return true; voice.say(phrase); let left = sec;
+      while (left > 0) { show(String(left), 'отдых', left / sec); if (!(await wait(1))) return false; left--; if (left === 3) voice.say(PH.ready); } return true; };
+    for (let s = 1; s <= P.sets; s++) {
+      if (P.sets > 1) await voice.speak(PH.set(s, P.sets)); if (dead()) return;
+      await voice.speak(P.holdReps ? PH.goSeries(P) : P.reps ? PH.goReps(P) : PH.goHold(P)); if (dead()) return; voice.beep('start');
+      const label = P.sets > 1 ? `подход ${s} из ${P.sets}` : '';
+      if (P.reps) { // счет вслух в темпе упражнения; на 40% и 75% вместо числа короткая подсказка
+        const cueAt = new Set(cues.length ? [Math.max(2, Math.round(P.reps * .4)), P.reps >= 8 ? Math.round(P.reps * .75) : 0] : []);
+        for (let r = 1; r <= P.reps; r++) { show(String(r), (label ? label + ' · ' : '') + `из ${P.reps} повторов`, 1 - r / P.reps);
+          if (cueAt.has(r)) cue(cues[(s + r) % cues.length]); else voice.say(numWord(r)); if (!(await wait(P.tempo))) return; } }
+      else if (P.holdReps) { for (let r = 1; r <= P.holdReps; r++) { let left = P.hold;
+          while (left > 0) { show(String(left), `${r} из ${P.holdReps} · держим`, left / P.hold); if (!(await wait(1))) return; left--; }
+          if (r < P.holdReps) { voice.say(PH.relax(r, P.holdReps)); show('↺', 'расслабьтесь', 1); if (!(await wait(P.relax))) return; } } }
+      else { let left = P.hold; const at = new Set([Math.round(P.hold * .66), Math.round(P.hold * .33)]);
+        while (left > 0) { show(String(left), (label ? label + ' · ' : '') + 'держим', left / P.hold);
+          if (left === 5 && P.hold > 10) voice.say(PH.five); else if (left <= 3) voice.say(numWord(left)); else if (cues.length && at.has(left)) cue(cues[(s + left) % cues.length]);
+          if (!(await wait(1))) return; left--; } }
+      voice.beep('stop'); if (cueEl()) cueEl().textContent = '';
+      if (s < P.sets && !(await rest(P.rest, PH.setDone + '. ' + PH.rest(P.rest)))) return;
+    }
+    mark(e); doneN++; i++;
+    // следующее упражнение: та же база с другой стороны — короткая смена стороны, иначе отдых и название следующего
+    const nx = list[i]; if (!nx) { voice.say(PH.done); await sleep(1500); return run(); }
+    const sameBase = nx.id.replace(/_(left|right)$/, '') === e.id.replace(/_(left|right)$/, '');
+    if (!(await rest(sameBase ? REST_SIDE : REST_NEXT, sameBase ? PH.side : PH.next(REST_NEXT, exName(nx))))) return;
+    run();
   };
   run();
 }
 function camOff() { cam.onFrame = null; if (cam.running) stopCamera(); }
+const timesDone = e => JSON.parse(localStorage.getItem(K('bp_done')) || '[]').filter(x => x.id === e.id).length;
+const planText = e => { const p = coachPlan(e); return [p.sets > 1 ? `${p.sets} подхода` : '', p.holdReps ? `${p.holdReps} × ${p.hold} с` : p.reps ? `${p.reps} раз` : `${p.hold} с`, p.rest ? `отдых ${p.rest} с` : ''].filter(Boolean).join(' · '); };
 function mark(e) { const d = JSON.parse(localStorage.getItem(K('bp_done')) || '[]'); d.push({ id: e.id, t: Date.now() }); localStorage.setItem(K('bp_done'), JSON.stringify(d.slice(-500))); backupSoon(10000); }
 function streak() { const days = new Set(JSON.parse(localStorage.getItem(K('bp_done')) || '[]').map(x => new Date(x.t).toDateString())); let n = 0; const d = new Date(); if (!days.has(d.toDateString())) d.setDate(d.getDate() - 1); while (days.has(d.toDateString())) { n++; d.setDate(d.getDate() - 1); } return n; }
 async function done(list, pre = null, n = list.length) { camOff(); keepAwake(false); voice.keep = false; setTimeout(() => { if (!cam.running) voice.release(); }, 6000); const s = Math.max(1, streak());
@@ -1560,8 +1607,23 @@ async function done(list, pre = null, n = list.length) { camOff(); keepAwake(fal
    ${dl > 0 ? `<p class="vasgood" style="font-size:18px;font-weight:600;color:var(--ok-t)">Отличный результат! Уровень боли снижен на ${dl} ${dl === 1 ? 'балл' : dl < 5 ? 'балла' : 'баллов'}</p>` : dl < 0 ? '<p class="sub">Боль после занятия выше. Уменьшите амплитуду, а если повторится, покажите это специалисту.</p>' : '<p class="sub">Делай так 2 недели и повтори тест. Сравним карты.</p>'}</div>
    <div class="pad kpi"><div><b>${n}</b><span>упражнения</span></div><div><b>${w.compliance}%</b><span>дней из 7</span></div><div><b>${s}</b><span>дн. подряд</span></div></div>
    ${progressChart(log)}
-   <div class="dock"><button class="btn" id="back">К карте тела</button><p style="text-align:center;font-size:13px;color:var(--sub)">Повтори тест через 7 дней, чтобы увидеть изменения</p></div></div>`);
-  $('#back').onclick = map; }
+   <div class="dock">${tests().length ? `<button class="btn" id="retest">${ic('activity', 's')}Проверить, что изменилось</button><button class="btn ghost" id="back">К карте тела</button><p style="text-align:center;font-size:13px;color:var(--sub)">Короткий тест покажет «было → стало» сразу после упражнений</p>` : '<button class="btn" id="back">К карте тела</button>'}</div></div>`);
+  $('#back').onclick = map;
+  // повторный тест сразу после комплекса: результат сравним с тестом до упражнений
+  if ($('#retest')) $('#retest').onclick = () => { localStorage.setItem(K('bp_retest'), String(tests().at(-1).date)); track('retest_after', { n }, false); prep(); }; }
+// база сравнения за период: последний тест не позже начала периода (иначе самый ранний в периоде)
+function periodBase(all, p) { const last = all.at(-1); if (all.length < 2) return null; if (p === 'prev') return all.at(-2); if (p === 'all') return all[0];
+  const from = last.date - (+p) * 864e5, before = all.filter(t => t.date <= from && t !== last); return before.at(-1) || all.find(t => t !== last && t.date >= from) || null; }
+function baPeriods(all) { const has = p => { const b = periodBase(all, p); return b && b !== all.at(-1); };
+  return `<div class="bap row" style="gap:6px;flex-wrap:wrap">${[['all', 'Все время'], ['30', 'Месяц'], ['7', 'Неделя'], ['prev', 'Прошлый тест']].filter(([p]) => has(p)).map(([p, n]) => `<button class="pill${p === 'all' ? ' on' : ''}" data-p="${p}">${n}</button>`).join('')}</div>`; }
+/** Сравнение сразу после комплекса: тест до упражнений и только что пройденный. */
+function afterWorkout(baseDate) { const all = tests(), was = all.find(t => t.date === baseDate), now = all.at(-1);
+  if (!was || !now || was === now) return analysisScreen();
+  go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>Было → стало</b><small>до и после комплекса</small></div></div>
+    <div class="pad" style="display:flex;flex-direction:column;gap:var(--s3);padding-bottom:var(--s4)"><p class="sub" style="font-size:15px">Слева тело до упражнений, справа сразу после. Тяните ползунок.</p>${baBlock('baw')}
+    <p class="sub" style="font-size:13px">Сразу после занятия мышцы отвечают быстрее всего, а закрепляется это за 2–3 недели регулярных занятий.</p></div>
+    <div class="dock"><button class="btn" id="go">К результату</button></div></div>`);
+  $('#back').onclick = $('#go').onclick = () => analysisScreen(); bindBa('baw', was, now); }
 // график прогресса клиента: боль до и после по последним занятиям (SVG, без библиотек)
 export function progressChart(log) {
   const L = log.filter(r => Number.isFinite(r.pre) && Number.isFinite(r.post)).slice(-10); if (L.length < 2) return '';
@@ -1642,7 +1704,7 @@ export function clientHome() {
       <button class="btn" id="cgo">${ic('play', 's')}Начать комплекс · ${totalMin(exIds.map(ex))} мин</button>`) : ''}
     ${card('Занятия за 4 недели', `${heatmap4w(doneMinutes(JSON.parse(localStorage.getItem(K('bp_done')) || '[]')))}
       <div class="row" style="font-size:15px;gap:16px;flex-wrap:wrap"><span><b class="num">${st.activeDays || 0}</b> <span class="sub">дн. из 30</span></span>${st.avgPre != null && st.avgPost != null ? `<span><span class="sub">боль</span> <b class="num">${(+st.avgPre).toFixed(1)} → ${(+st.avgPost).toFixed(1)}</b></span>` : ''}</div>`)}
-    ${card('Мои изменения', `${delta ? `${baBlock('bah')}<div style="display:flex;flex-direction:column;gap:8px"><div class="sub" style="font-size:13px">Первый тест → последний</div>${delta}</div>` : ''}
+    ${card('Мои изменения', `${delta ? `${baPeriods(all)}<div id="bahw">${baBlock('bah')}</div><div style="display:flex;flex-direction:column;gap:8px"><div class="sub" style="font-size:13px">Первый тест → последний</div>${delta}</div>` : ''}
       ${all.length ? `<div class="group">${all.slice().reverse().slice(0, 8).map(t => `<button class="row-link ctest" data-d="${t.date}"><span style="flex:1;text-align:left"><b style="font-weight:600">${fmtD(t.date)} · ${testLabel(t)}</b><small class="sub" style="display:block;font-size:13px">${zonesOf(t) ? zonesOf(t) + ' ' + plural3(zonesOf(t), 'зона требует', 'зоны требуют', 'зон требуют') + ' внимания' : 'без выраженных перекосов'}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>` : '<p class="sub">Тестов пока нет.</p>'}
       ${all.length === 1 ? '<p class="sub" style="font-size:14px">Пройдите тест еще раз через 3–4 недели, и здесь появится сравнение.</p>' : ''}`)}
     ${reps.length ? card('Отчеты специалиста', `<div class="group">${reps.slice().reverse().map(r => `<button class="row-link crep" data-c="${esc(r.code)}">${ic('file-text', 's')}<span style="flex:1;text-align:left">${esc(r.date || fmtD(r.at))}<small class="sub" style="display:block;font-size:13px">${esc(r.author)}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>`) : ''}
@@ -1653,7 +1715,10 @@ export function clientHome() {
   app.querySelectorAll('.ctest').forEach(b => b.onclick = () => { SHOW_T = +b.dataset.d; map(); });
   app.querySelectorAll('.crep').forEach(b => b.onclick = () => reportView(b.dataset.c));
   $('#ctest').onclick = () => { SHOW_T = null; again(); }; bindInstall(); bindClientNav();
-  if (delta && $('#bah')) bindBa('bah', all[0], last);
+  if (delta && $('#bah')) { bindBa('bah', all[0], last);
+    // период сравнения: после последнего комплекса (прошлый тест), неделя, месяц, все время
+    app.querySelectorAll('.bap button').forEach(b => b.onclick = () => { const base = periodBase(all, b.dataset.p); if (!base) return;
+      app.querySelectorAll('.bap button').forEach(x => x.classList.toggle('on', x === b)); $('#bahw').innerHTML = baBlock('bah'); bindBa('bah', base, last); track('ba_period', { c: b.dataset.p }, false); }); }
 }
 
 // ---------- настройки ----------

@@ -55,7 +55,8 @@ try {
   const ex = JSON.parse(await readFile('data/exercises.json', 'utf8')).exercises;
   const extra = JSON.parse(await readFile('data/voice-extra.json', 'utf8').catch(() => '[]'));
   const regen = process.env.VOICE_REGEN_ALL === '1', voiceName = process.env.VOICE_TTS || 'ru-RU-DmitryNeural';
-  const need = [...new Set([...ex.map(sayText), ...extra, ...(regen ? Object.keys(idx) : [])])].filter(t => t && (regen || !idx[t]));
+  const { coachPhrases } = await import('../js/coach.js');
+  const need = [...new Set([...ex.map(sayText), ...extra, ...coachPhrases(ex), ...(regen ? Object.keys(idx) : [])])].filter(t => t && (regen || !idx[t]));
   if (need.length) {
     const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
     // 4 соединения параллельно, до 15 минут на сборку: после смены адреса сервиса Microsoft (msedge-tts 2.1) озвучиваются все новые фразы за одну сборку

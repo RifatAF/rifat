@@ -808,7 +808,7 @@ async function newAssessment(clientId, retestOf, opts = {}) {
     $('#go').onclick = async () => { useHit('tpl', tpl[0]); voice.unlock(); startMotion(); $('#go').textContent = 'Загружаю модель…';
       try { await initPose(); } catch (e) { toast('Не удалось загрузить модель: ' + e.message); return draw(); }
       track('assess_start', { n: units.length }, false);
-      const r = await runProtocol(units, { target: prev && prev.setup, onCancel: () => clientCard(clientId), pre, specialist: true }); if (!r) return;
+      const r = await runProtocol(units, { target: prev && prev.setup, onCancel: () => clientCard(clientId), pre, specialist: true, repeat: !!prev }); if (!r) return;
       const a = { id: uid(), clientId, date: r.date, template: tpl[0], templateName: session ? 'После сеанса' : tpl[0] === 'posture' && !prev ? 'До сеанса' : tpl[1], protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, ...(r.main ? { main: r.main } : {}), tech: r.tech || null, limits: r.limits || {}, pain, painSide, lumbarZone: LUMBAR[tpl[0]] || (prev && prev.lumbarZone) || null, hyp: {}, plan: null, note: '', expect: expect.trim().slice(0, 500), nextDate: r.date + 30 * DAY, prevId: prev ? prev.id : null, draft: true };
       await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); backupSoon(); track('assess_done', { n: units.length }, false); if (prev) track('retest_done', { n: Math.round((r.date - prev.date) / DAY) }, false); if (prev) endTrialOnRetest(); result(a.id); }; };
   draw(); if (opts.autostart) $('#go').click();
