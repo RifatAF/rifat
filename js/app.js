@@ -292,8 +292,11 @@ export function onboarding() {
     <div class="pad welcome-txt"><div class="welcome-kicker">Паспорт вашего тела</div><h1>Проверьте, как вы двигаетесь, за&nbsp;4&nbsp;минуты</h1>
       <p>Камера телефона посмотрит на осанку и движения и подскажет, с чего начать. Видео не записывается и не покидает телефон.</p>
       ${INV() ? '' : `<div class="row" style="margin-top:18px;gap:10px"><img src="img/rifat.jpg" alt="Рифат Аюпов" width="36" height="36" style="border-radius:50%;object-fit:cover;flex:none;border:1.5px solid rgba(255,255,255,.4)"><div style="font-size:13px;line-height:1.35"><b style="font-weight:600;display:block">Методика Рифата Аюпова</b><span style="opacity:.7">кинезиотерапевт, биомеханик</span></div></div>`}</div>
-    <div class="dock dark-dock"><button class="btn white" id="next">Начать тест ${ic('arrow-right', 's')}</button>${myReports().length || tests().length ? '<button class="btn ghost on-dark" id="mycab">История</button>' : ''}<div class="row" style="justify-content:center;gap:20px"><button class="link on-dark" id="pro">Я специалист</button>${canInstall() ? `<button class="link on-dark" id="inst1">${ic('download', 's')} Установить</button>` : ''}</div></div></div>`);
-  $('#next').onclick = () => { track('onb_done'); prep(); }; if ($('#pro')) $('#pro').onclick = () => localStorage.getItem('bp_inv') ? specSheet() : openPro(); if ($('#mycab')) $('#mycab').onclick = clientHome; if ($('#inst1')) $('#inst1').onclick = () => installNow();
+    <div class="dock dark-dock"><button class="btn white" id="next">Начать тест ${ic('arrow-right', 's')}</button><button class="btn ghost on-dark" id="mycab"${myReports().length || tests().length ? '' : ' hidden'}>${ic('user', 's')}Мой кабинет</button><div class="row" style="justify-content:center;gap:20px"><button class="link on-dark" id="pro">Я специалист</button>${canInstall() ? `<button class="link on-dark" id="inst1">${ic('download', 's')} Установить</button>` : ''}</div></div></div>`);
+  // уже есть кабинет: вошедший специалист идет в свой кабинет, клиент с аккаунтом или тестами в свой
+  getMe().then(u => { const b = $('#mycab'); if (!u || !b || !b.isConnected) return; b.hidden = false;
+    if (u.role === 'specialist') { b.onclick = () => openPro(); const pr = $('#pro'); if (pr) pr.remove(); } }).catch(() => {});
+  $('#next').onclick = () => { track('onb_done'); prep(); }; if ($('#pro')) $('#pro').onclick = () => localStorage.getItem('bp_inv') ? specSheet() : openPro(); $('#mycab').onclick = clientHome; if ($('#inst1')) $('#inst1').onclick = () => installNow();
 }
 
 // ---------- 2. подготовка ----------
