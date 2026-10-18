@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     // веса правил, выученные по калибровкам: читают все приложения, меняет только администратор
     if (req.query.a === 'weights') {
       const W = 'config/weights.json', load = async () => { try { const r = await get(W, { access: 'private', useCache: false }); return r && r.stream ? JSON.parse(await readAll(r.stream)) : null; } catch (e) { return null; } };
-      if (req.method === 'GET') { const cur = await load(); res.setHeader('Cache-Control', 'public, max-age=300'); return res.status(200).json(cur ? { w: cur.w || {}, t: cur.t || {}, at: cur.at, n: cur.n || 0 } : { w: {}, t: {} }); }
+      if (req.method === 'GET') { const cur = await load(); res.setHeader('Cache-Control', 'public, max-age=300'); return res.status(200).json(cur ? { w: cur.w || {}, t: cur.t || {}, at: cur.at, n: cur.n || 0, retest: cur.retest || null } : { w: {}, t: {} }); }
       if (req.method !== 'POST') return res.status(405).json({ error: 'method' });
       const u = await currentUser(req).catch(() => null); if (!isAdmin(u)) return res.status(403).json({ error: 'forbidden' });
       let b; try { b = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}); } catch (e) { return res.status(400).json({ error: 'bad body' }); }
@@ -29,9 +29,23 @@ export default async function handler(req, res) {
       else if (!b.reset) { for (const [k, v] of Object.entries(b.w || {})) if (/^[a-z0-9_]{1,40}\|[a-z0-9_]{1,40}$/.test(k) && Number.isFinite(+v) && +v >= .05 && +v <= 2) w[k] = Math.round(+v * 100) / 100;
         // пороги правил по нормам базы (Администрирование → Нормы)
         for (const [k, v] of Object.entries(b.t || {})) if (/^[a-z0-9_]{1,40}$/.test(k) && Number.isFinite(+v) && Math.abs(+v) < 1000) t[k] = Math.round(+v * 1000) / 1000; }
-      const doc = { at: Date.now(), by: String(u.id), n: Math.max(0, Math.round(+b.n || 0)), w, t, history: hist };
+      const doc = { at: Date.now(), by: String(u.id), n: Math.max(0, Math.round(+b.n || 0)), w, t, history: hist, ...(prev && prev.retest ? { retest: prev.retest } : {}) };
       await put(W, JSON.stringify(doc), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true });
       return res.status(200).json({ ok: true, w, t, at: doc.at });
+    }
+    // пара тестов одного человека: до и после комплекса или контрольная (повтор без упражнений). Без имени и аккаунта:
+    // только числа признаков и проценты мышц. Из пар считается разброс теста и порог заметного изменения
+    if (req.query.a === 'pair' && req.method === 'POST') {
+      const origin = req.headers.origin; let oh = null; try { oh = origin ? new URL(origin).host : null; } catch (e) { oh = '?'; }
+      if (origin && oh !== req.headers.host) return res.status(403).json({ error: 'origin' });
+      const raw = typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {}); if (raw.length > 20000) return res.status(413).json({ error: 'too large' });
+      let b; try { b = JSON.parse(raw); } catch (e) { return res.status(400).json({ error: 'bad body' }); }
+      const nums = o => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).slice(0, 120).filter(([k, v]) => /^[\w:]{1,48}$/.test(k) && Number.isFinite(+v)).map(([k, v]) => [k, Math.round(+v * 100) / 100]));
+      const doc = { at: Date.now(), workout: b.workout === true, gap: Math.max(0, Math.min(86400, Math.round(+b.gap || 0))), ex: Math.max(0, Math.min(20, Math.round(+b.ex || 0))),
+        f1: nums(b.f1), f2: nums(b.f2), m1: nums(b.m1), m2: nums(b.m2), q1: Math.round(+b.q1 || 0), q2: Math.round(+b.q2 || 0) };
+      if (!Object.keys(doc.f1).length || !Object.keys(doc.f2).length) return res.status(400).json({ error: 'empty' });
+      await put(`pairs/${new Date(doc.at).toISOString().slice(0, 10)}/${doc.at}-${doc.workout ? 'w' : 'c'}-${Math.random().toString(36).slice(2, 8)}.json`, JSON.stringify(doc), { access: 'private', contentType: 'application/json', addRandomSuffix: false });
+      return res.status(200).json({ ok: true });
     }
     const u = await currentUser(req).catch(() => null);
     if (req.method === 'POST') {

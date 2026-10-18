@@ -12,7 +12,9 @@ const EVENTS = new Set(['app_open', 'plan_minutes', 'onb_done', 'login_ok', 'saf
   // поведение: экран (сколько секунд, сколько нажатий, нажатия мимо кнопок), жест «назад»
   'screen', 'back', 'device',
   // результат и обновления: «узнаете себя», блок комплекса при боли, плашка обновления
-  'main_recognize', 'workout_pain_block', 'update_offer', 'retest_after', 'ba_period']);
+  'main_recognize', 'workout_pain_block', 'update_offer', 'retest_after', 'ba_period',
+  // чтение: глубина и скорость листания экрана, мгновенный уход назад (зашел не туда), пара тестов до и после комплекса
+  'scroll', 'qback', 'retest_pair', 'menu']);
 let sid; try { sid = sessionStorage.getItem('bp_sid'); if (!sid) { sid = Math.random().toString(36).slice(2, 12); sessionStorage.setItem('bp_sid', sid); } } catch (e) { sid = Math.random().toString(36).slice(2, 12); }
 const t0 = Date.now(), q = [], seen = new Set(); let errs = 0;
 const role = () => { try { return localStorage.getItem('bp_mode') === 'pro' ? 'pro' : 'client'; } catch (e) { return 'client'; } };
@@ -47,10 +49,16 @@ export function channel() {
     if (ch && !localStorage.getItem('bp_src')) localStorage.setItem('bp_src', ch); return ch || localStorage.getItem('bp_src') || 'direct'; } catch (e) { return ch || 'direct'; } }
 // экраны: сколько секунд человек провел, сколько раз нажал и сколько раз мимо кнопок (признак «не понял, куда жать»)
 let scr = null;
+// листание: до какой доли экрана дочитали (v, %) и с какой скоростью листали (s, экранов в секунду). Быстро и до конца = пролистал не читая
+const leave = (s, now) => { track('screen', { c: s.name, d: Math.min(1800, (now - s.t) / 1000), n: s.taps, q: s.miss }, false);
+  if (s.tall && s.px > 0) track('scroll', { c: s.name, v: Math.round(s.depth * 100), s: Math.round(s.px / innerHeight / Math.max(1, (s.last - s.first) / 1000) * 10) / 10 }, false); };
 export function screenView(name) { const now = Date.now();
-  if (scr && scr.name !== name) track('screen', { c: scr.name, d: Math.min(1800, (now - scr.t) / 1000), n: scr.taps, q: scr.miss }, false);
-  if (!scr || scr.name !== name) scr = { name, t: now, taps: 0, miss: 0 }; }
-addEventListener('popstate', () => { if (scr) track('back', { c: scr.name }, false); });
+  if (scr && scr.name !== name) leave(scr, now);
+  if (!scr || scr.name !== name) scr = { name, t: now, taps: 0, miss: 0, depth: 0, px: 0, y: scrollY, first: 0, last: 0, tall: false }; }
+addEventListener('scroll', () => { if (!scr) return; const h = document.documentElement.scrollHeight, now = Date.now(); scr.tall = h > innerHeight * 1.3;
+  scr.depth = Math.max(scr.depth, Math.min(1, (scrollY + innerHeight) / h)); scr.px += Math.abs(scrollY - scr.y); scr.y = scrollY; if (!scr.first) scr.first = now; scr.last = now; }, { passive: true });
+// «назад» в первые 3 секунды на экране: человек зашел не туда
+addEventListener('popstate', () => { if (!scr) return; const d = (Date.now() - scr.t) / 1000; track('back', { c: scr.name, d }, false); if (d < 3) track('qback', { c: scr.name }, false); });
 export const currentScreen = () => scr ? scr.name : '';
 // устройство (бета): система, браузер, класс экрана, установлено ли приложение, модель (Android Chrome отдает ее по запросу). Без серийных номеров
 export async function deviceInfo() { const n = navigator, ua = n.userAgent || '';
@@ -60,7 +68,7 @@ export async function deviceInfo() { const n = navigator, ua = n.userAgent || ''
   try { if (n.userAgentData && n.userAgentData.getHighEntropyValues) { const h = await n.userAgentData.getHighEntropyValues(['model']); if (h.model) model = h.model; } } catch (e) {}
   const sc = screen || {}, w = Math.min(sc.width || 0, sc.height || 0);
   return { os: os.trim(), br, model: String(model).slice(0, 30), cls: w >= 600 ? 'планшет' : w >= 400 ? 'большой' : 'обычный', mem: n.deviceMemory || null, pwa: matchMedia('(display-mode: standalone)').matches || n.standalone === true }; }
-addEventListener('pagehide', () => { if (scr) { track('screen', { c: scr.name, d: Math.min(1800, (Date.now() - scr.t) / 1000), n: scr.taps, q: scr.miss }, false); scr = null; flush(); } });
+addEventListener('pagehide', () => { if (scr) { leave(scr, Date.now()); scr = null; flush(); } });
 /** Сведения об устройстве и последних действиях для отчета о проблеме. Без имен и данных клиентов. */
 export function diagnostics(extra = {}) {
   const n = navigator, sc = screen || {};
