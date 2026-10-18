@@ -1116,7 +1116,9 @@ export function baBlock(id) {
     <input type="range" min="0" max="100" value="50" aria-label="Было или стало"></div>
     <p class="bas-hint">Тяните ползунок влево и вправо</p><div class="bas-list"></div></div>`;
 }
-export async function bindBa(id, prevT, curT) {
+// acute: сравнение сразу после занятия. Ухудшение в пределах двойного порога не показываем: через полчаса это чаще усталость
+// и разброс теста, чем правда, а «хуже» после честной работы отбивает желание продолжать
+export async function bindBa(id, prevT, curT, opts = {}) {
   const el = document.getElementById(id); if (!el || el.dataset.on) return; el.dataset.on = '1';
   let A, B; try { A = baSpots(prevT); B = baSpots(curT); } catch (e) { el.remove(); return; }
   const cvA = el.querySelector('.bas-a'), cvB = el.querySelector('.bas-b'), box = el.querySelector('.bas-box'), rng = el.querySelector('input');
@@ -1140,8 +1142,8 @@ export async function bindBa(id, prevT, curT) {
   const MDC = baNoise(), row = r => { const p0 = pct(r.a), p1 = pct(r.b), d = p1 - p0, k = (r.b && r.b.k !== 'OK' ? r.b : r.a).k;
     const v = p1 === 0 && p0 > 0 ? '<b class="up">норма</b>' : d < 0 ? '<b class="up">лучше</b>' : '<b class="down">хуже</b>';
     return `<div class="bas-row"><div><span>${esc(C.muscles[r.s.id].name)} ${sideWord(r.s.side)}</span><small>${BA_NOUN[k] || ''}</small></div><div class="bas-p"><span>${p0}%</span><i>→</i><span>${p1}%</span></div>${v}</div>`; };
-  const big = rows.filter(r => Math.abs(pct(r.b) - pct(r.a)) >= MDC).sort((x, y) => Math.abs(pct(y.b) - pct(y.a)) - Math.abs(pct(x.b) - pct(x.a))), same = rows.length - big.length;
-  el.querySelector('.bas-list').innerHTML = (big.length ? big.slice(0, 5).map(row).join('') : '<p class="bas-note" style="margin:0">Заметных изменений пока нет. Обычно они видны через 2–3 недели занятий.</p>')
+  const big = rows.filter(r => { const d = pct(r.b) - pct(r.a); return opts.acute ? d <= -MDC || d >= 2 * MDC : Math.abs(d) >= MDC; }).sort((x, y) => Math.abs(pct(y.b) - pct(y.a)) - Math.abs(pct(x.b) - pct(x.a))), same = rows.length - big.length;
+  el.querySelector('.bas-list').innerHTML = (big.length ? big.slice(0, 5).map(row).join('') : `<p class="bas-note" style="margin:0">${opts.acute ? 'Сразу после занятия тело откликается не всегда, это нормально. Главная проверка через неделю регулярных занятий.' : 'Заметных изменений пока нет. Обычно они видны через 2–3 недели занятий.'}</p>`)
     + (same > 0 ? `<p class="bas-note">Без заметных изменений: ${same} ${plural3(same, 'мышца', 'мышцы', 'мышц')}.</p>` : '');
 }
 function bindPosture(a) {
@@ -1277,7 +1279,7 @@ function mainSheet(top, a, start) {
 }
 /** Нижнее меню клиента: итог, история, поделиться, профиль. */
 export function clientNav(on) {
-  const items = SHARED ? [['home', 'activity', 'Результат'], ['shr', 'share', 'Поделиться']] : [['home', 'activity', 'Результат'], ['cab', 'clock', 'История'], ['shr', 'share', 'Поделиться'], ['set', 'user', 'Профиль']];
+  const items = SHARED ? [['home', 'activity', 'Результат'], ['shr', 'share', 'Поделиться']] : [['home', 'activity', 'Результат'], ['cab', 'clock', 'Прогресс'], ['shr', 'share', 'Поделиться'], ['set', 'user', 'Профиль']];
   return `<nav class="bnav" aria-label="Разделы">${items.map(([id, i, n]) => `<button id="${id === on ? 'nav-on' : id}" data-nav="${id}"${id === on ? ' aria-current="page"' : ''}>${ic(i, 's')}<span>${n}</span></button>`).join('')}</nav>`;
 }
 function bindClientNav() {
@@ -1619,7 +1621,7 @@ async function done(list, pre = null, n = list.length) { camOff(); keepAwake(fal
    ${dl > 0 ? `<p class="vasgood" style="font-size:18px;font-weight:600;color:var(--ok-t)">Отличный результат! Уровень боли снижен на ${dl} ${dl === 1 ? 'балл' : dl < 5 ? 'балла' : 'баллов'}</p>` : dl < 0 ? '<p class="sub">Боль после занятия выше. Уменьшите амплитуду, а если повторится, покажите это специалисту.</p>' : '<p class="sub">Делай так 2 недели и повтори тест. Сравним карты.</p>'}</div>
    <div class="pad kpi"><div><b>${n}</b><span>упражнения</span></div><div><b>${w.compliance}%</b><span>дней из 7</span></div><div><b>${s}</b><span>дн. подряд</span></div></div>
    ${progressChart(log)}
-   <div class="dock">${tests().length ? `<button class="btn" id="retest">${ic('activity', 's')}Проверить, что изменилось</button><button class="btn ghost" id="back">К карте тела</button><p style="text-align:center;font-size:13px;color:var(--sub)">Короткий тест покажет «было → стало» сразу после упражнений</p>` : '<button class="btn" id="back">К карте тела</button>'}</div></div>`);
+   <div class="dock">${tests().length ? `<button class="btn" id="retest">${ic('activity', 's')}Что откликнулось: быстрая проверка</button><button class="btn ghost" id="back">К карте тела</button><p style="text-align:center;font-size:13px;color:var(--sub)">Короткий тест покажет, что тело почувствовало сразу. Настоящий итог через неделю</p>` : '<button class="btn" id="back">К карте тела</button>'}</div></div>`);
   $('#back').onclick = map;
   // повторный тест сразу после комплекса: результат сравним с тестом до упражнений
   if ($('#retest')) $('#retest').onclick = () => { localStorage.setItem(K('bp_retest'), String(tests().at(-1).date)); track('retest_after', { n }, false); prep(); }; }
@@ -1646,7 +1648,7 @@ function afterWorkout(baseDate) { const all = tests(), was = all.find(t => t.dat
     <div class="pad" style="display:flex;flex-direction:column;gap:var(--s3);padding-bottom:var(--s4)"><p class="sub" style="font-size:15px">Слева тело до упражнений, справа сразу после. Тяните ползунок.</p>${baBlock('baw')}
     <p class="sub" style="font-size:13px">Сразу после занятия мышцы отвечают быстрее всего, а закрепляется это за 2–3 недели регулярных занятий.</p></div>
     <div class="dock"><button class="btn" id="go">К результату</button></div></div>`);
-  $('#back').onclick = $('#go').onclick = () => analysisScreen(); bindBa('baw', was, now); }
+  $('#back').onclick = $('#go').onclick = () => analysisScreen(); bindBa('baw', was, now, { acute: true }); }
 // график прогресса клиента: боль до и после по последним занятиям (SVG, без библиотек)
 export function progressChart(log) {
   const L = log.filter(r => Number.isFinite(r.pre) && Number.isFinite(r.post)).slice(-10); if (L.length < 2) return '';
@@ -1687,7 +1689,7 @@ async function reportView(code) {
     r = await seal.decrypt(k, await res.text()); if (typeof r.img !== 'string' || !r.img.startsWith('data:image/jpeg;base64,')) throw new Error('bad'); } catch (e) { r = null; }
   if (!r) { go(`<div class="scr pad fade" style="justify-content:center;gap:14px"><h1>Отчет не открылся</h1><p class="sub">Ссылка устарела (отчет хранится 90 дней) или скопирована не целиком. Попросите специалиста прислать ее снова.</p><button class="btn" id="tst">Пройти свой тест движения</button></div>`); $('#tst').onclick = () => { history.replaceState(null, '', location.pathname); onboarding(); }; return; }
   const str = (v, n) => esc(String(v || '').slice(0, n)); saveReport(code, r); const exIds = (Array.isArray(r.ex) ? r.ex : []).filter(id => ex(id));
-  go(`<div class="fade" style="padding-bottom:32px"><div class="pad row" style="padding-top:12px"><span style="flex:1"></span><button class="pill" id="rcab">История</button></div><div class="pad" style="padding-top:4px"><div class="eyebrow">Биомеханический паспорт</div><h1 style="margin-top:6px">${str(r.name, 80)}</h1><p class="sub" style="font-size:14px">${str(r.date, 40)}${r.author ? ' · ' + str(r.author, 80) : ''}</p></div>
+  go(`<div class="fade" style="padding-bottom:32px"><div class="pad row" style="padding-top:12px"><span style="flex:1"></span><button class="pill" id="rcab">Мой прогресс</button></div><div class="pad" style="padding-top:4px"><div class="eyebrow">Биомеханический паспорт</div><h1 style="margin-top:6px">${str(r.name, 80)}</h1><p class="sub" style="font-size:14px">${str(r.date, 40)}${r.author ? ' · ' + str(r.author, 80) : ''}</p></div>
     <div class="pad" style="margin-top:12px"><img src="${r.img}" alt="Отчет" style="width:100%;display:block;border-radius:16px"></div>
     <div class="pad" style="margin-top:14px;display:flex;flex-direction:column;gap:8px">${exIds.length ? `<button class="btn" id="rex">${ic('play', 's')}Начать упражнения · ${totalMin(exIds.map(ex))} мин</button>` : ''}<a class="btn${exIds.length ? ' line' : ''}" id="rdl" href="${r.img}" download="bodypassport-report.jpg" style="text-decoration:none">${ic('download', 's')}Сохранить картинку</a>
     <p class="sub" style="font-size:12px;text-align:center">Отчет сохранен в вашем кабинете на этом телефоне. Он зашифрован, ключ есть только в ссылке.</p></div></div>`);
@@ -1717,7 +1719,7 @@ export function clientHome() {
     .filter(([, a, b]) => Number.isFinite(a) && Number.isFinite(b)).map(([n, a, b]) => { const better = Math.abs(b) < Math.abs(a) - .5, worse = Math.abs(b) > Math.abs(a) + .5;
       return `<div class="row" style="font-size:15px"><span style="flex:1">${n}</span><span class="num" style="color:var(--sub)">${Math.abs(a).toFixed(1)}°</span><span style="margin:0 8px;color:var(--faint)">→</span><b class="num" style="color:${better ? 'var(--ok-t)' : worse ? 'var(--over-t)' : 'var(--text)'}">${Math.abs(b).toFixed(1)}°</b></div>`; }).join('') : '';
   go(`<div class="scr fade" style="padding-bottom:110px"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><span style="flex:1"></span><button class="round" id="cset" aria-label="Настройки">${ic('settings')}</button></div>
-   <div class="pad" style="padding-top:4px">${PROFILE() && PROFILE().name ? `<div class="eyebrow">${esc(PROFILE().name)}</div>` : ''}<h1 style="margin-top:6px">История</h1></div>
+   <div class="pad" style="padding-top:4px">${PROFILE() && PROFILE().name ? `<div class="eyebrow">${esc(PROFILE().name)}</div>` : ''}<h1 style="margin-top:6px">Мой прогресс</h1></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s3)">
     ${spec || next ? card('Мой специалист', `${spec ? `<div class="row" style="gap:12px"><span class="avatar">${esc(spec.slice(0, 1).toUpperCase())}</span><div style="flex:1;min-width:0"><b style="font-size:17px">${esc(spec)}</b>${rep && rep.contact ? `<div class="sub" style="font-size:14px;user-select:text">${esc(rep.contact)}</div>` : ''}</div></div>` : ''}
       ${next ? `<div class="row" style="gap:10px;font-size:15px">${ic('calendar', 's')}<span style="flex:1">Повторный тест</span><b>${fmtD(next)}</b></div>` : ''}
