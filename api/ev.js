@@ -12,10 +12,10 @@ const NAMES = new Set(['app_open', 'plan_minutes', 'onb_done', 'login_ok', 'safe
   'pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'db_empty', 'db_other', 'backup_done', 'restore_done',
   'gate_hit', 'compare_open', 'retest_done', 'report_shared', 'bug_sent', 'rage', 'slow',
   'pro_click', 'vas_done', 'report_link', 'progress_sent',
-  'paywall_view', 'limit_hit', 'trial_end', 'trial_end_view', 'balance_pay', 'screen', 'back', 'device', 'main_recognize', 'workout_pain_block', 'update_offer', 'retest_after', 'ba_period']);
+  'paywall_view', 'limit_hit', 'trial_end', 'trial_end_view', 'balance_pay', 'screen', 'back', 'device', 'main_recognize', 'workout_pain_block', 'update_offer', 'retest_after', 'ba_period', 'scroll', 'qback', 'retest_pair', 'menu']);
 const KEYS = new Set(['m', 'f', 'l', 'n', 'c', 'r', 'd', 's', 'q']); // ошибка, файл, строка, число, категория, источник, секунды, оценка, качество
 // события, у которых в сводке видна разбивка по категории (c) и медиана чисел (d, n, q)
-const DETAIL = new Set(['pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'gate_hit', 'rage', 'slow', 'result_fail', 'test_done', 'assess_done', 'vas_done', 'report_link', 'paywall_view', 'limit_hit', 'trial_end', 'pro_click', 'fb_sent', 'main_recognize', 'workout_pain_block']);
+const DETAIL = new Set(['menu', 'qback', 'pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'gate_hit', 'rage', 'slow', 'result_fail', 'test_done', 'assess_done', 'vas_done', 'report_link', 'paywall_view', 'limit_hit', 'trial_end', 'pro_click', 'fb_sent', 'main_recognize', 'workout_pain_block']);
 const MAX = 8 * 1024;
 const day = t => new Date(t).toISOString().slice(0, 10);
 
@@ -52,8 +52,10 @@ async function stats(days) {
           if (x.e === 'app_open' && x.p && x.p.c) chOf[b.s] = String(x.p.c).slice(0, 20);
           if (x.e === 'device' && x.p && x.p.c) { devOf[b.s] = String(x.p.c).slice(0, 40); const m = String(x.p.m || '').slice(0, 30); if (m) out.models[m] = (out.models[m] || 0) + 1; }
           if (x.e === 'cam_q' && x.p && typeof x.p.n === 'number' && x.p.n > 0) (fpsBy[b.s] ||= []).push(x.p.n);
-          if (x.e === 'screen' && x.p && x.p.c) { const S = (scr[String(x.p.c).slice(0, 40)] ||= { n: 0, sec: [], taps: 0, miss: 0, back: 0 }); S.n++; if (typeof x.p.d === 'number' && S.sec.length < 2000) S.sec.push(x.p.d); S.taps += +x.p.n || 0; S.miss += +x.p.q || 0; }
-          if (x.e === 'back' && x.p && x.p.c) { const S = (scr[String(x.p.c).slice(0, 40)] ||= { n: 0, sec: [], taps: 0, miss: 0, back: 0 }); S.back++; }
+          if (x.e === 'screen' && x.p && x.p.c) { const S = (scr[String(x.p.c).slice(0, 40)] ||= { n: 0, sec: [], taps: 0, miss: 0, back: 0, qback: 0, depth: [], skim: 0, scrolled: 0 }); S.n++; if (typeof x.p.d === 'number' && S.sec.length < 2000) S.sec.push(x.p.d); S.taps += +x.p.n || 0; S.miss += +x.p.q || 0; }
+          if ((x.e === 'qback' || x.e === 'scroll') && x.p && x.p.c) { const S = (scr[String(x.p.c).slice(0, 40)] ||= { n: 0, sec: [], taps: 0, miss: 0, back: 0, qback: 0, depth: [], skim: 0, scrolled: 0 });
+            if (x.e === 'qback') S.qback++; else { S.scrolled++; if (typeof x.p.v === 'number' && S.depth.length < 2000) S.depth.push(x.p.v); if (x.p.s >= 1.5 && x.p.v >= 80) S.skim++; } }
+          if (x.e === 'back' && x.p && x.p.c) { const S = (scr[String(x.p.c).slice(0, 40)] ||= { n: 0, sec: [], taps: 0, miss: 0, back: 0, qback: 0, depth: [], skim: 0, scrolled: 0 }); S.back++; }
           if (x.e === 'app_open' && x.p && x.p.r) { const k = String(x.p.r).slice(0, 40); out.sources[k] = (out.sources[k] || 0) + 1; }
           if (x.e === 'test_done' && x.p && x.p.d > 0 && out.testSec.length < 2000) out.testSec.push(x.p.d); } } catch (e) {} }));
     for (const [k, s] of Object.entries(sess)) ((out.events[k] ||= {})[d] = s.size);
@@ -67,7 +69,8 @@ async function stats(days) {
   out.medians = Object.fromEntries(Object.entries(nums).map(([k, a]) => { a.sort((x, y) => x - y); return [k, { p50: pct(a, .5), p90: pct(a, .9), n: a.length }]; }));
   out.users = Object.entries(out.users).map(([id, U]) => ({ id, r: U.r, days: U.days.size, assess: U.assess, reports: U.reports, retests: U.retests, bugs: U.bugs })).sort((a, b) => b.days - a.days).slice(0, 200);
   out.devices = Object.fromEntries(Object.entries(out.devices).map(([k, D]) => { const f = D.fps.sort((x, y) => x - y); delete D.fps; return [k, { ...D, fps: f.length ? Math.round(pct(f, .5)) : null }]; }));
-  out.screens = Object.fromEntries(Object.entries(scr).map(([k, S]) => { S.sec.sort((x, y) => x - y); return [k, { n: S.n, p50: S.sec.length ? Math.round(pct(S.sec, .5)) : null, p90: S.sec.length ? Math.round(pct(S.sec, .9)) : null, taps: S.n ? Math.round(S.taps / S.n * 10) / 10 : 0, miss: S.n ? Math.round(S.miss / S.n * 10) / 10 : 0, back: S.back }]; }));
+  out.screens = Object.fromEntries(Object.entries(scr).map(([k, S]) => { S.sec.sort((x, y) => x - y); return [k, { n: S.n, p50: S.sec.length ? Math.round(pct(S.sec, .5)) : null, p90: S.sec.length ? Math.round(pct(S.sec, .9)) : null, taps: S.n ? Math.round(S.taps / S.n * 10) / 10 : 0, miss: S.n ? Math.round(S.miss / S.n * 10) / 10 : 0, back: S.back, qback: S.qback || 0,
+    depth: S.depth && S.depth.length ? Math.round(pct(S.depth.sort((x, y) => x - y), .5)) : null, skim: S.scrolled ? Math.round(S.skim / S.scrolled * 100) : null }]; }));
   out.weeks = Object.fromEntries(Object.entries(out.weeks).map(([w, s]) => [w, s.size]));
   const t = out.testSec.sort((a, b) => a - b); out.testMedianSec = t.length ? t[Math.floor(t.length / 2)] : null; out.testN = t.length; delete out.testSec;
   return out;

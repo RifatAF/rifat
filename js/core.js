@@ -19,7 +19,7 @@ export async function loadContent() {
   C.muscles = mus.muscles; C.bodymap = bm; C.chains = ch.chains; C.exercises = Object.fromEntries(ex.exercises.map(e => [e.id, e])); C.booking = 'https://t.me/BodyPassport_bot';
   // веса «правило → мышца», выученные по калибровкам специалистов (Администрирование → Калибровки): без сети остаются исходные из базы
   // ждем не дольше 2,5 с: иначе клиент и специалист разбирали один тест с разными весами и видели разные мышцы
-  const wq = fetch('/api/calib?a=weights', { signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : null).then(j => { if (j && (j.w || j.t)) { applyRuleWeights(bm.rules, j.w, j.t); C.weightsAt = j.at || 0; C.thresholds = j.t || {}; } }).catch(() => {});
+  const wq = fetch('/api/calib?a=weights', { signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : null).then(j => { if (j && (j.w || j.t)) { applyRuleWeights(bm.rules, j.w, j.t); C.weightsAt = j.at || 0; C.thresholds = j.t || {}; } if (j) C.weights = { retest: j.retest || null }; }).catch(() => {});
   await Promise.race([wq, sleep(2500)]);
   return C;
 }

@@ -84,7 +84,7 @@ export function verdict(top, findings, plain = false) {
     // одна мышца с двух сторон: «с двух сторон» вместо двух строк
     const ids = [...new Set(items.map(s => s.id))], names = ids.map(id => { const sd = items.filter(s => s.id === id).map(s => s.side);
       return (plain ? lc(C.muscles[id].zone || C.muscles[id].name) : acc(lc(C.muscles[id].name))) + ' ' + (sd.length > 1 ? 'с двух сторон' : sideWord(sd[0])); });
-    if (plain) { const uniq = [...new Set(names)]; names.length = 0; names.push(...uniq.slice(0, 3)); }
+    if (plain) { const uniq = [...new Set(names)]; names.length = 0; names.push(...uniq.slice(0, 2)); }
     return { k, verb, f, what: names.join(', '), why: f ? f.observed.replace(' (на границе нормы)', '') : s0.byChain ? `Возможно, по цепи «${s0.byChain}»` : '' }; }).filter(Boolean);
 }
 // skip: причины, которые уже показаны выше на экране (блок «Измерено»), под решениями не повторяем.
@@ -98,7 +98,8 @@ export function verdictCard(top, findings, empty = 'Явных перекосо�
   return `<div class="card" style="padding:4px var(--s4)"><p class="sub" style="font-size:13px;padding-top:12px">${plain ? 'Что мешает телу двигаться ровно. Это вероятная причина того, что увидела камера.' : 'Мышцы ниже: вероятная причина того, что измерила камера. Проверит специалист руками.'}</p>${v.map((x, i) => {
     const s0 = top.find(s => s.k === x.k && !s.ambiguous), f = s0 && findings.find(f => f.muscles.some(m => m.id === s0.id && (m.side === s0.side || m.side === 'BOTH')));
     const measured = f && s0 && !s0.derived && !s0.byChain, edge = f && / \(на границе нормы\)/.test(f.observed);
-    const why = x.why && !skip.includes(x.why) && !(i && v[i - 1].why === x.why) ? `<span>${esc(x.why)}</span>` : '';
+    // одно и то же наблюдение камеры под разными мышцами показываем один раз
+    const why = x.why && !skip.includes(x.why) && !v.slice(0, i).some(y => y.why === x.why) ? `<span>${esc(x.why)}</span>` : '';
     return `<div class="verdict-row"><span class="mark ${x.k}"></span><div style="flex:1;min-width:0"><div class="what"><b>${x.verb}${plain ? ':' : ''}</b> ${esc(x.what)}</div>${plain ? `<div style="font-size:14px;line-height:1.4;color:var(--sub);margin-top:4px">${VERB_WHY[x.k]}</div>` : ''}
       <div class="why">${plain ? (why ? ic('camera', 's') : '') : measured ? '<span class="src">ЗАМЕР</span>' : '<span class="src hyp">ГИПОТЕЗА</span>'}${why}${edge ? '<span class="edge">на границе нормы</span>' : ''}</div></div></div>`; }).join('')}</div>`;
 }
@@ -300,9 +301,12 @@ export function onboarding() {
       ${INV() ? '' : `<div class="row" style="margin-top:18px;gap:10px"><img src="img/rifat.jpg" alt="Рифат Аюпов" width="36" height="36" style="border-radius:50%;object-fit:cover;flex:none;border:1.5px solid rgba(255,255,255,.4)"><div style="font-size:13px;line-height:1.35"><b style="font-weight:600;display:block">Методика Рифата Аюпова</b><span style="opacity:.7">кинезиотерапевт, биомеханик</span></div></div>`}</div>
     <div class="dock dark-dock"><button class="btn white" id="next">Начать тест ${ic('arrow-right', 's')}</button><button class="btn ghost on-dark" id="mycab"${myReports().length || tests().length ? '' : ' hidden'}>${ic('user', 's')}Мой кабинет</button><div class="row" style="justify-content:center;gap:20px"><button class="link on-dark" id="pro">Я специалист</button>${canInstall() ? `<button class="link on-dark" id="inst1">${ic('download', 's')} Установить</button>` : ''}</div></div></div>`);
   // уже есть кабинет: вошедший специалист идет в свой кабинет, клиент с аккаунтом или тестами в свой
-  getMe().then(u => { const b = $('#mycab'); if (!u || !b || !b.isConnected) return; b.hidden = false;
+  // вход проверяем заново: запомненный ответ мог быть «не вошел» из-за сбоя сети при запуске
+  $('#mycab').onclick = clientHome;
+  { const acc = localStorage.getItem('bp_acc'); if (acc) { $('#mycab').hidden = false; if (acc === 'pro') $('#mycab').onclick = () => openPro(); } }
+  getMe(true).then(u => { const b = $('#mycab'); if (!b || !b.isConnected) return; if (!u) return; localStorage.setItem('bp_acc', u.role === 'specialist' ? 'pro' : '1'); b.hidden = false;
     if (u.role === 'specialist') { b.onclick = () => openPro(); const pr = $('#pro'); if (pr) pr.remove(); } }).catch(() => {});
-  $('#next').onclick = () => { track('onb_done'); prep(); }; if ($('#pro')) $('#pro').onclick = () => localStorage.getItem('bp_inv') ? specSheet() : openPro(); $('#mycab').onclick = clientHome; if ($('#inst1')) $('#inst1').onclick = () => installNow();
+  $('#next').onclick = () => { track('onb_done'); prep(); }; if ($('#pro')) $('#pro').onclick = () => localStorage.getItem('bp_inv') ? specSheet() : openPro(); if ($('#inst1')) $('#inst1').onclick = () => installNow();
 }
 
 // ---------- 2. подготовка ----------
@@ -850,6 +854,9 @@ async function runTest(vns = null, acute) {
   const r = await runProtocol(consumerProtocol(), { pre: PRE, vns, acute }); if (!r) return;
   const { poses, ...light } = r; saveTest(light); rememberBaseline(light.touch); resetTouch();
   const rt = +localStorage.getItem(K('bp_retest')); localStorage.removeItem(K('bp_retest')); if (rt) return afterWorkout(rt);
+  // контрольная пара: тест повторили в течение 30 минут без упражнений между ними
+  { const all = tests(), prev = all.at(-2), now = all.at(-1), done = JSON.parse(localStorage.getItem(K('bp_done')) || '[]');
+    if (prev && now && now.date - prev.date < 30 * 60e3 && !done.some(x => x.t > prev.date)) sendPair(prev, now, false); }
   analysisScreen();
 }
 
@@ -1101,6 +1108,8 @@ const BA_NOUN = { WEAK: 'слабость', SHORT: 'зажатость', HYPER: 
 const baSpots = t => { const a = analyze(t, C); let all = spots(a); if (t.main) all = applyMain(all, t.main);
   const keys = new Set(topOf(all).slice(0, 12).map(x => x.key)); return all.map(x => keys.has(x.key) ? x : { ...x, k: 'OK', tone: 0 }); };
 const pct = x => x && x.k !== 'OK' ? Math.min(100, Math.round(Math.abs(x.tone) * 100)) : 0;
+// порог заметного изменения, процентных пунктов: из разброса пар тестов (автокалибровка), пока данных мало — 15
+const baNoise = () => { const n = C.weights && C.weights.retest && C.weights.retest.mdc; return Number.isFinite(n) ? Math.max(8, Math.min(40, n)) : 15; };
 export function baBlock(id) {
   return `<div class="bas" id="${id}"><div class="bas-tabs"><button class="on" data-b="0">Спереди</button><button data-b="1">Сзади</button></div>
     <div class="bas-box"><canvas class="bas-a"></canvas><canvas class="bas-b"></canvas><span class="bas-l">Было</span><span class="bas-r">Стало</span><div class="bas-h"><i></i></div>
@@ -1126,11 +1135,14 @@ export async function bindBa(id, prevT, curT) {
   // подсказка движением: разделитель один раз проходит туда и обратно
   if (!reduceMotion()) { const t0 = performance.now(); const k = () => { if (box._drag) return; const t = (performance.now() - t0) / 1400; if (t > 1) return set(50); set(50 + Math.sin(t * Math.PI * 2) * 22); requestAnimationFrame(k); }; setTimeout(() => requestAnimationFrame(k), 500); }
   const byKey = new Map(A.map(x => [x.key, x])), rows = [...new Set([...topOf(A), ...topOf(B)].map(x => x.key))].map(key => { const a = byKey.get(key), b = B.find(x => x.key === key); return { a, b, s: b && b.k !== 'OK' ? b : a }; })
-    .filter(r => r.s && C.muscles[r.s.id]).sort((x, y) => Math.max(pct(y.a), pct(y.b)) - Math.max(pct(x.a), pct(x.b))).slice(0, 8);
-  el.querySelector('.bas-list').innerHTML = rows.map(r => { const p0 = pct(r.a), p1 = pct(r.b), d = p1 - p0, k = (r.b && r.b.k !== 'OK' ? r.b : r.a).k;
-    const v = p1 === 0 && p0 > 0 ? '<b class="up">норма</b>' : d <= -8 ? '<b class="up">лучше</b>' : d >= 8 ? '<b class="down">хуже</b>' : '<b>так же</b>';
-    return `<div class="bas-row"><div><span>${esc(C.muscles[r.s.id].name)} ${sideWord(r.s.side)}</span><small>${BA_NOUN[k] || ''}</small></div><div class="bas-p"><span>${p0}%</span><i>→</i><span>${p1}%</span></div>${v}</div>`; }).join('')
-    + '<p class="bas-note">Процент: насколько мышца ослаблена, зажата или перегружена по тесту. 0% значит норма.</p>';
+    .filter(r => r.s && C.muscles[r.s.id]);
+  // показываем только заметные изменения: разница меньше порога лежит в пределах разброса между двумя тестами (поза, свет, усталость)
+  const MDC = baNoise(), row = r => { const p0 = pct(r.a), p1 = pct(r.b), d = p1 - p0, k = (r.b && r.b.k !== 'OK' ? r.b : r.a).k;
+    const v = p1 === 0 && p0 > 0 ? '<b class="up">норма</b>' : d < 0 ? '<b class="up">лучше</b>' : '<b class="down">хуже</b>';
+    return `<div class="bas-row"><div><span>${esc(C.muscles[r.s.id].name)} ${sideWord(r.s.side)}</span><small>${BA_NOUN[k] || ''}</small></div><div class="bas-p"><span>${p0}%</span><i>→</i><span>${p1}%</span></div>${v}</div>`; };
+  const big = rows.filter(r => Math.abs(pct(r.b) - pct(r.a)) >= MDC).sort((x, y) => Math.abs(pct(y.b) - pct(y.a)) - Math.abs(pct(x.b) - pct(x.a))), same = rows.length - big.length;
+  el.querySelector('.bas-list').innerHTML = (big.length ? big.slice(0, 5).map(row).join('') : '<p class="bas-note" style="margin:0">Заметных изменений пока нет. Обычно они видны через 2–3 недели занятий.</p>')
+    + (same > 0 ? `<p class="bas-note">Без заметных изменений: ${same} ${plural3(same, 'мышца', 'мышцы', 'мышц')}.</p>` : '');
 }
 function bindPosture(a) {
   const acc = $('#posacc'), box = $('#pos3d'); if (!acc || !box) return; let s3 = null;
@@ -1616,9 +1628,20 @@ function periodBase(all, p) { const last = all.at(-1); if (all.length < 2) retur
   const from = last.date - (+p) * 864e5, before = all.filter(t => t.date <= from && t !== last); return before.at(-1) || all.find(t => t !== last && t.date >= from) || null; }
 function baPeriods(all) { const has = p => { const b = periodBase(all, p); return b && b !== all.at(-1); };
   return `<div class="bap row" style="gap:6px;flex-wrap:wrap">${[['all', 'Все время'], ['30', 'Месяц'], ['7', 'Неделя'], ['prev', 'Прошлый тест']].filter(([p]) => has(p)).map(([p, n]) => `<button class="pill${p === 'all' ? ' on' : ''}" data-p="${p}">${n}</button>`).join('')}</div>`; }
+// пара тестов для калибровки: признаки и проценты мышц обоих тестов, без имени и аккаунта.
+// workout: между тестами был комплекс; иначе контрольная пара (повтор без упражнений) — по ней видно чистый разброс теста
+function sendPair(was, now, workout) { if (was.beta || now.beta) return; try {
+  const fOf = t => Object.fromEntries(Object.entries(analyze(t, C).f || {}).filter(([, v]) => Number.isFinite(v)));
+  const mOf = t => Object.fromEntries(baSpots(t).filter(x => x.k !== 'OK').map(x => [x.key, pct(x)]));
+  const q = t => { const v = Object.values(t.quality || {}).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0; };
+  const ex = workout ? JSON.parse(localStorage.getItem(K('bp_done')) || '[]').filter(x => x.t > was.date && x.t < now.date).length : 0;
+  fetch('/api/calib?a=pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
+    body: JSON.stringify({ workout, gap: Math.round((now.date - was.date) / 1000), ex, f1: fOf(was), f2: fOf(now), m1: mOf(was), m2: mOf(now), q1: q(was), q2: q(now) }) }).catch(() => {});
+  track('retest_pair', { c: workout ? 'workout' : 'control' }, false); } catch (e) {} }
 /** Сравнение сразу после комплекса: тест до упражнений и только что пройденный. */
 function afterWorkout(baseDate) { const all = tests(), was = all.find(t => t.date === baseDate), now = all.at(-1);
   if (!was || !now || was === now) return analysisScreen();
+  sendPair(was, now, true);
   go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>Было → стало</b><small>до и после комплекса</small></div></div>
     <div class="pad" style="display:flex;flex-direction:column;gap:var(--s3);padding-bottom:var(--s4)"><p class="sub" style="font-size:15px">Слева тело до упражнений, справа сразу после. Тяните ползунок.</p>${baBlock('baw')}
     <p class="sub" style="font-size:13px">Сразу после занятия мышцы отвечают быстрее всего, а закрепляется это за 2–3 недели регулярных занятий.</p></div>
@@ -1726,23 +1749,27 @@ export function settings() {
   const d = document.createElement('div'); d.className = 'sheet';
   const row = (id, icon, text, extra = '') => `<button class="row-link" id="${id}"${extra}>${ic(icon, 's')}<span>${text}</span>${ic('chevron-right', 's chev')}</button>`;
   const acc = (h, body, open = false) => `<details class="acc" style="margin-top:var(--s3)"${open ? ' open' : ''}><summary style="font-weight:600;font-size:16px">${h}</summary><div style="margin-top:4px">${body}</div></details>`;
-  d.innerHTML = `<div><h2>Настройки</h2>
-    <div class="group" style="margin-top:var(--s4)"><div class="row" style="min-height:56px"><span style="flex:1">Голосовые подсказки</span><button class="pill" id="vm">${voice.muted ? 'Выкл' : 'Вкл'}</button></div></div>
-    ${acc('Аккаунт', `<div id="acc"></div>${canSwitchMode() ? `<div class="group" style="margin-top:8px">${row('topro', 'user-plus', 'Кабинет специалиста')}</div>` : ''}`, true)}
-    ${acc('Мои данные', `<p class="ondevice" style="margin:4px 0 8px">${ic('shield-check', 's')}${meSync() ? 'Копия хранится в аккаунте' : 'Войдите, чтобы данные не пропали'}</p>
-      <div class="group">${row('bkf', 'download', 'Сохранить копию в файл')}${row('rsf', 'upload', 'Восстановить из файла')}<button class="row-link" id="wipe" style="color:var(--over-t)">${ic('x', 's')}<span>Удалить все мои данные</span></button></div>`)}
-    ${acc('Помощь', `<div class="group">${row('fbk', 'message-square', 'Ошибка или идея')}${row('shapp', 'share', 'Поделиться приложением')}${canInstall() ? row('sinst', 'download', 'Установить приложение') : ''}
-      <a class="row-link" href="/privacy" target="_blank">${ic('shield-check', 's')}<span>Конфиденциальность</span>${ic('chevron-right', 's chev')}</a><a class="row-link" href="/terms" target="_blank">${ic('file-text', 's')}<span>Соглашение</span>${ic('chevron-right', 's chev')}</a></div>
-      <p style="margin-top:var(--s3);font-size:12px;color:var(--sub);line-height:1.45">Методика: Рифат Аюпов. <a href="/licenses" target="_blank" style="color:var(--sub);font-weight:500">Лицензии</a></p>`)}
+  // меню без лишнего: аккаунт, голос, связь. Редкое (копия в файл, документы, удаление) свернуто в «Ещё»
+  d.innerHTML = `<div><h2>Профиль</h2>
+    <div id="acc"></div>
+    <div class="group" style="margin-top:var(--s3)"><div class="row" style="min-height:56px"><span style="flex:1">Голос тренера</span><button class="pill" id="vm">${voice.muted ? 'Выкл' : 'Вкл'}</button></div>
+      ${row('fbk', 'message-square', 'Написать нам: ошибка или идея')}${canInstall() ? row('sinst', 'download', 'Установить на экран') : ''}${canSwitchMode() ? row('topro', 'user-plus', 'Кабинет специалиста') : ''}</div>
+    ${acc('Ещё', `<div class="group">${row('shapp', 'share', 'Поделиться приложением')}${row('bkf', 'download', 'Сохранить копию в файл')}${row('rsf', 'upload', 'Восстановить из файла')}
+      <button class="row-link" id="wipe" style="color:var(--over-t)">${ic('x', 's')}<span>${meSync() ? 'Удалить аккаунт и все данные' : 'Удалить все мои данные'}</span></button></div>
+      <p style="margin-top:var(--s3);font-size:13px;color:var(--sub);line-height:1.6"><a href="/privacy" style="color:var(--sub)">Конфиденциальность</a> · <a href="/terms" style="color:var(--sub)">Соглашение</a> · <a href="/licenses" style="color:var(--sub)">Лицензии</a><br>Методика: Рифат Аюпов</p>`)}
     <button class="btn" id="cl" style="margin-top:var(--s4)">Готово</button></div>`;
   document.body.appendChild(d);
+  // какими пунктами меню пользуются: лишнее потом убираем по данным
+  d.addEventListener('click', e => { const b = e.target.closest && e.target.closest('button[id],summary,a[href]'); if (b) track('menu', { c: b.id || (b.tagName === 'SUMMARY' ? 'more' : b.getAttribute('href')) }, false); }, true);
   d.querySelector('#fbk').onclick = () => { d.remove(); bugSheet(); };
   d.querySelector('#shapp').onclick = () => shareApp();
   d.querySelector('#bkf').onclick = () => downloadBackup(); d.querySelector('#rsf').onclick = () => pickRestore(n => { if (n) { d.remove(); tests().length ? map() : onboarding(); } });
   if (d.querySelector('#sinst')) d.querySelector('#sinst').onclick = () => { d.remove(); installNow(); };
   d.querySelector('#vm').onclick = e => { voice.muted = !voice.muted; localStorage.setItem('bp_mute', voice.muted ? '1' : '0'); e.target.textContent = voice.muted ? 'Выкл' : 'Вкл'; };
-  d.querySelector('#wipe').onclick = async () => { if (!confirm('Удалить все мои данные на этом телефоне: тесты, отчеты специалиста, занятия, анкету и ссылку от специалиста? Это нельзя отменить.')) return;
-    await wipeClientData(); d.remove(); toast('Данные удалены'); onboarding(); };
+  // одно удаление вместо двух: вошел — стираем аккаунт на сервере и данные на телефоне, не вошел — только телефон
+  d.querySelector('#wipe').onclick = async () => { const acc = !!meSync();
+    if (!confirm(acc ? 'Удалить аккаунт навсегда? Сотрутся аккаунт, все тесты и результаты на сервере и на этом телефоне. Вернуть нельзя.' : 'Удалить все мои данные на этом телефоне: тесты, занятия, анкету? Вернуть нельзя.')) return;
+    try { if (acc) { await deleteAccount(); localStorage.removeItem('bp_mode'); localStorage.removeItem('bp_acc'); } await wipeClientData(); d.remove(); toast(acc ? 'Аккаунт удален' : 'Данные удалены'); onboarding(); } catch (e) { toast('Не получилось: ' + e.message); } };
   if (d.querySelector('#topro')) d.querySelector('#topro').onclick = () => { d.remove(); openPro(); };
   d.querySelector('#cl').onclick = () => d.remove(); d.onclick = e => { if (e.target === d) d.remove(); };
   accountBlock(d.querySelector('#acc'), () => d.remove());
@@ -1752,10 +1779,8 @@ async function accountBlock(el, close) {
   if (!u) { if ((await providers()).length) { el.innerHTML = '<button class="btn line" id="login" style="margin-top:12px">Войти</button>'; el.querySelector('#login').onclick = () => { close(); const home = () => (tests().length ? map() : onboarding()); ensureLogin('client', home).then(ok => ok && home()); }; } return; }
   el.innerHTML = `<div class="group" style="margin-top:var(--s3)"><div class="row" style="min-height:64px"><span class="avatar">${esc((u.name || '?').slice(0, 1).toUpperCase())}</span><div style="flex:1;font-size:14px;line-height:1.35"><b>${esc(u.name)}</b><div style="color:var(--sub);font-size:12px">${u.provider === 'google' ? 'Google' : u.provider === 'email' ? esc(u.email || 'Почта') : 'Telegram'}</div></div><button class="pill" id="lo">Выйти</button></div>
     ${u.admin ? `<button class="row-link" id="adm">${ic('settings', 's')}<span>Администрирование</span>${ic('chevron-right', 's chev')}</button>` : ''}
-    <button class="row-link" id="delacc" style="color:var(--over-t)"><span>Удалить аккаунт</span></button></div>`;
-  el.querySelector('#lo').onclick = async () => { const out = async () => { await logout(); localStorage.removeItem('bp_mode'); onboarding(); }; close(); if (configSync().beta !== false) exitSurvey('logout', out); else out(); };
-  el.querySelector('#delacc').onclick = async () => { if (!confirm('Удалить аккаунт навсегда? Сотрутся аккаунт, все тесты и результаты на сервере и на этом телефоне. Вернуть будет нельзя.')) return;
-    try { await deleteAccount(); await wipeClientData(); localStorage.removeItem('bp_mode'); close(); toast('Аккаунт удален'); onboarding(); } catch (e) { toast('Не получилось: ' + e.message); } };
+    </div>`;
+  el.querySelector('#lo').onclick = async () => { const out = async () => { await logout(); localStorage.removeItem('bp_mode'); localStorage.removeItem('bp_acc'); onboarding(); }; close(); if (configSync().beta !== false) exitSurvey('logout', out); else out(); };
   if (el.querySelector('#adm')) el.querySelector('#adm').onclick = () => { close(); adminScreen(); };
 }
 /** Панель администратора: режим приложения, участники, статистика, выгрузка данных, сброс. */
@@ -1778,12 +1803,21 @@ function devCard(d) { const dv = Object.entries(d.devices || {}).sort((a, b) => 
     ${dv.map(([k, v]) => `<tr><td style="padding:4px;border-top:1px solid var(--line-2)">${esc(k)}</td>${cols.map(([e]) => `<td style="padding:4px;text-align:center;border-top:1px solid var(--line-2);${(e === 'pose_fail' || e === 'cam_err') && v[e] ? 'color:var(--over-t);font-weight:600' : ''}">${v[e] || 0}</td>`).join('')}<td style="padding:4px;text-align:center;border-top:1px solid var(--line-2);${v.fps && v.fps < 15 ? 'color:var(--over-t);font-weight:600' : ''}">${v.fps ?? '—'}</td></tr>`).join('')}</table>
     ${models.length ? `<p style="font-size:13px;margin-top:8px"><span class="sub">Модели:</span> ${models.map(([m, n]) => esc(m) + ' ' + n).join(', ')}</p>` : ''}
     <p class="sub" style="font-size:12px;margin-top:6px">Меньше 15 кадров в секунду — тест на этом устройстве менее точен. На iPhone модель телефона браузер не сообщает.</p></div>`; }
+// пары тестов: насколько тест стабилен и есть ли эффект комплекса сверх простого повтора
+function stabilityCard() { const r = C.weights && C.weights.retest; if (!r) return '<div class="card" style="padding:14px 16px"><b>Стабильность теста</b><p class="sub" style="font-size:13px;margin-top:6px">Пар тестов пока нет. Они появятся, когда люди пройдут тест после комплекса или повторят тест без упражнений.</p></div>';
+  const fs = Object.entries(r.features || {}).sort((a, b) => (a[1].rel ?? 1) - (b[1].rel ?? 1)).slice(0, 8);
+  return `<div class="card" style="padding:14px 16px"><b>Стабильность теста</b><p style="font-size:14px;margin-top:6px;line-height:1.5">Пар: ${r.n} (после комплекса ${r.nWorkout}, контрольных ${r.nControl}).
+    Порог заметного изменения: <b>${r.mdc ?? '—'}</b> п.п.${r.effect != null ? ` Эффект комплекса сверх простого повтора: <b>${r.effect > 0 ? '+' : ''}${r.effect}</b> п.п. (минус — мышцы стали ближе к норме).` : ' Эффект комплекса появится после 30 контрольных пар.'}</p>
+    ${fs.length ? `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px"><tr><th style="text-align:left;padding:4px">Признак (самые шумные сверху)</th><th style="text-align:left;padding:4px">Надежность</th><th style="text-align:left;padding:4px">Пар</th></tr>${fs.map(([k, v]) => `<tr><td style="padding:4px;border-top:1px solid var(--line-2)">${esc(k)}</td><td style="padding:4px;border-top:1px solid var(--line-2)"><b style="color:${v.rel != null && v.rel < .5 ? 'var(--over-t)' : 'inherit'}">${v.rel ?? '—'}</b></td><td style="padding:4px;border-top:1px solid var(--line-2)">${v.n}</td></tr>`).join('')}</table>` : ''}
+    <p class="sub" style="font-size:12px;margin-top:6px">Надежность ниже 0,5: признак больше шумит, чем различает людей. Его правила стоит ослабить или переснять это движение.</p></div>`; }
 function screensCard(d) { const sc = Object.entries(d.screens || {}).filter(([, v]) => v.n >= 2); if (!sc.length) return '';
   // «тупят»: долго на экране, много нажатий мимо кнопок, часто уходят назад
-  const score = v => (v.p50 || 0) / 30 + v.miss * 2 + v.back / Math.max(1, v.n) * 5; sc.sort((a, b) => score(b[1]) - score(a[1]));
-  return `<div class="card" style="padding:14px 16px;overflow-x:auto"><b>Экраны: где тупят</b><table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px"><tr>${['Экран', 'Показов', 'Время, с (медиана / 90%)', 'Нажатий', 'Мимо кнопок', 'Назад'].map(h => `<th style="text-align:left;padding:4px;font-weight:600">${h}</th>`).join('')}</tr>
-    ${sc.slice(0, 20).map(([k, v]) => `<tr>${[esc(SCREEN_RU[k] || k), v.n, `${v.p50 ?? '—'} / ${v.p90 ?? '—'}`, v.taps, `<b style="color:${v.miss >= 1 ? 'var(--over-t)' : 'inherit'}">${v.miss}</b>`, v.back].map(x => `<td style="padding:4px;border-top:1px solid var(--line-2)">${x}</td>`).join('')}</tr>`).join('')}</table>
-    <p class="sub" style="font-size:12px;margin-top:6px">Сверху экраны, где люди дольше всего стоят, жмут мимо кнопок и уходят назад: их стоит упростить в первую очередь.</p></div>`; }
+  const score = v => (v.p50 || 0) / 30 + v.miss * 2 + v.back / Math.max(1, v.n) * 5 + (v.qback || 0) / Math.max(1, v.n) * 8 + (v.skim || 0) / 25; sc.sort((a, b) => score(b[1]) - score(a[1]));
+  const red = (x, bad) => `<b style="color:${bad ? 'var(--over-t)' : 'inherit'}">${x}</b>`;
+  return `<div class="card" style="padding:14px 16px;overflow-x:auto"><b>Экраны: где тупят и где не читают</b><table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px"><tr>${['Экран', 'Показов', 'Время, с (медиана / 90%)', 'Нажатий', 'Мимо кнопок', 'Назад', 'Сразу назад', 'Дочитали, %', 'Пролистали, %'].map(h => `<th style="text-align:left;padding:4px;font-weight:600">${h}</th>`).join('')}</tr>
+    ${sc.slice(0, 20).map(([k, v]) => `<tr>${[esc(SCREEN_RU[k] || k), v.n, `${v.p50 ?? '—'} / ${v.p90 ?? '—'}`, v.taps, red(v.miss, v.miss >= 1), v.back, red(v.qback || 0, (v.qback || 0) / v.n > .15), v.depth ?? '—', red(v.skim ?? '—', v.skim >= 40)].map(x => `<td style="padding:4px;border-top:1px solid var(--line-2)">${x}</td>`).join('')}</tr>`).join('')}</table>
+    <p class="sub" style="font-size:12px;margin-top:6px">Сверху экраны, где стоят дольше всего, жмут мимо кнопок и уходят назад. «Сразу назад»: ушли в первые 3 секунды, зашли не туда. «Пролистали»: долистали до конца быстрее экрана в секунду, текст не читали.
+    Осторожно с выводами: эти цифры только по тем, кто дошел до экрана (кто бросил раньше, сюда не попал), а долгое время бывает и от интереса, и от непонимания. Смотрите вместе с «мимо кнопок».</p></div>`; }
 /** Сводка калибровки: итог, таблица по мышцам, разбор каждого случая. Пересчитано текущими правилами по сохраненным замерам. */
 function calibReportScreen(rep, back, docs = []) { const t = rep.totals, K = ['match', 'side', 'opposite', 'missed', 'notMeasured', 'extra'];
   const lw = learnWeights(docs, C), wf = v => String(v).replace('.', ',');
@@ -1968,7 +2002,7 @@ export async function funnelScreen(days = 14) {
         ${g.errors && g.errors.length ? '<div style="color:var(--over-t);margin-top:4px">' + g.errors.map(esc).join('<br>') + '</div>' : ''}${g.trail ? '<div style="margin-top:4px;font-family:monospace;font-size:11px">' + g.trail.map(esc).join('<br>') + '</div>' : ''}
         ${x.contact ? `<div style="margin-top:4px;color:var(--weak-t)">Контакт: ${esc(x.contact.name)} ${esc(x.contact.handle)}</div>` : ''}</div></details>`; }).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Пока никто не сообщил</div>'}</div>`;
   const techCard = `<div class="card" style="padding:14px 16px"><b>Техника камеры</b><div style="font-size:13px;margin-top:8px;line-height:1.7">Загрузка модели, с: ${med('pose_init.d')}<br>Встать в кадр, с: ${med('setup.d')}<br>Подсказок до кадра: ${med('setup.n')}<br>Кадров в секунду: ${med('cam_q.n')}<br>Худшее качество шага: ${med('cam_q.q')}<br>Длина теста, с: ${med('test_done.d')}</div>
-    ${det('pose_init', 'Где считается модель')}${det('pose_fail', 'Модель не загрузилась')}${det('cam_err', 'Ошибки камеры')}${det('retake', 'Пересъемки по шагам')}${det('step_skip', '«Не могу» по шагам')}${det('rage', 'Злые тапы (4 нажатия подряд)')}${det('slow', 'Подвисания интерфейса')}${det('storage', 'Хранилище кабинета')}${det('gate_hit', 'Упор в тариф')}</div>`;
+    ${det('menu', 'Меню профиля: чем пользуются')}${det('qback', 'Сразу назад: зашли не туда')}${det('pose_init', 'Где считается модель')}${det('pose_fail', 'Модель не загрузилась')}${det('cam_err', 'Ошибки камеры')}${det('retake', 'Пересъемки по шагам')}${det('step_skip', '«Не могу» по шагам')}${det('rage', 'Злые тапы (4 нажатия подряд)')}${det('slow', 'Подвисания интерфейса')}${det('storage', 'Хранилище кабинета')}${det('gate_hit', 'Упор в тариф')}</div>`;
   const usersCard = `<div class="card" style="padding:14px 16px"><b>Специалисты по неделям</b><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px;font-size:13px">${weeks.length ? weeks.map(([w, n]) => `<span class="pill">с ${esc(w.slice(5))}: <b>${n}</b></span>`).join('') : '<span class="sub">Пока нет данных</span>'}</div>
     ${us.length ? `<div style="margin-top:10px;font-size:12px;color:var(--sub)">Псевдоним · активных дней · оценок · отчетов · ретестов · проблем</div>` + us.slice(0, 40).map(u => `<div class="row" style="font-size:13px;margin-top:4px;font-family:monospace"><span style="flex:1">${esc(u.id)}</span><span>${u.days} · ${u.assess} · ${u.reports} · ${u.retests} · ${u.bugs}</span></div>`).join('') : ''}
     <p class="sub" style="font-size:12px;margin-top:8px">Псевдоним одинаков у одного аккаунта, но имя и почту по нему не узнать.</p></div>`;
@@ -1977,7 +2011,7 @@ export async function funnelScreen(days = 14) {
      <p class="sub" style="font-size:13px">Число вкладок, где шаг был хотя бы раз, сумма по дням. Процент от первого шага.</p>
      <div class="seg">${[7, 30, 90].map(n => `<button data-d="${n}" class="${n === days ? 'on' : ''}">${n} дней</button>`).join('')}</div>
      ${bugCard}
-     ${chanCard(d)}${devCard(d)}${screensCard(d)}
+     ${chanCard(d)}${devCard(d)}${screensCard(d)}${stabilityCard()}
      ${exitCard}
      ${fb && fb.testN ? `<div class="card" style="padding:14px 16px"><b>Анкета после теста (${fb.testN})</b><div style="font-size:14px;margin-top:8px">Средняя оценка: <b>${String(fb.testAvg).replace('.', ',')}</b> из 5</div>
       ${Object.entries(fb.testIssues || {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<div class="row" style="font-size:13px;margin-top:6px"><span style="flex:1">${esc(k)}</span><b>${n}</b></div>`).join('')}
