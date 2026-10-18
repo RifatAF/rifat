@@ -21,3 +21,20 @@ export function vectorSection(snapshot, setup, pose) {
   return { h: 'Векторная сетка (относительно g)', rows };
 }
 const PT = { 0: 'голова', 11: 'плечо Л', 12: 'плечо П', 23: 'таз Л', 24: 'таз П', 25: 'колено Л', 26: 'колено П', 27: 'стопа Л', 28: 'стопа П' };
+
+/** Лист клиенту после сеанса (одна страница A4): что видно сейчас, что делаем, когда повторный тест. Только наблюдаемое, без диагнозов. */
+export function sessionSheet({ date, seen = [], todo = [], retest }) {
+  const W = 1240, H = 1754, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+  const day = d => d.toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' });
+  g.fillStyle = '#F5F6FA'; g.fillRect(0, 0, W, H); g.fillStyle = '#fff'; g.beginPath(); g.roundRect(70, 70, W - 140, H - 140, 36); g.fill();
+  let y = 170; const text = (t, size, color = '#14161A', weight = 400, x = 130, max = W - 260) => { g.font = `${weight} ${size}px system-ui, -apple-system, sans-serif`; g.fillStyle = color;
+    const words = String(t).split(' '); let line = ''; for (const w of words) { const s = line ? line + ' ' + w : w; if (g.measureText(s).width > max && line) { g.fillText(line, x, y); y += size * 1.35; line = w; } else line = s; }
+    if (line) { g.fillText(line, x, y); y += size * 1.35; } };
+  text('ЛИСТ ПОСЛЕ ЗАНЯТИЯ', 26, '#6B7280', 600); y += 10; text(day(date), 52, '#14161A', 700); y += 40;
+  const block = (h, items, empty) => { text(h, 36, '#14161A', 700); y += 6; (items.length ? items : [empty]).forEach((t, i) => { const y0 = y; text(items.length ? `${i + 1}.` : '', 30, '#6B7280', 600, 130, 40); y = y0; text(t, 30, '#14161A', 400, 180, W - 310); y += 8; }); y += 36; };
+  block('Что видно сейчас', seen, 'Заметных отклонений в проверенных движениях нет');
+  block('Что делаем', todo, 'Продолжаем по плану специалиста');
+  text('Повторный тест', 36, '#14161A', 700); y += 6; text(retest ? day(retest) : 'через неделю', 30); y += 40;
+  text('Это наблюдение за движением по камере телефона, а не диагноз. Результат одного занятия может колебаться, надежнее сравнивать через неделю.', 24, '#6B7280');
+  return cv;
+}

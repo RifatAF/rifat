@@ -43,6 +43,8 @@ export default async function handler(req, res) {
       const nums = o => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).slice(0, 120).filter(([k, v]) => /^[\w:]{1,48}$/.test(k) && Number.isFinite(+v)).map(([k, v]) => [k, Math.round(+v * 100) / 100]));
       const doc = { at: Date.now(), workout: b.workout === true, gap: Math.max(0, Math.min(86400, Math.round(+b.gap || 0))), ex: Math.max(0, Math.min(20, Math.round(+b.ex || 0))),
         f1: nums(b.f1), f2: nums(b.f2), m1: nums(b.m1), m2: nums(b.m2), q1: Math.round(+b.q1 || 0), q2: Math.round(+b.q2 || 0) };
+      // режим сеанса: пара до и после правки руками или контрольный повтор без вмешательства
+      doc.gapMin = Math.round(doc.gap / 60); if (b.session === true) { doc.session = true; if (b.control === true) doc.control = true; }
       if (!Object.keys(doc.f1).length || !Object.keys(doc.f2).length) return res.status(400).json({ error: 'empty' });
       await put(`pairs/${new Date(doc.at).toISOString().slice(0, 10)}/${doc.at}-${doc.workout ? 'w' : 'c'}-${Math.random().toString(36).slice(2, 8)}.json`, JSON.stringify(doc), { access: 'private', contentType: 'application/json', addRandomSuffix: false });
       return res.status(200).json({ ok: true });
