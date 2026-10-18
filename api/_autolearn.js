@@ -22,10 +22,13 @@ export function retestStats(pairs) {
   // эффект комплекса: средняя разница с комплексом минус средняя разница простого повтора (привыкание к тесту, регрессия к среднему)
   const effect = mc.length >= 30 && mw.length >= 30 ? Math.round((mean(mw) - mean(mc)) * 10) / 10 : null;
   // надежность признаков: разброс между двумя тестами относительно разброса между людьми (1 — идеально, 0 — один шум)
-  const feats = {}; for (const x of diffs(ctl.length >= 10 ? ctl : [], 'f')) if (Number.isFinite(x.a) && Number.isFinite(x.b)) ((feats[x.k] ||= { d: [], v: [] }).d.push(x.d), feats[x.k].v.push(x.a, x.b));
-  const features = Object.fromEntries(Object.entries(feats).filter(([, F]) => F.d.length >= 10).map(([k, F]) => { const e = sd(F.d) / Math.SQRT2, t = sd(F.v);
-    return [k, { n: F.d.length, sem: Math.round(e * 100) / 100, rel: t ? Math.round(Math.max(0, 1 - (e * e) / (t * t)) * 100) / 100 : null }]; }));
-  return { at: Date.now(), n: pairs.length, nControl: ctl.length, nWorkout: wk.length, mdc, effect, features };
+  const featStats = list => { const feats = {}; for (const x of diffs(list.length >= 10 ? list : [], 'f')) if (Number.isFinite(x.a) && Number.isFinite(x.b)) ((feats[x.k] ||= { d: [], v: [] }).d.push(x.d), feats[x.k].v.push(x.a, x.b));
+    return Object.fromEntries(Object.entries(feats).filter(([, F]) => F.d.length >= 10).map(([k, F]) => { const e = sd(F.d) / Math.SQRT2, t = sd(F.v);
+      return [k, { n: F.d.length, sem: Math.round(e * 100) / 100, rel: t ? Math.round(Math.max(0, 1 - (e * e) / (t * t)) * 100) / 100 : null }]; })); };
+  const features = featStats(ctl);
+  // шум на коротком интервале (меньше 15 минут, как в сеансе): без усталости и смены дня он обычно меньше
+  const gapMin = p => Number.isFinite(p.gapMin) ? p.gapMin : (p.gap || 0) / 60, shortCtl = ctl.filter(p => gapMin(p) < 15), featuresShort = featStats(shortCtl);
+  return { at: Date.now(), n: pairs.length, nControl: ctl.length, nWorkout: wk.length, nShort: shortCtl.length, mdc, effect, features, featuresShort };
 }
 
 export async function autoLearn(host) {

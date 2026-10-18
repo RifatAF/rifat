@@ -101,6 +101,8 @@ export const voice = {
   /** Сказать фразу целиком и дождаться конца. Не обрывается следующими фразами; не дольше 15 с, чтобы сбой звука не останавливал тест. */
   speak(text, cueEl) {
     if (cueEl) cueEl.textContent = text;
+    // короткая подсказка еще звучит: дать ей договорить (не дольше 2 с), а не обрывать на полуслове
+    if (this.busy()) { const t0 = Date.now(); return new Promise(r => { const w = () => this.busy() && Date.now() - t0 < 2000 ? setTimeout(w, 80) : r(); w(); }).then(() => this.speak(text)); }
     return new Promise(res => { let done = false; const fin = () => { if (!done) { done = true; this.until = 0; res(); } };
       const est = 500 + text.length * 75; if (this.muted) return setTimeout(fin, 200);
       const f = voiceIdx[text.trim()]; if (audio) { audio.stop(); audio = null; }
