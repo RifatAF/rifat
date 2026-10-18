@@ -1529,7 +1529,7 @@ export async function workout(ids, reasons = {}) {
         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><b id="tm" class="num" style="font-size:${hasFigure(e.id) ? 20 : 56}px;font-weight:600;letter-spacing:-.02em;opacity:.45">${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}</b></div></div><span id="tml" style="font-size:14px;color:var(--cam-sub)">старт после подсказки</span><b id="ccue" style="flex:1;font-size:20px;line-height:1.25;color:var(--signal)"></b></div>
       <div style="flex:1;margin-top:20px;display:flex;flex-direction:column;gap:12px">${e.steps.slice(0, 3).map((s, k) => `<div class="row st" style="opacity:.45;align-items:flex-start"><span class="step-n" style="color:var(--signal);width:22px;padding-top:2px">${String(k + 1).padStart(2, '0')}</span><span style="font-size:16px;line-height:1.35;flex:1">${s}</span></div>`).join('')}
         ${e.check ? `<div class="row" style="background:rgba(255,255,255,.08);border-radius:var(--r-md);padding:12px;align-items:flex-start;gap:10px"><span style="color:var(--signal)">${ic('info', 's')}</span><span style="font-size:14px;line-height:1.4">${e.check}</span></div>` : ''}
-        <div class="row" id="exctl" style="gap:8px"><button class="btn glass" id="exrep">${ic('volume-2', 's')}Повторить</button><button class="btn glass" id="exskip">Сразу начать${ic('chevron-right', 's')}</button></div></div>
+        <div id="exctl" style="display:flex;flex-direction:column;gap:8px"><button class="btn" id="exskip" style="background:var(--signal);color:var(--cam-bg,#0B1B3B);height:56px;font-size:18px">${ic('play', 's')}Я в положении, начинаем</button><button class="btn glass" id="exrep">${ic('volume-2', 's')}Объяснить еще раз</button></div></div>
       <div class="row" style="justify-content:center;gap:28px;margin-top:16px"><button class="round" id="pv" aria-label="Назад" style="width:56px;height:56px;background:rgba(255,255,255,.1);color:#fff">${ic('skip-back')}</button><button class="round" id="pp" aria-label="Пауза" style="width:80px;height:80px;background:var(--signal);color:var(--cam-bg)">${ic('pause')}</button><button class="round" id="nx" aria-label="Дальше" style="width:56px;height:56px;background:rgba(255,255,255,.1);color:#fff">${ic('skip-forward')}</button></div></div>`);
     let token = {}; const myTok = token;
     const camStart = async () => { const v = $('#exv'); if (!v || !rk) return; $('#excoff').onclick = () => { localStorage.setItem('bp_excam', '0'); camOff(); $('#cambox').innerHTML = camHtml(); bindCam(); };
@@ -1556,7 +1556,8 @@ export async function workout(ids, reasons = {}) {
     let exTok = 0, ready, full = false; const started = new Promise(r => ready = r);
     const explain = async () => { const my = ++exTok, dead = () => myTok.dead || closed || my !== exTok;
       // упражнение уже делали два раза и больше: только название, подробности по кнопке «Повторить»
-      if (!full && timesDone(e) >= 2) { await voice.speak(exName(e) + (exSide(e) ? ', ' + (exSide(e) === 'слева' ? 'левая сторона' : 'правая сторона') : '')); full = true; if (!dead()) ready(); return; }
+      const sideTwo = i > 0 && list[i - 1].id.replace(/_(left|right)$/, '') === e.id.replace(/_(left|right)$/, '');
+      if (!full && (timesDone(e) >= 2 || sideTwo)) { await voice.speak(exName(e) + (exSide(e) ? ', ' + (exSide(e) === 'слева' ? 'левая сторона' : 'правая сторона') : '')); full = true; if (!dead()) voice.say(PH.wait); return; }
       const rec = [sayText(e)].find(x => x && voice.has(x));
       if (rec) { const nS = Math.min(3, e.steps.length), t0 = Date.now(), per = (rec.length * 65) / (nS + (e.check ? 1 : 0));
         const tick = setInterval(() => { if (dead()) return clearInterval(tick); lit(Math.min(nS - 1, Math.floor((Date.now() - t0) / per))); }, 300);
@@ -1564,11 +1565,14 @@ export async function workout(ids, reasons = {}) {
       else { await voice.speak(e.title.split(' (')[0] + (exSide(e) ? ', ' + (exSide(e) === 'слева' ? 'левая сторона' : 'правая сторона') : ''));
         for (let k = 0; k < Math.min(3, e.steps.length); k++) { if (dead()) return; lit(k); await voice.speak(e.steps[k]); }
         if (e.check && !dead()) await voice.speak(e.check); }
-      if (!dead()) ready(); };
+      // старт только по кнопке: человек сам говорит, что уже лег, встал или сел как надо
+      if (!dead()) voice.say(PH.wait); };
     $('#exskip').onclick = () => { exTok++; hush(); ready(); };
     $('#exrep').onclick = () => { hush(); lit(-1); full = true; explain(); };
     explain(); await started; if ($('#exctl')) $('#exctl').hidden = true;
-    if (!myTok.dead && !closed) { voice.beep('start'); await sleep(400); }
+    // короткий отсчет, чтобы после нажатия успеть вернуть руку в положение
+    for (const n of [3, 2, 1]) { if (myTok.dead || closed) return; $('#tm').style.opacity = 1; $('#tm').textContent = n; $('#tml').textContent = 'приготовились'; voice.say(numWord(n)); await sleep(1000); }
+    if (!myTok.dead && !closed) { voice.beep('start'); await sleep(300); }
     // дальше ведет тренер: подходы, счет повторов, подсказки по технике, отдых между подходами и упражнениями
     if (myTok.dead || closed) return; lit(-1); playing = true; $('#tm').style.opacity = 1;
     const P = coachPlan(e), cues = cuesOf(e), dead = () => myTok.dead || closed, cueEl = () => $('#ccue');
@@ -1584,9 +1588,10 @@ export async function workout(ids, reasons = {}) {
       await voice.speak(P.holdReps ? PH.goSeries(P) : P.reps ? PH.goReps(P) : PH.goHold(P)); if (dead()) return; voice.beep('start');
       const label = P.sets > 1 ? `подход ${s} из ${P.sets}` : '';
       if (P.reps) { // счет вслух в темпе упражнения; на 40% и 75% вместо числа короткая подсказка
-        const cueAt = new Set(cues.length ? [Math.max(2, Math.round(P.reps * .4)), P.reps >= 8 ? Math.round(P.reps * .75) : 0] : []);
+        let hushNext = false; const cueAt = new Set(cues.length ? [Math.max(2, Math.round(P.reps * .4)), P.reps >= 8 ? Math.round(P.reps * .75) : 0] : []);
         for (let r = 1; r <= P.reps; r++) { show(String(r), (label ? label + ' · ' : '') + `из ${P.reps} повторов`, 1 - r / P.reps);
-          if (cueAt.has(r)) cue(cues[(s + r) % cues.length]); else voice.say(numWord(r)); if (!(await wait(P.tempo))) return; } }
+          // после подсказки следующее число не звучит: фраза успевает договориться до конца
+          if (cueAt.has(r)) { cue(cues[(s + r) % cues.length]); hushNext = true; } else if (hushNext) hushNext = false; else voice.say(numWord(r)); if (!(await wait(P.tempo))) return; } }
       else if (P.holdReps) { for (let r = 1; r <= P.holdReps; r++) { let left = P.hold;
           while (left > 0) { show(String(left), `${r} из ${P.holdReps} · держим`, left / P.hold); if (!(await wait(1))) return; left--; }
           if (r < P.holdReps) { voice.say(PH.relax(r, P.holdReps)); show('↺', 'расслабьтесь', 1); if (!(await wait(P.relax))) return; } } }
@@ -1621,7 +1626,7 @@ async function done(list, pre = null, n = list.length) { camOff(); keepAwake(fal
    ${dl > 0 ? `<p class="vasgood" style="font-size:18px;font-weight:600;color:var(--ok-t)">Отличный результат! Уровень боли снижен на ${dl} ${dl === 1 ? 'балл' : dl < 5 ? 'балла' : 'баллов'}</p>` : dl < 0 ? '<p class="sub">Боль после занятия выше. Уменьшите амплитуду, а если повторится, покажите это специалисту.</p>' : '<p class="sub">Делай так 2 недели и повтори тест. Сравним карты.</p>'}</div>
    <div class="pad kpi"><div><b>${n}</b><span>упражнения</span></div><div><b>${w.compliance}%</b><span>дней из 7</span></div><div><b>${s}</b><span>дн. подряд</span></div></div>
    ${progressChart(log)}
-   <div class="dock">${tests().length ? `<button class="btn" id="retest">${ic('activity', 's')}Что откликнулось: быстрая проверка</button><button class="btn ghost" id="back">К карте тела</button><p style="text-align:center;font-size:13px;color:var(--sub)">Короткий тест покажет, что тело почувствовало сразу. Настоящий итог через неделю</p>` : '<button class="btn" id="back">К карте тела</button>'}</div></div>`);
+   <div class="dock">${tests().length ? `<button class="btn" id="retest">${ic('activity', 's')}Посмотреть, как повлияли упражнения</button><button class="btn ghost" id="back">К карте тела</button><p style="text-align:center;font-size:13px;color:var(--sub)">Короткий повторный тест: сравним движения до и после занятия</p>` : '<button class="btn" id="back">К карте тела</button>'}</div></div>`);
   $('#back').onclick = map;
   // повторный тест сразу после комплекса: результат сравним с тестом до упражнений
   if ($('#retest')) $('#retest').onclick = () => { localStorage.setItem(K('bp_retest'), String(tests().at(-1).date)); track('retest_after', { n }, false); prep(); }; }
@@ -1641,14 +1646,37 @@ function sendPair(was, now, workout) { if (was.beta || now.beta) return; try {
     body: JSON.stringify({ workout, gap: Math.round((now.date - was.date) / 1000), ex, f1: fOf(was), f2: fOf(now), m1: mOf(was), m2: mOf(now), q1: q(was), q2: q(now) }) }).catch(() => {});
   track('retest_pair', { c: workout ? 'workout' : 'control' }, false); } catch (e) {} }
 /** Сравнение сразу после комплекса: тест до упражнений и только что пройденный. */
-function afterWorkout(baseDate) { const all = tests(), was = all.find(t => t.date === baseDate), now = all.at(-1);
+// движения, которые человек сам чувствует: «до занятия присед был такой, после стал глубже». up: больше = лучше
+const FEEL = [['sq_depth', 'Присед стал глубже', 8, true], ['valgus_max', 'Колени в приседе меньше уходят внутрь', 8], ['sls_valgus_r', 'Стоя на правой, колено держится ровнее', 8],
+  ['sls_valgus_l', 'Стоя на левой, колено держится ровнее', 8], ['sls_drop_r', 'На правой ноге таз держится ровнее', 2.5], ['sls_drop_l', 'На левой ноге таз держится ровнее', 2.5],
+  ['sq_lean', 'В приседе спина прямее', 5], ['sq_arms', 'Руки в приседе держатся выше', 6], ['oh_reach', 'Руки поднимаются выше над головой', 8],
+  ['head_forward', 'Голова стоит ровнее над плечами', 4], ['shoulder_tilt', 'Плечи стоят ровнее', 2], ['pelvic_tilt', 'Таз стоит ровнее', 2],
+  ['trot_r', 'Поворот корпуса вправо стал больше', 6, true], ['trot_l', 'Поворот корпуса влево стал больше', 6, true], ['asym_bend', 'Наклоны вправо и влево стали ровнее', 5]];
+const MOVE_NAME = { sq_depth: 'Присед', valgus_max: 'Присед', sls_valgus_r: 'Присед на правой ноге', sls_valgus_l: 'Присед на левой ноге', sls_drop_r: 'Стойка на правой ноге', sls_drop_l: 'Стойка на левой ноге',
+  sq_lean: 'Присед', sq_arms: 'Присед с руками вверх', oh_reach: 'Подъем рук', head_forward: 'Положение головы', shoulder_tilt: 'Положение плеч', pelvic_tilt: 'Положение таза', trot_r: 'Поворот вправо', trot_l: 'Поворот влево', asym_bend: 'Наклоны в стороны' };
+/** Что изменилось в движениях между тестами. k: запас к порогу (сразу после занятия порог в 1,5 раза выше: там больше случайного разброса). */
+function feelDeltas(was, now, k = 1.5) { const f0 = analyze(was, C).f, f1 = analyze(now, C).f;
+  return FEEL.filter(([key]) => Number.isFinite(f0[key]) && Number.isFinite(f1[key])).map(([key, text, thr, up]) => { const a = Math.abs(f0[key]), b = Math.abs(f1[key]), gain = up ? b - a : a - b;
+    return { key, text, a, b, gain, better: gain >= thr * k, worse: -gain >= thr * 3, size: gain / thr }; }); }
+/** «Как повлияли упражнения»: тест до занятия и сразу после. Главное — что человек смог сделать лучше; честно о разбросе. */
+export function afterWorkout(baseDate) { const all = tests(), was = all.find(t => t.date === baseDate), now = all.at(-1);
   if (!was || !now || was === now) return analysisScreen();
   sendPair(was, now, true);
-  go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>Было → стало</b><small>до и после комплекса</small></div></div>
-    <div class="pad" style="display:flex;flex-direction:column;gap:var(--s3);padding-bottom:var(--s4)"><p class="sub" style="font-size:15px">Слева тело до упражнений, справа сразу после. Тяните ползунок.</p>${baBlock('baw')}
-    <p class="sub" style="font-size:13px">Сразу после занятия мышцы отвечают быстрее всего, а закрепляется это за 2–3 недели регулярных занятий.</p></div>
-    <div class="dock"><button class="btn" id="go">К результату</button></div></div>`);
-  $('#back').onclick = $('#go').onclick = () => analysisScreen(); bindBa('baw', was, now, { acute: true }); }
+  const ds = feelDeltas(was, now), good = ds.filter(x => x.better).sort((x, y) => y.size - x.size), bad = ds.filter(x => x.worse), deg = v => Math.round(v) + '°';
+  const hero = good[0];
+  track('retest_after', { c: 'view', n: good.length }, false);
+  go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>Как повлияли упражнения</b><small>до и после занятия</small></div></div>
+    <div class="pad" style="display:flex;flex-direction:column;gap:var(--s3);padding-bottom:var(--s4)">
+    ${hero ? `<div class="card" style="background:var(--ok-s);border:0"><div class="row" style="gap:10px;align-items:center"><span style="color:var(--ok-t)">${ic('check')}</span><b style="font-size:20px;line-height:1.25">${esc(hero.text)}</b></div>
+      <div class="row" style="gap:10px;margin-top:10px;font-size:17px"><span class="sub">до занятия</span><b class="num">${deg(hero.a)}</b><span class="sub">→ после</span><b class="num" style="color:var(--ok-t)">${deg(hero.b)}</b></div></div>
+      ${good.length > 1 ? `<div class="group">${good.slice(1, 4).map(x => `<div class="row" style="min-height:52px;gap:10px"><span style="color:var(--ok-t)">${ic('check', 's')}</span><span style="flex:1;font-size:15px">${esc(x.text)}</span><span class="num sub">${deg(x.a)} → <b style="color:var(--text)">${deg(x.b)}</b></span></div>`).join('')}</div>` : ''}`
+    : `<div class="card"><b style="font-size:18px">Сразу после занятия заметной разницы нет</b><p class="sub" style="margin-top:6px;font-size:15px;line-height:1.45">Так бывает часто: телу нужно время. Изменения обычно становятся видны через 1–2 недели регулярных занятий.</p></div>`}
+    ${bad.length ? `<p class="sub" style="font-size:14px;line-height:1.45">${esc(MOVE_NAME[bad[0].key] || 'Одно движение')} сегодня получилось чуть хуже. Сразу после нагрузки это обычно усталость, а не откат. Если повторится через неделю, сделайте упражнения легче.</p>` : ''}
+    <details class="acc"><summary style="font-weight:600">Мышцы до и после</summary>${baBlock('baw')}</details>
+    <p class="sub" style="font-size:13px;line-height:1.45">У любого теста по камере есть разброс: два замера подряд никогда не совпадают точно. Поэтому здесь только то, что изменилось заметно больше обычного разброса. Надежный итог через неделю.</p></div>
+    <div class="dock"><button class="btn" id="go">Готово</button></div></div>`);
+  $('#back').onclick = $('#go').onclick = () => analysisScreen();
+  const det = app.querySelector('details.acc'); det.addEventListener('toggle', () => { if (det.open) bindBa('baw', was, now, { acute: true }); }); }
 // график прогресса клиента: боль до и после по последним занятиям (SVG, без библиотек)
 export function progressChart(log) {
   const L = log.filter(r => Number.isFinite(r.pre) && Number.isFinite(r.post)).slice(-10); if (L.length < 2) return '';
