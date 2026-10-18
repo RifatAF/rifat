@@ -3,7 +3,7 @@
 //
 // Хранилища (включаются переменными окружения в Vercel):
 //   blob   — Vercel Blob (BLOB_READ_WRITE_TOKEN), как было;
-//   s3     — любое S3-совместимое: Cloudflare R2, Backblaze B2, Yandex Object Storage (S3_ENDPOINT, S3_BUCKET, S3_KEY, S3_SECRET, S3_REGION);
+//   s3     — любое S3-совместимое: Cloudflare R2, Backblaze B2, Yandex Object Storage (S3_KEY, S3_SECRET; S3_ENDPOINT, S3_BUCKET, S3_REGION по желанию);
 //   backup — второе S3, например MinIO на домашнем сервере (BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_KEY, BACKUP_S3_SECRET, BACKUP_S3_REGION).
 // STORE_PRIMARY=blob|s3 выбирает, откуда читать (по умолчанию blob). Запись и удаление идут в основное хранилище,
 // и копия уходит во все остальные настроенные. Сбой копии не ломает запрос, он пишется в лог.
@@ -12,8 +12,10 @@ import crypto from 'node:crypto';
 const env = process.env;
 let blobMod = null; const blob = async () => blobMod || (blobMod = await import('@vercel/blob'));
 
+// Cloudflare R2 проекта: адрес и бакет не секретны, поэтому зашиты по умолчанию; в Vercel нужны только S3_KEY и S3_SECRET
+const R2 = { ENDPOINT: 'https://4dd93185d6026da92474ab3657d65dc7.r2.cloudflarestorage.com', BUCKET: 'bodypassport-data' };
 function s3cfg(p) {
-  const e = env[p + 'ENDPOINT'], b = env[p + 'BUCKET'], k = env[p + 'KEY'], s = env[p + 'SECRET'];
+  const d = p === 'S3_' ? R2 : {}, e = env[p + 'ENDPOINT'] || d.ENDPOINT, b = env[p + 'BUCKET'] || d.BUCKET, k = env[p + 'KEY'], s = env[p + 'SECRET'];
   return e && b && k && s ? { endpoint: e.replace(/\/+$/, ''), bucket: b, key: k, secret: s, region: env[p + 'REGION'] || 'auto', name: p === 'S3_' ? 's3' : 'backup' } : null;
 }
 const sha = d => crypto.createHash('sha256').update(d).digest('hex');
