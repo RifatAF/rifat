@@ -32,7 +32,7 @@ async function save(path, buf) { await mkdir(dirname(path), { recursive: true })
 
 // сайт собирается в public/: Vercel публикует ее целиком, вместе со скачанными файлами
 const OUT = 'public';
-const SKIP = new Set(['api', 'scripts', 'node_modules', 'public', '.git', '.vercel', 'package.json', 'package-lock.json', 'AUDIT.md', '.gitignore', '.vercelignore', 'vercel.json', '_headers', 'tests']);
+const SKIP = new Set(['api', 'scripts', 'node_modules', 'public', '.git', '.vercel', 'package.json', 'package-lock.json', 'AUDIT.md', '.gitignore', '.vercelignore', 'vercel.json', '_headers', 'tests', 'docs']);
 await rm(OUT, { recursive: true, force: true }); await mkdir(OUT, { recursive: true });
 const { readdir } = await import('node:fs/promises');
 for (const e of await readdir('.')) if (!SKIP.has(e) && !e.endsWith('.md')) await cp(e, OUT + '/' + e, { recursive: true });
