@@ -1071,7 +1071,7 @@ async function analysisScreen() {
 }
 
 // ---------- 5. карта тела ----------
-let BACK = true, SEL = null, MODE3D = false, MAP_OPEN = false;
+let BACK = true, SEL = null, MODE3D = false, MAP_OPEN = true; // карта тела открыта и стоит первой, под ней карточки задач
 // короткий замер для подписи на карте: «14°», «8%»
 const shortVal = t => { const m = String(t || '').match(/(\d+(?:[.,]\d+)?)\s*(°|%|см)?/); return m ? m[1] + (m[2] || '') : null; };
 // для какой зоны итога упражнение: строка-связь на экране тренировки
@@ -1253,7 +1253,6 @@ export function map() {
    <div class="pad row" style="padding-top:16px;align-items:flex-start"><div style="flex:1;min-width:0"><div class="eyebrow">${new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })} · ${nSteps} ${plural3(nSteps, 'шаг', 'шага', 'шагов')}${qa != null ? ' · качество ' + qa : ''}</div><h1 style="margin-top:6px">Что мы нашли</h1></div></div>
    ${mainLine(top, a)}
    ${days >= 7 && !SHARED ? `<div class="pad"><button class="row-link" id="re" style="color:var(--focus);font-weight:600"><span>Прошла неделя: пройдите быстрый тест и сравните</span>${ic('chevron-right', 's')}</button></div>` : ''}
-   ${taskCards(top)}
    <div class="pad" style="margin-top:12px"><details class="acc card" id="mapacc" style="border-radius:var(--r-xl);padding:12px 8px 8px"${MAP_OPEN || !top.length ? ' open' : ''}><summary style="font-weight:600;min-height:40px;padding:0 8px">Карта тела</summary>
      <div class="seg" style="margin:8px 4px 0"><button id="vf" class="${!BACK && !MODE3D ? 'on' : ''}">Спереди</button><button id="vb" class="${BACK && !MODE3D ? 'on' : ''}">Сзади</button>${device.webgl2 ? `<button id="v3" class="${MODE3D ? 'on' : ''}">3D</button>` : ''}</div>
      <div id="vis" style="position:relative;margin:8px auto 0;width:min(100%,360px);${MODE3D ? 'height:420px' : ''}">${MODE3D ? '' : '<canvas id="heat" style="width:100%;display:block;cursor:pointer"></canvas>'}</div>
@@ -1262,6 +1261,7 @@ export function map() {
        <div class="row" id="lay" style="gap:6px;flex-wrap:wrap;justify-content:center;margin-top:6px"><button class="pill on" data-l="">Все слои</button>${LAYER_NAMES.map(([l, n]) => `<button class="pill" data-l="${l}">${n} · ${top.filter(x => layerOf(x.id) === l).length}</button>`).join('')}</div>
        <div class="row" style="gap:6px;flex-wrap:wrap;justify-content:center;margin-top:8px">${[['all', 'Всё тело'], ['head', 'Шея'], ['shoulders', 'Плечи'], ['back', 'Спина'], ['pelvis', 'Таз'], ['knees', 'Колени'], ['feet', 'Стопы']].map(([z, n]) => `<button class="pill" data-z="${z}">${n}</button>`).join('')}</div></details>` : ''}
      <div id="selbox" style="margin:8px 4px 0"></div></details></div>
+   ${taskCards(top)}
    ${top.length ? '' : `<div class="pad" style="margin-top:16px">${verdictCard(top, a.findings, 'Сильных перекосов не видно', [], true)}</div>`}
    ${cnsCard(t, a)}
    <div class="pad row" style="margin-top:12px;gap:16px"><button class="link" id="more">${ic('file-text', 's')} Подробный обзор</button><button class="link" id="lrs">${ic('arrow-right-left', 's')} Левая и правая</button></div>
@@ -1291,7 +1291,7 @@ export function map() {
   $('#vf').onclick = () => { if (MODE3D) { MODE3D = false; BACK = false; return map(); } BACK = false; setView(); };
   $('#vb').onclick = () => { if (MODE3D) { MODE3D = false; BACK = true; return map(); } BACK = true; setView(); };
   if ($('#v3')) $('#v3').onclick = () => { if (!MODE3D) { MODE3D = true; map(); } };
-  // карта свернута по умолчанию: при раскрытии перерисовываем (в свернутом блоке у холста нулевая ширина)
+  // карту можно свернуть: при раскрытии перерисовываем (в свернутом блоке у холста нулевая ширина)
   $('#mapacc').addEventListener('toggle', () => { const was = MAP_OPEN; MAP_OPEN = $('#mapacc').open; if (MAP_OPEN && !was) { if (MODE3D) map(); else draw2d(); } });
   bindTaskCards(top, a, all);
   if ($('#plan')) $('#plan').onclick = () => durationSheet(top, pl, why);
