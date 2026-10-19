@@ -1,6 +1,6 @@
 // BodyPassport web: тот же поток, тексты и дизайн, что в Android-версии.
 import { backupSoon, restoreIfEmpty, downloadBackup, pickRestore } from './backup.js';
-import { stateScores, cnsDelta, LAW, LAW_WHY } from './muscle-logic.js';
+import { stateScores, cnsDelta } from './muscle-logic.js';
 import { P, F, G, Movement, sideView, levelled, analyze, fmt, standSnapshot, sideSnapshot, features } from './analysis.js';
 import { track, vasSave, vasLog, vasStats, vasDelta, channel, screenView, deviceInfo } from './track.js';
 import { bugSheet, rateCard, bindRate, installCard, bindInstall, installNow, canInstall, feedbackSheet, shareApp, appLink, mountBugTab, mountBetaBar, exitSurvey, testSurvey } from './grow.js';
@@ -18,7 +18,7 @@ import { sayText } from './saytext.js';
 import { BATTERY_UNITS, forwardBend, singleBalance, thoracicRotation, trotSweep, overheadReach, chairStand, retroGait, autoScale } from './test-battery.js';
 import { mountPacing, falseStart, matchScore, PHASE, SHORT_CMD, GO_WORD, COUNT_WORDS, numWord, ZERO_CLICK } from './pacing-guard.js';
 import { pinhole, fpsGuard, flushGL } from './hardware-adapter.js';
-import { setSession, MODES, passiveOn, syncThemeColor } from './session-controller.js';
+import { setSession, MODES, passiveOn, syncThemeColor, isSpecialist } from './session-controller.js';
 import { touchSummary, resetTouch, startPassive, rememberBaseline } from './touch-tracker.js';
 import { runLoader, vnsSummary } from './vns-phenotype.js';
 import { ribFlare, apicalBreath, buttWink } from './biomechanics-engine.js';
@@ -55,20 +55,32 @@ const tests = () => JSON.parse(localStorage.getItem(K('bp_tests')) || '[]');
 const saveTest = t => { const a = tests(); a.push(t); localStorage.setItem(K('bp_tests'), JSON.stringify(a.slice(-20))); backupSoon(); };
 const bot = () => C.booking + '?start=app_' + encodeURIComponent(REF);
 // v2.0: Гипертонус (SHORT), Перерастяжение (HYPER), Слабая (WEAK); NT — мышца этим тестом не измерялась, «нормой» ее не называем
-export const TONE = { HYPER: ['Перерастяжение', 'var(--hyper)', 'var(--hyperS)', 'перегружена', 'Перерастяжение', 'var(--hyperT)'], SHORT: ['Гипертонус', 'var(--short)', 'var(--short-s)', 'зажата', 'Гипертонус', 'var(--short-t)'],
+const TONE_SPEC = { HYPER: ['Перерастяжение', 'var(--hyper)', 'var(--hyperS)', 'перегружена', 'Перерастяжение', 'var(--hyperT)'], SHORT: ['Гипертонус', 'var(--short)', 'var(--short-s)', 'зажата', 'Гипертонус', 'var(--short-t)'],
   WEAK: ['Слабая', 'var(--weak)', 'var(--weakS)', 'недорабатывает', 'Слабость', 'var(--weak-t)'], OK: ['Норма', 'var(--ok)', 'var(--ok-s)', 'норма', 'Норма', 'var(--ok-t)'], NT: ['Не измерено', 'var(--faint)', 'var(--line-2)', 'не измерено', 'Не измерено', 'var(--sub)'],
   DONE: ['Проработана сегодня', 'var(--ok)', 'var(--ok-s)', 'проработана сегодня', 'Проработана', 'var(--ok-t)'] };
+// клиенту вместо состояния мышцы задача тренировки: что делать с зоной, без «гипертонуса» и «слабости» (юридический разбор, docs/legal_texts)
+const TONE_CLIENT = { ...TONE_SPEC, HYPER: ['Разгрузить', 'var(--act-hyper)', 'var(--act-hyper-s)', 'разгрузить, не растягивать', 'Разгрузить', 'var(--act-hyper-t)'],
+  SHORT: ['Расслабить', 'var(--act-short)', 'var(--act-short-s)', 'расслабить и растянуть', 'Расслабить', 'var(--act-short-t)'], WEAK: ['Укрепить', 'var(--weak)', 'var(--weakS)', 'укрепить', 'Укрепить', 'var(--weak-t)'] };
+// одна точка выбора: кабинет специалиста видит состояния, клиент видит задачи
+const bySession = (spec, client) => new Proxy({}, { get: (_, k) => (isSpecialist() ? spec : client)[k] });
+export const TONE = bySession(TONE_SPEC, TONE_CLIENT);
 // подпись состояния в числе зоны: «Глубокие мышцы шеи · не включаются», «Сгибатели бедра · зажаты»
 const plural = id => { const z = (C.muscles[id] && C.muscles[id].zone) || ''; return /мышцы|^\S+(ые|ие|тели)\s/i.test(z + ' '); };
 export const toneText = (s, i) => { const t = TONE[s.k][i]; return plural(s.id) ? t.replace('нута', 'нуты').replace('слабая', 'слабые').replace('ается', 'аются') : t; };
 // что значит каждый цвет: одна строка простыми словами (клиент путал «укорочена» и «перегружена»)
-export const TONE_HELP = `<details class="q"><summary aria-label="Что значат цвета">?</summary><div style="display:flex;flex-direction:column;gap:10px;line-height:1.4">
+const TONE_HELP_SPEC = `<details class="q"><summary aria-label="Что значат цвета">?</summary><div style="display:flex;flex-direction:column;gap:10px;line-height:1.4">
   <span><span class="mark sm SHORT"></span> <b>Гипертонус</b>: мышца зажата. Помогает расслабить и растянуть</span>
   <span><span class="mark sm HYPER"></span> <b>Перерастяжение</b>: мышцу тянет соседняя. Растягивать нельзя</span>
   <span><span class="mark sm WEAK"></span> <b>Слабая</b>: мышца не включается. Помогает укрепить</span>
   <span style="color:#B6BED0">В 3D точки бегут к центру мышцы, если она зажата, к краям, если растянута, и мерцают, если слабая</span></div></details>`;
-export const TONE_HEX = { HYPER: '#F59E0B', SHORT: '#EF4444', WEAK: '#3B73D9', OK: '#15803D', NT: '#B9BEC2', DONE: '#22C55E' };
-export const TONE_TEXT_HEX = { HYPER: '#9E4E0E', SHORT: '#B42323', WEAK: '#2A5CB8', OK: '#15803D', NT: '#6B747A', DONE: '#15803D' };
+const TONE_HELP_CLIENT = `<details class="q"><summary aria-label="Что значат цвета">?</summary><div style="display:flex;flex-direction:column;gap:10px;line-height:1.4">
+  <span>Цвет показывает, что делать с зоной на тренировке. Подобрано по тому, как вы двигались на видео.</span>
+  <span><span class="mark sm SHORT"></span> <b>Расслабить</b>: раскатка и мягкая растяжка</span>
+  <span><span class="mark sm HYPER"></span> <b>Разгрузить</b>: мягкие удержания. Растягивать не нужно</span>
+  <span><span class="mark sm WEAK"></span> <b>Укрепить</b>: упражнения, чтобы зона активнее включалась</span></div></details>`;
+export const TONE_HELP = () => isSpecialist() ? TONE_HELP_SPEC : TONE_HELP_CLIENT;
+export const TONE_HEX = bySession({ HYPER: '#F59E0B', SHORT: '#EF4444', WEAK: '#3B73D9', OK: '#15803D', NT: '#B9BEC2', DONE: '#22C55E' }, { HYPER: '#8B5CF6', SHORT: '#0D9488', WEAK: '#3B73D9', OK: '#15803D', NT: '#B9BEC2', DONE: '#22C55E' });
+export const TONE_TEXT_HEX = bySession({ HYPER: '#9E4E0E', SHORT: '#B42323', WEAK: '#2A5CB8', OK: '#15803D', NT: '#6B747A', DONE: '#15803D' }, { HYPER: '#6D28D9', SHORT: '#0F766E', WEAK: '#2A5CB8', OK: '#15803D', NT: '#6B747A', DONE: '#15803D' });
 const sideWord = s => s === 'RIGHT' ? 'справа' : 'слева';
 // ---------- итог в три строки: глагол действия, мышца, одна измеренная деталь ----------
 const VERBS = [['WEAK', 'Укрепить'], ['SHORT', 'Расслабить'], ['HYPER', 'Разгрузить']];
@@ -90,12 +102,12 @@ export function verdict(top, findings, plain = false) {
 // skip: причины, которые уже показаны выше на экране (блок «Измерено»), под решениями не повторяем.
 // У каждой строки метка источника: ИЗМЕРЕНО (опирается на замер) или ГИПОТЕЗА (вывод по цепи). «На границе нормы» показываем, а не вырезаем.
 // что значит каждое действие простыми словами: «вот почему мне так говорили»
-const VERB_WHY = { WEAK: 'Эти мышцы «уснули»: их работу делают соседние и от этого устают.', SHORT: 'Эти мышцы зажаты, как натянутая резинка, и тянут тело в свою сторону.', HYPER: 'Эти мышцы работают за двоих и устают. Их разгружают, а не растягивают.' };
+const VERB_WHY = { WEAK: 'Упражнения, чтобы эти зоны активнее включались в движение.', SHORT: 'Раскатка и мягкая растяжка, чтобы движение стало свободнее.', HYPER: 'Мягкие удержания без растяжки, чтобы снять нагрузку.' };
 export function verdictCard(top, findings, empty = 'Явных перекосов не видно', skip = [], plain = false) {
   const v = verdict(top, findings, plain);
   if (!v.length) return `<div class="card empty">${ic('check')}<b>${empty}</b><span class="sub">Движение симметричное. Повтори тест через месяц.</span></div>`;
   // камера мерит угол, а мышца выведена из него: метка «замер» стоит у факта, мышца подписана как вероятная причина (аудит, п. 2)
-  return `<div class="card" style="padding:4px var(--s4)"><p class="sub" style="font-size:13px;padding-top:12px">${plain ? 'Что мешает телу двигаться ровно. Это вероятная причина того, что увидела камера.' : 'Мышцы ниже: вероятная причина того, что измерила камера. Проверит специалист руками.'}</p>${v.map((x, i) => {
+  return `<div class="card" style="padding:4px var(--s4)"><p class="sub" style="font-size:13px;padding-top:12px">${plain ? 'На что направить тренировку. Подобрано по тому, что увидела камера.' : 'Мышцы ниже: вероятная причина того, что измерила камера. Проверит специалист руками.'}</p>${v.map((x, i) => {
     const s0 = top.find(s => s.k === x.k && !s.ambiguous), f = s0 && findings.find(f => f.muscles.some(m => m.id === s0.id && (m.side === s0.side || m.side === 'BOTH')));
     const measured = f && s0 && !s0.derived && !s0.byChain, edge = f && / \(на границе нормы\)/.test(f.observed);
     // одно и то же наблюдение камеры под разными мышцами показываем один раз
@@ -208,8 +220,9 @@ export const SHORT = { piriformis: 'Грушевидная', supraspinatus: 'Н�
   pec_minor: 'М. грудная', obliques: 'Косые живота', iliopsoas: 'Илиопсоас', tfl: 'Напр. фасции', rectus_fem: 'Прямая бедра', adductors: 'Приводящие', pec_major: 'Б. грудная',
   lats: 'Широчайшая', serratus: 'Зубчатая', rectus_abd: 'Прямая живота', vmo: 'Вн. широкая', abdominals: 'Пресс', thoracic_ext: 'Грудн. разгиб.', tibialis: 'Большеберцовая',
   vastus_lat: 'Нар. широкая', triceps: 'Трицепс', biceps: 'Бицепс', deltoid: 'Дельтовидная', forearm_flex: 'Предплечье', peroneus: 'Малоберцовые' };
-export const tech = s => s.k === 'OK' ? C.muscles[s.id].name : `${TONE[s.k][4]} ${C.muscles[s.id].gen}`;
-const TONE_WHY = { HYPER: `перерастянута: ее тянет напряженная соседняя, и она держит сустав из последних сил. ${STATES.HYPER.forbid[0].toUpperCase() + STATES.HYPER.forbid.slice(1)}.`, SHORT: `в гипертонусе: зажата и укорочена. Помогают ${STATES.SHORT.do}.`, WEAK: `слабая: не включается в движение, ее работу забирают соседние. Помогает ${STATES.WEAK.do}.` };
+export const tech = s => s.k === 'OK' ? C.muscles[s.id].name : isSpecialist() ? `${TONE[s.k][4]} ${C.muscles[s.id].gen}` : `${TONE[s.k][4]}: ${lc(C.muscles[s.id].name)}`;
+const TONE_WHY_SPEC = { HYPER: `перерастянута: ее тянет напряженная соседняя, и она держит сустав из последних сил. ${STATES.HYPER.forbid[0].toUpperCase() + STATES.HYPER.forbid.slice(1)}.`, SHORT: `в гипертонусе: зажата и укорочена. Помогают ${STATES.SHORT.do}.`, WEAK: `слабая: не включается в движение, ее работу забирают соседние. Помогает ${STATES.WEAK.do}.` };
+const TONE_WHY_CLIENT = { HYPER: 'Задача тренировки: разгрузить. Растягивать и раскатывать эту зону не нужно, помогают мягкие удержания.', SHORT: 'Задача тренировки: расслабить. Помогают раскатка мячом и мягкая растяжка.', WEAK: 'Задача тренировки: укрепить, чтобы зона активнее включалась в движение.' };
 /** Касание мышцы на 3D: шторка с названием, состоянием простыми словами, причиной из замера и проверкой руками.
  *  pro — для специалиста (проверка специалистом вместо самопроверки), onWhat — кнопка «Что делать». */
 export function muscleInfo(key, all, a, { pro = false, onWhat } = {}) {
@@ -221,7 +234,7 @@ export function muscleInfo(key, all, a, { pro = false, onWhat } = {}) {
   const d = document.createElement('div'); d.className = 'sheet'; d.id = 'minfo';
   d.innerHTML = `<div><div class="row" style="gap:8px"><span class="mark ${x.k}"></span><span style="font-size:13px;font-weight:600;color:${TONE[x.k][5]}">${x.k === 'NT' ? NT_TEXT : x.k === 'OK' ? 'Без отклонений' : x.ambiguous ? 'Признаки противоречат' : TONE[x.k][0]}${x.derived ? ' · гипотеза' : ''}</span></div>
     <h2 style="margin-top:6px">${esc(m.name)} ${side === 'RIGHT' ? 'справа' : 'слева'}</h2>${act && !pro ? `<div style="font-size:14px;margin-top:2px"><b>${act.name}</b>: ${act.does}</div>` : ''}${m.zone ? `<div class="sub" style="font-size:14px">${esc(m.zone)}</div>` : ''}
-    ${x.k === 'NT' ? `<p class="sub" style="font-size:15px;margin-top:10px">${NT_TEXT}: ни одно движение этого теста ее не проверяло. Это не значит, что с ней все в порядке.</p>` : x.k !== 'OK' ? `<p style="font-size:15px;line-height:1.45;margin-top:10px">Мышца ${TONE_WHY[x.k]}</p>` : `<p class="sub" style="font-size:15px;margin-top:10px">Этот тест ее проверял: отклонений не видно.</p>`}
+    ${x.k === 'NT' ? `<p class="sub" style="font-size:15px;margin-top:10px">${NT_TEXT}: ни одно движение этого теста ее не проверяло. Это не значит, что с ней все в порядке.</p>` : x.k !== 'OK' ? `<p style="font-size:15px;line-height:1.45;margin-top:10px">${isSpecialist() ? 'Мышца ' + TONE_WHY_SPEC[x.k] : TONE_WHY_CLIENT[x.k]}</p>` : `<p class="sub" style="font-size:15px;margin-top:10px">Этот тест ее проверял: отклонений не видно.</p>`}
     ${why.length ? `<div style="margin-top:10px;font-size:14px;line-height:1.45"><span class="src">ЗАМЕР</span> ${why.slice(0, 2).map(esc).join('; ')}</div>` : x.byChain ? `<div style="margin-top:10px;font-size:14px"><span class="src hyp">ГИПОТЕЗА</span> по цепи «${esc(x.byChain)}»</div>` : ''}
     ${!['OK', 'NT'].includes(x.k) && m.benefit ? `<p class="sub" style="font-size:14px;line-height:1.45;margin-top:10px">${esc(m.benefit)}</p>` : ''}
     ${test ? `<details class="acc" style="margin-top:10px;font-size:14px;line-height:1.45"><summary style="font-weight:600">${pro ? 'Проверка руками' : 'Как проверить самому'}</summary><p style="margin-top:6px">${esc(test)}</p></details>` : ''}
@@ -1110,7 +1123,7 @@ function postureCard(a) {
 // Зеленым то, что выровнялось, красным то, что осталось или усилилось. Без WebGL блок не показывается, остаются цифры.
 // «Было → стало» на 3D-фигуре с мышцами: две картинки одна над другой, человек сам тянет разделитель, как в сравнениях графики в играх.
 // Под фигурой мышцы с процентами: насколько мышца ослаблена, зажата или перегружена в первом и в последнем тесте.
-const BA_NOUN = { WEAK: 'слабость', SHORT: 'зажатость', HYPER: 'перерастяжение' }; // HYPER везде одно: перерастянута (Long-Tight), растяжка запрещена
+const BA_NOUN_SPEC = { WEAK: 'слабость', SHORT: 'зажатость', HYPER: 'перерастяжение' }; // HYPER везде одно: перерастянута (Long-Tight), растяжка запрещена
 const baSpots = t => { const a = analyze(t, C); let all = spots(a); if (t.main) all = applyMain(all, t.main);
   const keys = new Set(topOf(all).slice(0, 12).map(x => x.key)); return all.map(x => keys.has(x.key) ? x : { ...x, k: 'OK', tone: 0 }); };
 const pct = x => x && x.k !== 'OK' ? Math.min(100, Math.round(Math.abs(x.tone) * 100)) : 0;
@@ -1147,8 +1160,8 @@ export async function bindBa(id, prevT, curT, opts = {}) {
     .filter(r => r.s && C.muscles[r.s.id]);
   // показываем только заметные изменения: разница меньше порога лежит в пределах разброса между двумя тестами (поза, свет, усталость)
   const MDC = baNoise(), row = r => { const p0 = pct(r.a), p1 = pct(r.b), d = p1 - p0, k = (r.b && r.b.k !== 'OK' ? r.b : r.a).k;
-    const v = p1 === 0 && p0 > 0 ? '<b class="up">норма</b>' : d < 0 ? '<b class="up">лучше</b>' : '<b class="down">хуже</b>';
-    return `<div class="bas-row"><div><span>${esc(C.muscles[r.s.id].name)} ${sideWord(r.s.side)}</span><small>${BA_NOUN[k] || ''}</small></div><div class="bas-p"><span>${p0}%</span><i>→</i><span>${p1}%</span></div>${v}</div>`; };
+    const v = p1 === 0 && p0 > 0 ? `<b class="up">${isSpecialist() ? 'норма' : 'лучше'}</b>` : d < 0 ? '<b class="up">лучше</b>' : '<b class="down">хуже</b>';
+    return `<div class="bas-row"><div><span>${esc(C.muscles[r.s.id].name)} ${sideWord(r.s.side)}</span><small>${(isSpecialist() ? BA_NOUN_SPEC[k] : TONE[k] && TONE[k][3]) || ''}</small></div>${isSpecialist() ? `<div class="bas-p"><span>${p0}%</span><i>→</i><span>${p1}%</span></div>` : ''}${v}</div>`; };
   const big = rows.filter(r => { const d = pct(r.b) - pct(r.a); return opts.acute ? d <= -MDC || d >= 2 * MDC : Math.abs(d) >= MDC; }).sort((x, y) => Math.abs(pct(y.b) - pct(y.a)) - Math.abs(pct(x.b) - pct(x.a))), same = rows.length - big.length;
   el.querySelector('.bas-list').innerHTML = (big.length ? big.slice(0, 5).map(row).join('') : `<p class="bas-note" style="margin:0">${opts.acute ? 'Сразу после занятия тело откликается не всегда, это нормально. Главная проверка через неделю регулярных занятий.' : 'Заметных изменений пока нет. Обычно они видны через 2–3 недели занятий.'}</p>`)
     + (same > 0 ? `<p class="bas-note">Без заметных изменений: ${same} ${plural3(same, 'мышца', 'мышцы', 'мышц')}.</p>` : '');
@@ -1173,7 +1186,8 @@ function iapCard(a) {
     <details class="q"><summary aria-label="Что это">?</summary><div>Диафрагма, мышцы живота и тазового дна держат давление в животе, как корсет изнутри (Коларж). Если вдох делают плечи и шея, а не живот, корсет не работает (Левит). Тогда поясница проваливается под нагрузкой (Макгилл).</div></details></div>
     ${rows.map(r => `<div class="row" style="margin-top:12px;gap:10px"><span style="width:22px;height:22px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;background:${r.ok === null ? 'var(--surface-2)' : r.ok ? 'var(--ok-s)' : 'var(--short-s)'};color:${r.ok === null ? 'var(--faint)' : r.ok ? 'var(--ok-t)' : 'var(--short-t)'}">${r.ok === null ? '·' : r.ok ? ic('check', 's') : '!'}</span><span style="flex:1;font-size:15px">${r.name}</span><span style="font-size:14px;color:${r.ok === false ? 'var(--short-t)' : 'var(--sub)'};text-align:right">${r.val}</span></div>`).join('')}</div></div>`;
 }
-// проценты по состояниям: сколько гипертонуса, перерастяжения и слабости и как они делятся между сторонами
+// проценты по состояниям: сколько гипертонуса, перерастяжения и слабости и как они делятся между сторонами.
+// Клиенту сейчас не показываем: проценты состояния мышц похожи на медицинский вывод (docs/legal_texts/proposal_client_ui.md)
 function balanceCard(all) {
   const sc = stateScores(all), rows = [['SHORT', 'Гипертонус'], ['HYPER', 'Перерастяжение'], ['WEAK', 'Слабость']].filter(([k]) => sc[k].all);
   if (!rows.length) return '';
@@ -1210,7 +1224,7 @@ export function map() {
    <div class="pad" style="margin-top:12px"><div class="card" style="border-radius:var(--r-xl);padding:12px 8px 8px">
      <div class="seg" style="margin:0 4px"><button id="vf" class="${!BACK && !MODE3D ? 'on' : ''}">Спереди</button><button id="vb" class="${BACK && !MODE3D ? 'on' : ''}">Сзади</button>${device.webgl2 ? `<button id="v3" class="${MODE3D ? 'on' : ''}">3D</button>` : ''}</div>
      <div id="vis" style="position:relative;margin:8px auto 0;width:min(100%,360px);${MODE3D ? 'height:420px' : ''}">${MODE3D ? '' : '<canvas id="heat" style="width:100%;display:block;cursor:pointer"></canvas>'}</div>
-     <div class="row" style="justify-content:center;gap:12px;flex-wrap:wrap;margin:10px 4px 0;font-size:13px;color:var(--sub)">${[['SHORT', 'зажата'], ['HYPER', 'перегружена'], ['WEAK', 'недорабатывает']].filter(([k]) => top.some(x => x.k === k)).map(([k, t]) => `<span class="row" style="gap:6px"><span class="mark sm ${k}"></span>${t}</span>`).join('')}${top.length ? TONE_HELP : ''}</div>
+     <div class="row" style="justify-content:center;gap:12px;flex-wrap:wrap;margin:10px 4px 0;font-size:13px;color:var(--sub)">${['SHORT', 'HYPER', 'WEAK'].filter(k => top.some(x => x.k === k)).map(k => `<span class="row" style="gap:6px"><span class="mark sm ${k}"></span>${TONE[k][3]}</span>`).join('')}${top.length ? TONE_HELP() : ''}</div>
      ${MODE3D ? `<details class="acc" style="margin:8px 8px 0;font-size:14px"><summary style="font-weight:600;min-height:40px">Слои и зоны</summary>
        <div class="row" id="lay" style="gap:6px;flex-wrap:wrap;justify-content:center;margin-top:6px"><button class="pill on" data-l="">Все слои</button>${LAYER_NAMES.map(([l, n]) => `<button class="pill" data-l="${l}">${n} · ${top.filter(x => layerOf(x.id) === l).length}</button>`).join('')}</div>
        <div class="row" style="gap:6px;flex-wrap:wrap;justify-content:center;margin-top:8px">${[['all', 'Всё тело'], ['head', 'Шея'], ['shoulders', 'Плечи'], ['back', 'Спина'], ['pelvis', 'Таз'], ['knees', 'Колени'], ['feet', 'Стопы']].map(([z, n]) => `<button class="pill" data-z="${z}">${n}</button>`).join('')}</div></details>` : ''}
@@ -1219,7 +1233,6 @@ export function map() {
    ${postureCard(a)}
    ${iapCard(a)}
    ${cnsCard(t, a)}
-   ${top.length ? `<div class="pad" style="margin-top:12px"><details class="acc"><summary style="font-weight:600">Баланс мышц по сторонам, %</summary><div style="margin-top:8px">${balanceCard(all)}</div></details></div>` : ''}
    <div class="pad row" style="margin-top:12px;gap:16px"><button class="link" id="more">${ic('file-text', 's')} Подробный обзор</button><button class="link" id="lrs">${ic('arrow-right-left', 's')} Левая и правая</button></div>
    <div class="pad row" style="margin-top:12px;gap:8px;font-size:12px;color:var(--sub)">${ic('cpu', 's')}<span>Посчитано на телефоне. Оценка движения, не диагноз</span></div>
    <div class="dock">${pl.length ? `<button class="btn" id="plan">${ic('play', 's')}Комплекс на сегодня · ${totalMin(pl.map(ex))} мин</button>` : `<button class="btn" id="again">${ic('rotate-ccw', 's')}${SHARED ? 'Пройти свой тест' : 'Пройти тест заново'}</button>`}${clientNav('home')}</div></div>`);
@@ -1314,9 +1327,9 @@ function moreSheet({ t, a }, top, hasPlan, only) {
     const rows = ids.map(id => { const l = sp.find(x => x.id === id && x.side === 'LEFT'), r = sp.find(x => x.id === id && x.side === 'RIGHT'), v = x => x ? Math.round(Math.min(1, Math.abs(x.tone)) * 100) : 0;
       return { id, l, r, L: v(l), R: v(r), k: (l && r ? (Math.abs(l.tone) >= Math.abs(r.tone) ? l : r) : l || r).k }; }).filter(x => Math.abs(x.L - x.R) >= 10).sort((x, y) => Math.abs(y.L - y.R) - Math.abs(x.L - x.R)).slice(0, 8);
     const bar = (v, c, right) => `<i style="flex:1;height:10px;border-radius:5px;background:var(--surface-2);position:relative;overflow:hidden"><b style="position:absolute;top:0;bottom:0;${right ? 'left' : 'right'}:0;width:${v}%;background:${c};border-radius:5px"></b></i>`;
-    d.innerHTML = `<div><h2>Левая и правая сторона</h2>${top.length ? `<div style="margin-top:var(--s4)">${balanceCard(sp)}</div>` : ''}
-      ${rows.length ? `<div class="card" style="margin-top:var(--s3)"><div class="row" style="font-size:12px;color:var(--sub)"><span style="flex:1">Мышца</span><b style="width:34%;text-align:center">Л</b><b style="width:34%;text-align:center">П</b></div>
-        ${rows.map(x => `<div style="margin-top:12px"><div style="font-size:14px">${esc(C.muscles[x.id].name)}</div><div class="row" style="gap:4px;margin-top:4px"><span class="mark sm ${x.k}"></span>${bar(x.L, TONE_HEX[x.k])}${bar(x.R, TONE_HEX[x.k], true)}</div></div>`).join('')}</div>`
+    d.innerHTML = `<div><h2>Левая и правая сторона</h2>
+      ${rows.length ? `<div class="card" style="margin-top:var(--s3)"><div class="row" style="font-size:12px;color:var(--sub)"><span style="flex:1">Зона и задача</span><b style="width:34%;text-align:center">Л</b><b style="width:34%;text-align:center">П</b></div>
+        ${rows.map(x => `<div style="margin-top:12px"><div style="font-size:14px">${esc(C.muscles[x.id].name)} · ${TONE[x.k][3]}</div><div class="row" style="gap:4px;margin-top:4px"><span class="mark sm ${x.k}"></span>${bar(x.L, TONE_HEX[x.k])}${bar(x.R, TONE_HEX[x.k], true)}</div></div>`).join('')}</div>`
       : '<p class="sub" style="margin-top:var(--s4)">Стороны работают ровно: разница меньше 10%.</p>'}
       <button class="btn" id="mx" style="margin-top:var(--s4)">Закрыть</button></div>`;
     document.body.appendChild(d); d.onclick = e => { if (e.target === d) close(); }; d.querySelector('#mx').onclick = close; return; }
@@ -1438,7 +1451,7 @@ async function resultImage() {
 }
 
 function share() { const url = appLink();
-  const text = 'Тест осанки и движения по камере телефона, 2–5 минут. Показывает перегруженные и слабые мышцы. Бесплатно:';
+  const text = 'Тест осанки и движения по камере телефона, 2–5 минут. Подсказывает, что растянуть и что укрепить, и дает упражнения. Бесплатно:';
   if (navigator.share) navigator.share({ title: 'BodyPassport', text, url }).catch(() => {}); else { navigator.clipboard.writeText(text + ' ' + url); toast('Ссылка скопирована'); } }
 function calendar() { // напоминание без сервера: событие в календаре телефона, каждый день в 20:00
   const d = new Date(); d.setHours(20, 0, 0, 0); if (d < new Date()) d.setDate(d.getDate() + 1);
@@ -1453,17 +1466,18 @@ export function muscle(key) {
   const m = C.muscles[s.id], sk = s.side === 'RIGHT' ? 'right' : 'left';
   const ids = l => (l || []).map(x => x.replace('{s}', sk)).filter(x => ex(x));
   const fd = a.findings.find(f => f.muscles.some(x => x.id === s.id && (x.side === s.side || x.side === 'BOTH'))); const ch = a.chains.find(c => c.chain.members.some(x => x.id === s.id));
-  const why = (s.cause && C.muscles[s.cause.id] && `${toneText(s, 0)}: ${LAW_WHY[s.cause.law]} (${lc(C.muscles[s.cause.id].name)} ${sideWord(s.cause.side)}). Закон: ${LAW[s.cause.law]}.`) || (fd && fd.meaning) || (ch && ch.chain.description) || (s.k === 'WEAK' ? 'Мышца почти не включается, и ее работу забирают соседи.' : s.k === 'SHORT' ? 'Гипертонус: мышца зажата и укорочена, поэтому движение ограничено.' : 'Перерастяжение: мышцу тянет напряженная соседняя, она и держит сустав из последних сил.');
+  // клиенту задача тренировки и что увидела камера, без выводов о состоянии мышцы (юридический разбор)
+  const why = TONE_WHY_CLIENT[s.k] || '';
   let stages;
   if (s.k === 'WEAK' && m.plan) { const subs = (m.plan.subs || []).map(x => C.muscles[x]).filter(Boolean); const rel = ids(m.plan.release), iso = ids(m.plan.isolate).filter(x => !rel.includes(x));
-    stages = [['Расслабь тех, кто работает за нее', subs.length ? `Пока ${subs.map(x => x.zone.toLowerCase()).join(' и ')} перехватывают работу, упражнения нагружают их, а не нужную мышцу.` : '', (subs.find(x => x.massage) || {}).massage, rel],
-      ['Включи ее отдельно', 'Легкая нагрузка, чтобы мышца снова начала включаться.', null, iso], ['Закрепи в движении', 'Мышца работает в обычном движении, без подмены.', null, ids(m.plan.integrate).filter(x => !rel.includes(x) && !iso.includes(x))]];
+    stages = [['Сначала расслабь соседние зоны', subs.length ? `Сначала ${subs.map(x => x.zone.toLowerCase()).join(' и ')}: так следующие упражнения пойдут легче.` : '', (subs.find(x => x.massage) || {}).massage, rel],
+      ['Включи ее отдельно', 'Легкая нагрузка, чтобы зона активнее включалась.', null, iso], ['Закрепи в движении', 'Та же работа в обычном движении.', null, ids(m.plan.integrate).filter(x => !rel.includes(x) && !iso.includes(x))]];
   } else if (s.k === 'WEAK') stages = [['Включи ее', '', null, ids(m.activate)]];
   else { const rel = ids(releaseFor(m, s.k, ex)), ant = m.antagonist && C.muscles[m.antagonist]; const give = [...(ant ? ids((ant.plan && ant.plan.isolate) || []).concat(ids(ant.activate)) : []), ...ids(m.activate)].filter(x => !rel.includes(x));
-    stages = [s.k === 'HYPER' ? ['Сними нагрузку мягко', `⛔ ${STATES.HYPER.forbid[0].toUpperCase() + STATES.HYPER.forbid.slice(1)}: мышца и так перерастянута. Только мягкая изометрия.`, null, rel] : ['Расслабь мышцу', '', massageAllowed(s.k) ? m.massage : null, rel], [ant ? 'Включи ' + ant.zone.toLowerCase() : 'Дай работу соседям', 'Перегрузка уменьшится, когда заработают мышцы, которые сейчас отлынивают.', null, [...new Set(give)].slice(0, 1)]]; }
+    stages = [s.k === 'HYPER' ? ['Сними нагрузку мягко', '⛔ Растягивать и раскатывать эту зону не нужно. Только мягкие удержания.', null, rel] : ['Расслабь мышцу', '', massageAllowed(s.k) ? m.massage : null, rel], [ant ? 'Включи ' + ant.zone.toLowerCase() : 'Дай работу соседям', 'Часть работы возьмут на себя соседние мышцы.', null, [...new Set(give)].slice(0, 1)]]; }
   // причина по закону Шеррингтона, Майерса или Шарман: сначала работаем с мышцей-источником
   const cm = s.cause && C.muscles[s.cause.id];
-  if (cm && s.cause.law !== 'sahr') stages.unshift([`Сначала расслабь ${lc(cm.zone || cm.name)} ${sideWord(s.cause.side)}`, 'Она тянет и тормозит эту мышцу. Пока она зажата, остальное не держится.', massageAllowed('SHORT') ? cm.massage : null, ids(releaseFor(cm, 'SHORT', ex))]);
+  if (cm && s.cause.law !== 'sahr') stages.unshift([`Сначала расслабь ${lc(cm.zone || cm.name)} ${sideWord(s.cause.side)}`, 'Начните с нее: так следующие упражнения пойдут легче.', massageAllowed('SHORT') ? cm.massage : null, ids(releaseFor(cm, 'SHORT', ex))]);
   stages = stages.filter(x => x[3].length || x[2]); const all = [...new Set(stages.flatMap(x => x[3]))]; let n = 0;
   const obs = seen(a, s), num = obs.map(x => String(x).match(/(\d+(?:[.,]\d+)?)\s*(°|%)?/)).find(Boolean);
   const finds = a.findings.filter(f => f.muscles.some(x => x.id === s.id && (x.side === s.side || x.side === 'BOTH')));
@@ -1474,10 +1488,10 @@ export function muscle(key) {
     <div><h1 style="font-size:26px">${title(s)}</h1><div style="font-size:14px;color:var(--sub);margin-top:4px">${tech(s)}</div></div>
     ${num ? `<div><div class="measure"><b>${num[1]}</b><u>${num[2] || ''}</u></div><div class="why" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:13px;color:var(--sub)"><span class="src">ЗАМЕР</span><span>${esc(obs[0].replace(' (на границе нормы)', ''))}</span>${/на границе нормы/.test(obs[0]) ? '<span class="edge">на границе нормы</span>' : ''}</div></div>`
       : `<div class="why" style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--sub)"><span class="src hyp">ГИПОТЕЗА</span><span>Напрямую не измерено</span></div>`}
-    <div class="card"><div class="eyebrow">Что происходит</div><p style="font-size:16px;line-height:1.45;margin-top:8px">${why}</p></div>
-    <details class="acc"><summary style="font-weight:600;font-size:15px">Почему так${s.cause ? ` · ${LAW[s.cause.law]}` : ''}</summary>
+    <div class="card"><div class="eyebrow">Задача</div><p style="font-size:16px;line-height:1.45;margin-top:8px">${why}</p></div>
+    <details class="acc"><summary style="font-weight:600;font-size:15px">Почему так</summary>
       ${finds.map(f => `<div style="margin-top:10px"><div class="row" style="gap:6px;align-items:flex-start"><span class="src" style="margin-top:2px">ЗАМЕР</span><b style="font-size:15px;flex:1">${f.observed}</b></div><div style="font-size:13px;color:var(--sub);margin-top:2px">${f.rule.basis || ''}${f.rule.weak ? ' · слабый признак' : ''}</div></div>`).join('')
-        || `<div class="row" style="gap:6px;align-items:flex-start;margin-top:10px"><span class="src hyp" style="margin-top:2px">ЦЕПЬ</span><p style="font-size:15px;line-height:1.4;flex:1">${s.byChain ? `Напрямую не измерено. Предположение по цепи «${s.byChain}».` : s.cause ? `Напрямую не измерено. ${LAW[s.cause.law]}: ${LAW_WHY[s.cause.law]}.` : s.derived ? 'Напрямую не измерено. Предположение: мышца-антагонист перегружена.' : 'Признак из теста.'}</p></div>`}
+        || `<div class="row" style="gap:6px;align-items:flex-start;margin-top:10px"><span class="src hyp" style="margin-top:2px">ЦЕПЬ</span><p style="font-size:15px;line-height:1.4;flex:1">${s.byChain ? `Напрямую не измерено. Предположение по цепи «${s.byChain}».` : s.cause || s.derived ? 'Напрямую не измерено. Подобрано по связи с соседними зонами.' : 'Признак из теста.'}</p></div>`}
       ${s.derived || finds.every(f => f.rule.weak) ? '<p style="font-size:13px;color:var(--short-t);margin-top:10px">Уверенность низкая. Проверь самопроверкой ниже или на консультации.</p>' : ''}</details>
     ${m.selfTest ? `<details class="acc"><summary style="font-weight:600;font-size:15px">Проверить себя за минуту</summary><p style="font-size:15px;line-height:1.45">${m.selfTest}</p></details>` : ''}
     ${m.benefit ? `<div class="card row" style="align-items:flex-start"><span class="mark OK" style="margin-top:4px"></span><div><b>Что изменится</b><p style="font-size:15px;margin-top:4px;line-height:1.4">${m.benefit}</p></div></div>` : ''}

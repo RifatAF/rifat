@@ -130,3 +130,12 @@ test('обратный совет: при перерастяжении ни од
     assert.ok(!e || !/растяж/i.test(e.category || '') && !/растяж/i.test(e.title || ''), `${id}: ${x}`); }
   assert.ok(n > 0, 'проверка не пустая');
 });
+
+// клиентские пояснения (data/plain.json): наблюдение и действие, без выводов о состоянии мышц (юридический разбор, docs/legal_texts)
+test('plain.json без слов о состоянии мышц', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const P = JSON.parse(await readFile(new URL('../data/plain.json', import.meta.url), 'utf8')).rules;
+  const bad = /гипертонус|зажат|(^|[^а-яё])слаб|перегруж|перерастя|недорабат|укороч|отлынив|уснул/i;
+  const hits = Object.entries(P).flatMap(([k, v]) => ['title', 'why', 'gain'].filter(f => bad.test(v[f] || '')).map(f => `${k}.${f}`));
+  assert.deepEqual(hits, []);
+});
