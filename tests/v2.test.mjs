@@ -121,3 +121,12 @@ test('голос: все фразы приложения записываютс�
   const miss = [...phrases, ...lit, ...COUNT_WORDS, ...Object.values(SHORT_CMD)].filter(x => !extra.has(x));
   assert.deepEqual(miss, []);
 });
+test('обратный совет: при перерастяжении ни одной мышце из базы не предлагается растяжка', async () => {
+  const { readFileSync } = await import('node:fs');
+  const mus = JSON.parse(readFileSync(new URL('../data/muscles.json', import.meta.url))).muscles;
+  const exs = Object.fromEntries(JSON.parse(readFileSync(new URL('../data/exercises.json', import.meta.url))).exercises.map(e => [e.id, e]));
+  const ex = id => exs[id.replace('{s}', 'left')] || exs[id.replace('{s}', 'right')] || exs[id.replace('_{s}', '')];
+  let n = 0; for (const [id, m] of Object.entries(mus)) for (const x of releaseFor(m, 'HYPER', ex)) { const e = ex(x); n++;
+    assert.ok(!e || !/растяж/i.test(e.category || '') && !/растяж/i.test(e.title || ''), `${id}: ${x}`); }
+  assert.ok(n > 0, 'проверка не пустая');
+});
