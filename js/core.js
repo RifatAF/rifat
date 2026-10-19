@@ -319,8 +319,8 @@ function bodyParts() { const e = (x, y, rx, ry) => { const p = new Path2D(); p.e
 const RAMP = [[-1, 0x3B73D9], [-.45, 0x8FB0F0], [0, 0xCEDBF2], [.45, 0xF8B860], [1, 0xEF4444]];
 // цвет мышцы по состоянию, а не по знаку: гипертонус красный, перерастяжение оранжевый, слабая синяя; сила отклонения дает насыщенность
 const STATE_RGB = { HYPER: [245, 158, 11], SHORT: [239, 68, 68], WEAK: [59, 115, 217], DONE: [34, 197, 94] }, BASE_LIGHT = [206, 219, 242], BASE_DARK = [184, 202, 236];
-// клиенту цвет означает задачу тренировки, а не состояние мышцы: без красного (расслабить бирюзовый, разгрузить фиолетовый, укрепить синий)
-const ACT_RGB = { ...STATE_RGB, HYPER: [139, 92, 246], SHORT: [13, 148, 136] };
+// клиенту цвет означает задачу тренировки, а не состояние мышцы: теплый = нагрузить (укрепить оранжевый, мягко укрепить желтый), холодный = расслабить (синий)
+const ACT_RGB = { ...STATE_RGB, WEAK: [249, 115, 22], HYPER: [234, 179, 8], SHORT: [37, 99, 235] };
 // в кабинете специалиста (navy) фигура холодная синяя, у клиента светлая
 const darkUI = () => document.documentElement.dataset.session === 'SPECIALIST_OPERATED' || document.documentElement.dataset.theme === 'pro';
 const baseRGB = () => darkUI() ? BASE_DARK : BASE_LIGHT;
@@ -330,7 +330,7 @@ export function ramp(v) { const x = Math.max(-1, Math.min(1, v)); let i = RAMP.f
   const [a, ca] = RAMP[i], [b, cb] = RAMP[i + 1], t = Math.max(0, Math.min(1, (x - a) / (b - a))); const ch = (c, s) => (c >> s) & 255; const mix = s => Math.round(ch(ca, s) + (ch(cb, s) - ch(ca, s)) * t);
   return [mix(16), mix(8), mix(0)]; }
 export const RAMP_CSS = 'linear-gradient(90deg,' + RAMP.map(([v, c]) => '#' + c.toString(16).padStart(6, '0') + ' ' + ((v + 1) * 50) + '%').join(',') + ')';
-export const MARK_HEX = { HYPER: '#F59E0B', SHORT: '#EF4444', WEAK: '#3B73D9', DONE: '#22C55E' }, ACT_HEX = { ...MARK_HEX, HYPER: '#8B5CF6', SHORT: '#0D9488' };
+export const MARK_HEX = { HYPER: '#F59E0B', SHORT: '#EF4444', WEAK: '#3B73D9', DONE: '#22C55E' }, ACT_HEX = { ...MARK_HEX, WEAK: '#F97316', HYPER: '#EAB308', SHORT: '#2563EB' };
 /** Маркер состояния формой: перегрузка — круг, укорочение — ромб, слабость — кольцо. derived: пунктир без ореола. */
 export function drawMark(ctx, x, y, k, o = {}) {
   const c = (darkUI() ? MARK_HEX : ACT_HEX)[k]; if (!c) return; const sc = o.scale ?? 1; ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
@@ -432,6 +432,9 @@ export function drawHeat(cv, spots0, back, selected, labels = [], opts = {}) {
     ctx.strokeStyle = 'rgba(17,20,24,.10)'; ctx.lineWidth = .8; for (const pp of parts) { ctx.save(); ctx.clip(pp); outline.forEach(e => ctx.stroke(e)); ctx.restore(); }
     if (toneK > 0) { const fs = fillShapes(toneK); for (const pp of parts) { ctx.save(); ctx.clip(pp); ctx.globalAlpha = figA * .88; for (const [e, c] of fs) { ctx.fillStyle = c; ctx.fill(e); } ctx.restore(); } ctx.globalAlpha = figA; }
     ctx.strokeStyle = darkUI() ? '#93ACDA' : '#AFC2E6'; ctx.lineWidth = 1.2; parts.forEach(pp => ctx.stroke(pp)); ctx.globalAlpha = 1; }
+    // halo: мини-фигура в карточке задачи; зона светится крупным пятном, иначе на маленькой фигуре ее не видно
+    if (opts.halo) marks.forEach(s => { const c = (darkUI() ? MARK_HEX : ACT_HEX)[s.k]; if (!c) return; const g = ctx.createRadialGradient(s.x * 200, s.y * 440, 0, s.x * 200, s.y * 440, 46);
+      g.addColorStop(0, c + 'AA'); g.addColorStop(.55, c + '44'); g.addColorStop(1, c + '00'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(s.x * 200, s.y * 440, 46, 0, 7); ctx.fill(); });
     marks.forEach((s, i) => { const t = markT(i); if (t <= 0) return; const sc2 = t < .7 ? .4 + (1.15 - .4) * (t / .7) : 1.15 - .15 * ((t - .7) / .3);
       drawMark(ctx, s.x * 200, s.y * 440, s.k, { derived: s.derived && !s.edited, scale: t >= 1 ? 1 : sc2, alpha: Math.min(1, t * 2) }); });
     for (const l of shown.filter(l => l.n)) { const s = mine.find(q => q.key === l.key); ctx.globalAlpha = Math.min(1, labA * 2 + (markT(0) > 0 ? 1 : 0));

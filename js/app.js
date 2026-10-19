@@ -59,8 +59,8 @@ const TONE_SPEC = { HYPER: ['Перерастяжение', 'var(--hyper)', 'var
   WEAK: ['Слабая', 'var(--weak)', 'var(--weakS)', 'недорабатывает', 'Слабость', 'var(--weak-t)'], OK: ['Норма', 'var(--ok)', 'var(--ok-s)', 'норма', 'Норма', 'var(--ok-t)'], NT: ['Не измерено', 'var(--faint)', 'var(--line-2)', 'не измерено', 'Не измерено', 'var(--sub)'],
   DONE: ['Проработана сегодня', 'var(--ok)', 'var(--ok-s)', 'проработана сегодня', 'Проработана', 'var(--ok-t)'] };
 // клиенту вместо состояния мышцы задача тренировки: что делать с зоной, без «гипертонуса» и «слабости» (юридический разбор, docs/legal_texts)
-const TONE_CLIENT = { ...TONE_SPEC, HYPER: ['Разгрузить', 'var(--act-hyper)', 'var(--act-hyper-s)', 'разгрузить, не растягивать', 'Разгрузить', 'var(--act-hyper-t)'],
-  SHORT: ['Расслабить', 'var(--act-short)', 'var(--act-short-s)', 'расслабить и растянуть', 'Расслабить', 'var(--act-short-t)'], WEAK: ['Укрепить', 'var(--weak)', 'var(--weakS)', 'укрепить', 'Укрепить', 'var(--weak-t)'] };
+const TONE_CLIENT = { ...TONE_SPEC, HYPER: ['Мягко укрепить', 'var(--act-hyper)', 'var(--act-hyper-s)', 'мягко укрепить, не растягивать', 'Мягко укрепить', 'var(--act-hyper-t)'],
+  SHORT: ['Расслабить', 'var(--act-short)', 'var(--act-short-s)', 'расслабить и растянуть', 'Расслабить', 'var(--act-short-t)'], WEAK: ['Укрепить', 'var(--act-weak)', 'var(--act-weak-s)', 'укрепить', 'Укрепить', 'var(--act-weak-t)'] };
 // одна точка выбора: кабинет специалиста видит состояния, клиент видит задачи
 const bySession = (spec, client) => new Proxy({}, { get: (_, k) => (isSpecialist() ? spec : client)[k] });
 export const TONE = bySession(TONE_SPEC, TONE_CLIENT);
@@ -74,13 +74,13 @@ const TONE_HELP_SPEC = `<details class="q"><summary aria-label="Что знач�
   <span><span class="mark sm WEAK"></span> <b>Слабая</b>: мышца не включается. Помогает укрепить</span>
   <span style="color:#B6BED0">В 3D точки бегут к центру мышцы, если она зажата, к краям, если растянута, и мерцают, если слабая</span></div></details>`;
 const TONE_HELP_CLIENT = `<details class="q"><summary aria-label="Что значат цвета">?</summary><div style="display:flex;flex-direction:column;gap:10px;line-height:1.4">
-  <span>Цвет показывает, что делать с зоной на тренировке. Подобрано по тому, как вы двигались на видео.</span>
-  <span><span class="mark sm SHORT"></span> <b>Расслабить</b>: раскатка и мягкая растяжка</span>
-  <span><span class="mark sm HYPER"></span> <b>Разгрузить</b>: мягкие удержания. Растягивать не нужно</span>
-  <span><span class="mark sm WEAK"></span> <b>Укрепить</b>: упражнения, чтобы зона активнее включалась</span></div></details>`;
+  <span>Цвет показывает, что делать с зоной на тренировке. Теплый: нагрузить, холодный: расслабить.</span>
+  <span><span class="mark sm WEAK"></span> <b>Укрепить</b>: упражнения, чтобы зона активнее включалась</span>
+  <span><span class="mark sm HYPER"></span> <b>Мягко укрепить</b>: спокойные удержания. Растягивать не нужно</span>
+  <span><span class="mark sm SHORT"></span> <b>Расслабить</b>: раскатка и мягкая растяжка</span></div></details>`;
 export const TONE_HELP = () => isSpecialist() ? TONE_HELP_SPEC : TONE_HELP_CLIENT;
-export const TONE_HEX = bySession({ HYPER: '#F59E0B', SHORT: '#EF4444', WEAK: '#3B73D9', OK: '#15803D', NT: '#B9BEC2', DONE: '#22C55E' }, { HYPER: '#8B5CF6', SHORT: '#0D9488', WEAK: '#3B73D9', OK: '#15803D', NT: '#B9BEC2', DONE: '#22C55E' });
-export const TONE_TEXT_HEX = bySession({ HYPER: '#9E4E0E', SHORT: '#B42323', WEAK: '#2A5CB8', OK: '#15803D', NT: '#6B747A', DONE: '#15803D' }, { HYPER: '#6D28D9', SHORT: '#0F766E', WEAK: '#2A5CB8', OK: '#15803D', NT: '#6B747A', DONE: '#15803D' });
+export const TONE_HEX = bySession({ HYPER: '#F59E0B', SHORT: '#EF4444', WEAK: '#3B73D9', OK: '#15803D', NT: '#B9BEC2', DONE: '#22C55E' }, { HYPER: '#EAB308', SHORT: '#2563EB', WEAK: '#F97316', OK: '#15803D', NT: '#B9BEC2', DONE: '#22C55E' });
+export const TONE_TEXT_HEX = bySession({ HYPER: '#9E4E0E', SHORT: '#B42323', WEAK: '#2A5CB8', OK: '#15803D', NT: '#6B747A', DONE: '#15803D' }, { HYPER: '#A16207', SHORT: '#1D4ED8', WEAK: '#C2410C', OK: '#15803D', NT: '#6B747A', DONE: '#15803D' });
 const sideWord = s => s === 'RIGHT' ? 'справа' : 'слева';
 // ---------- итог в три строки: глагол действия, мышца, одна измеренная деталь ----------
 const VERBS = [['WEAK', 'Укрепить'], ['SHORT', 'Расслабить'], ['HYPER', 'Разгрузить']];
@@ -91,7 +91,7 @@ const acc = t => t.split(' ').map(w => { const m = w.match(/^(.*?)([,.]?)$/), x 
   return w; }).join(' ');
 // plain: клиенту бытовые зоны («ягодица сбоку справа») вместо анатомических названий
 export function verdict(top, findings, plain = false) {
-  return VERBS.map(([k, verb]) => { const items = top.filter(s => s.k === k && !s.ambiguous).slice(0, 12); if (!items.length) return null;
+  return VERBS.map(([k, v0]) => { const verb = isSpecialist() ? v0 : TONE[k][4], items = top.filter(s => s.k === k && !s.ambiguous).slice(0, 12); if (!items.length) return null;
     const s0 = items[0], f = findings.find(f => f.muscles.some(m => m.id === s0.id && (m.side === s0.side || m.side === 'BOTH')));
     // одна мышца с двух сторон: «с двух сторон» вместо двух строк
     const ids = [...new Set(items.map(s => s.id))], names = ids.map(id => { const sd = items.filter(s => s.id === id).map(s => s.side);
@@ -102,7 +102,7 @@ export function verdict(top, findings, plain = false) {
 // skip: причины, которые уже показаны выше на экране (блок «Измерено»), под решениями не повторяем.
 // У каждой строки метка источника: ИЗМЕРЕНО (опирается на замер) или ГИПОТЕЗА (вывод по цепи). «На границе нормы» показываем, а не вырезаем.
 // что значит каждое действие простыми словами: «вот почему мне так говорили»
-const VERB_WHY = { WEAK: 'Упражнения, чтобы эти зоны активнее включались в движение.', SHORT: 'Раскатка и мягкая растяжка, чтобы движение стало свободнее.', HYPER: 'Мягкие удержания без растяжки, чтобы снять нагрузку.' };
+const VERB_WHY = { WEAK: 'Упражнения, чтобы зона активнее включалась в движение.', SHORT: 'Раскатка и мягкая растяжка, чтобы движение стало свободнее.', HYPER: 'Спокойные удержания без растяжки, чтобы снять нагрузку.' };
 export function verdictCard(top, findings, empty = 'Явных перекосов не видно', skip = [], plain = false) {
   const v = verdict(top, findings, plain);
   if (!v.length) return `<div class="card empty">${ic('check')}<b>${empty}</b><span class="sub">Движение симметричное. Повтори тест через месяц.</span></div>`;
@@ -220,9 +220,9 @@ export const SHORT = { piriformis: 'Грушевидная', supraspinatus: 'Н�
   pec_minor: 'М. грудная', obliques: 'Косые живота', iliopsoas: 'Илиопсоас', tfl: 'Напр. фасции', rectus_fem: 'Прямая бедра', adductors: 'Приводящие', pec_major: 'Б. грудная',
   lats: 'Широчайшая', serratus: 'Зубчатая', rectus_abd: 'Прямая живота', vmo: 'Вн. широкая', abdominals: 'Пресс', thoracic_ext: 'Грудн. разгиб.', tibialis: 'Большеберцовая',
   vastus_lat: 'Нар. широкая', triceps: 'Трицепс', biceps: 'Бицепс', deltoid: 'Дельтовидная', forearm_flex: 'Предплечье', peroneus: 'Малоберцовые' };
-export const tech = s => s.k === 'OK' ? C.muscles[s.id].name : isSpecialist() ? `${TONE[s.k][4]} ${C.muscles[s.id].gen}` : `${TONE[s.k][4]}: ${lc(C.muscles[s.id].name)}`;
+export const tech = s => s.k === 'OK' ? C.muscles[s.id].name : isSpecialist() ? `${TONE[s.k][4]} ${C.muscles[s.id].gen}` : `${TONE[s.k][4]}: ${lc(C.muscles[s.id].zone || C.muscles[s.id].name)}`;
 const TONE_WHY_SPEC = { HYPER: `перерастянута: ее тянет напряженная соседняя, и она держит сустав из последних сил. ${STATES.HYPER.forbid[0].toUpperCase() + STATES.HYPER.forbid.slice(1)}.`, SHORT: `в гипертонусе: зажата и укорочена. Помогают ${STATES.SHORT.do}.`, WEAK: `слабая: не включается в движение, ее работу забирают соседние. Помогает ${STATES.WEAK.do}.` };
-const TONE_WHY_CLIENT = { HYPER: 'Задача тренировки: разгрузить. Растягивать и раскатывать эту зону не нужно, помогают мягкие удержания.', SHORT: 'Задача тренировки: расслабить. Помогают раскатка мячом и мягкая растяжка.', WEAK: 'Задача тренировки: укрепить, чтобы зона активнее включалась в движение.' };
+const TONE_WHY_CLIENT = { HYPER: 'Задача тренировки: мягко укрепить. Растягивать и раскатывать эту зону не нужно, помогают спокойные удержания.', SHORT: 'Задача тренировки: расслабить. Помогают раскатка мячом и мягкая растяжка.', WEAK: 'Задача тренировки: укрепить, чтобы зона активнее включалась в движение.' };
 /** Касание мышцы на 3D: шторка с названием, состоянием простыми словами, причиной из замера и проверкой руками.
  *  pro — для специалиста (проверка специалистом вместо самопроверки), onWhat — кнопка «Что делать». */
 export function muscleInfo(key, all, a, { pro = false, onWhat } = {}) {
@@ -1066,15 +1066,14 @@ async function analysisScreen() {
 }
 
 // ---------- 5. карта тела ----------
-let BACK = true, SEL = null, MODE3D = false;
+let BACK = true, SEL = null, MODE3D = false, MAP_OPEN = false;
 // короткий замер для подписи на карте: «14°», «8%»
 const shortVal = t => { const m = String(t || '').match(/(\d+(?:[.,]\d+)?)\s*(°|%|см)?/); return m ? m[1] + (m[2] || '') : null; };
-const VERB_OF = { WEAK: 'Включить', SHORT: 'Расслабить', HYPER: 'Разгрузить' };
 // для какой зоны итога упражнение: строка-связь на экране тренировки
 function reasonsOf(ids, top) { const out = {};
   for (const id of ids) for (const s of top.slice(0, 3)) { const m = C.muscles[s.id], sk = s.side === 'RIGHT' ? 'right' : 'left';
     const list = s.k === 'WEAK' ? ((m.plan && m.plan.isolate) || m.activate || []) : releaseFor(m, s.k, ex);
-    if (!out[id] && list.some(x => x.replace('{s}', sk) === id)) out[id] = { k: s.k, t: `${VERB_OF[s.k]} ${acc(lc(m.name))} ${sideWord(s.side)}` }; }
+    if (!out[id] && list.some(x => x.replace('{s}', sk) === id)) out[id] = { k: s.k, t: `${TONE[s.k][4]}: ${lc(m.zone || m.name)} ${sideWord(s.side)}` }; }
   return out; }
 // «Ваша осанка»: перекосы позы простыми словами и схемой, которая плавно уходит из ровной стойки в позу человека.
 // Схема спереди: правая сторона человека слева на экране. Наклоны на схеме усилены в 3 раза, чтобы их было видно.
@@ -1161,7 +1160,7 @@ export async function bindBa(id, prevT, curT, opts = {}) {
   // показываем только заметные изменения: разница меньше порога лежит в пределах разброса между двумя тестами (поза, свет, усталость)
   const MDC = baNoise(), row = r => { const p0 = pct(r.a), p1 = pct(r.b), d = p1 - p0, k = (r.b && r.b.k !== 'OK' ? r.b : r.a).k;
     const v = p1 === 0 && p0 > 0 ? `<b class="up">${isSpecialist() ? 'норма' : 'лучше'}</b>` : d < 0 ? '<b class="up">лучше</b>' : '<b class="down">хуже</b>';
-    return `<div class="bas-row"><div><span>${esc(C.muscles[r.s.id].name)} ${sideWord(r.s.side)}</span><small>${(isSpecialist() ? BA_NOUN_SPEC[k] : TONE[k] && TONE[k][3]) || ''}</small></div>${isSpecialist() ? `<div class="bas-p"><span>${p0}%</span><i>→</i><span>${p1}%</span></div>` : ''}${v}</div>`; };
+    return `<div class="bas-row"><div><span>${esc(isSpecialist() ? C.muscles[r.s.id].name : C.muscles[r.s.id].zone || C.muscles[r.s.id].name)} ${sideWord(r.s.side)}</span><small>${(isSpecialist() ? BA_NOUN_SPEC[k] : TONE[k] && TONE[k][3]) || ''}</small></div>${isSpecialist() ? `<div class="bas-p"><span>${p0}%</span><i>→</i><span>${p1}%</span></div>` : ''}${v}</div>`; };
   const big = rows.filter(r => { const d = pct(r.b) - pct(r.a); return opts.acute ? d <= -MDC || d >= 2 * MDC : Math.abs(d) >= MDC; }).sort((x, y) => Math.abs(pct(y.b) - pct(y.a)) - Math.abs(pct(x.b) - pct(x.a))), same = rows.length - big.length;
   el.querySelector('.bas-list').innerHTML = (big.length ? big.slice(0, 5).map(row).join('') : `<p class="bas-note" style="margin:0">${opts.acute ? 'Сразу после занятия тело откликается не всегда, это нормально. Главная проверка через неделю регулярных занятий.' : 'Заметных изменений пока нет. Обычно они видны через 2–3 недели занятий.'}</p>`)
     + (same > 0 ? `<p class="bas-note">Без заметных изменений: ${same} ${plural3(same, 'мышца', 'мышцы', 'мышц')}.</p>` : '');
@@ -1204,6 +1203,34 @@ function cnsCard(t, a) {
     <details class="acc" style="margin-top:12px"><summary style="font-weight:600;min-height:40px">Подробно: почему, развесовка, что делать</summary>
       <div style="margin-top:8px">${cnsDetail(t, a.findings, spots(a), spots(analyze({ ...t, vns: null, touch: null }, C)))}</div></details></div></div>`;
 }
+// Клиенту главное крупно и наглядно: что делать (укрепить, расслабить), где это на теле (мини-фигура с подсвеченной зоной)
+// и с какого упражнения начать. Без чисел и анатомических названий; подробности в «Карте тела» и «Подробном обзоре».
+// одна карточка = одна зона: «Укрепить · Ягодица сбоку справа»; до 4 карточек, сначала укрепить, потом мягко укрепить и расслабить
+function tasksOf(top) { const by = ['WEAK', 'HYPER', 'SHORT'].map(k => { const l = top.filter(s => s.k === k && !s.ambiguous);
+    return [...new Set(l.map(s => s.id))].map(id => { const items = l.filter(s => s.id === id), m = C.muscles[id];
+      return { k, items, what: (m.zone || m.name) + ' ' + (items.length > 1 ? 'с двух сторон' : sideWord(items[0].side)) }; }); });
+  // сначала по одной зоне каждого вида, затем вторые: так в четырех карточках видны и «укрепить», и «расслабить»
+  const out = [...by.map(l => l[0]), ...by.map(l => l[1])].filter(Boolean).slice(0, 4);
+  return ['WEAK', 'HYPER', 'SHORT'].flatMap(k => out.filter(x => x.k === k)); }
+function taskCards(top) {
+  const v = tasksOf(top); if (!v.length) return '';
+  return `<div class="pad" style="margin-top:12px;display:flex;flex-direction:column;gap:10px">${v.map((x, i) => { const exs = plan(x.items).filter((id, j, l) => l.findIndex(y => y.replace(/_(left|right)$/, '') === id.replace(/_(left|right)$/, '')) === j).slice(0, 2);
+    return `<div class="card task" style="display:flex;gap:12px;align-items:flex-start;padding:14px;border-left:4px solid ${TONE_HEX[x.k]}">
+      <button class="tfig" data-i="${i}" aria-label="Показать на карте тела" style="border:0;background:var(--surface-2);border-radius:14px;padding:6px 4px;flex:none;cursor:pointer"><canvas data-i="${i}" style="width:76px;display:block"></canvas></button>
+      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:${TONE_TEXT_HEX[x.k]}">${TONE[x.k][4]}</div>
+        <div style="font-size:18px;font-weight:700;line-height:1.25;margin-top:2px">${esc(x.what)}</div>
+        <div style="font-size:13px;color:var(--sub);line-height:1.4;margin-top:4px">${VERB_WHY[x.k]}</div>
+        ${exs.length ? `<div style="display:flex;gap:8px;margin-top:10px">${exs.map(id => `<button class="tex" data-id="${id}" style="flex:0 0 calc(50% - 4px);min-width:0;border:0;background:var(--surface-2);border-radius:12px;padding:4px 4px 6px;font:inherit;color:inherit;cursor:pointer;text-align:center">${hasFigure(id) ? exFigure(id) : `<span class="round" style="margin:6px auto;background:var(--surface)">${ic('play', 's')}</span>`}<span style="display:block;font-size:12px;line-height:1.25;margin-top:2px">${esc(exLabel(ex(id)))}</span></button>`).join('')}</div>` : ''}</div></div>`; }).join('')}</div>`;
+}
+function bindTaskCards(top, a, all) {
+  const v = tasksOf(top);
+  app.querySelectorAll('.task canvas[data-i]').forEach(cv => { const x = v[+cv.dataset.i]; if (!x) return; const keys = new Set(x.items.map(s => s.key));
+    const sp = all.map(s => keys.has(s.key) ? { ...s, tone: Math.sign(s.tone || 1), derived: false } : { ...s, k: 'OK', tone: 0 }), back = x.items.filter(s => s.back).length > x.items.length / 2;
+    drawHeat(cv, sp, back, null, [], { reveal: false, halo: true }); });
+  app.querySelectorAll('.task .tfig').forEach(b => b.onclick = () => { const x = v[+b.dataset.i]; if (!x) return;
+    SEL = x.items[0].key; BACK = x.items[0].back; MAP_OPEN = true; map(); setTimeout(() => { const m = $('#mapacc'); if (m) m.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' }); }, 50); });
+  app.querySelectorAll('.task .tex').forEach(b => b.onclick = () => workout([b.dataset.id], reasonsOf([b.dataset.id], top)));
+}
 export function map() {
   setBodySex(SHARED ? 'M' : (PROFILE() || {}).sex); setSession(MODES.SELF);
   const cur = currentAnalysis(); if (!cur) return onboarding(); track('map_view');
@@ -1221,24 +1248,23 @@ export function map() {
    <div class="pad row" style="padding-top:16px;align-items:flex-start"><div style="flex:1;min-width:0"><div class="eyebrow">${new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })} · ${nSteps} ${plural3(nSteps, 'шаг', 'шага', 'шагов')}${qa != null ? ' · качество ' + qa : ''}</div><h1 style="margin-top:6px">Что мы нашли</h1></div></div>
    ${mainLine(top, a)}
    ${days >= 7 && !SHARED ? `<div class="pad"><button class="row-link" id="re" style="color:var(--focus);font-weight:600"><span>Прошла неделя: пройдите быстрый тест и сравните</span>${ic('chevron-right', 's')}</button></div>` : ''}
-   <div class="pad" style="margin-top:12px"><div class="card" style="border-radius:var(--r-xl);padding:12px 8px 8px">
-     <div class="seg" style="margin:0 4px"><button id="vf" class="${!BACK && !MODE3D ? 'on' : ''}">Спереди</button><button id="vb" class="${BACK && !MODE3D ? 'on' : ''}">Сзади</button>${device.webgl2 ? `<button id="v3" class="${MODE3D ? 'on' : ''}">3D</button>` : ''}</div>
+   ${taskCards(top)}
+   <div class="pad" style="margin-top:12px"><details class="acc card" id="mapacc" style="border-radius:var(--r-xl);padding:12px 8px 8px"${MAP_OPEN || !top.length ? ' open' : ''}><summary style="font-weight:600;min-height:40px;padding:0 8px">Карта тела</summary>
+     <div class="seg" style="margin:8px 4px 0"><button id="vf" class="${!BACK && !MODE3D ? 'on' : ''}">Спереди</button><button id="vb" class="${BACK && !MODE3D ? 'on' : ''}">Сзади</button>${device.webgl2 ? `<button id="v3" class="${MODE3D ? 'on' : ''}">3D</button>` : ''}</div>
      <div id="vis" style="position:relative;margin:8px auto 0;width:min(100%,360px);${MODE3D ? 'height:420px' : ''}">${MODE3D ? '' : '<canvas id="heat" style="width:100%;display:block;cursor:pointer"></canvas>'}</div>
      <div class="row" style="justify-content:center;gap:12px;flex-wrap:wrap;margin:10px 4px 0;font-size:13px;color:var(--sub)">${['SHORT', 'HYPER', 'WEAK'].filter(k => top.some(x => x.k === k)).map(k => `<span class="row" style="gap:6px"><span class="mark sm ${k}"></span>${TONE[k][3]}</span>`).join('')}${top.length ? TONE_HELP() : ''}</div>
      ${MODE3D ? `<details class="acc" style="margin:8px 8px 0;font-size:14px"><summary style="font-weight:600;min-height:40px">Слои и зоны</summary>
        <div class="row" id="lay" style="gap:6px;flex-wrap:wrap;justify-content:center;margin-top:6px"><button class="pill on" data-l="">Все слои</button>${LAYER_NAMES.map(([l, n]) => `<button class="pill" data-l="${l}">${n} · ${top.filter(x => layerOf(x.id) === l).length}</button>`).join('')}</div>
        <div class="row" style="gap:6px;flex-wrap:wrap;justify-content:center;margin-top:8px">${[['all', 'Всё тело'], ['head', 'Шея'], ['shoulders', 'Плечи'], ['back', 'Спина'], ['pelvis', 'Таз'], ['knees', 'Колени'], ['feet', 'Стопы']].map(([z, n]) => `<button class="pill" data-z="${z}">${n}</button>`).join('')}</div></details>` : ''}
-     <div id="selbox" style="margin:8px 4px 0"></div></div></div>
-   <div class="pad" style="margin-top:16px">${verdictCard(top, a.findings, 'Сильных перекосов не видно', [], true)}</div>
-   ${postureCard(a)}
-   ${iapCard(a)}
+     <div id="selbox" style="margin:8px 4px 0"></div></details></div>
+   ${top.length ? '' : `<div class="pad" style="margin-top:16px">${verdictCard(top, a.findings, 'Сильных перекосов не видно', [], true)}</div>`}
    ${cnsCard(t, a)}
    <div class="pad row" style="margin-top:12px;gap:16px"><button class="link" id="more">${ic('file-text', 's')} Подробный обзор</button><button class="link" id="lrs">${ic('arrow-right-left', 's')} Левая и правая</button></div>
    <div class="pad row" style="margin-top:12px;gap:8px;font-size:12px;color:var(--sub)">${ic('cpu', 's')}<span>Посчитано на телефоне. Оценка движения, не диагноз</span></div>
    <div class="dock">${pl.length ? `<button class="btn" id="plan">${ic('play', 's')}Комплекс на сегодня · ${totalMin(pl.map(ex))} мин</button>` : `<button class="btn" id="again">${ic('rotate-ccw', 's')}${SHARED ? 'Пройти свой тест' : 'Пройти тест заново'}</button>`}${clientNav('home')}</div></div>`);
   if (device.webgl2 && !device.weak && !device.wv) preload3D();
   // подписи: зона и короткий замер цветом состояния
-  const labels = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 4)).map(s => ({ key: s.key, title: C.muscles[s.id].zone + (s.side === 'RIGHT' ? ' · П' : ' · Л'), sub: toneText(s, 3).replace('похоже, ', ''), value: shortVal(seen(a, s)[0]), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
+  const labels = [false, true].flatMap(b => top.filter(s => s.back === b).slice(0, 4)).map(s => ({ key: s.key, title: C.muscles[s.id].zone + (s.side === 'RIGHT' ? ' · П' : ' · Л'), sub: toneText(s, 3).replace('похоже, ', ''), color: TONE_HEX[s.k], text: TONE_TEXT_HEX[s.k] }));
   let h2d = null, first = reveal;
   // на схеме и в 3D один и тот же набор: главные зоны итога (до 8) и выбранная; остальное серым
   const focusK = new Set([...top.map(x => x.key), SEL].filter(Boolean)), today = SHARED ? new Set() : workedToday(), focus = () => all.map(x => focusK.has(x.key) || x.key === SEL ? x : { ...x, k: 'OK', tone: 0 });
@@ -1260,7 +1286,9 @@ export function map() {
   $('#vf').onclick = () => { if (MODE3D) { MODE3D = false; BACK = false; return map(); } BACK = false; setView(); };
   $('#vb').onclick = () => { if (MODE3D) { MODE3D = false; BACK = true; return map(); } BACK = true; setView(); };
   if ($('#v3')) $('#v3').onclick = () => { if (!MODE3D) { MODE3D = true; map(); } };
-  bindPosture(a);
+  // карта свернута по умолчанию: при раскрытии перерисовываем (в свернутом блоке у холста нулевая ширина)
+  $('#mapacc').addEventListener('toggle', () => { const was = MAP_OPEN; MAP_OPEN = $('#mapacc').open; if (MAP_OPEN && !was) { if (MODE3D) map(); else draw2d(); } });
+  bindTaskCards(top, a, all);
   if ($('#plan')) $('#plan').onclick = () => durationSheet(top, pl, why);
   if ($('#again')) $('#again').onclick = again;
   if ($('#re')) $('#re').onclick = () => { FULL = false; prep(); };
@@ -1278,7 +1306,7 @@ function mainLine(top, a) {
   if (!f) return `<div class="pad" style="margin-top:12px"><div class="main-line"><b>Явных перекосов не видно</b><span>Тело двигается ровно. Повторите тест через месяц.</span></div></div>`;
   return `<div class="pad" style="margin-top:12px"><button class="main-line" id="mainl" aria-label="Подробнее: что это значит">
     <span class="ml-k">Главное</span><b>${esc(pl ? pl.title : obs)}</b>${pl && pl.feel ? `<span class="ml-feel">Отсюда может быть: ${esc(pl.feel.slice(0, 2).map(lc).join(', '))}</span>` : ''}
-    ${pl ? `<span class="ml-obs">${ic('camera', 's')}${esc(obs)}</span>` : ''}<span class="ml-more">Узнаете себя? Почему так и что делать ${ic('chevron-right', 's')}</span></button></div>`;
+    ${pl ? `<span class="ml-obs">${ic('camera', 's')}${esc(obs.replace(/ на \d+(?:[.,]\d+)?\s*(?:°|%|мм|см)?/g, ''))}</span>` : ''}<span class="ml-more">Узнаете себя? Почему так и что делать ${ic('chevron-right', 's')}</span></button></div>`;
 }
 // шторка по главной находке: узнаете ли вы это, почему так, что даст комплекс; в конце кнопка комплекса
 function mainSheet(top, a, start) {
@@ -1329,7 +1357,7 @@ function moreSheet({ t, a }, top, hasPlan, only) {
     const bar = (v, c, right) => `<i style="flex:1;height:10px;border-radius:5px;background:var(--surface-2);position:relative;overflow:hidden"><b style="position:absolute;top:0;bottom:0;${right ? 'left' : 'right'}:0;width:${v}%;background:${c};border-radius:5px"></b></i>`;
     d.innerHTML = `<div><h2>Левая и правая сторона</h2>
       ${rows.length ? `<div class="card" style="margin-top:var(--s3)"><div class="row" style="font-size:12px;color:var(--sub)"><span style="flex:1">Зона и задача</span><b style="width:34%;text-align:center">Л</b><b style="width:34%;text-align:center">П</b></div>
-        ${rows.map(x => `<div style="margin-top:12px"><div style="font-size:14px">${esc(C.muscles[x.id].name)} · ${TONE[x.k][3]}</div><div class="row" style="gap:4px;margin-top:4px"><span class="mark sm ${x.k}"></span>${bar(x.L, TONE_HEX[x.k])}${bar(x.R, TONE_HEX[x.k], true)}</div></div>`).join('')}</div>`
+        ${rows.map(x => `<div style="margin-top:12px"><div style="font-size:14px">${esc(C.muscles[x.id].zone || C.muscles[x.id].name)} · ${TONE[x.k][3]}</div><div class="row" style="gap:4px;margin-top:4px"><span class="mark sm ${x.k}"></span>${bar(x.L, TONE_HEX[x.k])}${bar(x.R, TONE_HEX[x.k], true)}</div></div>`).join('')}</div>`
       : '<p class="sub" style="margin-top:var(--s4)">Стороны работают ровно: разница меньше 10%.</p>'}
       <button class="btn" id="mx" style="margin-top:var(--s4)">Закрыть</button></div>`;
     document.body.appendChild(d); d.onclick = e => { if (e.target === d) close(); }; d.querySelector('#mx').onclick = close; return; }
@@ -1341,14 +1369,14 @@ function moreSheet({ t, a }, top, hasPlan, only) {
   const lim = t.limits && Object.keys(t.limits).length ? acc('Не получилось выполнить', Object.entries(t.limits).map(([u, l]) => `<div style="margin-top:8px;font-size:14px"><b>${esc(LIMIT_NAMES[u] || u)}</b>: ${esc([l.level, ...(l.reasons || [])].filter(Boolean).join(', '))}</div>`).join('')) : '';
   const zones = top.length ? acc(`Все зоны · ${top.length}`, `<div class="stack" style="margin-top:6px">${top.map(s => `<div class="list-item" data-k="${s.key}" style="background:var(--bg);min-height:52px"><span class="mark ${s.k}"></span><div style="flex:1;min-width:0"><b style="font-size:15px">${title(s)}</b></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div>`, true) : '';
   const row = (id, icon, text) => `<button class="row-link" id="${id}">${ic(icon, 's')}<span>${text}</span>${ic('chevron-right', 's chev')}</button>`;
-  d.innerHTML = `<div><h2>Обзор</h2>${zones}${ba}${lim}
+  d.innerHTML = `<div><h2>Обзор</h2>${zones}${ba}${lim}<div style="margin:0 calc(-1 * var(--gutter))">${postureCard(a)}${iapCard(a)}</div>
     ${acc('Действия', `<div class="group">${row('shareRes', 'share', 'Поделиться результатом')}${top.length && !SHARED ? row('cal', 'bell', 'Напоминать в 20:00') : ''}${hasPlan ? row('again', 'rotate-ccw', SHARED ? 'Пройти свой тест' : 'Пройти тест заново') : ''}${INV() ? '' : `<a class="row-link" href="${bot()}" target="_blank">${ic('message-square', 's')}<span>Разобрать с автором методики</span>${ic('chevron-right', 's chev')}</a>`}</div>`)}
     ${SHARED ? '' : `<div style="margin-top:var(--s3)">${rateCard(String(t.date))}</div>`}
     <button class="btn" id="mx" style="margin-top:var(--s4)">Закрыть</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) close(); };
   const q = s => d.querySelector(s);
   { const bx = q('#ba3d'), det = bx && bx.closest('details'); if (det) det.addEventListener('toggle', () => { if (det.open) bindBa('ba3d', first, t); }); }
-  q('#mx').onclick = close; bindRate('map');
+  q('#mx').onclick = close; bindRate('map'); bindPosture(a);
   d.querySelectorAll('.list-item[data-k]').forEach(el => el.onclick = () => { close(); muscle(el.dataset.k); });
   q('#shareRes').onclick = () => { close(); shareResult(); };
   if (q('#cal')) q('#cal').onclick = calendar;
@@ -1481,12 +1509,12 @@ export function muscle(key) {
   stages = stages.filter(x => x[3].length || x[2]); const all = [...new Set(stages.flatMap(x => x[3]))]; let n = 0;
   const obs = seen(a, s), num = obs.map(x => String(x).match(/(\d+(?:[.,]\d+)?)\s*(°|%)?/)).find(Boolean);
   const finds = a.findings.filter(f => f.muscles.some(x => x.id === s.id && (x.side === s.side || x.side === 'BOTH')));
-  const reason = { k: s.k, t: `${VERB_OF[s.k] || ''} ${acc(lc(m.name))} ${sideWord(s.side)}` };
+  const reason = { k: s.k, t: `${TONE[s.k][4]}: ${lc(m.zone || m.name)} ${sideWord(s.side)}` };
   go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:var(--s4);padding-bottom:var(--s4)">
     <div class="row" style="gap:8px"><span class="mark ${s.k}"></span><span style="font-size:13px;font-weight:600;color:${TONE[s.k][5]}">${TONE[s.k][0]}</span></div>
     <div><h1 style="font-size:26px">${title(s)}</h1><div style="font-size:14px;color:var(--sub);margin-top:4px">${tech(s)}</div></div>
-    ${num ? `<div><div class="measure"><b>${num[1]}</b><u>${num[2] || ''}</u></div><div class="why" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:13px;color:var(--sub)"><span class="src">ЗАМЕР</span><span>${esc(obs[0].replace(' (на границе нормы)', ''))}</span>${/на границе нормы/.test(obs[0]) ? '<span class="edge">на границе нормы</span>' : ''}</div></div>`
+    ${num ? `<div><div class="why" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--sub)"><span class="src">ЗАМЕР</span><span>${esc(obs[0].replace(' (на границе нормы)', ''))}</span>${/на границе нормы/.test(obs[0]) ? '<span class="edge">на границе нормы</span>' : ''}</div></div>`
       : `<div class="why" style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--sub)"><span class="src hyp">ГИПОТЕЗА</span><span>Напрямую не измерено</span></div>`}
     <div class="card"><div class="eyebrow">Задача</div><p style="font-size:16px;line-height:1.45;margin-top:8px">${why}</p></div>
     <details class="acc"><summary style="font-weight:600;font-size:15px">Почему так</summary>
