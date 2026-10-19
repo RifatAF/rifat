@@ -15,7 +15,7 @@ import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.
 import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS } from './plans.js';
 import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast, preload3D, saveBlob , setBodySex } from './core.js';
 import { baBlock, bindBa } from './app.js';
-import { cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, mainOf, TONE_HELP, applyMain, fromMain, muscleInfo, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen, TIP_ACT } from './app.js';
+import { asClient, cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, mainOf, TONE_HELP, applyMain, fromMain, muscleInfo, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen, TIP_ACT } from './app.js';
 
 // активные клиенты занимают слоты; пример и закрытые (пришли сверх лимита) не считаются
 // ведение = ретест, ссылка на ретест или занятия дома за 30 дней. Первые тесты новых клиентов лимит не трогают
@@ -1319,12 +1319,13 @@ async function report(aid) {
   const plain = t => t.replace(/ \(на границе нормы\)/, '').replace(/\s*на\s*[\d,.]+\s*°.*$/, '').replace(/:\s*$/, '');
   const same = prev && Math.abs(a.date - prev.date) < 12 * 3600e3;
   const conf = a.check || {}, decided = sp.filter(s => s.k !== 'OK' && (conf[s.key] === 'yes' || s.edited)).sort((x, y2) => Math.abs(y2.tone) - Math.abs(x.tone));
-  const fo = focusOf(a, sp), v = verdict(fo.items, an.findings), pl = a.plan || { ex: plan(fo.planSpots), text: '' };
-  // отчет для клиента: три наблюдения, упражнения на дом, над чем работаем; на схеме только главное
+  // отчет клиенту говорит языком клиента: зоны тела и задачи («Укрепить: ягодица сбоку»), без латыни и состояний мышц
+  const fo = focusOf(a, sp), v = await asClient(() => verdict(fo.items, an.findings, true)), pl = a.plan || { ex: plan(fo.planSpots), text: '' };
+  // отчет для клиента: что видно на видео, над чем работаем, упражнения на дом; на схеме только главное
   const exs = pl.ex.slice(0, 4).map(id => C.exercises[id]).filter(Boolean);
-  const sections = [{ h: 'Что мы заметили', rows: an.findings.slice(0, 3).map((f, i) => ({ text: `${i + 1}. ${plain(f.observed)}` })) },
-    { h: 'Упражнения на дом', rows: [...exs.map((e, i) => ({ text: `${i + 1}. ${e.title.split(' (')[0]}${e.title.includes('(') ? ', ' + e.title.split('(')[1].replace(')', '').replace(' сторона', '') : ''}${e.dose ? ': ' + e.dose : ''}` })), ...(pl.text ? [{ text: pl.text }] : [])] },
-    { h: 'Над чем работаем', rows: v.slice(0, 3).map(x => ({ k: x.k, small: true, text: `${x.verb} ${x.what}` })) }];
+  const sections = [{ h: 'Что видно на видео', rows: an.findings.slice(0, 3).map(f => ({ text: '• ' + plain(f.observed) })) },
+    { h: 'Над чем работаем', rows: v.slice(0, 3).map(x => ({ k: x.k, small: true, text: `${x.verb}: ${x.what}` })) },
+    { h: 'Упражнения на дом', rows: [...exs.map((e, i) => ({ text: `${i + 1}. ${e.title.split(' (')[0]}${e.title.includes('(') ? ', ' + e.title.split('(')[1].replace(')', '').replace(' сторона', '') : ''}${e.dose ? ': ' + e.dose : ''}` })), ...(pl.text ? [{ text: pl.text }] : [])] }];
   const mapSp = onlyKeys(sp, mainKeys(a, sp));
   let delta = null; const after = [];
   if (prev) { const cmp = comparable(prev, a);
@@ -1342,21 +1343,26 @@ async function report(aid) {
   // занятия дома: комплаенс и боль до/после (если клиент делал комплекс по ссылке)
   const hv = c.progress && c.progress.vas || []; if (hv.length) { const m = vasStats(hv, 30), pairs = hv.filter(r => Number.isFinite(r.pre) && Number.isFinite(r.post));
     sections.push({ h: 'Занятия дома, 30 дней', rows: [{ text: `Выполнено в ${m.activeDays} из 30 дней (${m.compliance}%)` }, ...(m.avgPre != null ? [{ text: `Боль в среднем: ${String(m.avgPre).replace('.', ',')} до занятия → ${String(m.avgPost).replace('.', ',')} после` }] : [])], chart: pairs.slice(-14) }); }
-  // режим специалиста: клиническая классификация и векторная сетка (θ относительно g, мм) в отчет PDF
-  { const pp = await get('poses', a.id).catch(() => null), st = pp && pp.poses && unpack(pp.poses.stand, (a.setup && a.setup.w) || 720, (a.setup && a.setup.h) || 1280), pose = st && st.length ? st[st.length >> 1].p : null;
-    for (const x of [clinicalSection(top, C.muscles), vectorSection(a.snapshot, a.setup, pose)]) if (x) sections.push(x); }
+  // для коллеги (по переключателю): клиническая классификация и векторная сетка (θ относительно g, мм); клиенту они непонятны
+  const techSections = async () => { const pp = await get('poses', a.id).catch(() => null), st = pp && pp.poses && unpack(pp.poses.stand, (a.setup && a.setup.w) || 720, (a.setup && a.setup.h) || 1280), pose = st && st.length ? st[st.length >> 1].p : null;
+    return [clinicalSection(top, C.muscles), vectorSection(a.snapshot, a.setup, pose)].filter(Boolean); };
   const pro = isPro(), logo = pro ? await meta('logo') : '', photo = await meta('photo'), title = await meta('title'), myLogo = await meta('logo');
-  const cv = await passportImage({ eyebrow: 'ПАСПОРТ ДВИЖЕНИЯ', name: c.name, date: 'Оценка ' + fmtDate(a.date), sp: mapSp, sections, delta, footer: { name: author, title, contact: contact ? 'Запись: ' + contact : location.host, after, note, logo, photo, brand: pro ? 'pro' : 'free' }, raw: true });
+  const build = async tech => { const secs = tech ? [...sections, ...await techSections()] : sections, foot = { name: author, title, contact: contact ? 'Запись: ' + contact : location.host, after, note, logo, photo, brand: pro ? 'pro' : 'free' };
+    return tech ? passportImage({ eyebrow: 'ПАСПОРТ ДВИЖЕНИЯ', name: c.name, date: 'Оценка ' + fmtDate(a.date), sp: mapSp, sections: secs, delta, footer: foot, raw: true })
+      : asClient(() => passportImage({ eyebrow: 'ПАСПОРТ ДВИЖЕНИЯ', name: c.name, date: 'Оценка ' + fmtDate(a.date), sp: mapSp, sections: secs, delta, footer: foot, raw: true })); };
+  let cv = await build(false);
   // предпросмотр перед отправкой: специалист видит ровно то, что получит клиент
   const base = `bodypassport-${c.name.replace(/[^\p{L}\p{N}]+/gu, '-')}-${new Date(a.date).toISOString().slice(0, 10)}`;
   const d = document.createElement('div'); d.className = 'sheet';
   d.innerHTML = `<div><h2 style="font-size:20px">Отчет клиенту</h2><p class="sub" style="font-size:13px;margin-top:4px">Так его увидит ${esc(c.name)}. PDF удобно распечатать, картинку переслать в мессенджер.</p>
-    <div style="margin-top:12px;max-height:46dvh;overflow:auto;border-radius:16px;border:1px solid var(--line)"><img src="${cv.toDataURL('image/jpeg', .8)}" alt="Отчет" style="width:100%;display:block"></div>
+    <div style="margin-top:12px;max-height:46dvh;overflow:auto;border-radius:16px;border:1px solid var(--line)"><img id="rimg" src="${cv.toDataURL('image/jpeg', .8)}" alt="Отчет" style="width:100%;display:block"></div>
+    <label class="row" style="gap:8px;margin-top:10px;font-size:14px"><input type="checkbox" id="rtech"> Технические данные для коллеги (классификация, углы, мм)</label>
     ${!pro ? `<p class="sub" style="font-size:13px;margin-top:8px">${myLogo ? 'Ваш логотип' : 'Логотип'} и отчет без плашки BodyPassport: <a href="/pricing" class="gopro">PRO</a></p>` : ''}${photo && (logo || !pro) ? '' : `<button class="link" id="rplg" style="font-size:13px;margin-top:8px">Добавить в отчет ${photo ? 'логотип' : 'свое фото'}</button>`}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn" id="rpdf">${ic('file-text', 's')}Скачать PDF${pro ? '' : ' · PRO'}</button><button class="btn line" id="rpng">${ic('image', 's')}Картинка</button></div>
     <button class="btn line" id="rweb" style="margin-top:8px">${ic('mail', 's')}Поделиться веб-ссылкой${pro ? '' : ' · PRO'}</button>
     <button class="btn ghost" id="rpx" style="margin-top:8px">Закрыть</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; d.querySelector('#rpx').onclick = () => d.remove();
+  d.querySelector('#rtech').onchange = async e => { cv = await build(e.target.checked); d.querySelector('#rimg').src = cv.toDataURL('image/jpeg', .8); };
   if (d.querySelector('#rplg')) d.querySelector('#rplg').onclick = () => { d.remove(); profileForm(); };
   const send = async (blob, name, type, kind) => { const file = new File([blob], name, { type });
     if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: 'Паспорт движения' }); track('report_shared', { c: kind }, false); } catch (e) {} }
@@ -1366,7 +1372,7 @@ async function report(aid) {
     b.disabled = false; b.innerHTML = ic('file-text', 's') + 'PDF'; };
   d.querySelector('#rpng').onclick = async () => send(await new Promise(r => cv.toBlob(r, 'image/png')), base + '.png', 'image/png', 'png');
   d.querySelector('#rweb').onclick = async () => { if (!gate('weblink')) return; const b = d.querySelector('#rweb'); b.disabled = true; b.textContent = 'Создаю ссылку…';
-    try { const url = await reportLink(cv, { name: c.name, date: fmtDate(a.date), author, contact: contact || '', at: a.date, ex: (pl.ex || []).slice(0, 8), next: Number.isFinite(+a.nextDate) ? +a.nextDate : 0, note: String(pl.text || '').slice(0, 600), focus: v.slice(0, 3).map(x => `${x.verb} ${x.what}`) }); track('report_link', {}, false);
+    try { const url = await reportLink(cv, { name: c.name, date: fmtDate(a.date), author, contact: contact || '', at: a.date, ex: (pl.ex || []).slice(0, 8), next: Number.isFinite(+a.nextDate) ? +a.nextDate : 0, note: String(pl.text || '').slice(0, 600), focus: v.slice(0, 3).map(x => `${x.verb}: ${x.what}`) }); track('report_link', {}, false);
       const text = `${c.name.split(' ')[0]}, здравствуйте! Ваш биомеханический паспорт по ссылке:`;
       if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url); toast('Ссылка скопирована'); } }
     catch (e) { toast('Не удалось создать ссылку: ' + e.message); }

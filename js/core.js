@@ -324,7 +324,10 @@ const ACT_RGB = { ...STATE_RGB, WEAK: [249, 115, 22], HYPER: [234, 179, 8], SHOR
 // в кабинете специалиста (navy) фигура холодная синяя, у клиента светлая
 const darkUI = () => document.documentElement.dataset.session === 'SPECIALIST_OPERATED' || document.documentElement.dataset.theme === 'pro';
 const baseRGB = () => darkUI() ? BASE_DARK : BASE_LIGHT;
-export function stateRGB(k, tone) { const P = darkUI() ? STATE_RGB : ACT_RGB, c = P[k] || (tone < 0 ? P.WEAK : P.HYPER); const t = k === 'OK' ? 0 : Math.max(.55, Math.min(1, Math.abs(tone) * 1.3));
+// отчет клиенту из кабинета специалиста: на время отрисовки цвета задач клиента, а не состояний (pro.js, report)
+let CLIENT_PAL = false; export const clientPalette = on => { CLIENT_PAL = !!on; };
+const specPal = () => darkUI() && !CLIENT_PAL;
+export function stateRGB(k, tone) { const P = specPal() ? STATE_RGB : ACT_RGB, c = P[k] || (tone < 0 ? P.WEAK : P.HYPER); const t = k === 'OK' ? 0 : Math.max(.55, Math.min(1, Math.abs(tone) * 1.3));
   return baseRGB().map((b, i) => Math.round(b + (c[i] - b) * t)); }
 export function ramp(v) { const x = Math.max(-1, Math.min(1, v)); let i = RAMP.findLastIndex(r => r[0] <= x); i = Math.max(0, Math.min(RAMP.length - 2, i));
   const [a, ca] = RAMP[i], [b, cb] = RAMP[i + 1], t = Math.max(0, Math.min(1, (x - a) / (b - a))); const ch = (c, s) => (c >> s) & 255; const mix = s => Math.round(ch(ca, s) + (ch(cb, s) - ch(ca, s)) * t);
@@ -333,7 +336,7 @@ export const RAMP_CSS = 'linear-gradient(90deg,' + RAMP.map(([v, c]) => '#' + c.
 export const MARK_HEX = { HYPER: '#F59E0B', SHORT: '#EF4444', WEAK: '#3B73D9', DONE: '#22C55E' }, ACT_HEX = { ...MARK_HEX, WEAK: '#F97316', HYPER: '#EAB308', SHORT: '#2563EB' };
 /** Маркер состояния формой: перегрузка — круг, укорочение — ромб, слабость — кольцо. derived: пунктир без ореола. */
 export function drawMark(ctx, x, y, k, o = {}) {
-  const c = (darkUI() ? MARK_HEX : ACT_HEX)[k]; if (!c) return; const sc = o.scale ?? 1; ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
+  const c = (specPal() ? MARK_HEX : ACT_HEX)[k]; if (!c) return; const sc = o.scale ?? 1; ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
   if (!o.derived) { ctx.globalAlpha = (k === 'WEAK' ? .14 : .18) * (o.alpha ?? 1); ctx.fillStyle = c; ctx.beginPath(); ctx.arc(0, 0, 16, 0, 7); ctx.fill(); }
   ctx.globalAlpha = o.alpha ?? 1; ctx.setLineDash(o.derived ? [3, 3] : []);
   if (k === 'HYPER') { ctx.beginPath(); ctx.arc(0, 0, 7, 0, 7); if (o.derived) { ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.stroke(); } else { ctx.fillStyle = c; ctx.fill(); } }
@@ -433,7 +436,7 @@ export function drawHeat(cv, spots0, back, selected, labels = [], opts = {}) {
     if (toneK > 0) { const fs = fillShapes(toneK); for (const pp of parts) { ctx.save(); ctx.clip(pp); ctx.globalAlpha = figA * .88; for (const [e, c] of fs) { ctx.fillStyle = c; ctx.fill(e); } ctx.restore(); } ctx.globalAlpha = figA; }
     ctx.strokeStyle = darkUI() ? '#93ACDA' : '#AFC2E6'; ctx.lineWidth = 1.2; parts.forEach(pp => ctx.stroke(pp)); ctx.globalAlpha = 1; }
     // halo: мини-фигура в карточке задачи; зона светится крупным пятном, иначе на маленькой фигуре ее не видно
-    if (opts.halo) marks.forEach(s => { const c = (darkUI() ? MARK_HEX : ACT_HEX)[s.k]; if (!c) return; const g = ctx.createRadialGradient(s.x * 200, s.y * 440, 0, s.x * 200, s.y * 440, 46);
+    if (opts.halo) marks.forEach(s => { const c = (specPal() ? MARK_HEX : ACT_HEX)[s.k]; if (!c) return; const g = ctx.createRadialGradient(s.x * 200, s.y * 440, 0, s.x * 200, s.y * 440, 46);
       g.addColorStop(0, c + 'AA'); g.addColorStop(.55, c + '44'); g.addColorStop(1, c + '00'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(s.x * 200, s.y * 440, 46, 0, 7); ctx.fill(); });
     marks.forEach((s, i) => { const t = markT(i); if (t <= 0) return; const sc2 = t < .7 ? .4 + (1.15 - .4) * (t / .7) : 1.15 - .15 * ((t - .7) / .3);
       drawMark(ctx, s.x * 200, s.y * 440, s.k, { derived: s.derived && !s.edited, scale: t >= 1 ? 1 : sc2, alpha: Math.min(1, t * 2) }); });
