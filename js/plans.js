@@ -138,7 +138,7 @@ export function goPro(period = 'month') {
     btn.disabled = true; btn.textContent = 'Сохраняю…';
     try { if (em.toLowerCase() !== String(u.payEmail || '').toLowerCase()) { const r = await fetch('/api/auth?a=payemail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: em }) }); if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status); u.payEmail = em.toLowerCase(); } }
     catch (e) { btn.disabled = false; btn.textContent = 'К оплате'; toastMsg('Не удалось сохранить почту: ' + e.message); return; }
-    location.href = period === 'year' && PAY_URL_YEAR ? PAY_URL_YEAR : PAY_URL; };
+    track('pay_redirect', { c: period || 'month' }); location.href = period === 'year' && PAY_URL_YEAR ? PAY_URL_YEAR : PAY_URL; };
 }
 export function planLine() {
   const p = plan(), until = p.until ? new Date(p.until).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' }) : '';

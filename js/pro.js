@@ -221,7 +221,7 @@ const UNIT_NAMES = { profile: 'Стойка боком', stand: 'Стойка', 
 const PAIN = [['neck', 'Шея'], ['shoulder', 'Плечо'], ['upper_back', 'Грудной отдел'], ['low_back', 'Поясница'], ['hip', 'Таз, бедро'], ['knee', 'Колено'], ['foot', 'Стопа']];
 let HYP3D = false, HYPOPEN = false, RES_A = null; const REVEALED = new Set(); // «Итог» оценки анимируется при первом открытии
 const seen2 = (an, s) => [...new Set(an.findings.filter(f => f.muscles.some(m => m.id === s.id && (m.side === s.side || m.side === 'BOTH'))).map(f => f.observed))]; // специалист смотрит гипотезу в 3D: режим сохраняется при правках
-const STATES = [['OK', 'Норма', 0], ['HYPER', 'Перегрузка', .8], ['SHORT', 'Зажата', .7], ['WEAK', 'Слабость', -.8]];
+const STATES = [['OK', 'Норма', 0], ['HYPER', 'Перерастяжение', .8], ['SHORT', 'Зажата', .7], ['WEAK', 'Слабость', -.8]];
 
 // ---------- голосовая заметка (распознавание речи браузера) ----------
 function dictate(textarea, btn) {
@@ -816,7 +816,7 @@ async function newAssessment(clientId, retestOf, opts = {}) {
 
 // ---------- вкладка «Гипотеза»: карточка мышцы обновляется на месте, без перерисовки экрана ----------
 const hypList = (a, sp, top) => (top.length ? top : sp.filter(s => s.k !== 'OK').slice(0, 8)).concat(sp.filter(s => s.edited && s.k === 'OK' && !top.includes(s))).slice(0, 14);
-const STATE4 = [['WEAK', 'Слабость'], ['HYPER', 'Перегруз'], ['SHORT', 'Укороч.'], ['OK', 'Норма']];
+const STATE4 = [['WEAK', 'Слабость'], ['HYPER', 'Перерастяж.'], ['SHORT', 'Укороч.'], ['OK', 'Норма']];
 function confLine(sc) {
   if (!sc || sc.S == null) return '';
   const lab = sc.labels.filter(l => l !== 'PRELIMINARY').map(l => LABELS[l]).join(' · ');

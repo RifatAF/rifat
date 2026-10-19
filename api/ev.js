@@ -12,7 +12,7 @@ const NAMES = new Set(['app_open', 'plan_minutes', 'onb_done', 'login_ok', 'safe
   'pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'db_empty', 'db_other', 'backup_done', 'restore_done',
   'gate_hit', 'compare_open', 'retest_done', 'report_shared', 'bug_sent', 'rage', 'slow',
   'pro_click', 'vas_done', 'report_link', 'progress_sent',
-  'paywall_view', 'limit_hit', 'trial_end', 'trial_end_view', 'balance_pay', 'screen', 'back', 'device', 'main_recognize', 'workout_pain_block', 'update_offer', 'session_start', 'session_done', 'retest_after', 'ba_period', 'scroll', 'qback', 'retest_pair', 'menu']);
+  'paywall_view', 'limit_hit', 'trial_end', 'trial_end_view', 'balance_pay', 'pay_redirect', 'screen', 'back', 'device', 'main_recognize', 'workout_pain_block', 'update_offer', 'session_start', 'session_done', 'retest_after', 'ba_period', 'scroll', 'qback', 'retest_pair', 'menu']);
 const KEYS = new Set(['m', 'f', 'l', 'n', 'c', 'r', 'd', 's', 'q']); // ошибка, файл, строка, число, категория, источник, секунды, оценка, качество
 // события, у которых в сводке видна разбивка по категории (c) и медиана чисел (d, n, q)
 const DETAIL = new Set(['menu', 'qback', 'pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'gate_hit', 'rage', 'slow', 'result_fail', 'test_done', 'assess_done', 'vas_done', 'report_link', 'paywall_view', 'limit_hit', 'trial_end', 'pro_click', 'fb_sent', 'main_recognize', 'workout_pain_block']);
@@ -73,6 +73,9 @@ async function stats(days) {
     depth: S.depth && S.depth.length ? Math.round(pct(S.depth.sort((x, y) => x - y), .5)) : null, skim: S.scrolled ? Math.round(S.skim / S.scrolled * 100) : null }]; }));
   out.weeks = Object.fromEntries(Object.entries(out.weeks).map(([w, s]) => [w, s.size]));
   const t = out.testSec.sort((a, b) => a - b); out.testMedianSec = t.length ? t[Math.floor(t.length / 2)] : null; out.testN = t.length; delete out.testSec;
+  // оплаты PRO по вебхуку lava.top (api/lava.js пишет lava/done/): последний шаг воронки специалиста
+  try { const from = Date.now() - days * 864e5; let cursor; do { const r = await list({ prefix: 'lava/done/', limit: 1000, cursor }); cursor = r.hasMore ? r.cursor : undefined;
+    for (const b of r.blobs) { const t = +new Date(b.uploadedAt); if (t >= from) { const k = day(t); ((out.events['pro:paid'] ||= {})[k] = (out.events['pro:paid'][k] || 0) + 1); } } } while (cursor); } catch (e) {}
   return out;
 }
 
