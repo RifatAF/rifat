@@ -1,0 +1,361 @@
+﻿Card Name,Description,List,Labels,Due Window,Owner,Priority,Definition of Done
+BP-01 — Зафиксировать позиционирование и границы обещаний,"ID: BP-01
+Owner: Founder
+Priority: P0
+Due window: W1
+Definition of Done: Утверждена одна формулировка позиционирования и список запрещённых неподтверждённых заявлений.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",This Week,"P0 — Must prove, Privacy/Regulatory",W1,Founder,P0,Утверждена одна формулировка позиционирования и список запрещённых неподтверждённых заявлений.
+BP-02 — Выбрать один начальный ICP,"ID: BP-02
+Owner: Founder
+Priority: P0
+Due window: W1
+Definition of Done: Определён сегмент специалистов с повторными клиентами и критерии включения/исключения.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",This Week,"P0 — Must prove, Research",W1,Founder,P0,Определён сегмент специалистов с повторными клиентами и критерии включения/исключения.
+BP-03 — Собрать список 30 специалистов,"ID: BP-03
+Owner: Founder
+Priority: P0
+Due window: W1
+Definition of Done: 30 квалифицированных контактов с нишей, каналом связи и причиной соответствия.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",This Week,"P0 — Must prove, Sales",W1,Founder,P0,"30 квалифицированных контактов с нишей, каналом связи и причиной соответствия."
+BP-04 — Подготовить сценарий демо на 10 минут,"ID: BP-04
+Owner: Founder
+Priority: P0
+Due window: W1
+Definition of Done: Демо показывает поддерживаемый тест, отчёт, границы интерпретации и ретест.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",This Week,"P0 — Must prove, Sales",W1,Founder,P0,"Демо показывает поддерживаемый тест, отчёт, границы интерпретации и ретест."
+BP-05 — Сделать одностраничный оффер и пример отчёта,"ID: BP-05
+Owner: Founder + Designer/AI
+Priority: P0
+Due window: W1
+Definition of Done: Ценность, аудитория, процесс, ограничения и CTA понятны менее чем за минуту.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",This Week,"P0 — Must prove, Sales",W1,Founder + Designer/AI,P0,"Ценность, аудитория, процесс, ограничения и CTA понятны менее чем за минуту."
+BP-06 — Проверить текущую сборку по обещанному сценарию,"ID: BP-06
+Owner: Developer
+Priority: P0
+Due window: W1
+Definition of Done: Зафиксированы работающие функции, сбои, устройства, ракурсы и ограничения.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",This Week,"P0 — Must prove, Privacy/Regulatory",W1,Developer,P0,"Зафиксированы работающие функции, сбои, устройства, ракурсы и ограничения."
+BP-07 — Проверить приватность и карту данных,"ID: BP-07
+Owner: Developer + Founder
+Priority: P0
+Due window: W1
+Definition of Done: Описаны обработка, загрузка, хранение, доступ, удаление и сроки; текст соответствует фактам.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",This Week,"P0 — Must prove, Privacy/Regulatory",W1,Developer + Founder,P0,"Описаны обработка, загрузка, хранение, доступ, удаление и сроки; текст соответствует фактам."
+BP-08 — Составить протокол повторяемости,"ID: BP-08
+Owner: Founder + Developer
+Priority: P0
+Due window: W1
+Definition of Done: Есть условия камеры, света, расстояния, видимости тела и критерии ошибки.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",This Week,"P0 — Must prove, Research",W1,Founder + Developer,P0,"Есть условия камеры, света, расстояния, видимости тела и критерии ошибки."
+BP-09 — Выполнить 5 повторных тестов,"ID: BP-09
+Owner: Founder + Developer
+Priority: P0
+Due window: W1-W2
+Definition of Done: Записаны дрейф результатов, видимость точек, сбои и чувствительность к положению телефона.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",This Week,"P0 — Must prove, Product",W1-W2,Founder + Developer,P0,"Записаны дрейф результатов, видимость точек, сбои и чувствительность к положению телефона."
+BP-10 — Провести 10 интервью со специалистами,"ID: BP-10
+Owner: Founder
+Priority: P0
+Due window: W1-W2
+Definition of Done: Записаны текущий процесс, проблемы, альтернативы, ценность и готовность платить.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",This Week,"P0 — Must prove, Sales",W1-W2,Founder,P0,"Записаны текущий процесс, проблемы, альтернативы, ценность и готовность платить."
+BP-11 — Отправить первые 15 персональных сообщений,"ID: BP-11
+Owner: Founder
+Priority: P0
+Due window: W2
+Definition of Done: Сообщения отправлены; ответы, демо и возражения отмечены.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",This Week,"P0 — Must prove, Sales",W2,Founder,P0,"Сообщения отправлены; ответы, демо и возражения отмечены."
+BP-12 — Провести 5 демо со специалистами,"ID: BP-12
+Owner: Founder
+Priority: P0
+Due window: W2-W3
+Definition of Done: Проведено 5 демо реального продукта; обратная связь записана по задачам.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P0 — Must prove, Sales",W2-W3,Founder,P0,Проведено 5 демо реального продукта; обратная связь записана по задачам.
+BP-13 — Предложить платный пилот,"ID: BP-13
+Owner: Founder
+Priority: P0
+Due window: W2-W3
+Definition of Done: Не менее 5 подходящих специалистов получили конкретное предложение оплаты.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P0 — Must prove, Sales",W2-W3,Founder,P0,Не менее 5 подходящих специалистов получили конкретное предложение оплаты.
+BP-14 — Проверить две цены,"ID: BP-14
+Owner: Founder
+Priority: P1
+Due window: W2-W3
+Definition of Done: Сравнены эквиваленты $19 и $29/месяц или сопоставимые варианты; записаны реальные решения.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P1 — Growth, Sales",W2-W3,Founder,P1,Сравнены эквиваленты $19 и $29/месяц или сопоставимые варианты; записаны реальные решения.
+BP-15 — Набрать 3–5 специалистов в пилот,"ID: BP-15
+Owner: Founder
+Priority: P0
+Due window: W3-W4
+Definition of Done: Есть согласие тестировать на реальных клиентах с правилами согласия и данных.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P0 — Must prove, Sales",W3-W4,Founder,P0,Есть согласие тестировать на реальных клиентах с правилами согласия и данных.
+BP-16 — Наблюдать 5 клиентских сессий,"ID: BP-16
+Owner: Founder
+Priority: P0
+Due window: W3-W5
+Definition of Done: Измерены время, путаница, ошибки, понимание отчёта и восприятие ценности.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P0 — Must prove, Research",W3-W5,Founder,P0,"Измерены время, путаница, ошибки, понимание отчёта и восприятие ценности."
+BP-17 — Добавить сбор обратной связи по отчёту,"ID: BP-17
+Owner: Developer
+Priority: P1
+Due window: W3-W4
+Definition of Done: Есть простой сбор полезности, непонятных мест и следующего действия.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P1 — Growth, Product",W3-W4,Developer,P1,"Есть простой сбор полезности, непонятных мест и следующего действия."
+BP-18 — Исправить только критические ошибки,"ID: BP-18
+Owner: Developer
+Priority: P0
+Due window: W3-W5
+Definition of Done: Блокирующие ошибки устранены; новые функции не отвлекают от основного сценария.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P0 — Must prove, Research",W3-W5,Developer,P0,Блокирующие ошибки устранены; новые функции не отвлекают от основного сценария.
+BP-19 — Создать шаблон отчёта до/после,"ID: BP-19
+Owner: Founder + Designer/AI
+Priority: P0
+Due window: W3-W4
+Definition of Done: Разделены измерения, визуальные наблюдения и интерпретация; есть сравнение ретеста.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P0 — Must prove, Product",W3-W4,Founder + Designer/AI,P0,"Разделены измерения, визуальные наблюдения и интерпретация; есть сравнение ретеста."
+BP-20 — Опубликовать посадочную страницу для специалистов,"ID: BP-20
+Owner: Founder + Developer
+Priority: P1
+Due window: W3-W4
+Definition of Done: Страница объясняет аудиторию, процесс, пример, ограничения, приватность и CTA.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P1 — Growth, Content",W3-W4,Founder + Developer,P1,"Страница объясняет аудиторию, процесс, пример, ограничения, приватность и CTA."
+BP-21 — Подготовить 3 формата контента,"ID: BP-21
+Owner: Founder + Designer/AI
+Priority: P1
+Due window: W3-W4
+Definition of Done: Есть примеры визуализации, до/после и рабочего процесса специалиста.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P1 — Growth, Content",W3-W4,Founder + Designer/AI,P1,"Есть примеры визуализации, до/после и рабочего процесса специалиста."
+BP-22 — Опубликовать 6 коротких видео,"ID: BP-22
+Owner: Founder
+Priority: P1
+Due window: W4-W6
+Definition of Done: Опубликовано 6 видео с реальным сценарием и ясным CTA, без ложной точности.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P1 — Growth, Content",W4-W6,Founder,P1,"Опубликовано 6 видео с реальным сценарием и ясным CTA, без ложной точности."
+BP-23 — Провести двухнедельный контент-тест,"ID: BP-23
+Owner: Founder
+Priority: P1
+Due window: W4-W6
+Definition of Done: Форматы сравнены по квалифицированным переходам, сообщениям и демо.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P1 — Growth, Content",W4-W6,Founder,P1,"Форматы сравнены по квалифицированным переходам, сообщениям и демо."
+BP-24 — Создать последовательность follow-up,"ID: BP-24
+Owner: Founder
+Priority: P1
+Due window: W2-W6
+Definition of Done: Подготовлены два коротких напоминания и сообщение о закрытии контакта.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P1 — Growth, Research",W2-W6,Founder,P1,Подготовлены два коротких напоминания и сообщение о закрытии контакта.
+BP-25 — Провести ещё 10 демо,"ID: BP-25
+Owner: Founder
+Priority: P0
+Due window: W5-W7
+Definition of Done: 10 дополнительных демо проведено или назначено; источник лида записан.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P0 — Must prove, Sales",W5-W7,Founder,P0,10 дополнительных демо проведено или назначено; источник лида записан.
+BP-26 — Измерить повторное использование за 14 дней,"ID: BP-26
+Owner: Founder
+Priority: P0
+Due window: W5-W8
+Definition of Done: Записано, кто повторил использование без напоминания и почему.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P0 — Must prove, Research",W5-W8,Founder,P0,"Записано, кто повторил использование без напоминания и почему."
+BP-27 — Запросить оплату/продление у активных пилотов,"ID: BP-27
+Owner: Founder
+Priority: P0
+Due window: W6-W8
+Definition of Done: Сделано минимум 3 явных запроса оплаты; результат и блокер записаны.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P0 — Must prove, Sales",W6-W8,Founder,P0,Сделано минимум 3 явных запроса оплаты; результат и блокер записаны.
+BP-28 — Проверить реферальный цикл через отчёт,"ID: BP-28
+Owner: Founder + Developer
+Priority: P1
+Due window: W6-W8
+Definition of Done: Не менее 5 клиентов получили отчёт/ссылку; измерены открытия/переходы, где возможно.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P1 — Growth, Product",W6-W8,Founder + Developer,P1,"Не менее 5 клиентов получили отчёт/ссылку; измерены открытия/переходы, где возможно."
+BP-29 — Принять решение о загрузке любого видео,"ID: BP-29
+Owner: Founder + Developer
+Priority: P0
+Due window: W6
+Definition of Done: Документирована техническая реализуемость форматов, FPS, ракурсов, точек и ошибок.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P0 — Must prove, Content",W6,Founder + Developer,P0,"Документирована техническая реализуемость форматов, FPS, ракурсов, точек и ошибок."
+BP-30 — Создать instant demo только при успешной проверке,"ID: BP-30
+Owner: Developer
+Priority: P2
+Due window: W7-W9
+Definition of Done: Прототип работает на определённом типе входа и явно отклоняет неподдерживаемые ролики.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",Backlog,"P2 — Later, Research",W7-W9,Developer,P2,Прототип работает на определённом типе входа и явно отклоняет неподдерживаемые ролики.
+BP-31 — Создать onboarding-чеклист специалиста,"ID: BP-31
+Owner: Founder + Developer
+Priority: P1
+Due window: W6-W8
+Definition of Done: Новый специалист получает первый валидный отчёт с минимальной помощью; время записано.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P1 — Growth, Sales",W6-W8,Founder + Developer,P1,Новый специалист получает первый валидный отчёт с минимальной помощью; время записано.
+BP-32 — Подготовить 3 кейса с согласием,"ID: BP-32
+Owner: Founder
+Priority: P1
+Due window: W7-W10
+Definition of Done: Три кейса показывают процесс и наблюдаемые изменения без причинных медицинских заявлений.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P1 — Growth, Content",W7-W10,Founder,P1,Три кейса показывают процесс и наблюдаемые изменения без причинных медицинских заявлений.
+BP-33 — Обновлять воронку каждую неделю,"ID: BP-33
+Owner: Founder
+Priority: P0
+Due window: W2-W12
+Definition of Done: Воронка обновлена; отмечены узкое место и следующее действие.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P0 — Must prove, Sales",W2-W12,Founder,P0,Воронка обновлена; отмечены узкое место и следующее действие.
+BP-34 — Измерять поддержку и ошибки,"ID: BP-34
+Owner: Founder + Developer
+Priority: P1
+Due window: W4-W12
+Definition of Done: Записаны минуты поддержки, доля ошибок и повторяющиеся причины.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P1 — Growth, Research",W4-W12,Founder + Developer,P1,"Записаны минуты поддержки, доля ошибок и повторяющиеся причины."
+BP-35 — Принять решение на 30-й день,"ID: BP-35
+Owner: Founder
+Priority: P0
+Due window: W4
+Definition of Done: Выбран путь: продолжать, сузить ICP, менять оффер или приостановить; есть обоснование.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P0 — Must prove, Research",W4,Founder,P0,"Выбран путь: продолжать, сузить ICP, менять оффер или приостановить; есть обоснование."
+BP-36 — Принять GTM-решение на 60-й день,"ID: BP-36
+Owner: Founder
+Priority: P0
+Due window: W8
+Definition of Done: Решение основано на оплате, повторном использовании, полезности и надёжности.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P0 — Must prove, Research",W8,Founder,P0,"Решение основано на оплате, повторном использовании, полезности и надёжности."
+BP-37 — Принять решение масштабировать/остановить на 90-й день,"ID: BP-37
+Owner: Founder
+Priority: P0
+Due window: W12-W13
+Definition of Done: Масштабирование только при оплатах и повторном использовании; иначе смена сегмента/задачи.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P0 — Must prove, Research",W12-W13,Founder,P0,Масштабирование только при оплатах и повторном использовании; иначе смена сегмента/задачи.
+BP-38 — Подготовить английскую и испанскую версии оффера,"ID: BP-38
+Owner: Founder + Translator/AI
+Priority: P2
+Due window: W8-W10
+Definition of Done: Перевод делается после подтверждения спроса; критичный текст проверен носителем языка.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",Backlog,"P2 — Later, Sales",W8-W10,Founder + Translator/AI,P2,Перевод делается после подтверждения спроса; критичный текст проверен носителем языка.
+BP-39 — Составить список партнёров,"ID: BP-39
+Owner: Founder
+Priority: P2
+Due window: W8-W10
+Definition of Done: 15 преподавателей, небольших клиник или сообществ с персональным подходом.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",Backlog,"P2 — Later, Sales",W8-W10,Founder,P2,"15 преподавателей, небольших клиник или сообществ с персональным подходом."
+BP-40 — Составить следующий квартальный roadmap,"ID: BP-40
+Owner: Founder + Developer
+Priority: P1
+Due window: W12-W13
+Definition of Done: Каждая задача привязана к подтверждённой потребности или данным надёжности.
+
+Evidence/notes:
+- Record result and source evidence.
+- Do not mark done without a concrete output.",To Do,"P1 — Growth, Research",W12-W13,Founder + Developer,P1,Каждая задача привязана к подтверждённой потребности или данным надёжности.
