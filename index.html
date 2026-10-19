@@ -46,8 +46,8 @@
   --over:#EF4444;--over-t:#B42323;--over-s:#FDE8E8;
   --short:#EF4444;--short-t:#B42323;--short-s:#FDE8E8;
   --weak:#3B73D9;--weak-t:#2557B0;--weak-s:#E5EDFB;
-  /* клиенту цвет = задача тренировки (расслабить, разгрузить), не состояние мышцы; специалисту прежние цвета состояний */
-  --act-short:#0D9488;--act-short-t:#0F766E;--act-short-s:#DDF3F0;--act-hyper:#8B5CF6;--act-hyper-t:#6D28D9;--act-hyper-s:#EDE7FE;
+  /* клиенту цвет = задача тренировки: теплый нагрузить (укрепить, мягко укрепить), холодный расслабить; специалисту прежние цвета состояний */
+  --act-weak:#F97316;--act-weak-t:#C2410C;--act-weak-s:#FFEDD5;--act-short:#2563EB;--act-short-t:#1D4ED8;--act-short-s:#DBEAFE;--act-hyper:#EAB308;--act-hyper-t:#A16207;--act-hyper-s:#FEF9C3;
   --ok:#22C55E;--ok-t:#15803D;--ok-s:#DCF7E5;
   --edge:#92580A;--edge-s:#FEF1D8;
   /* тёмная тема: камера, упражнения, плашки 3D */
@@ -87,7 +87,7 @@
   --weak-t:#93B4FF;--weak-s:rgba(59,115,217,.2);--ok-t:#5BDB8A;--ok-s:rgba(34,197,94,.16);
   --edge:#F6B54A;--edge-s:rgba(245,158,11,.16);--hyperT:#F6B54A;--hyperS:rgba(245,158,11,.16);
   --ink2:#1A2640;
-  --act-short:var(--short);--act-short-t:var(--short-t);--act-short-s:var(--short-s);--act-hyper:var(--hyper);--act-hyper-t:var(--hyperT);--act-hyper-s:var(--hyperS);
+  --act-weak:var(--weak);--act-weak-t:var(--weak-t);--act-weak-s:var(--weak-s);--act-short:var(--short);--act-short-t:var(--short-t);--act-short-s:var(--short-s);--act-hyper:var(--hyper);--act-hyper-t:var(--hyperT);--act-hyper-s:var(--hyperS);
   --sh-1:0 0 0 1px rgba(255,255,255,.04);--sh-2:0 12px 32px rgba(0,0,0,.45);--sh-3:0 -12px 40px rgba(0,0,0,.5);
 }
 @media (prefers-reduced-motion:reduce){:root{--d1:1ms;--d2:1ms;--d3:1ms;--d4:160ms;--stagger:0ms}}
@@ -154,7 +154,7 @@ button,a,.list-item,[data-k],[data-id]{transition:transform var(--d1) var(--ease
 .mark{display:inline-block;flex:none;width:14px;height:14px;box-sizing:border-box}
 .mark.HYPER{border-radius:50%;background:var(--act-hyper)}
 .mark.SHORT{width:11px;height:11px;margin:1.5px;background:var(--act-short);transform:rotate(45deg)}
-.mark.WEAK{border-radius:50%;border:3px dashed var(--weak)}.mark.DONE{border-radius:50%;background:#3FAE76}.mark.NT{border-radius:50%;background:var(--line-2);border:2px solid #B9BEC2}
+.mark.WEAK{border-radius:50%;border:3px dashed var(--act-weak)}.mark.DONE{border-radius:50%;background:#3FAE76}.mark.NT{border-radius:50%;background:var(--line-2);border:2px solid #B9BEC2}
 .mark.OK{border-radius:50%;background:var(--ok-s);position:relative}.mark.OK::after{content:'';position:absolute;left:4px;top:2px;width:4px;height:7px;border:solid var(--ok-t);border-width:0 2px 2px 0;transform:rotate(45deg)}
 .verdict-row{display:flex;gap:var(--s3);padding:var(--s3) 0}.verdict-row+.verdict-row{border-top:1px solid var(--line-2)}
 .verdict-row .mark{margin-top:4px}.verdict-row .what{font-size:var(--fs-h3);line-height:1.3}
