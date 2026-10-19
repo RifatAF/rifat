@@ -319,19 +319,21 @@ function bodyParts() { const e = (x, y, rx, ry) => { const p = new Path2D(); p.e
 const RAMP = [[-1, 0x3B73D9], [-.45, 0x8FB0F0], [0, 0xCEDBF2], [.45, 0xF8B860], [1, 0xEF4444]];
 // цвет мышцы по состоянию, а не по знаку: гипертонус красный, перерастяжение оранжевый, слабая синяя; сила отклонения дает насыщенность
 const STATE_RGB = { HYPER: [245, 158, 11], SHORT: [239, 68, 68], WEAK: [59, 115, 217], DONE: [34, 197, 94] }, BASE_LIGHT = [206, 219, 242], BASE_DARK = [184, 202, 236];
+// клиенту цвет означает задачу тренировки, а не состояние мышцы: без красного (расслабить бирюзовый, разгрузить фиолетовый, укрепить синий)
+const ACT_RGB = { ...STATE_RGB, HYPER: [139, 92, 246], SHORT: [13, 148, 136] };
 // в кабинете специалиста (navy) фигура холодная синяя, у клиента светлая
 const darkUI = () => document.documentElement.dataset.session === 'SPECIALIST_OPERATED' || document.documentElement.dataset.theme === 'pro';
 const baseRGB = () => darkUI() ? BASE_DARK : BASE_LIGHT;
-export function stateRGB(k, tone) { const c = STATE_RGB[k] || (tone < 0 ? STATE_RGB.WEAK : STATE_RGB.HYPER); const t = k === 'OK' ? 0 : Math.max(.55, Math.min(1, Math.abs(tone) * 1.3));
+export function stateRGB(k, tone) { const P = darkUI() ? STATE_RGB : ACT_RGB, c = P[k] || (tone < 0 ? P.WEAK : P.HYPER); const t = k === 'OK' ? 0 : Math.max(.55, Math.min(1, Math.abs(tone) * 1.3));
   return baseRGB().map((b, i) => Math.round(b + (c[i] - b) * t)); }
 export function ramp(v) { const x = Math.max(-1, Math.min(1, v)); let i = RAMP.findLastIndex(r => r[0] <= x); i = Math.max(0, Math.min(RAMP.length - 2, i));
   const [a, ca] = RAMP[i], [b, cb] = RAMP[i + 1], t = Math.max(0, Math.min(1, (x - a) / (b - a))); const ch = (c, s) => (c >> s) & 255; const mix = s => Math.round(ch(ca, s) + (ch(cb, s) - ch(ca, s)) * t);
   return [mix(16), mix(8), mix(0)]; }
 export const RAMP_CSS = 'linear-gradient(90deg,' + RAMP.map(([v, c]) => '#' + c.toString(16).padStart(6, '0') + ' ' + ((v + 1) * 50) + '%').join(',') + ')';
-export const MARK_HEX = { HYPER: '#F59E0B', SHORT: '#EF4444', WEAK: '#3B73D9', DONE: '#22C55E' };
+export const MARK_HEX = { HYPER: '#F59E0B', SHORT: '#EF4444', WEAK: '#3B73D9', DONE: '#22C55E' }, ACT_HEX = { ...MARK_HEX, HYPER: '#8B5CF6', SHORT: '#0D9488' };
 /** Маркер состояния формой: перегрузка — круг, укорочение — ромб, слабость — кольцо. derived: пунктир без ореола. */
 export function drawMark(ctx, x, y, k, o = {}) {
-  const c = MARK_HEX[k]; if (!c) return; const sc = o.scale ?? 1; ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
+  const c = (darkUI() ? MARK_HEX : ACT_HEX)[k]; if (!c) return; const sc = o.scale ?? 1; ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
   if (!o.derived) { ctx.globalAlpha = (k === 'WEAK' ? .14 : .18) * (o.alpha ?? 1); ctx.fillStyle = c; ctx.beginPath(); ctx.arc(0, 0, 16, 0, 7); ctx.fill(); }
   ctx.globalAlpha = o.alpha ?? 1; ctx.setLineDash(o.derived ? [3, 3] : []);
   if (k === 'HYPER') { ctx.beginPath(); ctx.arc(0, 0, 7, 0, 7); if (o.derived) { ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.stroke(); } else { ctx.fillStyle = c; ctx.fill(); } }
