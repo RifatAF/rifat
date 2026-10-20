@@ -313,18 +313,18 @@ export function onboarding() {
   setSession(MODES.SELF);
   go(`<div class="scr welcome fade">
     <img class="welcome-bg" src="img/bp-hero-client.webp" alt="">
-    <div class="row pad" style="padding-top:18px;position:relative"><img src="icons/mark.svg" width="36" height="36" alt=""><b class="brand-name">BodyPassport</b><span style="flex:1"></span>${configSync().beta !== false ? '<span class="tag-dark">бета</span>' : ''}</div>
+    <div class="row pad" style="padding-top:18px;position:relative"><img src="icons/mark.svg" width="36" height="36" alt=""><b class="brand-name">BodyPassport</b><span style="flex:1"></span><button class="spec-pill" id="pro">${ic('users', 's')}Я специалист</button></div>
     <div class="pad welcome-txt"><div class="welcome-kicker">Паспорт вашего тела</div><h1>Проверьте, как вы двигаетесь, за&nbsp;4&nbsp;минуты</h1>
       <p>Камера телефона посмотрит на осанку и движения и подскажет, с чего начать. Видео не записывается и не покидает телефон.</p>
       ${INV() ? '' : `<div class="row" style="margin-top:18px;gap:10px"><img src="img/rifat.jpg" alt="Рифат Аюпов" width="36" height="36" style="border-radius:50%;object-fit:cover;flex:none;border:1.5px solid rgba(255,255,255,.4)"><div style="font-size:13px;line-height:1.35"><b style="font-weight:600;display:block">Методика Рифата Аюпова</b><span style="opacity:.7">кинезиотерапевт, биомеханик</span></div></div>`}</div>
-    <div class="dock dark-dock"><button class="btn white" id="next">Начать тест ${ic('arrow-right', 's')}</button><button class="btn ghost on-dark" id="mycab"${myReports().length || tests().length ? '' : ' hidden'}>${ic('user', 's')}Мой кабинет</button><div class="row" style="justify-content:center;gap:20px"><button class="link on-dark" id="pro">Я специалист</button>${canInstall() ? `<button class="link on-dark" id="inst1">${ic('download', 's')} Установить</button>` : ''}</div></div></div>`);
+    <div class="dock dark-dock"><button class="btn white" id="next">Начать тест ${ic('arrow-right', 's')}</button><button class="btn ghost on-dark" id="mycab"${myReports().length || tests().length ? '' : ' hidden'}>${ic('user', 's')}Мой кабинет</button><button class="btn ghost on-dark" id="pro2">${ic('users', 's')}Кабинет специалиста</button>${canInstall() ? `<div class="row" style="justify-content:center"><button class="link on-dark" id="inst1">${ic('download', 's')} Установить</button></div>` : ''}</div></div>`);
   // уже есть кабинет: вошедший специалист идет в свой кабинет, клиент с аккаунтом или тестами в свой
   // вход проверяем заново: запомненный ответ мог быть «не вошел» из-за сбоя сети при запуске
   $('#mycab').onclick = clientHome;
   { const acc = localStorage.getItem('bp_acc'); if (acc) { $('#mycab').hidden = false; if (acc === 'pro') $('#mycab').onclick = () => openPro(); } }
   getMe(true).then(u => { const b = $('#mycab'); if (!b || !b.isConnected) return; if (!u) return; localStorage.setItem('bp_acc', u.role === 'specialist' ? 'pro' : '1'); b.hidden = false;
-    if (u.role === 'specialist') { b.onclick = () => openPro(); const pr = $('#pro'); if (pr) pr.remove(); } }).catch(() => {});
-  $('#next').onclick = () => { track('onb_done'); prep(); }; if ($('#pro')) $('#pro').onclick = () => localStorage.getItem('bp_inv') ? specSheet() : openPro(); if ($('#inst1')) $('#inst1').onclick = () => installNow();
+    if (u.role === 'specialist') { b.onclick = () => openPro(); for (const id of ['#pro', '#pro2']) { const pr = $(id); if (pr) pr.remove(); } } }).catch(() => {});
+  $('#next').onclick = () => { track('onb_done'); prep(); }; for (const id of ['#pro', '#pro2']) if ($(id)) $(id).onclick = () => localStorage.getItem('bp_inv') ? specSheet() : openPro(); if ($('#inst1')) $('#inst1').onclick = () => installNow();
 }
 
 // ---------- 2. подготовка ----------
