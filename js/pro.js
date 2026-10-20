@@ -9,7 +9,7 @@ import { releaseFor, massageAllowed } from './biomechanics-engine.js';
 import { analyze, fmt, recompute } from './analysis.js';
 import { track, vasStats } from './track.js';
 import { painWord, PAIN_SCALE } from './vas.js';
-import { npsCard, bindNps, installCard, bindInstall, installNow, canInstall, feedbackSheet, referralSheet, myRef, bugSheet, DEV, exitSurvey } from './grow.js';
+import { npsCard, bindNps, installCard, bindInstall, installNow, canInstall, feedbackSheet, referralSheet, myRef, bugSheet, DEV, proSurvey, proSurveyDue } from './grow.js';
 import { meSync, logout, getMe } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
 import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS } from './plans.js';
@@ -364,11 +364,11 @@ function feedbackHub() { const d = document.createElement('div'); d.className = 
   const it = (id, icon, t, sub) => `<button class="row-link" data-f="${id}">${ic(icon, 's')}<span style="flex:1;text-align:left"><b style="font-weight:600">${t}</b><br><small class="sub" style="font-size:13px">${sub}</small></span>${ic('chevron-right', 's chev')}</button>`;
   d.innerHTML = `<div><h2>Обратная связь</h2><div class="group" style="margin-top:var(--s3)">
     ${it('bug', 'message-square', 'Ошибка, неудобство или идея', 'Экран и устройство приложатся сами')}
-    ${isBeta() ? it('rate', 'star', 'Оценить работу с приложением', '30 секунд, 5 вопросов') : ''}
+    ${it('rate', 'star', 'Оставить оценку', '2 минуты, 5 вопросов: польза, чего не хватает, цена')}
     <a class="row-link" href="https://t.me/${DEV.tg}" target="_blank" rel="noopener"><img src="${DEV.photo}" alt="" width="22" height="22" style="border-radius:50%;object-fit:cover"><span style="flex:1"><b style="font-weight:600">Написать разработчику</b><br><small class="sub" style="font-size:13px">Telegram, отвечаю сам</small></span>${ic('chevron-right', 's chev')}</a></div>
     <button class="btn ghost" id="fx" style="margin-top:8px;border:0">Закрыть</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; d.querySelector('#fx').onclick = () => d.remove();
-  d.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { d.remove(); if (b.dataset.f === 'bug') bugSheet(); else exitSurvey('menu'); }); }
+  d.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { d.remove(); if (b.dataset.f === 'bug') bugSheet(); else proSurvey('menu'); }); }
 /** Удаление кабинета: все клиенты, оценки и записи на этом телефоне, ссылки клиентов закрываются; по желанию и аккаунт на сервере. С защитой от случайного нажатия. */
 async function wipeCabinet() {
   const n = (await all('clients')).filter(c => !c.demo).length;
@@ -396,6 +396,7 @@ async function proMenu() {
   const h = (t, open) => `<details class="acc" style="margin-top:var(--s3)"${open ? ' open' : ''}><summary style="font-weight:600;font-size:16px">${t}</summary><div style="margin-top:4px">`, he = '</div></details>', ntf = localStorage.getItem('bp_ntf') !== '0';
   d.innerHTML = `<div><h2>Меню</h2>
     ${p.plan === 'start' && !isBeta() ? `<a class="row-link gopro" href="/pricing" style="margin-top:var(--s2)"><span style="color:var(--sub);font-size:14px">${planLine()}</span>${ic('chevron-right', 's chev')}</a>` : ''}
+    <div class="group" style="margin-top:var(--s2)">${r('mrate', 'star', 'Оставить оценку')}</div>
     ${h('Работа', true)}<div class="group">
       ${r('mcal', 'calendar', 'Календарь: ретесты и консультации')}
       <div class="row-link" style="cursor:default">${ic('bell', 's')}<span>Напоминания</span><button class="pill" id="mntf">${ntf ? 'Вкл' : 'Выкл'}</button></div>
@@ -410,7 +411,7 @@ async function proMenu() {
     ${he}${h('Помощь')}<div class="group">
       ${canInstall() ? r('minst', 'download', 'Установить приложение на телефон') : ''}${r('mrsf', 'upload', 'Восстановить клиентов из файла')}
       ${r('demo2', 'file-text', 'Пример оценки')}
-      ${r('mfb', 'message-square', 'Обратная связь: ошибка, идея, оценка')}
+      ${r('mfb', 'message-square', 'Обратная связь: ошибка, идея')}
       ${r('mexp', 'info', 'Мои проверки: что подтверждается')}
       <a class="row-link" href="/privacy" target="_blank">${ic('shield-check', 's')}<span>Конфиденциальность</span>${ic('chevron-right', 's chev')}</a></div>
     ${he}${h('Аккаунт')}<div class="group">
@@ -431,13 +432,14 @@ async function proMenu() {
   if (d.querySelector('#minst')) d.querySelector('#minst').onclick = () => { d.remove(); installNow(); };
   d.querySelector('#mrsf').onclick = () => pickRestore(n => { d.remove(); if (n) proHome(); });
   d.querySelector('#mfb').onclick = () => { d.remove(); feedbackHub(); };
+  d.querySelector('#mrate').onclick = () => { d.remove(); proSurvey('menu'); };
   d.querySelector('#msp').onclick = () => { d.remove(); specialtyScreen(proHome); };
   d.querySelector('#mr').onchange = e => { const f = e.target.files[0]; d.remove(); if (f) restore(f); };
   d.querySelector('#mp').onclick = async () => { d.remove(); profileForm(); };
   d.querySelector('#mref').onclick = () => { d.remove(); referralSheet(); };
   if (d.querySelector('#mbal')) d.querySelector('#mbal').onclick = () => { d.remove(); balanceScreen(); };
   if (d.querySelector('#mc')) d.querySelector('#mc').onclick = () => { localStorage.setItem('bp_mode', 'client'); d.remove(); onboarding(); };
-  if (d.querySelector('#mo')) d.querySelector('#mo').onclick = async () => { d.remove(); const out = async () => { await logout(); localStorage.removeItem('bp_mode'); onboarding(); }; if (isBeta()) exitSurvey('logout', out); else out(); };
+  if (d.querySelector('#mo')) d.querySelector('#mo').onclick = async () => { d.remove(); const out = async () => { await logout(); localStorage.removeItem('bp_mode'); onboarding(); }; if (isBeta() && proSurveyDue()) proSurvey('logout', out); else out(); };
   d.querySelector('#mx').onclick = () => d.remove();
   d.querySelector('#mcal').onclick = () => { d.remove(); calendarScreen(); };
   d.querySelector('#macal').onclick = e => { const on = localStorage.getItem('bp_autocal') === '0'; localStorage.setItem('bp_autocal', on ? '1' : '0'); e.target.textContent = on ? 'Вкл' : 'Выкл'; if (on) { autoCalAt = 0; syncAutoCalib().catch(() => {}); } };
@@ -810,7 +812,9 @@ async function newAssessment(clientId, retestOf, opts = {}) {
       track('assess_start', { n: units.length }, false);
       const r = await runProtocol(units, { target: prev && prev.setup, onCancel: () => clientCard(clientId), pre, specialist: true, repeat: !!prev }); if (!r) return;
       const a = { id: uid(), clientId, date: r.date, template: tpl[0], templateName: session ? 'После сеанса' : tpl[0] === 'posture' && !prev ? 'До сеанса' : tpl[1], protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, ...(r.main ? { main: r.main } : {}), tech: r.tech || null, limits: r.limits || {}, pain, painSide, lumbarZone: LUMBAR[tpl[0]] || (prev && prev.lumbarZone) || null, hyp: {}, plan: null, note: '', expect: expect.trim().slice(0, 500), nextDate: r.date + 30 * DAY, prevId: prev ? prev.id : null, draft: true };
-      await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); backupSoon(); track('assess_done', { n: units.length }, false); if (prev) track('retest_done', { n: Math.round((r.date - prev.date) / DAY) }, false); if (prev) endTrialOnRetest(); result(a.id); }; };
+      await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); backupSoon(); track('assess_done', { n: units.length }, false); if (prev) track('retest_done', { n: Math.round((r.date - prev.date) / DAY) }, false); if (prev) endTrialOnRetest(); await result(a.id);
+      // анкета специалиста (BP-17): когда результат уже посмотрели, пока не ответил
+      if (isBeta() && proSurveyDue()) setTimeout(() => { if ($('#rep') && !document.querySelector('.sheet')) proSurvey('test'); }, 25000); }; };
   draw(); if (opts.autostart) $('#go').click();
 }
 

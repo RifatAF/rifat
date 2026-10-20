@@ -209,15 +209,45 @@ export function testSurvey(key, ctx = {}) {
       toast('Спасибо! Это очень помогает'); d.remove(); }
     catch (e) { b.disabled = false; b.textContent = 'Отправить'; d.querySelector('#tse').textContent = 'Не отправилось, попробуйте еще раз'; } };
 }
+/** Анкета специалиста (BP-17): польза для работы, будет ли использовать с клиентами, готовность платить. Клиенты видят свою анкету exitSurvey. */
+const PRO_DONE = 'bp_prosv_done', PRO_AT = 'bp_prosv_at';
+// сама открывается после теста, пока специалист не ответил; после «Позже» не чаще раза в 3 дня
+export const proSurveyDue = () => !LS.get(PRO_DONE) && Date.now() - +(LS.get(PRO_AT) || 0) > 3 * 864e5;
+export function proSurvey(where = 'menu', then = null) {
+  if (document.querySelector('.sheet #psok')) return; LS.set(PRO_AT, String(Date.now())); track('fb_sent', { c: 'pro_open' }, false);
+  const pick = { s: 0, use: '' }, area = (id, ph) => `<textarea id="${id}" class="field" rows="2" maxlength="2000" placeholder="${ph}" style="height:auto;padding:12px 16px;margin-top:8px"></textarea>`;
+  const d = sheet(`<div class="eyebrow">Бета-версия · для специалистов</div><h2 style="font-size:22px;margin-top:6px">Оцените приложение</h2>
+    <p class="sub" style="font-size:14px;margin-top:6px">2 минуты. Обязателен только вопрос 3, критикуйте смело: каждый ответ читаю сам.</p>
+    <b style="display:block;margin-top:16px">1. Насколько приложение полезно для вашей работы?</b>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:8px">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => `<button class="pill" data-s="${n}" style="min-height:44px;font-size:17px;justify-content:center">${n}</button>`).join('')}</div>
+    <div class="row" style="justify-content:space-between;font-size:12px;color:var(--sub);margin:4px 4px 0"><span>бесполезно</span><span>очень полезно</span></div>
+    <b style="display:block;margin-top:16px">2. Что было понятно, а что нет?</b>${area('psclear', 'Например: карта тела понятна, а что значит «Мягко укрепить», не ясно')}
+    <b style="display:block;margin-top:16px">3. Будете использовать с клиентами?</b>
+    <div class="seg" style="margin-top:8px"><button data-u="yes">Да</button><button data-u="maybe">Может быть</button><button data-u="no">Нет</button></div>${area('pswhy', 'Почему?')}
+    <b style="display:block;margin-top:16px">4. Чего не хватило?</b>${area('psmiss', 'Функции, упражнения, данные в отчете…')}
+    <b style="display:block;margin-top:16px">5. Готовы ли платить за такой инструмент? Сколько в месяц и за что?</b>${area('pspay', 'Например: 1000 ₽ в месяц, если будут ретесты и отчеты с моим логотипом')}
+    <p id="pse" style="font-size:13px;color:var(--over-t);min-height:18px"></p>
+    <button class="btn" id="psok">Отправить</button><button class="btn ghost" id="psno" style="margin-top:8px;border:0">Позже</button>`);
+  const done = () => { d.remove(); if (then) then(); };
+  d.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { pick.s = pick.s === +b.dataset.s ? 0 : +b.dataset.s; d.querySelectorAll('[data-s]').forEach(x => { const on = +x.dataset.s <= pick.s; x.style.background = on ? 'var(--ink)' : ''; x.style.color = on ? '#fff' : ''; }); });
+  d.querySelectorAll('[data-u]').forEach(b => b.onclick = () => { pick.use = b.dataset.u; d.querySelectorAll('[data-u]').forEach(x => x.classList.toggle('on', x === b)); d.querySelector('#pse').textContent = ''; });
+  d.querySelector('#psno').onclick = () => { track('fb_sent', { c: 'pro_skip' }, false); done(); };
+  d.querySelector('#psok').onclick = async () => { const e = d.querySelector('#pse');
+    if (!pick.use) { e.textContent = 'Ответьте на вопрос 3: будете ли использовать с клиентами'; d.querySelector('[data-u]').scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
+    const v = id => d.querySelector(id).value.trim().slice(0, 2000), b = d.querySelector('#psok'); b.disabled = true; b.textContent = 'Отправляю…';
+    try { await sendFeedback({ k: 'pro', s: pick.s || null, w: where, q: { use: pick.use, why: v('#pswhy'), clear: v('#psclear'), missing: v('#psmiss'), pay: v('#pspay') } });
+      LS.set(PRO_DONE, String(Date.now())); toast('Спасибо! Ответ получен'); done(); }
+    catch (err) { b.disabled = false; b.textContent = 'Отправить'; e.textContent = 'Не отправилось, проверьте интернет'; } };
+}
 /** Плашка беты сверху экрана (только в режиме «Бета»): видно, что это бета, и можно сразу оценить работу. */
 export function mountBetaBar() {
   if (configSync().beta === false || document.getElementById('betabar')) return;
   const b = document.createElement('div'); b.id = 'betabar';
   b.innerHTML = `<span><b>Бета-версия</b> · все бесплатно</span><button id="betarate">Оценить работу</button>`;
   document.body.prepend(b); document.body.classList.add('beta');
-  b.querySelector('#betarate').onclick = () => exitSurvey('banner');
+  b.querySelector('#betarate').onclick = () => role() === 'pro' ? proSurvey('banner') : exitSurvey('banner');
   // вернулся после работы (2+ минуты) больше чем через 20 минут: один раз в день спрашиваем про прошлую сессию
   try { const s = JSON.parse(localStorage.getItem('bp_sess') || 'null'), lastAsk = +(LS.get('bp_exit_at') || 0);
     if (s && s.end - s.start > 120e3 && Date.now() - s.end > 20 * 60e3 && LS.get('bp_sess_rated') !== String(s.start) && Date.now() - lastAsk > 20 * 3600e3)
-      setTimeout(() => { if (!document.querySelector('.sheet') && !document.querySelector('.cam')) exitSurvey('return'); }, 2500); } catch (e) {}
+      setTimeout(() => { if (document.querySelector('.sheet') || document.querySelector('.cam')) return; if (role() !== 'pro') exitSurvey('return'); else if (proSurveyDue()) proSurvey('return'); }, 2500); } catch (e) {}
 }

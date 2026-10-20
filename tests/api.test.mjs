@@ -16,7 +16,7 @@ const SESS = await import(R + '_session.js'); SESS.APP.beta = false; // тест
 const relay = (await import(R + 'relay.js')).default, ev = (await import(R + 'ev.js')).default, auth = (await import(R + 'auth.js')).default, cron = (await import(R + 'cron.js')).default;
 const cookie = uid => { const b = Buffer.from(JSON.stringify({ uid, exp: Date.now() + 1e7 })).toString('base64url'); return `bp_s=${b}.${crypto.createHmac('sha256', 'test-secret').update(b).digest('base64url')}`; };
 function call(h, { method = 'GET', query = {}, body, headers = {} } = {}) {
-  return new Promise(ok => { const res = { code: 200, h: {}, setHeader(k, v) { this.h[k] = v; }, status(c) { this.code = c; return this; }, json(j) { ok({ code: this.code, j }); }, end() { ok({ code: this.code }); } };
+  return new Promise(ok => { const res = { code: 200, h: {}, setHeader(k, v) { this.h[k] = v; }, status(c) { this.code = c; return this; }, json(j) { ok({ code: this.code, j }); }, end(b) { ok({ code: this.code, body: b }); } };
     Promise.resolve(h({ method, query, body, headers: { host: 'x.app', ...headers } }, res)); });
 }
 // trialUntil: 1 означает «пробный уже был»: старые тесты проверяют Free; пробный проверяется отдельно
@@ -80,6 +80,18 @@ test('feedback: проверка оценки, контакт только по 
   assert.ok(!l.j.items.find(x => x.k === 'nps' && x.s === 10).contact, 'без согласия контакта нет');
   assert.equal(l.j.items.find(x => x.k === 'nps' && x.s === 10).t, 'Супер b', 'угловые скобки вырезаны');
   assert.ok(l.j.items.find(x => x.k === 'result').contact.name, 'с согласием контакт есть');
+});
+test('feedback: анкета специалиста BP-17, ID и выгрузка CSV', async () => {
+  assert.equal((await call(fb, { method: 'POST', body: JSON.stringify({ k: 'pro', s: 8, q: {} }), headers: { cookie: cookie('t_2') } })).code, 400, 'вопрос 3 обязателен');
+  assert.equal((await call(fb, { method: 'POST', body: JSON.stringify({ k: 'pro', s: 11, q: { use: 'yes' } }) })).code, 400, 'шкала 1–10');
+  assert.equal((await call(fb, { method: 'POST', body: JSON.stringify({ k: 'pro', r: 'pro', q: { use: 'maybe' } }) })).code, 200, 'остальное необязательно');
+  assert.equal((await call(fb, { method: 'POST', body: JSON.stringify({ k: 'pro', r: 'pro', s: 9, q: { use: 'yes', why: 'экономит; время', pay: '=1000 ₽', missing: 'ретест\nс логотипом' } }), headers: { cookie: cookie('t_2') } })).code, 200);
+  const l = await call(fb, { headers: { cookie: cookie('t_1') } }); assert.equal(l.j.proN, 2); assert.equal(l.j.proAvg, 9); assert.deepEqual(l.j.proUse, { yes: 1, no: 0, maybe: 1 });
+  const it = l.j.items.find(x => x.k === 'pro' && x.s === 9); assert.equal(it.uid, 't_2', 'ID пользователя сохранен'); assert.ok(it.at > 0);
+  assert.equal((await call(fb, { query: { k: 'pro', format: 'csv' }, headers: { cookie: cookie('t_2') } })).code, 403, 'выгрузка только админу');
+  const c = await call(fb, { query: { k: 'pro', format: 'csv' }, headers: { cookie: cookie('t_1') } }); const lines = c.body.split('\r\n');
+  assert.equal(lines.length, 3); assert.ok(lines[0].startsWith('\ufeffДата;ID пользователя'));
+  assert.ok(c.body.includes('"экономит; время"') && c.body.includes("'=1000 ₽") && c.body.includes('ретест с логотипом'), 'экранирование и защита от формул');
 });
 test('рефералы: код, засчет нового специалиста один раз, +3 слота, не за себя', async () => {
   const s = await import(R + '_session.js');
