@@ -253,6 +253,15 @@ function loop(gen = ++loopGen) {
   }
   requestAnimationFrame(() => loop(gen));
 }
+/** Точки на неподвижном снимке (фото «Быстрого теста»): та же модель в режиме видео, без сглаживания,
+ *  три прохода по одному кадру, чтобы трекер модели сошелся на этом снимке. Живой цикл камеры на это время стоит. */
+export async function detectStill(src) {
+  await initPose(); const w = src.videoWidth || src.naturalWidth || src.width, h = src.videoHeight || src.naturalHeight || src.height; let r = null;
+  const was = cam.hold; cam.hold = true;
+  try { for (let i = 0; i < 3; i++) { const ts = Math.max(performance.now(), lastTs + 1); lastTs = ts; r = landmarker.detectForVideo(src, ts); } }
+  finally { cam.hold = was; oeS = null; }
+  const l = r && r.landmarks && r.landmarks[0]; return l ? l.map(p => ({ x: p.x * w, y: p.y * h, visibility: p.visibility ?? 1 })) : null;
+}
 // prof: человек боком или спиной; дальние плечо и стопа закрыты телом, поэтому достаточно одной точки из пары
 export function fullyVisible(p, prof) { if (!p) return false; const v = i => p[i].visibility > .5;
   if (prof) return (v(P.NOSE) || v(P.L_EAR) || v(P.R_EAR)) && (v(P.L_SHOULDER) || v(P.R_SHOULDER)) && (v(P.L_ANKLE) || v(P.R_ANKLE));

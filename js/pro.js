@@ -291,9 +291,10 @@ export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC
     <div class="pad row" style="align-items:flex-start">${myPhoto ? `<img src="${myPhoto}" alt="" width="44" height="44" style="border-radius:50%;object-fit:cover;flex:none;margin:2px 12px 0 0" id="mph">` : ''}<div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--sub)">${esc(name)}${spName ? ' · ' + esc(spName.toLowerCase()) : ''}</div><h1>Привет, ${esc(String(name).split(' ')[0])}</h1><div style="font-size:14px;color:var(--sub);margin-top:2px">${today[0].toUpperCase() + today.slice(1)}</div></div></div>
     ${real.length ? `<div class="pad kpi" style="margin-top:var(--s4)"><div><b>${real.filter(c => { const a = last(c.id); return a && Date.now() - a.date < 60 * DAY; }).length}</b><span>активных</span></div><div><b>${review.length + consults.filter(x => new Date(x.v.t).toDateString() === new Date().toDateString()).length}</b><span>на сегодня</span></div><div><b>${real.length}</b><span>всего</span></div></div>` : ''}
     ${slotWidget(slots((await trackedIds()).size))}
-    <div class="pad" style="margin-top:var(--s4);display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <button class="card" id="qa1" style="border:0;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:14px;display:flex;flex-direction:column;gap:6px;background:var(--brand);color:#fff">${ic('camera')}<b style="font-size:16px;line-height:1.2">Оценить клиента</b><span style="font-size:12px;opacity:.75">он рядом, тест на этом телефоне</span></button>
-      <button class="card" id="qa2" style="border:0;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:14px;display:flex;flex-direction:column;gap:6px">${ic('mail')}<b style="font-size:16px;line-height:1.2">Тест из дома</b><span style="font-size:12px;color:var(--sub)">ссылка клиенту, результат придет сюда</span></button>${(meSync() || {}).admin && localStorage.getItem('bp_session_mode') === '1' ? `<button class="card row" id="qses" style="grid-column:1/-1;border:0;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:14px;gap:10px">${ic('rotate-ccw')}<div style="flex:1"><b style="font-size:16px">Сеанс</b><div style="font-size:12px;color:var(--sub)">тест, правка руками, повтор</div></div></button>` : ''}</div>
+    <div class="pad" style="margin-top:var(--s4)"><button class="btn" id="qquick" style="height:72px;font-size:19px;gap:12px;justify-content:flex-start;padding:0 20px">${ic('camera')}<span style="text-align:left;line-height:1.2">Быстрый тест<br><small style="font-size:13px;font-weight:500;opacity:.75">4 фото клиента, точки и отчет</small></span></button></div>
+    <div class="pad" style="margin-top:var(--s3)"><details class="acc" id="qmore"${localStorage.getItem('bp_more_open') === '1' ? ' open' : ''}><summary style="font-weight:600;font-size:15px">Ещё: тест по видео, тест из дома</summary><div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <button class="card" id="qa1" style="border:0;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:14px;display:flex;flex-direction:column;gap:6px">${ic('play')}<b style="font-size:16px;line-height:1.2">Тест по видео</b><span style="font-size:12px;color:var(--sub)">клиент рядом, движения на камеру</span></button>
+      <button class="card" id="qa2" style="border:0;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:14px;display:flex;flex-direction:column;gap:6px">${ic('mail')}<b style="font-size:16px;line-height:1.2">Тест из дома</b><span style="font-size:12px;color:var(--sub)">ссылка клиенту, результат придет сюда</span></button>${(meSync() || {}).admin && localStorage.getItem('bp_session_mode') === '1' ? `<button class="card row" id="qses" style="grid-column:1/-1;border:0;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:14px;gap:10px">${ic('rotate-ccw')}<div style="flex:1"><b style="font-size:16px">Сеанс</b><div style="font-size:12px;color:var(--sub)">тест, правка руками, повтор</div></div></button>` : ''}</div></details></div>
     ${real.length && !review.length && !soon.length && !consults.length ? `<div class="pad" style="margin-top:var(--s3)"><div class="card row" style="gap:10px;font-size:14px;padding:12px 14px">${ic('check', 's')}<span style="flex:1">Новых результатов, ретестов и консультаций на неделе нет</span></div></div>` : ''}
     <div class="pad tools" id="toolsH" hidden><button class="tool" id="join">${ic('mail')}Тест по ссылке</button><button class="tool" id="rtq">${ic('rotate-ccw')}Ретест</button><button class="tool" id="repq">${ic('file-text')}Отчёт</button><button class="tool" id="cmpq">${ic('arrow-right-left')}Было→стало</button></div>
     ${review.length ? h3('Новые результаты: разобрать', review.length) + `<div class="pad"><div class="group">${review.map(a => `<div class="list-item" data-a="${a.id}" style="border-radius:0;padding:var(--s3) 0;background:transparent"><span class="dot"></span><div style="flex:1;min-width:0"><b>${esc(byId[a.clientId].name)}</b><div style="font-size:13px;color:var(--sub)">${a.source === 'home' ? 'прошёл тест по ссылке' : 'гипотеза не подтверждена'} · ${esc(a.templateName || 'оценка')} · ${fmtDate(a.date)}</div></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div></div>` : ''}
@@ -312,18 +313,20 @@ export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC
   </div><div class="dock">${proNav('home')}</div></div>`);
   if (pulled && pulled.length) toast('Пришли результаты по ссылке: ' + pulled.join(', '));
   if ($('#demo')) $('#demo').onclick = openDemo;
+  $('#qmore').ontoggle = e => localStorage.setItem('bp_more_open', e.target.open ? '1' : '0');
+  $('#qquick').onclick = () => { useHit('act', 'quick'); import('./quick.js').then(m => m.quickTest()).catch(e => toast('Не открылось: ' + e.message)); };
   $('#qa1').onclick = () => { useHit('act', 'qs'); quickStart(); }; $('#qa2').onclick = () => { useHit('act', 'join'); sendJoin(); }; if ($('#qses')) $('#qses').onclick = () => import('./session.js').then(m => m.sessionStart(() => proHome())).catch(e => toast('Не открылось: ' + e.message));
   bindInstall(); if ($('#mph')) $('#mph').onclick = profileForm; 
   // одна кнопка «+»: все действия в одном списке, главный экран без лишних кнопок
   $('#new').onclick = () => { const d = document.createElement('div'); d.className = 'sheet';
     const it = (id, icon, t, sub) => `<button class="row-link" data-act="${id}">${ic(icon, 's')}<span style="flex:1;text-align:left"><b style="font-weight:600">${t}</b><br><small class="sub" style="font-size:13px">${sub}</small></span>${ic('chevron-right', 's chev')}</button>`;
-    const acts = [['qs', 'camera', ({ trainer: 'Скрининг клиента', manual: 'До сеанса', sport: 'Спортивный тест' })[sp] || 'Новая оценка', 'Клиент рядом, тест на этом телефоне'],
+    const acts = [['quick', 'camera', 'Быстрый тест', '4 фото клиента, точки и отчет'], ['qs', 'play', ({ trainer: 'Скрининг клиента', manual: 'До сеанса', sport: 'Спортивный тест' })[sp] || 'Новая оценка', 'Клиент рядом, тест на этом телефоне'],
       ['join', 'mail', 'Тест по ссылке', 'Клиент пройдет тест дома'], ['rtq', 'rotate-ccw', 'Ретест', 'Повторный тест того же клиента'], ['repq', 'file-text', 'Отчёт клиенту', 'PDF, картинка или ссылка'],
       ['cmpq', 'arrow-right-left', 'Было → стало', 'Сравнить два теста'], ...(isBeta() && (meSync() || {}).admin ? [['calq', 'star', 'Калибровка (бета)', 'Вы знаете проблему человека, он проходит тест, данные уходят на настройку']] : [])];
     // чаще используемое наверху: список подстраивается под специалиста
     d.innerHTML = `<div><h2>Что сделать?</h2><div class="group" style="margin-top:var(--s3)">${byUse('act', acts, x => x[0]).map(x => it(...x)).join('')}</div></div>`;
     document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
-    d.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { d.remove(); const k = b.dataset.act; useHit('act', k); if (k === 'qs') quickStart(); else if (k === 'calq') calibSheet(); else $('#' + k).click(); }); }; $('#join').onclick = sendJoin; bindProNav(); if ($('#bk')) $('#bk').onclick = backup; if ($('#bk2')) $('#bk2').onclick = backup;
+    d.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { d.remove(); const k = b.dataset.act; useHit('act', k); if (k === 'quick') $('#qquick').click(); else if (k === 'qs') quickStart(); else if (k === 'calq') calibSheet(); else $('#' + k).click(); }); }; $('#join').onclick = sendJoin; bindProNav(); if ($('#bk')) $('#bk').onclick = backup; if ($('#bk2')) $('#bk2').onclick = backup;
   // инструменты в одно касание: клиент один — сразу действие, иначе выбор из последних
   const lastTwo = id => asses.filter(a => a.clientId === id).sort((x, y) => x.date - y.date).slice(-2);
   const tool = (title, ok, act) => () => { const cs = sorted.filter(c => ok(lastTwo(c.id))); if (!cs.length) return toast('Пока нет подходящих клиентов'); if (cs.length === 1) return act(cs[0], lastTwo(cs[0].id)); pickClient(title, cs, c => act(c, lastTwo(c.id))); };
@@ -338,7 +341,7 @@ export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC
 }
 /** Нижнее меню кабинета: главная, клиенты, действия (+), календарь, меню. id совпадают со старыми кнопками шапки. */
 export function proNav(on) {
-  const items = [['phome', 'home', 'Главная'], ['nclients', 'users', 'Клиенты'], ['new', 'plus', 'Действия'], ['hcal', 'calendar', 'Календарь'], ['menu', 'menu', 'Меню']];
+  const items = [['phome', 'home', 'Главная'], ['nclients', 'users', 'Клиенты'], ['new', 'plus', 'Ещё'], ['hcal', 'calendar', 'Календарь'], ['menu', 'menu', 'Меню']];
   return `<nav class="bnav pro-nav" aria-label="Разделы кабинета">${items.map(([id, i, n]) => `<button id="${id}"${id === on || (on === 'home' && id === 'phome') ? ' aria-current="page"' : ''}${id === 'new' ? ' class="nav-plus"' : ''}>${ic(i, 's')}<span>${n}</span></button>`).join('')}</nav>`;
 }
 function bindProNav() {
@@ -917,7 +920,8 @@ export async function result(aid, view = 'measured') {
   // назначение теперь внизу «Итога»: старые ссылки на вкладку ведут туда же и прокручивают к нему
   const toPlan = view === 'plan'; if (toPlan) view = 'measured';
   if (RES_A && RES_A.id === aid && $('#pt')) await savePlan(RES_A); // перерисовка не теряет набранный комментарий
-  const a = await get('assessments', aid); if (!a) return proHome(); RES_A = a; const c = await get('clients', a.clientId); setBodySex(sexOf(c));
+  const a = await get('assessments', aid); if (!a) return proHome();
+  if (a.template === 'quick') return import('./quick.js').then(m => m.quickResult(aid)); RES_A = a; const c = await get('clients', a.clientId); setBodySex(sexOf(c));
   // ретест: что изменилось с прошлого теста, прямо в «Итоге» (3 самых заметных сдвига и боль)
   const pv = a.prevId ? await get('assessments', a.prevId) : null; let deltaCard = '';
   if (pv) { const cmp = comparable(pv, a), ds = deltas(pv, a).filter(x => x.state !== 'same').sort((x, y) => Math.abs(y.d) - Math.abs(x.d)).slice(0, 3);
@@ -1169,7 +1173,7 @@ async function undoRestore() { const v = await snapLoad(); if (!v) return toast(
   indexedDB.deleteDatabase(snapName()); toast('Вернул как было'); proHome(); }
 
 // для автотестов
-export const _pro = { all, put, get, del, db, unpack: (...a) => unpack(...a), normalize: (...a) => normalize(...a), phaseRep: (...a) => phaseRep(...a), clientCard: (...a) => clientCard(...a), calendarScreen: (...a) => calendarScreen(...a), result: (...a) => result(...a), compare: (...a) => compare(...a) };
+export const _pro = { all, put, get, del, db, backup: () => backup(), meta: k => meta(k), uid: () => uid(), author: () => defaultAuthor(), fmtDate: t => fmtDate(t), unpack: (...a) => unpack(...a), normalize: (...a) => normalize(...a), phaseRep: (...a) => phaseRep(...a), clientCard: (...a) => clientCard(...a), calendarScreen: (...a) => calendarScreen(...a), result: (...a) => result(...a), compare: (...a) => compare(...a) };
 
 // =================== Этап 2: «было → стало» и отчет клиенту ===================
 const BONES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28], [27, 31], [28, 32], [27, 29], [28, 30]];
