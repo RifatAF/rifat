@@ -1,6 +1,7 @@
 // Быстрый вход: Google (Google Identity Services), Telegram (виджет на сайте или Mini App внутри Telegram) и код на почту (подходит всем, в том числе iPhone без Google).
 import crypto from 'node:crypto';
 import { setSession, clearSession, sessionUid, loadUser, saveUser, deleteUser, allUsers, publicUser, isAdmin, effectivePlan, CONSENT_VERSION, maxClientSlots, ensureRefIndex, loadApp, saveApp, APP, creditReferral, startTrialIfNeeded, trialActive, PRO_PRICE } from './_session.js';
+const CLOUD_BACKUP = process.env.CLOUD_BACKUP === '1';
 
 const GOOGLE_ID = process.env.GOOGLE_CLIENT_ID || '';
 const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
@@ -110,7 +111,7 @@ export default async function handler(req, res) {
   try {
     if (!process.env.SESSION_SECRET) return res.status(503).json({ error: 'вход не настроен' });
     await loadApp();
-    if (req.method === 'GET' && a === 'config') return res.status(200).json({ beta: APP.beta, google: GOOGLE_ID || null, email: !!MAIL_KEY, telegram: TG_TOKEN && TG_NAME ? TG_NAME : null, telegramWeb: await widgetReady(String(req.headers.host || '').split(':')[0]), telegramId: TG_TOKEN ? TG_TOKEN.split(':')[0] : null });
+    if (req.method === 'GET' && a === 'config') return res.status(200).json({ beta: APP.beta, google: GOOGLE_ID || null, email: !!MAIL_KEY, telegram: TG_TOKEN && TG_NAME ? TG_NAME : null, telegramWeb: await widgetReady(String(req.headers.host || '').split(':')[0]), telegramId: TG_TOKEN ? TG_TOKEN.split(':')[0] : null, cloudBackup: CLOUD_BACKUP });
     if (req.method === 'GET' && a === 'me') { const uid = sessionUid(req); const u = uid && await loadUser(uid); if (!u) { if (uid) clearSession(res); return res.status(401).json({ user: null }); }
       if (!u.refCode && process.env.SESSION_SECRET) { await ensureRefIndex(u); await saveUser(u); } // код приглашения для тех, кто вошел до реферальной программы
       if (startTrialIfNeeded(u)) await saveUser(u);
@@ -130,6 +131,8 @@ export default async function handler(req, res) {
       req.body = { ...b, ...(v.consent ? { consent: true, health: true } : {}), role: b.role || v.role }; return signIn(req, res, v.ident); }
     const uid = sessionUid(req); const u = uid && await loadUser(uid);
     if (!u) return res.status(401).json({ error: 'войдите заново' });
+    // серверная копия за флагом (ТЗ v4, п. 5.3): по умолчанию данные клиентов не уходят с телефона
+    if (a === 'backup' && !CLOUD_BACKUP) return res.status(403).json({ error: 'cloud backup off' });
     if (a === 'backup') { const d = b.data; if (!d || typeof d !== 'object' || Array.isArray(d)) return res.status(400).json({ error: 'data' });
       const raw = JSON.stringify(d); if (raw.length > 3.5e6) return res.status(413).json({ error: 'слишком большая копия' });
       await writeJson(`backups/${u.id}.json`, { at: Date.now(), v: 1, data: d }); return res.status(200).json({ ok: true, at: Date.now() }); }

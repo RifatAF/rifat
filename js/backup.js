@@ -1,7 +1,8 @@
-// Резервная копия в аккаунте. Удаление приложения стирает localStorage и IndexedDB, поэтому тесты, анкета, занятия
-// и база клиентов специалиста дублируются на сервер (приватный Blob, только для этого аккаунта). Записи движения
-// (скелет) и видео в копию не идут: они тяжелые и не нужны. После входа на пустом телефоне копия возвращается сама.
-import { meSync } from './auth.js';
+// Резервная копия. По умолчанию (ТЗ v4, п. 5) данные остаются на телефоне, копия только файлом: downloadBackup
+// или шифрованная копия кабинета. Серверная копия в аккаунте включается флагом CLOUD_BACKUP на сервере (после юриста):
+// тогда тесты, анкета, занятия и база клиентов дублируются в приватный Blob. Записи движения и видео не идут никогда.
+// Старые копии, сохраненные до выключения, по-прежнему возвращаются на пустой телефон после входа.
+import { meSync, configSync } from './auth.js';
 import { toast } from './core.js';
 
 // ключи, которые относятся к этому телефону, а не к человеку
@@ -31,7 +32,7 @@ let timer = null, busy = false;
 /** Отправить копию, если что-то поменялось. Вызывается после теста, занятия, анкеты и при сворачивании приложения. */
 export function backupSoon(ms = 3000) { clearTimeout(timer); timer = setTimeout(() => backupNow().catch(() => {}), ms); }
 export async function backupNow() {
-  if (busy || !meSync() || !navigator.onLine) return false; busy = true;
+  if (busy || !configSync().cloudBackup || !meSync() || !navigator.onLine) return false; busy = true;
   try { const data = await snapshot(), raw = JSON.stringify(data), h = hash(raw);
     if (!Object.keys(data.ls).length && !data.pro) return false; if (localStorage.getItem('bp_bk_hash') === h) return true;
     const r = await fetch('/api/auth?a=backup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data }), keepalive: raw.length < 6e4 });

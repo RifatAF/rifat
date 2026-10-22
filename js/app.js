@@ -25,7 +25,7 @@ import { ribFlare, apicalBreath, buttWink } from './biomechanics-engine.js';
 import { cnsScore, cnsScoreCard, cnsDetail } from './cns-report.js';
 import { STATES, NT_TEXT, releaseFor, massageAllowed, measuredIds, ACTION_NAMES, LAYERS, LAYER_NAMES, layerOf } from './biomechanics-engine.js';
 import { repCounter, repKind, targetReps, setsOf, REP_KINDS } from './repcount.js';
-import { ready3D, C, loadContent, voice, sleep, phone, startMotion, initPose, poseInfo, notePoseSpeed, prefetchPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, clientPalette, RAMP_CSS, body3D, preload3D, setBodySex, device, keepAwake, ic, toast, reduceMotion } from './core.js';
+import { ready3D, C, loadContent, voice, sleep, phone, startMotion, initPose, poseInfo, notePoseSpeed, prefetchPose, cam, startCamera, stopCamera, fullyVisible, drawSkeleton, drawSilhouette, drawHeat, drawMark, clientPalette, RAMP_CSS, body3D, preload3D, setBodySex, device, keepAwake, ic, toast, reduceMotion, cameraBlocked, openInBrowserSheet } from './core.js';
 export { ic, toast };
 
 const $ = s => document.querySelector(s);
@@ -46,6 +46,9 @@ const q = new URLSearchParams(location.search);
 const inRef = (q.get('ref') || q.get('utm_source') || '').replace(/[^\w.-]/g, '').slice(0, 40);
 if (inRef && !localStorage.getItem('bp_ref')) localStorage.setItem('bp_ref', inRef);
 const REF = localStorage.getItem('bp_ref') || 'direct';
+// кампания из ссылок соцсетей (utm_campaign), тоже первое касание: в воронке видно, какой пост привел
+const inCamp = (q.get('utm_campaign') || '').replace(/[^\w.-]/g, '').slice(0, 40);
+if (inCamp && !localStorage.getItem('bp_camp')) localStorage.setItem('bp_camp', inCamp);
 // данные клиента разделены по аккаунтам: у каждого входа свои результаты на этом устройстве
 const K = k => { const u = meSync(); return u && u.id ? k + ':' + u.id : k; };
 function claimLegacy() { const u = meSync(); if (!u || localStorage.getItem('bp_legacy_client')) return; localStorage.setItem('bp_legacy_client', u.id);
@@ -317,7 +320,7 @@ export function onboarding() {
     <div class="pad welcome-txt"><div class="welcome-kicker">Паспорт вашего тела</div><h1>Проверьте, как вы двигаетесь, за&nbsp;4&nbsp;минуты</h1>
       <p>Камера телефона посмотрит на осанку и движения и подскажет, с чего начать. Видео не записывается и не покидает телефон.</p>
       ${INV() ? '' : `<div class="row" style="margin-top:18px;gap:10px"><img src="img/rifat.jpg" alt="Рифат Аюпов" width="36" height="36" style="border-radius:50%;object-fit:cover;flex:none;border:1.5px solid rgba(255,255,255,.4)"><div style="font-size:13px;line-height:1.35"><b style="font-weight:600;display:block">Методика Рифата Аюпова</b><span style="opacity:.7">кинезиотерапевт, биомеханик</span></div></div>`}</div>
-    <div class="dock dark-dock"><button class="btn white" id="next">Начать тест ${ic('arrow-right', 's')}</button><button class="btn ghost on-dark" id="mycab"${myReports().length || tests().length ? '' : ' hidden'}>${ic('user', 's')}Мой кабинет</button><button class="btn ghost on-dark" id="pro2">${ic('users', 's')}Кабинет специалиста</button>${canInstall() ? `<div class="row" style="justify-content:center"><button class="link on-dark" id="inst1">${ic('download', 's')} Установить</button></div>` : ''}</div></div>`);
+    <div class="dock dark-dock"><button class="btn white" id="next">Начать тест ${ic('arrow-right', 's')}</button><button class="btn ghost on-dark" id="mycab"${myReports().length || tests().length ? '' : ' hidden'}>${ic('user', 's')}Мой кабинет</button><button class="btn ghost on-dark" id="pro2">${ic('users', 's')}Кабинет специалиста</button></div></div>`);
   // уже есть кабинет: вошедший специалист идет в свой кабинет, клиент с аккаунтом или тестами в свой
   // вход проверяем заново: запомненный ответ мог быть «не вошел» из-за сбоя сети при запуске
   $('#mycab').onclick = clientHome;
@@ -390,7 +393,7 @@ export async function prep() {
   if ($('#skipTest')) $('#skipTest').onclick = () => { track('beta_skip_test'); saveTest(fakeResult(consumerProtocol())); analysisScreen(); };
   if (reopen) prepSheet(false, true);
   // обычная кнопка вместо свайпа: свайп не находили и не понимали (аудит, п. 15)
-  let starting = false; $('#start').onclick = async () => { if (starting) return; starting = true; $('#start').disabled = true; const r = await launchTest(runTest, e => startError(e, () => launchTest(runTest, () => prep()))); if (r === null && $('#start')) prep(); };
+  let starting = false; $('#start').onclick = async () => { if (cameraBlocked()) return openInBrowserSheet(); if (starting) return; starting = true; $('#start').disabled = true; const r = await launchTest(runTest, e => startError(e, () => launchTest(runTest, () => prep()))); if (r === null && $('#start')) prep(); };
 }
 // шторка настроек теста: режим, камера, сила, список шагов с «Не могу». После перерисовки prep() остается открытой
 function prepSheet(toSteps, keep) {
@@ -1000,7 +1003,7 @@ async function inviteWelcome() {
   // после теста экрана с полем уже нет: берем сохраненный текст
   const comment = () => String(($('#ccom') ? $('#ccom').value : (() => { try { return localStorage.getItem('bp_ccom_' + inv.i); } catch (e) { return ''; } })()) || '').trim().slice(0, 1000);
   if ($('#editpf')) $('#editpf').onclick = joinForm;
-  $('#go').onclick = async () => { if (!$('#share_ok').checked) { $('#share_ok').parentElement.style.outline = '2px solid var(--over)'; return; } localStorage.setItem('bp_share_' + inv.i, String(Date.now())); let st = null; try { st = await launchTest((vns, acute) => ({ vns, acute }), e => { throw e; }); } catch (e) { inviteWelcome(); return startError(e, () => $('#go') && $('#go').click()); } if (!st) return;
+  $('#go').onclick = async () => { if (cameraBlocked()) return openInBrowserSheet(); if (!$('#share_ok').checked) { $('#share_ok').parentElement.style.outline = '2px solid var(--over)'; return; } localStorage.setItem('bp_share_' + inv.i, String(Date.now())); let st = null; try { st = await launchTest((vns, acute) => ({ vns, acute }), e => { throw e; }); } catch (e) { inviteWelcome(); return startError(e, () => $('#go') && $('#go').click()); } if (!st) return;
     const r = await runProtocol(inv.p, { onCancel: inviteWelcome, pre: PREI, vns: st.vns, acute: st.acute }); if (!r) return; stampMain(r);
     const { poses, ...light } = r; saveTest({ ...light, pain, inv: inv.i }); rememberBaseline(light.touch); resetTouch();
     const cm = comment(); sendResult({ ...r, pain, comment: cm, profile: inv.join || inv.cal ? PROFILE() : undefined }); analysisScreen(); };
@@ -2141,7 +2144,7 @@ async function checkInvAlive() { const inv = INV(); if (!inv || !inv.i) return;
 try { if (!localStorage.getItem('bp_poses_wiped')) { consumerPoses.clear().catch(() => {}); indexedDB.deleteDatabase('bodypassport-client'); localStorage.setItem('bp_poses_wiped', '1'); } } catch (e) {}
 startPassive(); // фоновый сбор касаний и ритма набора с первого экрана (только SELF_TEST)
 (async () => {
-  track('app_open', { r: REF, c: channel() });
+  track('app_open', { r: REF + (localStorage.getItem('bp_camp') ? '/' + localStorage.getItem('bp_camp') : ''), c: channel() });
   // бета: с какого устройства зашли, чтобы потом оптимизировать под iPhone и Android
   deviceInfo().then(d => track('device', { c: d.os + ' · ' + d.br, m: d.model || d.cls, n: d.mem || 0, r: d.pwa ? 'pwa' : 'web' })).catch(() => {});
   try { await loadContent(); } catch (e) { app.innerHTML = '<div class="scr pad" style="justify-content:center;gap:16px"><h1>Не удалось загрузить данные</h1><p class="sub">Проверь интернет и обнови страницу.</p><button class="btn" id="rl">Обновить</button></div>'; $('#rl').onclick = () => location.reload(); return; }

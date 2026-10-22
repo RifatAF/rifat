@@ -148,6 +148,30 @@ export async function installNow(done) {
   if (deferred) { deferred.prompt(); const r = await deferred.userChoice.catch(() => null); deferred = null; if (r && r.outcome === 'accepted') { LS.set('bp_inst', 'done'); done && done(); } return; }
   toast(iOS() ? 'Нажмите «Поделиться» → «На экран Домой»' : inApp() ? 'Откройте сайт в Chrome, там будет кнопка установки' : 'Меню ⋮ → «Установить приложение»');
 }
+// иконка «Поделиться» в Safari, чтобы человек узнал кнопку на своем экране
+const SHARE_ICO = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-5px"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
+const ADD_ICO = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="vertical-align:-5px"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg>';
+/** После первого готового отчета: установить приложение. На iPhone данные Safari и приложения раздельные, поэтому сначала копия файлом. */
+export function installSheet(onBackup) {
+  if (!canInstall() || LS.get('bp_inst') === 'done' || LS.get('bp_inst_ask')) return false;
+  LS.set('bp_inst_ask', String(Date.now())); track('install_shown');
+  const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua), safari = iOS(), android = /Android/.test(ua);
+  const step = (n, t) => `<div class="row" style="gap:12px;align-items:center;margin-top:10px;font-size:15px;line-height:1.35"><b style="flex:none;width:28px;height:28px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center">${n}</b><span>${t}</span></div>`;
+  const how = deferred ? '' : ios && !safari ? `<p style="font-size:15px;margin-top:12px;line-height:1.45">Установить на iPhone можно только из Safari. Скопируйте ссылку и откройте ее в Safari.</p>`
+    : ios ? `<div style="margin-top:12px">${step(1, 'Сохраните копию данных кнопкой ниже')}${step(2, `Нажмите ${SHARE_ICO} «Поделиться» внизу экрана`)}${step(3, `Выберите ${ADD_ICO} «На экран Домой» → «Добавить»`)}${step(4, 'Откройте приложение с экрана и загрузите копию: Меню → «Восстановить из копии»')}</div>`
+    : android ? `<p style="font-size:15px;margin-top:12px;line-height:1.45">Меню ⋮ в Chrome → «Установить приложение» или «Добавить на главный экран».</p>` : '';
+  const d = sheet(`<h2 style="font-size:22px">Установите приложение</h2>
+    <p class="sub" style="font-size:15px;margin-top:8px;line-height:1.45">Данные клиентов хранятся только на этом устройстве. Браузер может очистить их, если долго не открывать сайт, а установленное приложение их не стирает.${ios ? ' На iPhone у Safari и приложения отдельная память, поэтому сначала сохраните копию.' : ''}</p>
+    ${how}
+    ${deferred ? '<button class="btn" id="isok" style="margin-top:16px">Установить</button>' : ios && !safari ? '<button class="btn" id="iscopy" style="margin-top:16px">Копировать ссылку</button>' : ''}
+    ${onBackup ? `<button class="btn ${deferred || (ios && !safari) ? 'ghost' : ''}" id="isbk" style="margin-top:8px">Сохранить копию данных</button>` : ''}
+    <button class="btn ghost" id="isx" style="margin-top:8px;border:0">Позже</button>`);
+  d.querySelector('#isx').onclick = () => d.remove();
+  if (d.querySelector('#isok')) d.querySelector('#isok').onclick = () => installNow(() => d.remove());
+  if (d.querySelector('#iscopy')) d.querySelector('#iscopy').onclick = async () => { try { await navigator.clipboard.writeText(location.origin); toast('Ссылка скопирована'); } catch (e) {} };
+  if (d.querySelector('#isbk')) d.querySelector('#isbk').onclick = () => onBackup();
+  return true;
+}
 /** Строка «Установить приложение» с одной кнопкой. */
 export function installCard() {
   if (!canInstall() || LS.get('bp_inst') === 'done') return '';
