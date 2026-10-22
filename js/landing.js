@@ -4,6 +4,7 @@ import { go, ic } from './app.js';
 import { track } from './track.js';
 
 const CSS = `
+body.lp-on{background:#070D1F}body.lp-on #app{max-width:none}
 .lp{background:#070D1F;color:#EEF1FA;min-height:100dvh;font-family:var(--font);overflow-x:hidden}
 .lp a{color:inherit}
 .lp-w{max-width:1080px;margin:0 auto;padding:0 20px}
@@ -26,7 +27,7 @@ const CSS = `
 .lp h2{font-size:clamp(26px,6vw,40px);line-height:1.1;letter-spacing:-.03em;font-weight:800;margin:0}
 .lp-steps{display:grid;gap:14px;margin-top:24px}
 .lp-step{background:#0F1730;border:1px solid rgba(255,255,255,.07);border-radius:24px;padding:20px;display:flex;gap:16px;align-items:flex-start}
-.lp-n{flex:none;width:40px;height:40px;border-radius:12px;background:rgba(108,99,255,.18);color:#A9A3FF;display:grid;place-items:center;font:800 18px var(--font)}
+.lp-step .lp-n{flex:none;width:40px;height:40px;border-radius:12px;background:rgba(108,99,255,.18);color:#A9A3FF;display:grid;place-items:center;font:800 18px var(--font)}
 .lp-step b{font-size:18px;display:block}
 .lp-step span{font-size:15px;line-height:1.5;color:#A9B1C8;display:block;margin-top:4px}
 .lp-legal{border-radius:20px;padding:18px 20px;background:rgba(255,138,91,.08);border:1px solid rgba(255,138,91,.3);font-size:16px;line-height:1.5}
@@ -39,13 +40,16 @@ const CSS = `
 .lp-foot button{background:none;border:0;color:inherit;font:inherit;cursor:pointer;padding:0;text-decoration:underline}
 .lp-sticky{position:fixed;left:0;right:0;bottom:0;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(transparent,#070D1F 40%);display:flex;justify-content:center;z-index:5;transition:opacity .2s}
 .lp-sticky .lp-cta{margin:0}
-@media(min-width:880px){.lp-hero{grid-template-columns:1.15fr .85fr;padding:40px 0 60px}.lp-steps{grid-template-columns:repeat(3,1fr)}.lp-grid{grid-template-columns:1fr 1fr}.lp-sticky{display:none}}
+@media(min-width:880px){.lp-hero{grid-template-columns:1.2fr .8fr;gap:56px;padding:40px 0 60px}.lp-steps{grid-template-columns:repeat(3,1fr)}.lp-grid{grid-template-columns:1fr 1fr}.lp-sticky{display:none}}
 @media(prefers-reduced-motion:reduce){.lp-cta{transition:none}}
 `;
 
 /** Лендинг. onTry: вход специалиста; onSelf: старый экран теста для себя; onLogin: вход для тех, у кого уже есть кабинет. */
 export function landing({ onTry, onSelf, onLogin }) {
-  track('page_view', { c: 'landing' }, false);
+  track('page_view', { c: 'landing' }, false); document.body.classList.add('lp-on');
+  // уход с лендинга (вход, тест для себя): обычный фон и ширина приложения
+  const leave = f => () => { document.body.classList.remove('lp-on'); f(); };
+  onTry = leave(onTry); onLogin = leave(onLogin); onSelf = leave(onSelf);
   const cta = (id) => `<button class="lp-cta" id="${id}">Попробовать бесплатно 30 дней ${ic('arrow-right', 's')}</button>`;
   go(`<div class="lp fade"><style>${CSS}</style><div class="lp-w">
     <header class="lp-top"><img src="icons/mark.svg" width="32" height="32" alt=""><b>BodyPassport</b><button class="lp-in" id="lpin">Войти</button></header>
