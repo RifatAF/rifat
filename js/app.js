@@ -314,6 +314,9 @@ async function resultLink() { return location.origin + location.pathname + '#r='
 // ---------- 1. знакомство ----------
 export function onboarding() {
   setSession(MODES.SELF);
+  // лендинг для специалистов (ТЗ v4, п. 8): новым посетителям без приглашения и без своих тестов; тест для себя по ссылке внизу
+  if (!INV() && !tests().length && !localStorage.getItem('bp_acc') && !localStorage.getItem('bp_self'))
+    return import('./landing.js').then(m => m.landing({ onTry: () => openPro(), onLogin: () => openPro(), onSelf: () => { localStorage.setItem('bp_self', '1'); onboarding(); } }));
   go(`<div class="scr welcome fade">
     <img class="welcome-bg" src="img/bp-hero-client.webp" alt="">
     <div class="row pad" style="padding-top:18px;position:relative"><img src="icons/mark.svg" width="36" height="36" alt=""><b class="brand-name">BodyPassport</b><span style="flex:1"></span><button class="spec-pill" id="pro">${ic('users', 's')}Я специалист</button></div>

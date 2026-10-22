@@ -10,7 +10,7 @@ const NAMES = new Set(['app_open', 'plan_minutes', 'onb_done', 'login_ok', 'safe
   'inv_open', 'result_sent', 'result_fail', 'pro_open', 'assess_start', 'assess_done', 'invite_sent', 'join_sent', 'result_pulled', 'report_sent', 'retest_set', 'err',
   'fb_sent', 'ref_share', 'install_shown', 'install_ok',
   // воронка ТЗ v4 (п. 8.4): регистрация, первый тест, первый отчет, повтор за 14 дней, установка, оплата; плюс события, что раньше терялись
-  'signup', 'first_test', 'first_report', 'retest_14d', 'install_click', 'profile_done', 'beta_skip_test', 'calib_sent',
+  'page_view', 'signup', 'first_test', 'first_report', 'retest_14d', 'install_click', 'profile_done', 'beta_skip_test', 'calib_sent',
   'pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'db_empty', 'db_other', 'backup_done', 'restore_done',
   'gate_hit', 'compare_open', 'retest_done', 'report_shared', 'bug_sent', 'rage', 'slow',
   'pro_click', 'vas_done', 'report_link', 'progress_sent',
