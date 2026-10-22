@@ -137,7 +137,7 @@ export const device = (() => {
   const mem = navigator.deviceMemory || 4, cores = navigator.hardwareConcurrency || 4;
   const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   // встроенные браузеры соцсетей часто не дают камеру
-  const inApp = /Instagram|FBAN|FBAV|Line\/|VKClient|TikTok|Snapchat/i.test(ua);
+  const inApp = /Instagram|FBAN|FBAV|FB_IAB|Line\/|VKClient|TikTok|Snapchat|Telegram-Android/i.test(ua);
   const tg = !!(window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData);
   const weak = mem <= 3 || cores <= 4;
   // встроенный браузер (Telegram, Android WebView): памяти меньше, чем у Chrome, и при тяжелой модели позы вкладку молча выгружало.
@@ -189,7 +189,26 @@ export function prefetchPose() { if (prefetched || landmarker) return; prefetche
     .forEach(u => fetch(u, { priority: 'low' }).catch(() => {}));
   (window.requestIdleCallback || (f => setTimeout(f, 1500)))(go); }
 export const cam = { video: null, stream: null, back: localStorage.getItem('bp_back') === '1', frame: null, running: false };
+// встроенные браузеры соцсетей и Telegram: камера не работает или открывает галерею (ТЗ v4, п. 4.3). До камеры не пускаем
+// Telegram Mini App на iPhone камеру дает (там работаем как раньше), на Android поле камеры открывает галерею
+export const cameraBlocked = () => device.inApp || (device.tg && /Android/i.test(navigator.userAgent));
+export function openInBrowserSheet() {
+  if (document.getElementById('inappsheet')) return; track('cam_err', { c: 'inapp' }, false);
+  const url = location.href.split('#')[0], android = /Android/i.test(navigator.userAgent);
+  const intent = 'intent://' + url.replace(/^https?:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;end';
+  const d = document.createElement('div'); d.className = 'sheet'; d.id = 'inappsheet';
+  d.innerHTML = `<div><h2 style="font-size:24px;line-height:1.2">Откройте ссылку в ${android ? 'Chrome' : 'Safari'}</h2>
+    <p class="sub" style="font-size:16px;margin-top:10px;line-height:1.45">Встроенный браузер ${device.tg ? 'Telegram' : 'соцсети'} не дает приложению камеру. В ${android ? 'Chrome' : 'Safari'} все заработает.</p>
+    <p style="font-size:15px;margin-top:12px;line-height:1.45">${android ? 'Нажмите «Открыть в Chrome» или меню ⋮ → «Открыть в браузере».' : 'Нажмите ⋯ вверху → «Открыть в Safari» или скопируйте ссылку и вставьте в Safari.'}</p>
+    ${android ? `<a class="btn" href="${intent}" style="margin-top:16px;text-decoration:none">Открыть в Chrome</a>` : ''}
+    <button class="btn${android ? ' ghost' : ''}" id="iacopy" style="margin-top:${android ? 8 : 16}px">Копировать ссылку</button>
+    <button class="btn ghost" id="iax" style="margin-top:8px;border:0">Закрыть</button></div>`;
+  document.body.appendChild(d);
+  d.querySelector('#iax').onclick = () => d.remove();
+  d.querySelector('#iacopy').onclick = async () => { try { await navigator.clipboard.writeText(url); toast('Ссылка скопирована'); } catch (e) { prompt('Скопируйте ссылку', url); } };
+}
 export async function startCamera(video) {
+  if (cameraBlocked()) { openInBrowserSheet(); throw Object.assign(new Error('in-app browser'), { name: 'InAppBrowser' }); }
   stopCamera();
   cam.video = video;
   try { cam.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: cam.back ? 'environment' : 'user', width: { ideal: device.weak || device.wv ? 1280 : 1920 }, height: { ideal: device.weak || device.wv ? 720 : 1080 } } }); }

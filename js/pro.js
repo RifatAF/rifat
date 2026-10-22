@@ -9,11 +9,11 @@ import { releaseFor, massageAllowed } from './biomechanics-engine.js';
 import { analyze, fmt, recompute } from './analysis.js';
 import { track, vasStats } from './track.js';
 import { painWord, PAIN_SCALE } from './vas.js';
-import { npsCard, bindNps, installCard, bindInstall, installNow, canInstall, feedbackSheet, referralSheet, myRef, bugSheet, DEV, proSurvey, proSurveyDue } from './grow.js';
+import { npsCard, bindNps, installCard, bindInstall, installNow, canInstall, feedbackSheet, referralSheet, myRef, bugSheet, DEV, proSurvey, proSurveyDue, installSheet } from './grow.js';
 import { meSync, logout, getMe } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
 import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS } from './plans.js';
-import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast, preload3D, saveBlob , setBodySex } from './core.js';
+import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast, preload3D, saveBlob , setBodySex, cameraBlocked, openInBrowserSheet } from './core.js';
 import { baBlock, bindBa } from './app.js';
 import { asClient, cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, mainOf, TONE_HELP, applyMain, fromMain, muscleInfo, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen, TIP_ACT } from './app.js';
 
@@ -308,7 +308,7 @@ export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC
     ${lost ? `<div class="pad" style="margin-top:var(--s3)"><div class="card" style="border:1px solid var(--over-t);font-size:14px;line-height:1.45"><b>Кабинет пуст, хотя здесь было ${was} ${plural(was)}</b><div style="margin-top:6px">Телефон мог очистить данные сайта. Восстановите кабинет из копии через меню «Восстановить из копии». Если копии нет, напишите нам через «Отзыв».</div></div></div>` : ''}
     ${iosRisk ? `<div class="pad" style="margin-top:var(--s3)"><div class="card" style="font-size:14px;line-height:1.45"><b>Защитите базу клиентов</b><div style="margin-top:6px">Safari на iPhone может стереть кабинет, если не открывать его неделю. Установите приложение на экран «Домой»: «Поделиться» → «На экран Домой», и раз в неделю сохраняйте копию.</div><button class="btn line" id="bk2" style="height:44px;margin-top:10px">Сохранить копию сейчас</button></div></div>` : ''}
     ${needBackup ? `<div class="pad" style="margin-top:var(--s3)"><button class="link" id="bk" style="width:100%;color:var(--sub);font-weight:500;font-size:13px">Клиенты хранятся только на этом телефоне · <u>сохранить копию с паролем</u></button></div>` : ''}
-    ${list.length ? installCard() : ''}
+    ${localStorage.getItem('bp_first_report') ? installCard() : ''}
   </div><div class="dock">${proNav('home')}</div></div>`);
   if (pulled && pulled.length) toast('Пришли результаты по ссылке: ' + pulled.join(', '));
   if ($('#demo')) $('#demo').onclick = openDemo;
@@ -404,7 +404,7 @@ async function proMenu() {
       ${r('msp', 'settings', 'Специализация: ' + esc(((SPECIALTIES.find(x => x[0] === localStorage.getItem('bp_sp')) || ['', 'не выбрана'])[1]).split(',')[0]))}
       ${r('mref', 'user-plus', isBeta() ? 'Пригласить коллегу' : 'Пригласить коллегу: 20% его оплат вам')}${isBeta() ? '' : r('mbal', 'download', 'Баланс: ' + ((u && u.balance) || 0).toLocaleString('ru') + ' ₽')}</div>
     ${he}${h('Данные')}<div class="group">
-      <div class="row-link" style="cursor:default">${ic('cpu', 's')}<span>Улучшать точность анонимно<br><small class="sub" style="font-size:12px">ваши проверки руками без имен клиентов</small></span><button class="pill" id="macal">${localStorage.getItem('bp_autocal') === '0' ? 'Выкл' : 'Вкл'}</button></div>
+      <div class="row-link" style="cursor:default">${ic('cpu', 's')}<span>Улучшать точность анонимно<br><small class="sub" style="font-size:12px">ваши проверки руками без имен клиентов</small></span><button class="pill" id="macal">${localStorage.getItem('bp_autocal') === '1' ? 'Вкл' : 'Выкл'}</button></div>
       ${r('mb', 'download', 'Сохранить копию с паролем')}
       <label class="row-link">${ic('upload', 's')}<span>Восстановить из копии</span>${ic('chevron-right', 's chev')}<input type="file" id="mr" accept=".json,.bpbackup,application/json" style="display:none"></label>
       ${hasSnap ? r('mund', 'rotate-ccw', 'Отменить последнее восстановление') : ''}</div>
@@ -442,7 +442,7 @@ async function proMenu() {
   if (d.querySelector('#mo')) d.querySelector('#mo').onclick = async () => { d.remove(); const out = async () => { await logout(); localStorage.removeItem('bp_mode'); onboarding(); }; if (isBeta() && proSurveyDue()) proSurvey('logout', out); else out(); };
   d.querySelector('#mx').onclick = () => d.remove();
   d.querySelector('#mcal').onclick = () => { d.remove(); calendarScreen(); };
-  d.querySelector('#macal').onclick = e => { const on = localStorage.getItem('bp_autocal') === '0'; localStorage.setItem('bp_autocal', on ? '1' : '0'); e.target.textContent = on ? 'Вкл' : 'Выкл'; if (on) { autoCalAt = 0; syncAutoCalib().catch(() => {}); } };
+  d.querySelector('#macal').onclick = e => { const on = localStorage.getItem('bp_autocal') !== '1'; localStorage.setItem('bp_autocal', on ? '1' : '0'); e.target.textContent = on ? 'Вкл' : 'Выкл'; if (on) { autoCalAt = 0; syncAutoCalib().catch(() => {}); } };
   d.querySelector('#mntf').onclick = e => { const on = localStorage.getItem('bp_ntf') === '0'; localStorage.setItem('bp_ntf', on ? '1' : '0'); e.target.textContent = on ? 'Вкл' : 'Выкл'; syncReminders().catch(() => {}); };
 }
 
@@ -807,12 +807,12 @@ async function newAssessment(clientId, retestOf, opts = {}) {
     $('#expect').oninput = e => { expect = e.target.value; };
     document.querySelectorAll('[data-ps]').forEach(b => b.onclick = () => { painSide = b.dataset.ps || null; document.querySelectorAll('[data-ps]').forEach(x => x.classList.toggle('on', x === b)); });
     $('#c0').onclick = () => { cam.back = false; localStorage.setItem('bp_back', '0'); draw(); }; $('#c1').onclick = () => { cam.back = true; localStorage.setItem('bp_back', '1'); draw(); };
-    $('#go').onclick = async () => { useHit('tpl', tpl[0]); voice.unlock(); startMotion(); $('#go').textContent = 'Загружаю модель…';
+    $('#go').onclick = async () => { if (cameraBlocked()) return openInBrowserSheet(); useHit('tpl', tpl[0]); voice.unlock(); startMotion(); $('#go').textContent = 'Загружаю модель…';
       try { await initPose(); } catch (e) { toast('Не удалось загрузить модель: ' + e.message); return draw(); }
-      track('assess_start', { n: units.length }, false);
+      track('assess_start', { n: units.length }, false); if (!localStorage.getItem('bp_first_test')) { localStorage.setItem('bp_first_test', String(Date.now())); track('first_test', null, false); }
       const r = await runProtocol(units, { target: prev && prev.setup, onCancel: () => clientCard(clientId), pre, specialist: true, repeat: !!prev }); if (!r) return;
       const a = { id: uid(), clientId, date: r.date, template: tpl[0], templateName: session ? 'После сеанса' : tpl[0] === 'posture' && !prev ? 'До сеанса' : tpl[1], protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, ...(r.main ? { main: r.main } : {}), tech: r.tech || null, limits: r.limits || {}, pain, painSide, lumbarZone: LUMBAR[tpl[0]] || (prev && prev.lumbarZone) || null, hyp: {}, plan: null, note: '', expect: expect.trim().slice(0, 500), nextDate: r.date + 30 * DAY, prevId: prev ? prev.id : null, draft: true };
-      await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); backupSoon(); track('assess_done', { n: units.length }, false); if (prev) track('retest_done', { n: Math.round((r.date - prev.date) / DAY) }, false); if (prev) endTrialOnRetest(); await result(a.id);
+      await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); backupSoon(); track('assess_done', { n: units.length }, false); if (prev) track('retest_done', { n: Math.round((r.date - prev.date) / DAY) }, false); if (prev && r.date - prev.date <= 14 * DAY) track('retest_14d', null, false); if (prev) endTrialOnRetest(); await result(a.id);
       // анкета специалиста (BP-17): когда результат уже посмотрели, пока не ответил
       if (isBeta() && proSurveyDue()) setTimeout(() => { if ($('#rep') && !document.querySelector('.sheet')) proSurvey('test'); }, 25000); }; };
   draw(); if (opts.autostart) $('#go').click();
@@ -1370,7 +1370,9 @@ async function report(aid) {
   if (d.querySelector('#rplg')) d.querySelector('#rplg').onclick = () => { d.remove(); profileForm(); };
   const send = async (blob, name, type, kind) => { const file = new File([blob], name, { type });
     if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: 'Паспорт движения' }); track('report_shared', { c: kind }, false); } catch (e) {} }
-    else { const l = document.createElement('a'); l.href = URL.createObjectURL(blob); l.download = name; l.click(); track('report_shared', { c: kind + '_download' }, false); } };
+    else { const l = document.createElement('a'); l.href = URL.createObjectURL(blob); l.download = name; l.click(); track('report_shared', { c: kind + '_download' }, false); }
+    // первый готовый отчет: событие воронки и предложение установить приложение (ТЗ v4, п. 4.1–4.2)
+    if (!localStorage.getItem('bp_first_report')) { localStorage.setItem('bp_first_report', String(Date.now())); track('first_report', null, false); setTimeout(() => installSheet(backup), 1200); } };
   d.querySelector('#rpdf').onclick = async () => { if (!gate('pdf')) return; const b = d.querySelector('#rpdf'); b.disabled = true; b.textContent = 'Собираю PDF…';
     try { const { canvasToPdf } = await import('./pdf.js'); await send(await canvasToPdf(cv, 'BodyPassport'), base + '.pdf', 'application/pdf', 'pdf'); } catch (e) { toast('Не удалось собрать PDF: ' + e.message); }
     b.disabled = false; b.innerHTML = ic('file-text', 's') + 'PDF'; };
@@ -1507,7 +1509,7 @@ function verdictsOf(a) { const out = new Map(), raw = (() => { try { return spot
 /** Фоновая калибровка (бета): проверки специалиста в разборах уходят без имени, как только изменились. Раз в 10 минут, при открытии главной. */
 let autoCalAt = 0;
 // работает и после беты: каждый специалист, не выключивший «Улучшать точность», пополняет общую базу; веса пересчитываются раз в сутки (api/_autolearn.js)
-async function syncAutoCalib() { if (!meSync() || localStorage.getItem('bp_autocal') === '0' || Date.now() - autoCalAt < 10 * 60e3) return; autoCalAt = Date.now();
+async function syncAutoCalib() { if (!meSync() || localStorage.getItem('bp_autocal') !== '1' || Date.now() - autoCalAt < 10 * 60e3) return; autoCalAt = Date.now();
   const as = (await all('assessments').catch(() => [])).filter(a => !a.demo);
   for (const a of as) { const v = verdictsOf(a); if (!v.length) continue; const h = JSON.stringify(v); if (a.autoCal === h) continue;
     const c = await get('clients', a.clientId).catch(() => null); if (!c || c.demo) continue;

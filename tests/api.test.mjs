@@ -67,6 +67,11 @@ test('auth: без второго согласия новый вход запр�
   const me9 = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_9') } }); assert.equal(me9.j.user.consentOk, false, 'старая версия согласия');
 });
 
+test('auth: серверная копия выключена по умолчанию (ТЗ v4, п. 5.3)', async () => {
+  const c = await call(auth, { query: { a: 'config' } }); assert.equal(c.j.cloudBackup, false);
+  const r = await call(auth, { method: 'POST', query: { a: 'backup' }, body: JSON.stringify({ data: { ls: {}, pro: { clients: [{ id: 'x', name: 'Иван' }] } } }), headers: { cookie: cookie('t_1') } });
+  assert.equal(r.code, 403); assert.ok(![...store.keys()].some(k => k.startsWith('backups/')), 'данные клиентов не сохранены');
+});
 const fb = (await import(R + 'feedback.js')).default;
 test('feedback: проверка оценки, контакт только по согласию, список только админу', async () => {
   assert.equal((await call(fb, { method: 'POST', body: JSON.stringify({ k: 'result', s: 9 }) })).code, 400, 'оценка вне 1–5');

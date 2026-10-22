@@ -113,7 +113,7 @@ export function loginScreen(role, cont, opts = {}) {
     if (!consented()) { err.textContent = 'Отметьте оба пункта выше'; return; }
     err.textContent = 'Вхожу…';
     try { const r = await post(a, { ...body, role, consent: true, health: true, ref: localStorage.getItem('bp_ref') }); me = r.user;
-      if (pro && me.role !== 'specialist') me = await setRole('specialist'); track('login_ok'); err.textContent = ''; window.dispatchEvent(new Event('bp-login')); cont(); }
+      if (pro && me.role !== 'specialist') me = await setRole('specialist'); track('login_ok'); if (r.created) track('signup', { r: pro ? 'pro' : 'client' }, false); err.textContent = ''; window.dispatchEvent(new Event('bp-login')); cont(); }
     catch (e) { err.textContent = 'Не получилось войти: ' + e.message; }
   };
   providers().then(list => {
