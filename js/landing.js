@@ -59,7 +59,7 @@ export function landing({ onTry, onSelf, onLogin }) {
         <p class="lp-sub">4 фото клиента, точки ставятся сами, отчёт с замером за 5 минут. Прямо в браузере телефона, без установки.</p>
         ${cta('lpgo')}<p class="lp-note">Без карты. Потом можно остаться на бесплатном тарифе.</p></div>
       <div class="lp-phone"><div class="lp-glow"></div>
-        <video id="lpv" autoplay muted loop playsinline preload="metadata" poster="img/lp/demo-poster-v1.webp" aria-label="Как проходит быстрый тест: 4 фото, точки, отчет"><source src="img/lp/demo-v1.mp4" type="video/mp4"></video>
+        <video id="lpv" autoplay muted loop playsinline preload="metadata" poster="img/lp/demo-poster-v2.webp" aria-label="Как проходит быстрый тест: 4 фото, точки, отчет"><source src="img/lp/demo-v2.mp4" type="video/mp4"></video>
         <span class="lp-cap">Реальные экраны приложения</span></div>
     </section>
     <section class="lp-sec"><h2>Три шага, пять минут</h2>
