@@ -173,30 +173,43 @@ function editor(i) {
    <div class="pad" style="margin-top:8px"><div class="row" style="gap:6px">${VIEWS.map((w, k) => { const y = Q.views[w.id];
      return `<button data-v="${k}" style="flex:1;height:58px;border-radius:12px;border:2px solid ${k === i ? 'var(--ink)' : 'var(--line)'};background:${y ? `center/cover url(${y.photo})` : 'var(--surface-2)'};position:relative;cursor:pointer" aria-label="${w.name}">${y && y.ok ? `<span style="position:absolute;right:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#16A34A;color:#fff;display:grid;place-items:center">${ic('check', 's')}</span>` : ''}${!y ? `<span style="font-size:11px;color:var(--sub)">${w.name}</span>` : ''}</button>`; }).join('')}</div>
     ${x.issue ? `<p style="font-size:13px;color:var(--over-t);margin-top:8px">${esc(x.issue)}</p>` : ''}
-    <div id="qbox" style="position:relative;margin-top:10px;touch-action:none;user-select:none;-webkit-user-select:none"><canvas id="qcv" style="width:100%;display:block;border-radius:14px;background:#111"></canvas><canvas id="qloupe" width="240" height="240" style="position:absolute;top:8px;left:8px;width:120px;height:120px;border-radius:50%;border:3px solid #fff;box-shadow:0 4px 18px rgba(0,0,0,.4);display:none;pointer-events:none"></canvas></div>
-    <p class="sub" style="font-size:13px;margin-top:6px">Проверьте точки. Неточную перетащите пальцем: лупа покажет место.</p>
+    <div id="qbox" style="position:relative;margin-top:10px;touch-action:pan-y;user-select:none;-webkit-user-select:none"><canvas id="qcv" style="width:100%;display:block;border-radius:14px;background:#111"></canvas><canvas id="qloupe" width="240" height="240" style="position:absolute;top:8px;left:8px;width:120px;height:120px;border-radius:50%;border:3px solid #fff;box-shadow:0 4px 18px rgba(0,0,0,.4);display:none;pointer-events:none;z-index:3"></canvas>
+      <button class="pill" id="qnextv" style="position:absolute;right:10px;top:10px;height:40px;font-weight:600;background:rgba(22,22,23,.78);color:#fff;border-color:rgba(255,255,255,.18);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)">${i < VIEWS.length - 1 ? 'Следующий снимок' : 'К первому снимку'} ${ic('chevron-right', 's')}</button></div>
+    <p class="sub" style="font-size:13px;margin-top:6px">Проверьте точки. Неточную перетащите пальцем: лупа покажет место. ${v.id === 'front' || v.id === 'back' ? 'Две точки у головы: на ушах, у козелка (хрящ перед слуховым проходом); сзади там же, по краю головы.' : 'Точка у головы: на ухе, у козелка (хрящ перед слуховым проходом).'}</p>
     <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="pill tog${showGrid ? ' on' : ''}" id="qgrid" aria-pressed="${showGrid}">Сетка</button><button class="pill tog${showPlumb ? ' on' : ''}" id="qplumb" aria-pressed="${showPlumb}">Отвес</button><button class="pill" id="qretake">${ic('camera', 's')} Переснять</button></div>
     <div id="qm" style="margin-top:12px"></div>
    </div>
-   <div class="dock"><button class="btn" id="qok">${ic('check', 's')}Все точки верны</button></div></div>`);
+   <div class="dock"><button class="btn" id="qok">${ic('check', 's')}Все точки верны · ${VIEWS.filter(w => Q.views[w.id]).length} фото</button></div></div>`);
   const cv = $('#qcv'), lp = $('#qloupe'), img = new Image(); let drag = -1, s = 1;
   const pts = () => x.pts || [];
   const draw = () => { if (!img.complete) return; const W = cv.clientWidth * devicePixelRatio; s = W / x.w; cv.width = W; cv.height = x.h * s; const g = cv.getContext('2d');
     g.drawImage(img, 0, 0, cv.width, cv.height);
     // сетка: квадратные клетки, светлая линия с темной подложкой видна и на светлой стене, и на темной одежде
     if (showGrid) { const cell = cv.width / 8, d = devicePixelRatio || 1; g.beginPath(); for (let gx = cell; gx < cv.width - 1; gx += cell) { g.moveTo(gx, 0); g.lineTo(gx, cv.height); } for (let gy = cell; gy < cv.height - 1; gy += cell) { g.moveTo(0, gy); g.lineTo(cv.width, gy); }
-      g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 3 * d; g.stroke(); g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineWidth = 1 * d; g.stroke(); }
+      g.strokeStyle = 'rgba(0,0,0,.25)'; g.lineWidth = 1.6 * d; g.stroke(); g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = .6 * d; g.stroke(); }
     const p = pts(); if (!p.length) return;
-    if (showPlumb) { const ax = v.id === 'right' ? p[P.R_ANKLE].x : v.id === 'left' ? p[P.L_ANKLE].x : (p[P.L_ANKLE].x + p[P.R_ANKLE].x) / 2; g.strokeStyle = '#FBBF24'; g.lineWidth = 2 * devicePixelRatio; g.setLineDash([8, 6]); g.beginPath(); g.moveTo(ax * s, 0); g.lineTo(ax * s, cv.height); g.stroke(); g.setLineDash([]); }
-    g.strokeStyle = 'rgba(79,209,217,.95)'; g.lineWidth = 2.5 * devicePixelRatio;
+    if (showPlumb) { const ax = v.id === 'right' ? p[P.R_ANKLE].x : v.id === 'left' ? p[P.L_ANKLE].x : (p[P.L_ANKLE].x + p[P.R_ANKLE].x) / 2; g.strokeStyle = '#FBBF24'; g.lineWidth = 1 * devicePixelRatio; g.setLineDash([6, 5]); g.beginPath(); g.moveTo(ax * s, 0); g.lineTo(ax * s, cv.height); g.stroke(); g.setLineDash([]); }
+    g.strokeStyle = 'rgba(79,209,217,.95)'; g.lineWidth = 1.4 * devicePixelRatio;
     for (const [a, b] of LINES[v.id]) { g.beginPath(); g.moveTo(p[a].x * s, p[a].y * s); g.lineTo(p[b].x * s, p[b].y * s); g.stroke(); }
-    for (const k of EDIT_POINTS[v.id]) { g.beginPath(); g.arc(p[k].x * s, p[k].y * s, (k === drag ? 9 : 6.5) * devicePixelRatio, 0, 7); g.fillStyle = k === drag ? '#FF7A45' : '#fff'; g.fill(); g.lineWidth = 2 * devicePixelRatio; g.strokeStyle = '#0E9AA7'; g.stroke(); }
+    for (const k of EDIT_POINTS[v.id]) { g.beginPath(); g.arc(p[k].x * s, p[k].y * s, (k === drag ? 8 : 5.5) * devicePixelRatio, 0, 7); g.fillStyle = k === drag ? '#FF7A45' : '#fff'; g.fill(); g.lineWidth = 1.5 * devicePixelRatio; g.strokeStyle = '#0E9AA7'; g.stroke(); }
+    // подписи ушей: какие две точки у головы, видно сразу
+    g.font = `600 ${11 * devicePixelRatio}px Inter, system-ui, sans-serif`; g.textBaseline = 'middle';
+    const ears = EDIT_POINTS[v.id].filter(k => k === P.L_EAR || k === P.R_EAR), cx = v.id === 'right' ? 1e9 : v.id === 'left' ? -1e9 : ears.reduce((a, k) => a + p[k].x * s, 0) / ears.length;
+    for (const k of ears) { const t = 'ухо', tw = g.measureText(t).width, out = p[k].x * s >= cx ? 1 : -1, d = devicePixelRatio, ex = p[k].x * s, ey = p[k].y * s;
+      // подпись в стороне от лица: наружу от середины головы (сбоку — назад, к затылку)
+      const tx = out > 0 ? ex + 34 * d : ex - 34 * d - tw, ty = ey - 18 * d;
+      g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = .8 * d; g.beginPath(); g.moveTo(ex + out * 6 * d, ey - 3 * d); g.lineTo(out > 0 ? tx - 5 * d : tx + tw + 5 * d, ty); g.stroke();
+      g.fillStyle = 'rgba(0,0,0,.55)'; g.beginPath(); g.roundRect(tx - 5 * devicePixelRatio, ty - 9 * devicePixelRatio, tw + 10 * devicePixelRatio, 18 * devicePixelRatio, 9 * devicePixelRatio); g.fill(); g.fillStyle = '#fff'; g.fillText(t, tx, ty); }
+    g.textBaseline = 'alphabetic';
   };
   const metrics = () => { const m = viewMetrics(v.id, x.pts, x.w, x.h, x.roll, heightCm()); $('#qm').innerHTML = m ? metricRows(m) : '<p class="sub">Точки не найдены: переснимите фото или загрузите другое.</p>'; };
   const at = e => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * x.w, y: (e.clientY - r.top) / r.height * x.h, cx: e.clientX - r.left, cy: e.clientY - r.top, rw: r.width }; };
   const loupe = (q) => { const g = lp.getContext('2d'), z = 3, half = 120 / z / (cv.clientWidth / x.w); g.clearRect(0, 0, 240, 240);
     g.drawImage(img, q.x - half, q.y - half, half * 2, half * 2, 0, 0, 240, 240); g.strokeStyle = '#FF7A45'; g.lineWidth = 2; g.beginPath(); g.moveTo(120, 96); g.lineTo(120, 144); g.moveTo(96, 120); g.lineTo(144, 120); g.stroke();
     lp.style.display = 'block'; lp.style.left = q.cx < q.rw / 2 ? 'auto' : '8px'; lp.style.right = q.cx < q.rw / 2 ? '8px' : 'auto'; };
+  // страница листается пальцем по фото; если палец лег на точку, прокрутку гасим и тянем точку
+  const hold = e => { if (drag >= 0 && e.cancelable) e.preventDefault(); };
+  cv.addEventListener('touchstart', hold, { passive: false }); cv.addEventListener('touchmove', hold, { passive: false });
   cv.addEventListener('pointerdown', e => { if (!x.pts) return; const q = at(e), r = 30 / (cv.clientWidth / x.w); let best = -1, bd = r;
     for (const k of EDIT_POINTS[v.id]) { const d = Math.hypot(x.pts[k].x - q.x, x.pts[k].y - q.y); if (d < bd) { bd = d; best = k; } }
     if (best < 0) return; drag = best; cv.setPointerCapture(e.pointerId); loupe({ ...q, x: x.pts[best].x, y: x.pts[best].y }); draw(); });
@@ -211,8 +224,11 @@ function editor(i) {
   $('#qplumb').onclick = () => { showPlumb = !showPlumb; localStorage.setItem('bp_q_plumb', showPlumb ? '1' : '0'); $('#qplumb').classList.toggle('on', showPlumb); $('#qplumb').setAttribute('aria-pressed', showPlumb); draw(); };
   $('#qretake').onclick = () => { Q.wasBack = cam.back; cam.back = true; shoot(i, true); };
   $('#back').onclick = () => { if (confirm('Выйти без сохранения? Фото этого теста удалятся.')) { Q = null; proHome(); } };
-  $('#qok').onclick = () => { if (!x.pts) return toast('На этом фото нет точек: переснимите'); x.ok = true;
-    const n = VIEWS.findIndex(w => !Q.views[w.id] || !Q.views[w.id].ok); n < 0 ? results() : editor(n); };
+  // «Следующий снимок»: этот вид проверен, к следующему; «Все точки верны» подтверждает сразу все фото
+  $('#qnextv').onclick = () => { if (x.pts) x.ok = true; editor((i + 1) % VIEWS.length); };
+  $('#qok').onclick = () => { const miss = VIEWS.findIndex(w => !Q.views[w.id] || !Q.views[w.id].pts);
+    if (miss >= 0) { toast(Q.views[VIEWS[miss].id] ? `${VIEWS[miss].name}: точек нет, переснимите` : `Нет фото: ${VIEWS[miss].name.toLowerCase()}`); return miss === i ? null : editor(miss); }
+    VIEWS.forEach(w => { Q.views[w.id].ok = true; }); results(); };
 }
 const heightCm = () => +((Q && Q.client && Q.client.height) || 0) || 0;
 const num = v => String(Math.abs(v)).replace('.', ',');
@@ -226,10 +242,19 @@ export const TASK = { WEAK: 'Укрепить', HYPER: 'Мягко укрепи�
 const sideRu = s => s === 'RIGHT' ? 'справа' : s === 'LEFT' ? 'слева' : '';
 const zoneName = z => (C.muscles[z.id] || {}).name || z.id;
 const GAINS = [1, 1.5, 2, 3], VIEWS3 = [['front', 'Спереди'], ['right', 'Сбоку'], ['back', 'Сзади']];
-/** Подсказки зон по существующим правилам проекта (bodymap, веса источников): до 8 самых выраженных. */
+/** Подсказки зон по существующим правилам проекта (bodymap, веса источников) для 4 фото.
+ *  Пороги правил подобраны для теста по видео; на фото признак учитывается с 60% порога, но не меньше погрешности замера.
+ *  Наклон головы вперед почти всегда выше порога и раньше забирал все места шеей: теперь из одного отдела тела
+ *  (шея, плечевой пояс, корпус, таз, ноги) не больше 4 зон, всего до 10. Самые выраженные идут первыми. */
+const RELAX = .6, FERR = { pelvic_tilt: 1.5, shoulder_tilt: 1.5, head_tilt: 2, trunk_lateral: 1.5, head_forward: 4, knee_hyper: 3, shoulder_shift: .015, hip_shift: .015 };
+const relax = (t, e) => t == null ? t : Math.sign(t) * Math.max(Math.abs(t) * RELAX, e);
+const REGION = y => y < .23 ? 0 : y < .38 ? 1 : y < .52 ? 2 : y < .63 ? 3 : 4;
 export function zonesOf(q) {
-  try { const a = analyze({ snapshot: q.snapshot, side: q.side, moves: {}, protocol: [] }, C);
-    const seen = new Set(); return topOf(spots(a)).filter(s => { const k = s.id + ':' + s.side; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 8).map(s => ({ id: s.id, side: s.side, k: s.k, key: s.key })); }
+  try { const rules = C.bodymap.rules.map(r => FERR[r.feature] == null ? r : { ...r, absGreater: relax(r.absGreater, FERR[r.feature]), greater: relax(r.greater, FERR[r.feature]), less: relax(r.less, FERR[r.feature]) });
+    const a = analyze({ snapshot: q.snapshot, side: q.side, moves: {}, protocol: [] }, { ...C, bodymap: { ...C.bodymap, rules } });
+    const seen = new Set(), per = [0, 0, 0, 0, 0], out = [];
+    for (const s of topOf(spots(a))) { const k = s.id + ':' + s.side, r = REGION(s.y); if (seen.has(k) || per[r] >= 4) continue; seen.add(k); per[r]++; out.push(s); if (out.length >= 10) break; }
+    return out.map(s => ({ id: s.id, side: s.side, k: s.k, key: s.key })); }
   catch (e) { return []; } }
 const zSpots = zones => zones.map(z => ({ ...z, key: z.key || z.id + ':' + z.side, tone: z.k === 'WEAK' ? -.75 : .75, back: (C.muscles[z.id] || {}).view === 'back' }));
 // клиенту: одна короткая фраза на показатель, без чисел (числа у специалиста и в «Измерено»)
@@ -267,17 +292,20 @@ async function drawMeasure(cv, x, view, ms, compact = false) {
   const sc = Math.min(W / bw, H / bh), ox = (W - bw * sc) / 2, oy = (H - bh * sc) / 2;
   g.fillStyle = '#1C1C1E'; g.fillRect(0, 0, W, H); g.drawImage(im, bx, by, bw, bh, ox, oy, bw * sc, bh * sc);
   g.fillStyle = 'rgba(10,10,12,.22)'; g.fillRect(0, 0, W, H);
+  // сетка как в правке точек (переключатель «Сетка» общий): тонкие квадратные клетки
+  if (showGrid) { const cell = W / 8; g.beginPath(); for (let gx = cell; gx < W - 1; gx += cell) { g.moveTo(gx, 0); g.lineTo(gx, H); } for (let gy = cell; gy < H - 1; gy += cell) { g.moveTo(0, gy); g.lineTo(W, gy); }
+    g.strokeStyle = 'rgba(0,0,0,.22)'; g.lineWidth = 1.6 * d; g.stroke(); g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = .6 * d; g.stroke(); }
   if (!pts) return true;
   const X = i => ox + (pts[i].x - bx) * sc, Y = i => oy + (pts[i].y - by) * sc, CY = '#0EA5E9', AM = '#FF9F0A';
   const out = new Set(ms.filter(m => m.dir !== 'в пределах погрешности').map(m => m.key));
   // отвес от середины стоп и горизонтали через плечи и таз
   const ax = view === 'right' ? X(P.R_ANKLE) : view === 'left' ? X(P.L_ANKLE) : (X(P.L_ANKLE) + X(P.R_ANKLE)) / 2;
-  g.save(); g.shadowColor = 'rgba(14,165,233,.8)'; g.shadowBlur = 8 * d; g.strokeStyle = 'rgba(14,165,233,.9)'; g.lineWidth = 1.5 * d; g.beginPath(); g.moveTo(ax, 0); g.lineTo(ax, H); g.stroke(); g.restore();
+  g.save(); g.shadowColor = 'rgba(14,165,233,.8)'; g.shadowBlur = 8 * d; g.strokeStyle = 'rgba(14,165,233,.9)'; g.lineWidth = 1 * d; g.beginPath(); g.moveTo(ax, 0); g.lineTo(ax, H); g.stroke(); g.restore();
   // скелет: сегмент с показателем вне погрешности янтарный
   const hot = { front: { [P.L_SHOULDER + ':' + P.R_SHOULDER]: 'shoulderTilt', [P.L_HIP + ':' + P.R_HIP]: 'pelvicTilt', [P.L_EAR + ':' + P.R_EAR]: 'headTilt' } }; hot.back = hot.front;
   for (const [a, b] of LINES[view]) { const k = (hot[view] || {})[a + ':' + b], on = k && out.has(k);
-    g.save(); g.shadowColor = on ? 'rgba(255,159,10,.7)' : 'rgba(14,165,233,.7)'; g.shadowBlur = 6 * d; g.strokeStyle = on ? AM : CY; g.lineWidth = 2.5 * d; g.beginPath(); g.moveTo(X(a), Y(a)); g.lineTo(X(b), Y(b)); g.stroke(); g.restore(); }
-  for (const i of ids) { g.beginPath(); g.arc(X(i), Y(i), 7 * d, 0, 7); g.fillStyle = 'rgba(14,165,233,.25)'; g.fill(); g.beginPath(); g.arc(X(i), Y(i), 3.6 * d, 0, 7); g.fillStyle = '#E0F2FE'; g.fill(); g.lineWidth = 1.5 * d; g.strokeStyle = CY; g.stroke(); }
+    g.save(); g.shadowColor = on ? 'rgba(255,159,10,.7)' : 'rgba(14,165,233,.7)'; g.shadowBlur = 6 * d; g.strokeStyle = on ? AM : CY; g.lineWidth = 1.5 * d; g.beginPath(); g.moveTo(X(a), Y(a)); g.lineTo(X(b), Y(b)); g.stroke(); g.restore(); }
+  for (const i of ids) { g.beginPath(); g.arc(X(i), Y(i), 5.5 * d, 0, 7); g.fillStyle = 'rgba(14,165,233,.25)'; g.fill(); g.beginPath(); g.arc(X(i), Y(i), 3 * d, 0, 7); g.fillStyle = '#E0F2FE'; g.fill(); g.lineWidth = 1.5 * d; g.strokeStyle = CY; g.stroke(); }
   // подписи: значение моноширинным в пилюле, под ней что это; по очереди слева и справа от тела
   const placed = []; let side = 0;
   const label = (k, m) => { const [pp, name] = ANCHOR[k] || []; if (!pp) return; const pi = pp.map(i => (SIDE_PT[view] || {})[i] ?? i);
@@ -317,7 +345,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
   const hasPh = VIEWS.some(v => photos[v.id] && photos[v.id].pts); let v3 = null, mode = '3d', view = 'front';
   const pose = () => poseOf({ by: st.by, h: st.h || 170 }, st.gain);
   host.innerHTML = `<div class="card" id="qfcard" style="padding:12px">
-      ${hasPh ? `<div class="row" style="justify-content:space-between;gap:8px"><div class="seg" id="qmode" style="width:auto;flex:none"><button data-md="3d" class="on" style="padding:0 18px">3D</button><button data-md="ph" style="padding:0 18px">Фото</button></div><span class="mt-tag n" id="qmlbl">Типовая фигура</span></div>` : ''}
+      ${hasPh ? `<div class="row" style="justify-content:space-between;gap:8px"><div class="seg" id="qmode" style="width:auto;flex:none"><button data-md="3d" class="on" style="padding:0 18px">3D</button><button data-md="ph" style="padding:0 18px">Фото</button></div><span style="flex:1"></span><button class="pill tog${showGrid ? ' on' : ''}" id="qpgrid" aria-pressed="${showGrid}" style="display:none;height:34px">Сетка</button><span class="mt-tag n" id="qmlbl">Типовая фигура</span></div>` : ''}
       <div id="q3d" style="height:min(58vh,420px);margin-top:10px"></div><canvas id="qph" style="width:100%;display:none;margin-top:10px;border-radius:22px"></canvas>
       <div class="seg" id="qview" style="margin-top:10px">${VIEWS.map((v, i) => `<button data-vw="${v.id}" class="${i ? '' : 'on'}" style="padding:0 6px">${v.name}</button>`).join('')}</div>
       <div id="qgr"><div class="row" style="gap:10px;margin-top:10px"><span class="sub" style="font-size:13px;flex:none">Усилить</span><div class="seg" id="qgain" style="flex:1">${GAINS.map(g => `<button data-g="${g}" class="${g === st.gain ? 'on' : ''}" style="padding:0 6px">×${String(g).replace('.', ',')}</button>`).join('')}</div></div><div id="qplate">${gainPlate(st.gain)}</div></div>
@@ -341,9 +369,11 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
   const setMode = md => { mode = md; host.querySelectorAll('[data-md]').forEach(x => x.classList.toggle('on', x.dataset.md === md));
     $h('#q3d').style.display = md === '3d' ? '' : 'none'; $h('#qph').style.display = md === 'ph' ? 'block' : 'none'; $h('#qgr').style.display = md === '3d' ? '' : 'none';
     if ($h('#qmlbl')) $h('#qmlbl').textContent = md === '3d' ? 'Типовая фигура' : 'Фото клиента';
+    if ($h('#qpgrid')) $h('#qpgrid').style.display = md === 'ph' ? '' : 'none';
     $h('#qcap').textContent = md === '3d' ? 'Положение на типовой фигуре, а не тело клиента. Цветом отмечены зоны' : 'Подписаны только отклонения больше погрешности. Линия: вертикаль от стоп';
     if (md === 'ph') photoView(); else if (v3) v3.look(view); };
   host.querySelectorAll('[data-md]').forEach(b => b.onclick = () => setMode(b.dataset.md));
+  if ($h('#qpgrid')) $h('#qpgrid').onclick = () => { showGrid = !showGrid; localStorage.setItem('bp_q_grid', showGrid ? '1' : '0'); $h('#qpgrid').classList.toggle('on', showGrid); $h('#qpgrid').setAttribute('aria-pressed', showGrid); photoView(); };
   $h('#qadd').onclick = () => addZone(zs => { const rest = st.zones.filter(x => !zs.some(z => x.id === z.id && x.side === z.side)); if (rest.length + zs.length > 12) return toast('Не больше 12 зон'); st.zones = [...rest, ...zs]; changed(); });
   host.querySelectorAll('[data-vw]').forEach(b => b.onclick = () => { view = b.dataset.vw; host.querySelectorAll('[data-vw]').forEach(x => x.classList.toggle('on', x === b)); if (mode === 'ph') photoView(); else if (v3) v3.look(view); });
   host.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { st.gain = +b.dataset.g; host.querySelectorAll('[data-g]').forEach(x => x.classList.toggle('on', x === b)); $h('#qplate').innerHTML = gainPlate(st.gain); if (v3) v3.pose(pose()); onChange(st); });
