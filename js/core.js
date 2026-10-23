@@ -1,4 +1,5 @@
 // Камера, MediaPipe, голос, тепловая карта (2D и 3D). Без сервера: все считается в браузере.
+import { matte } from './ds.js';
 import { P } from './analysis.js';
 import { track } from './track.js';
 // MediaPipe со своего домена (кладет scripts/fetch-assets.mjs при сборке), jsdelivr только запасной вариант
@@ -362,6 +363,9 @@ export function ramp(v) { const x = Math.max(-1, Math.min(1, v)); let i = RAMP.f
   return [mix(16), mix(8), mix(0)]; }
 export const RAMP_CSS = 'linear-gradient(90deg,' + RAMP.map(([v, c]) => '#' + c.toString(16).padStart(6, '0') + ' ' + ((v + 1) * 50) + '%').join(',') + ')';
 export const MARK_HEX = { HYPER: '#F59E0B', SHORT: '#EF4444', WEAK: '#3B73D9', DONE: '#22C55E' }, ACT_HEX = { ...MARK_HEX, WEAK: '#F97316', HYPER: '#EAB308', SHORT: '#2563EB' };
+// Apple Matte: те же смыслы в цветах Apple. Клиенту «Укрепить» зеленый, «Мягко укрепить» мятный, «Расслабить» янтарный
+if (matte()) { Object.assign(STATE_RGB, { HYPER: [255, 159, 10], SHORT: [255, 69, 58], WEAK: [10, 132, 255], DONE: [48, 209, 88] }); Object.assign(ACT_RGB, { WEAK: [48, 209, 88], HYPER: [102, 212, 207], SHORT: [255, 159, 10] });
+  Object.assign(MARK_HEX, { HYPER: '#FF9F0A', SHORT: '#FF453A', WEAK: '#0A84FF', DONE: '#30D158' }); Object.assign(ACT_HEX, { WEAK: '#30D158', HYPER: '#66D4CF', SHORT: '#FF9F0A' }); }
 /** Маркер состояния формой: перегрузка — круг, укорочение — ромб, слабость — кольцо. derived: пунктир без ореола. */
 export function drawMark(ctx, x, y, k, o = {}) {
   const c = (specPal() ? MARK_HEX : ACT_HEX)[k]; if (!c) return; const sc = o.scale ?? 1; ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
@@ -451,8 +455,8 @@ export async function posedFigure(spots, pose, view, wpx, hpx) {
   for (let i = 0; i < m.nv; i++) { pa.array[i * 3] = pv[i * 3]; pa.array[i * 3 + 1] = pv[i * 3 + 2]; pa.array[i * 3 + 2] = -pv[i * 3 + 1]; }
   // нормали оставляем исходные: у анатомической сетки двойные слои, пересчет дает «хромированные» разводы; изгибы малы, свет почти не меняется
   pa.needsUpdate = true;
-  const sp = alias3d(spots || [], m.meta.order); paintMesh(m, sp, S.col); S.geo.attributes.color.needsUpdate = true;
-  { const ix = meshIndex(m, sp); if (S.ix !== ix) { S.ix = ix; S.geo.setIndex(new S.THREE.BufferAttribute(ix, 1)); } }
+  const sp = alias3d(spots || [], m.meta.order); paintMesh(m, sp, S.col, true); S.geo.attributes.color.needsUpdate = true;
+  { const ix = m.idx; if (S.ix !== ix) { S.ix = ix; S.geo.setIndex(new S.THREE.BufferAttribute(ix, 1)); } }
   S.root.rotation.y = { front: 0, back: Math.PI, right: Math.PI / 2, left: -Math.PI / 2 }[view] || 0;
   if (S.renderer.domElement.width !== wpx || S.renderer.domElement.height !== hpx) S.renderer.setSize(wpx, hpx, false);
   S.renderer.render(S.scene, S.cam);
@@ -606,11 +610,13 @@ async function loadMeshM() {
 export function preload3D() { const go = () => { import('three'); import('three/addons/controls/OrbitControls.js'); ready3D().catch(() => {}); };
   if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 3000 }); else setTimeout(go, 1500); }
 // раскраска сетки по тону: и для живой 3D-модели, и для снимков схемы
-function paintMesh(m, spots, out) { const order = m.meta.order, lin = c => (c / 255) ** 2.2, BASE3 = baseRGB().map(lin);
+function paintMesh(m, spots, out, surf = false) { const order = m.meta.order, lin = c => (c / 255) ** 2.2, BASE3 = baseRGB().map(lin);
   // группа сетки → цвет мышцы по состоянию; соседям достается слабый край того же цвета, чтобы граница читалась
   const col = new Map(); for (const s of spots) { const o = order.indexOf(s.id); if (o < 0 || s.k === 'OK' || Math.abs(s.tone) < .02) continue; col.set(1 + o * 2 + (s.side === 'RIGHT' ? 1 : 0), stateRGB(s.k, s.tone).map(lin)); }
   // глубокие мышцы закрыты поверхностными (ромбовидные под трапецией, малая грудная под большой): их цвет просвечивает четким пятном над ними
-  const DEEP = new Set([]); // глубокие мышцы теперь видны через окно в верхних слоях (meshIndex), свечение сквозь поверхность не нужно
+  // глубокие мышцы видны через окно в верхних слоях (meshIndex). Фигура в позе клиента (surf) без окон: окно в изогнутой шее выглядит как разрыв,
+  // поэтому там цвет глубокой мышцы мягко проступает на покрывающей поверхности
+  const DEEP = surf ? new Set(DEEP_IDS.map(id => order.indexOf(id)).filter(i => i >= 0)) : new Set([]);
   const blobs = Object.entries(m.meta.blobs).map(([g, c]) => [+g, c, DEEP.has((+g - 1) >> 1)]).filter(([g]) => col.has(+g));
   for (let i = 0; i < m.nv; i++) { const g = m.grp[i];
     if (g === 255 || g === TRAP_MID) { out.set(BASE3, i * 3); continue; }
@@ -631,7 +637,7 @@ export async function body3D(container, spots0, onPick, opts = {}) {
   const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
   const m = await loadMesh(); const order = m.meta.order; let spots = alias3d(spots0, order);
   const col = new Float32Array(m.nv * 3), lin = c => (c / 255) ** 2.2, BASE3 = ramp(0).map(lin);
-  const paint = (spots, out) => paintMesh(m, spots, out);
+  const paint = (spots, out) => paintMesh(m, spots, out, !!opts.pose);
   paint(spots, col);
   const geo = new THREE.BufferGeometry();
   // модель: x человека, z вверх, перед = −y → Three: X = x, Y = z, Z = −y
@@ -644,7 +650,7 @@ export async function body3D(container, spots0, onPick, opts = {}) {
   const at3 = c => { if (!curPose) return new THREE.Vector3(c[0], c[2], -c[1]); const q = PF.poseVerts(Float32Array.of(c[0], c[1], c[2]), curPose, m.meta.zmax); return new THREE.Vector3(q[0], q[2], -q[1]); };
   if (curPose) bend(curPose);
   geo.setAttribute('position', new THREE.BufferAttribute(p2, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(n2, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); let curIx = meshIndex(m, spots); geo.setIndex(new THREE.BufferAttribute(curIx, 1));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); let curIx = opts.pose ? m.idx : meshIndex(m, spots); geo.setIndex(new THREE.BufferAttribute(curIx, 1));
   const scene = new THREE.Scene(); scene.background = new THREE.Color(bg3);
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .85, metalness: 0, side: THREE.DoubleSide });
   const obj = new THREE.Mesh(geo, mat); const cz = (m.meta.zmin + m.meta.zmax) / 2; obj.position.y = -cz; const root = new THREE.Group(); root.add(obj); root.scale.setScalar(2 / (m.meta.zmax - m.meta.zmin)); scene.add(root);
@@ -771,7 +777,7 @@ export async function body3D(container, spots0, onPick, opts = {}) {
     /** «Как должно быть»: мышцы в балансе, без цвета, маркеров и стрелок. false — вернуть результат теста. */
     norm(on) { normOn = !!on; const sp = normOn ? lastSpots.map(s => ({ ...s, k: 'OK', tone: 0 })) : (only ? lastSpots.map(s => only.has(s.id) ? s : { ...s, k: 'OK', tone: 0 }) : lastSpots);
       paint(sp, col); target.set(col); geo.attributes.color.needsUpdate = true; arrows.visible = !normOn; marks.forEach(x => { x.el.hidden = normOn; }); dirty = true; },
-    update(spots) { spots = alias3d(spots, order); lastSpots = spots; spots = only ? spots.map(s => only.has(s.id) ? s : { ...s, k: 'OK', tone: 0 }) : spots; paint(spots, col); target.set(col); geo.attributes.color.needsUpdate = true; { const ix = meshIndex(m, spots); if (ix !== curIx) { curIx = ix; geo.setIndex(new THREE.BufferAttribute(ix, 1)); } } buildMarks(spots); buildArrows(spots); if (normOn) api.norm(true); dirty = true; },
+    update(spots) { spots = alias3d(spots, order); lastSpots = spots; spots = only ? spots.map(s => only.has(s.id) ? s : { ...s, k: 'OK', tone: 0 }) : spots; paint(spots, col); target.set(col); geo.attributes.color.needsUpdate = true; { const ix = opts.pose ? m.idx : meshIndex(m, spots); if (ix !== curIx) { curIx = ix; geo.setIndex(new THREE.BufferAttribute(ix, 1)); } } buildMarks(spots); buildArrows(spots); if (normOn) api.norm(true); dirty = true; },
     dispose() { if (!alive) return; alive = false; ctl.dispose(); if (pts) pts.geometry.dispose(); pmat.dispose(); geo.dispose(); mat.dispose(); renderer.dispose(); try { renderer.forceContextLoss(); } catch (e) {} } };
   anim(); return api;
 }
