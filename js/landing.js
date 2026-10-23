@@ -76,7 +76,7 @@ body.lp-on #betabar{background:#161617;color:#98989D;border-bottom:1px solid rgb
 /* v2 первого экрана: по центру, как продуктовая страница Apple; визуал из настоящей 3D-фигуры и реального ролика */
 .mx-top{text-align:center;padding:56px 0 0;overflow:hidden;background:radial-gradient(120% 70% at 50% 0%,#232326 0%,#161617 60%)}
 .mx-eye{font-size:15px;font-weight:500;color:#98989D;margin:0 0 14px}
-.mx-top h1{font-size:clamp(42px,9.6vw,84px);line-height:1.02;letter-spacing:-.05em;font-weight:700;margin:0 auto;max-width:12em}
+.mx-top h1{font-size:clamp(40px,9.6vw,80px);line-height:1.04;letter-spacing:-.05em;font-weight:700;margin:0 auto;max-width:14em}
 .mx-top h1 span,.mx h2 span{background:linear-gradient(180deg,#F5F5F7 0%,#8E8E93 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
 .mx-top .mx-sub{margin:22px auto 0;font-size:clamp(18px,2.4vw,22px);line-height:1.45;color:#A1A1A6;max-width:28em}
 .mx-top .mx-btns{justify-content:center;align-items:center;gap:22px;margin-top:30px}
@@ -101,6 +101,21 @@ body.lp-on #betabar{background:#161617;color:#98989D;border-bottom:1px solid rgb
 .mx-final{padding:110px 0 90px}
 @media(min-width:760px){.mx-ba{grid-template-columns:1fr 1fr}}
 @media(max-width:959px){.mx-fig{display:none}.mx-stage{height:660px}.mx-cap{top:616px}.mx-top .mx-btns{flex-direction:column;gap:16px}}
+.mx-try{max-width:400px;margin:32px auto 0;padding:14px;border-radius:32px;background:linear-gradient(180deg,#262629,#1C1C1E);border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 30px 80px rgba(0,0,0,.5)}
+.mx-trow{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mx-seg{display:flex;gap:2px;padding:4px;border-radius:9999px;background:#141416;box-shadow:inset 0 1px 2px rgba(0,0,0,.5)}
+.mx-seg button{flex:1;height:38px;padding:0 14px;border:0;border-radius:9999px;background:transparent;color:#98989D;font:500 14px Inter,system-ui,sans-serif;cursor:pointer;transition:background .2s,color .2s}
+.mx-seg button.on{background:linear-gradient(180deg,#48484C,#3A3A3D);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 2px 6px rgba(0,0,0,.4)}
+.mx-seg button:active{transform:scale(.96)}
+#tvw{margin-top:10px}#tvw button{padding:0 6px}
+.mx-tst{position:relative;margin-top:10px;height:460px;border-radius:24px;background:radial-gradient(80% 60% at 50% 40%,#16202E,#0F151F);overflow:hidden;touch-action:pan-y;cursor:grab;user-select:none;-webkit-user-select:none}
+.mx-tst:active{cursor:grabbing}
+.mx-turn{position:absolute;inset:16px 0 4px;background:url(img/lp/try-turn.webp) 0 0/2400% 100% no-repeat;width:200px;margin:0 auto}
+.mx-tst img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.mx-hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:9999px;background:rgba(33,33,36,.85);border:1px solid rgba(255,255,255,.1);font-size:13px;color:#E5E5EA;transition:opacity .4s;pointer-events:none}.mx-hint svg{width:15px;height:15px}
+.mx-tcap{font-size:12.5px;color:#86868B;text-align:center;margin:10px 0 0}
+.mx-hyp{display:grid;gap:8px;margin-top:12px}.mx-hyp div{display:grid;grid-template-columns:12px auto 1fr;gap:4px 10px;align-items:baseline;padding:12px 14px;border-radius:18px;background:#141416;font-size:14px}
+.mx-hyp i{width:10px;height:10px;border-radius:50%;align-self:center}.mx-hyp b{font-weight:600}.mx-hyp span{color:#A1A1A6}
 @media(prefers-reduced-motion:reduce){.mx-p1{animation:none}.mx-in{opacity:1;transform:none;transition:none}}
 `;
 const I = {
@@ -121,21 +136,32 @@ export function landing(o) {
   const cta = (id, big = true) => `<button class="mx-pill mx-cta${big ? ' mx-big' : ''}" id="${id}">Попробовать бесплатно</button>`;
   go(`<div class="mx fade"><style>${CSS}</style>
     <nav class="mx-nav"><div class="w"><img src="icons/bp6-64.png" width="28" height="28" alt="" style="border-radius:7px"><b>BodyPassport</b>
-      <div class="mx-links"><a href="#mxf">Возможности</a><a href="#mxba">Было → стало</a><a href="#mxs">Как это работает</a><a href="/pricing">Цены</a></div>
+      <div class="mx-links"><a href="#mxtry">Пример</a><a href="#mxf">Возможности</a><a href="#mxba">Было → стало</a><a href="#mxs">Как это работает</a><a href="/pricing">Цены</a></div>
       <span style="flex:1"></span><button class="mx-pill" id="lpin">Войти</button></div></nav>
     <header class="mx-top"><div class="w">
       <p class="mx-eye mx-in">Для тренеров, реабилитологов и массажистов</p>
-      <h1 class="mx-in">Покажите клиенту,<br><span>как он стоит.</span></h1>
-      <p class="mx-sub mx-in">Четыре фото, пять минут. Замер, 3D-фигура в его позе и отчёт, который он сохранит.</p>
-      <div class="mx-btns mx-in">${cta('lpgo')}<a class="mx-link" href="#mxs">Как это работает ${ic('chevron-right', 's')}</a></div>
+      <h1 class="mx-in">Осанка в цифрах для&nbsp;вас.<br><span>В&nbsp;3D для&nbsp;клиента.</span></h1>
+      <p class="mx-sub mx-in">По четырём фото приложение измерит наклоны и смещения головы, плеч и таза и покажет их на 3D‑фигуре в позе клиента. Ваша оценка объективна, клиент видит, за что платит.</p>
+      <div class="mx-btns mx-in">${cta('lpgo')}<a class="mx-link" href="#mxtry">Попробовать на примере ${ic('chevron-right', 's')}</a></div>
       <p class="mx-note mx-in">30 дней бесплатно, без карты. Работает в браузере телефона.</p></div>
       <div class="mx-stage mx-in"><div class="mx-glow"></div>
-        <img class="mx-fig" src="img/lp/hero-figure.webp" alt="3D-фигура в позе клиента" width="348" height="1000">
-        <div class="mx-phone mx-p1"><div class="mx-scr"><video id="lpv" autoplay muted loop playsinline preload="metadata" poster="img/lp/demo-poster-v4.webp" aria-label="Как проходит быстрый тест: 4 фото, точки, 3D-фигура, отчет"><source src="img/lp/demo-v4.mp4" type="video/mp4"></video></div></div>
-        <div class="mx-phone mx-p2" aria-hidden="true"><div class="mx-scr"><img src="img/lp/screen-passport.webp" alt="" loading="lazy"></div></div>
+        <img class="mx-fig" src="img/lp/hero-figure-v5.webp" alt="3D-фигура в позе клиента" width="343" height="1000">
+        <div class="mx-phone mx-p1"><div class="mx-scr"><video id="lpv" autoplay muted loop playsinline preload="metadata" poster="img/lp/demo-poster-v5.webp" aria-label="Как проходит быстрый тест: 4 фото, точки, 3D-фигура, отчет"><source src="img/lp/demo-v5.mp4" type="video/mp4"></video></div></div>
+        <div class="mx-phone mx-p2" aria-hidden="true"><div class="mx-scr"><img src="img/lp/screen-passport-v5.webp" alt="" loading="lazy"></div></div>
         <span class="mx-cap">Реальные экраны приложения</span></div>
     </header>
     <div class="w">
+    <section class="mx-sec" id="mxtry"><div class="mx-in mx-c"><h2>Попробуйте сами.<br><span>Это настоящий результат теста.</span></h2>
+        <p class="mx-lead" style="margin:12px auto 0">Покрутите фигуру пальцем, смените ракурс, откройте фото с замерами. Пример: клиент жалуется на поясницу.</p></div>
+      <div class="mx-try mx-in">
+        <div class="mx-trow"><div class="mx-seg" id="tmd"><button data-md="3d" class="on">3D</button><button data-md="ph">Фото</button></div><span class="mx-tag n" id="tlbl">Типовая фигура</span></div>
+        <div class="mx-tst" id="tst"><div class="mx-turn" id="tturn" role="img" aria-label="3D-фигура в позе клиента, отмечены зоны для работы"></div><img id="tph" alt="Фото клиента с замерами" hidden>
+          <span class="mx-hint" id="thint">${ic('arrow-right-left', 's')}Покрутите</span></div>
+        <div class="mx-seg" id="tvw"><button data-vw="front" class="on">Спереди</button><button data-vw="right">Справа</button><button data-vw="back">Сзади</button><button data-vw="left">Слева</button></div>
+        <p class="mx-tcap" id="tcap">Положение на типовой фигуре. Цветом отмечены зоны для работы</p>
+        <div class="mx-hyp"><div><i style="background:#FF9F0A"></i><b>Расслабить</b><span>поясница, передняя сторона бедра, грудь</span></div><div><i style="background:#30D158"></i><b>Укрепить</b><span>ягодица, задняя сторона бедра</span></div></div>
+        <p class="mx-tcap">Зоны предлагает специалист: это его гипотеза, не диагноз</p>
+      </div></section>
     <section class="mx-sec" id="mxf"><div class="mx-in mx-c"><h2>Всё, что нужно на приёме.<br><span>Ничего лишнего.</span></h2></div>
       <div class="mx-grid">
         <div class="mx-card mx-in"><div class="mx-ico">${I.photo}</div><b>Замер по четырём фото</b><p>Точки встают сами. Неточную поправите пальцем, лупа покажет место.</p></div>
@@ -146,7 +172,7 @@ export function landing(o) {
     <section class="mx-sec" id="mxba"><div class="mx-ba">
         <div class="mx-in"><h2>Прогресс,<br><span>который клиент видит сам.</span></h2><p class="mx-lead">Повторный замер ставит два теста рядом. Лучший аргумент продолжить работу говорит не специалист, а фото.</p>
           <ul class="mx-list"><li>Фото до и после с теми же линиями</li><li>Отмечено только то, что изменилось больше погрешности</li><li>Клиент видит результат своих усилий</li></ul></div>
-        <div class="mx-shot mx-in"><img src="img/lp/screen-compare.webp" alt="Экран «Было → стало» в приложении" loading="lazy"></div>
+        <div class="mx-shot mx-in"><img src="img/lp/screen-compare-v5.webp" alt="Экран «Было → стало» в приложении" loading="lazy"></div>
       </div></section>
     <section class="mx-sec" id="mxs"><div class="mx-in mx-c"><h2>Пять минут<br><span>от фото до отчёта.</span></h2></div>
       <div class="mx-steps">
@@ -176,4 +202,33 @@ export function landing(o) {
     const ap = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('on'); ap.unobserve(e.target); } }), { rootMargin: '0px 0px -8% 0px' });
     document.querySelectorAll('.mx-in').forEach(el => ap.observe(el)); }
   else document.querySelectorAll('.mx-in').forEach(el => el.classList.add('on'));
+  tryDemo();
+}
+/** «Попробуйте сами»: 24 кадра настоящей 3D-фигуры (поворот пальцем) и 4 фото с замерами. Кнопки работают как в приложении. */
+function tryDemo() {
+  const $ = id => document.getElementById(id), N = 24, turn = $('tturn'), ph = $('tph'), st = $('tst'), hint = $('thint');
+  if (!turn) return;
+  const VW = { front: 0, right: 6, back: 12, left: 18 }; let f = 0, mode = '3d', view = 'front', anim = 0;
+  const show = () => { turn.style.backgroundPosition = `${(((Math.round(f) % N) + N) % N) * 100 / (N - 1)}% 0`; };
+  const spin = (to, ms = 500) => { cancelAnimationFrame(anim); let d = ((to - f) % N + N) % N; if (d > N / 2) d -= N; const f0 = f, t0 = performance.now();
+    const step = t => { const k = Math.min(1, (t - t0) / ms), e = 1 - (1 - k) ** 3; f = f0 + d * e; show(); if (k < 1) anim = requestAnimationFrame(step); }; anim = requestAnimationFrame(step); };
+  const setView = v => { view = v; document.querySelectorAll('#tvw button').forEach(b => b.classList.toggle('on', b.dataset.vw === v));
+    if (mode === 'ph') ph.src = `img/lp/try-${v}.webp`; else spin(VW[v]); };
+  const setMode = m => { mode = m; document.querySelectorAll('#tmd button').forEach(b => b.classList.toggle('on', b.dataset.md === m));
+    turn.hidden = m !== '3d'; ph.hidden = m !== 'ph'; hint.style.display = m === '3d' ? '' : 'none'; st.style.cursor = m === '3d' ? '' : 'default';
+    $('tlbl').textContent = m === '3d' ? 'Типовая фигура' : 'Фото клиента';
+    $('tcap').textContent = m === '3d' ? 'Положение на типовой фигуре. Цветом отмечены зоны для работы' : 'Подписаны только отклонения больше погрешности. Линия: вертикаль от стоп';
+    setView(view); };
+  document.querySelectorAll('#tmd button').forEach(b => b.onclick = () => { setMode(b.dataset.md); track('try_click', { c: 'mode_' + b.dataset.md }, false); });
+  document.querySelectorAll('#tvw button').forEach(b => b.onclick = () => setView(b.dataset.vw));
+  // поворот пальцем: 360° на ширину блока; отпустили — фигура доворачивается к ближайшему кадру, вкладка ракурса подсвечивается
+  let x0 = null, f0 = 0;
+  st.addEventListener('pointerdown', e => { if (mode !== '3d') return; cancelAnimationFrame(anim); x0 = e.clientX; f0 = f; hint.style.opacity = 0; st.setPointerCapture(e.pointerId); });
+  st.addEventListener('pointermove', e => { if (x0 === null) return; f = f0 - (e.clientX - x0) / st.clientWidth * N; show(); });
+  const up = () => { if (x0 === null) return; x0 = null; const r = ((Math.round(f) % N) + N) % N, v = Object.keys(VW).find(k => VW[k] === r);
+    document.querySelectorAll('#tvw button').forEach(b => b.classList.toggle('on', b.dataset.vw === v)); if (v) view = v; spin(Math.round(f), 200); };
+  st.addEventListener('pointerup', up); st.addEventListener('pointercancel', up);
+  // при первом показе фигура делает один медленный оборот, чтобы было понятно, что ее можно крутить
+  if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const io = new IntersectionObserver(es => { if (!es[0].isIntersecting) return; io.disconnect(); setTimeout(() => { if (x0 === null && mode === '3d' && !f) spin(N, 2600); }, 600); }, { threshold: .6 }); io.observe(st); }
 }

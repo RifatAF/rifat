@@ -344,7 +344,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
     $h('#qcap').textContent = md === '3d' ? 'Положение на типовой фигуре, а не тело клиента. Цветом отмечены зоны' : 'Подписаны только отклонения больше погрешности. Линия: вертикаль от стоп';
     if (md === 'ph') photoView(); else if (v3) v3.look(view); };
   host.querySelectorAll('[data-md]').forEach(b => b.onclick = () => setMode(b.dataset.md));
-  $h('#qadd').onclick = () => addZone(z => { if (st.zones.length >= 8) return toast('Не больше 8 зон'); st.zones = st.zones.filter(x => !(x.id === z.id && x.side === z.side)); st.zones.push(z); changed(); });
+  $h('#qadd').onclick = () => addZone(zs => { const rest = st.zones.filter(x => !zs.some(z => x.id === z.id && x.side === z.side)); if (rest.length + zs.length > 12) return toast('Не больше 12 зон'); st.zones = [...rest, ...zs]; changed(); });
   host.querySelectorAll('[data-vw]').forEach(b => b.onclick = () => { view = b.dataset.vw; host.querySelectorAll('[data-vw]').forEach(x => x.classList.toggle('on', x === b)); if (mode === 'ph') photoView(); else if (v3) v3.look(view); });
   host.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { st.gain = +b.dataset.g; host.querySelectorAll('[data-g]').forEach(x => x.classList.toggle('on', x === b)); $h('#qplate').innerHTML = gainPlate(st.gain); if (v3) v3.pose(pose()); onChange(st); });
   // без WebGL2 3D-фигуры нет: остаются фото с замерами (если есть) или блок прячется
@@ -373,14 +373,14 @@ function addZone(onAdd) {
   const d = document.createElement('div'); d.className = 'sheet';
   d.innerHTML = `<div><h2 style="font-size:20px">Добавить зону</h2>
     <select id="zm" class="field" style="margin-top:12px">${ids.map(id => `<option value="${id}">${esc(C.muscles[id].name)}</option>`).join('')}</select>
-    <div class="seg" id="zsd" style="margin-top:10px"><button data-s="RIGHT" class="on">Справа</button><button data-s="LEFT">Слева</button></div>
+    <div class="seg" id="zsd" style="margin-top:10px"><button data-s="BOTH" class="on">С двух сторон</button><button data-s="RIGHT">Справа</button><button data-s="LEFT">Слева</button></div>
     <div class="seg" id="zk" style="margin-top:10px">${Object.entries(ZST).map(([k, t], i) => `<button data-k="${k}" class="${i ? '' : 'on'}">${t}</button>`).join('')}</div>
     <button class="btn" id="zok" style="margin-top:14px">Добавить</button><button class="btn ghost" id="zx" style="margin-top:8px;border:0">Отмена</button></div>`;
-  document.body.appendChild(d); let side = 'RIGHT', k = 'WEAK';
+  document.body.appendChild(d); let side = 'BOTH', k = 'WEAK';
   d.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { side = b.dataset.s; d.querySelectorAll('[data-s]').forEach(x => x.classList.toggle('on', x === b)); });
   d.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { k = b.dataset.k; d.querySelectorAll('[data-k]').forEach(x => x.classList.toggle('on', x === b)); });
   d.querySelector('#zx').onclick = () => d.remove();
-  d.querySelector('#zok').onclick = () => { const id = d.querySelector('#zm').value; d.remove(); onAdd({ id, side, k, key: id + ':' + side }); };
+  d.querySelector('#zok').onclick = () => { const id = d.querySelector('#zm').value; d.remove(); onAdd((side === 'BOTH' ? ['RIGHT', 'LEFT'] : [side]).map(s => ({ id, side: s, k, key: id + ':' + s }))); };
 }
 /** «Показать клиенту»: полный экран, крутящаяся фигура с зонами в цветах задач, 2–3 коротких фразы и задачи. Без кнопок специалиста. */
 function showClient(st, name) {

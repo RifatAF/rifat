@@ -619,10 +619,13 @@ function paintMesh(m, spots, out, surf = false) { const order = m.meta.order, li
   const DEEP = surf ? new Set(DEEP_IDS.map(id => order.indexOf(id)).filter(i => i >= 0)) : new Set([]);
   const blobs = Object.entries(m.meta.blobs).map(([g, c]) => [+g, c, DEEP.has((+g - 1) >> 1)]).filter(([g]) => col.has(+g));
   for (let i = 0; i < m.nv; i++) { const g = m.grp[i];
-    if (g === 255 || g === TRAP_MID) { out.set(BASE3, i * 3); continue; }
-    let c = col.get(g);
+    // нейтральная поверхность (фасция поясницы, середина трапеции) окрашивается только пятном глубокой мышцы под ней
+    const neutral = g === 255 || g === TRAP_MID; if (neutral && !DEEP.size) { out.set(BASE3, i * 3); continue; }
+    let c = neutral ? null : col.get(g);
     if (!c) { const x = m.pos[i * 3], y = m.pos[i * 3 + 1], z = m.pos[i * 3 + 2]; let w0 = 1, acc = BASE3.slice();
-      for (const [bg, ctr, deep] of blobs) { const sg = deep ? 30 : 22, d2 = (x - ctr[0]) ** 2 + (y - ctr[1]) ** 2 + (z - ctr[2]) ** 2; if (d2 > 9 * sg * sg) continue; const w = (deep ? 1.6 : .3) * Math.exp(-d2 / (2 * sg * sg)), bc = col.get(bg);
+      for (const [bg, ctr, deep] of blobs) { if (neutral && !deep) continue; // глубокая мышца проступает пятном по ее площади на своей стороне тела (поясница сзади, а не на животе): глубина и высота весят меньше
+        if (deep && Math.abs(ctr[1]) > 20 && (y - ctr[1]) * ctr[1] < 0) continue;
+        const sg = deep ? 40 : 22, d2 = (x - ctr[0]) ** 2 + (y - ctr[1]) ** 2 * (deep ? .2 : 1) + (z - ctr[2]) ** 2 * (deep ? .55 : 1); if (d2 > 9 * sg * sg) continue; const w = (deep ? 5 : .3) * Math.exp(-d2 / (2 * sg * sg)), bc = col.get(bg);
         for (let q = 0; q < 3; q++) acc[q] += w * bc[q]; w0 += w; }
       c = acc.map(v => v / w0); }
     if (g === 0 && c !== BASE3) c = c.map((v, q) => BASE3[q] + (v - BASE3[q]) * .7);
@@ -690,7 +693,7 @@ export async function body3D(container, spots0, onPick, opts = {}) {
   const buildMarks = spots => { marks.forEach(x => x.el.remove()); if (opts.noMarks) { marks = []; return; }
     marks = spots.filter(s => s.k !== 'OK' && s.k !== 'DONE' && s.k !== 'NT' && order.indexOf(s.id) >= 0).map(s => { const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0), c = m.meta.blobs[g]; if (!c) return null;
       const el = document.createElement('button'); el.className = 'mark3d'; el.setAttribute('aria-label', s.key); el.innerHTML = `<span class="mark ${s.k}"${s.derived && !s.edited ? ' style="opacity:.75"' : ''}></span>`;
-      el.onclick = () => onPick && onPick(s.key); container.appendChild(el); return { el, c, local: at3(c), vis: null }; }).filter(Boolean); };
+      el.onclick = () => onPick && onPick(s.key); container.appendChild(el); return { el, c, local: at3(c), n: new THREE.Vector3(c[0], 0, -(c[1] - 10)).normalize(), vis: null }; }).filter(Boolean); };
   buildMarks(spots);
   // Поток частиц по волокнам, как ветер на погодной карте: главная ось мышцы (PCA по ее наружной поверхности) ≈ направление
   // волокон, поперек оси несколько дорожек на всю ширину мышцы. Гипертонус: частицы стекаются с концов к центру и гаснут
@@ -745,7 +748,9 @@ export async function body3D(container, spots0, onPick, opts = {}) {
   const wv = new THREE.Vector3(), nv = new THREE.Vector3(), cv3 = new THREE.Vector3();
   const placeMarks = () => { const w = container.clientWidth, h = container.clientHeight;
     for (const x of marks) { obj.localToWorld(wv.copy(x.local));
-      nv.set(wv.x, 0, wv.z).normalize(); cv3.copy(camera.position).sub(wv); const vis = nv.dot(cv3) > -0.05 * cv3.length();
+      // сторона метки берется от самой мышцы в покое (спина или грудь), а не от оси сцены: при сдвиге таза в позе клиента
+      // метка поясницы иначе считалась бы передней и просвечивала на животе
+      nv.copy(x.n).transformDirection(obj.matrixWorld); cv3.copy(camera.position).sub(wv); const vis = nv.dot(cv3) > -0.05 * cv3.length();
       const p = cv3.copy(wv).project(camera); x.el.style.transform = `translate(${((p.x + 1) / 2 * w).toFixed(1)}px,${((1 - p.y) / 2 * h).toFixed(1)}px)`;
       if (vis !== x.vis) { x.vis = vis; x.el.style.opacity = vis ? 1 : 0; x.el.style.pointerEvents = vis ? 'auto' : 'none'; } } };
   // появление: тон 0→1 за 560 мс, камера доезжает с поворота 25° до фронта за 800 мс
@@ -760,7 +765,11 @@ export async function body3D(container, spots0, onPick, opts = {}) {
   let alive = true, dirty = true; ctl.addEventListener('change', () => { dirty = true; });
   function anim() { if (!alive) return; if (!renderer.domElement.isConnected) { api.dispose(); return; }
     if (rv) { reveal(); dirty = true; }
-    if (fly) { fly.k = Math.min(1, fly.k + .06); const e = 1 - (1 - fly.k) ** 3; ctl.target.lerpVectors(fly.from.t, fly.to.t, e); camera.position.lerpVectors(fly.from.p, fly.to.p, e); if (fly.k >= 1) fly = null; dirty = true; }
+    if (fly) { fly.k = Math.min(1, fly.k + .06); const e = 1 - (1 - fly.k) ** 3; ctl.target.lerpVectors(fly.from.t, fly.to.t, e);
+      // по дуге вокруг фигуры с плавной сменой расстояния: по прямой камера проходила вплотную и фигура «шагала»
+      const a0 = fly.from.p.clone().sub(fly.from.t), a1 = fly.to.p.clone().sub(fly.to.t), r0 = a0.length(), r1 = a1.length(), h0 = Math.atan2(a0.x, a0.z); let dh = Math.atan2(a1.x, a1.z) - h0; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+      const y = a0.y / r0 + (a1.y / r1 - a0.y / r0) * e, hz = Math.sqrt(Math.max(0, 1 - y * y)), h = h0 + dh * e, r = r0 + (r1 - r0) * e;
+      camera.position.set(Math.sin(h) * hz, y, Math.cos(h) * hz).multiplyScalar(r).add(ctl.target); if (fly.k >= 1) fly = null; dirty = true; }
     const now = performance.now(); if (parts.length && !normOn && now - lastArrow > (device.weak ? 66 : 33)) { lastArrow = now; if (!reduceMotion() || !arrows.userData.done) { stepArrows(reduceMotion() ? 900 : now); arrows.userData.done = true; dirty = true; } }
     ctl.update(); if (dirty) { dirty = false; renderer.render(scene, camera); placeMarks(); } requestAnimationFrame(anim); }
   let isBack = false;
