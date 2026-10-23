@@ -625,7 +625,7 @@ function paintMesh(m, spots, out) { const order = m.meta.order, lin = c => (c / 
 const ALIAS3D = { piriformis: 'glute_max', supraspinatus: 'upper_trap', soleus: 'calf' };
 const alias3d = (spots, order) => (spots || []).map(s => order.indexOf(s.id) >= 0 || !ALIAS3D[s.id] || (spots.some(o => o.id === ALIAS3D[s.id] && o.side === s.side && o.k !== 'OK')) ? s : { ...s, id: ALIAS3D[s.id] });
 export async function body3D(container, spots0, onPick, opts = {}) {
-  container.style.borderRadius = '24px'; container.style.overflow = 'hidden'; const bg3 = darkUI() ? 0x101A2E : 0xFFFFFF; container.style.background = '#' + bg3.toString(16).padStart(6, '0');
+  container.style.borderRadius = '24px'; container.style.overflow = 'hidden'; const bg3 = darkUI() ? 0x0F151F : 0xFFFFFF; container.style.background = '#' + bg3.toString(16).padStart(6, '0');
   container.innerHTML = '<div class="skel" style="height:100%"></div>';
   const THREE = await import('three');
   const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
