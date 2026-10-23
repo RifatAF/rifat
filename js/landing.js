@@ -14,7 +14,7 @@ body.lp-on{background:#161617}body.lp-on #app{max-width:none}
 .mx .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:0}
 .mx-nav{position:sticky;top:0;z-index:6;background:rgba(22,22,23,.78);-webkit-backdrop-filter:saturate(1.6) blur(20px);backdrop-filter:saturate(1.6) blur(20px);border-bottom:1px solid rgba(255,255,255,.06)}
 .mx-nav .w{display:flex;align-items:center;gap:12px;height:60px}
-.mx-nav b{font-size:17px;font-weight:600;letter-spacing:-.02em}
+.mx-nav img{filter:grayscale(1) brightness(1.7)}.mx-nav b{font-size:17px;font-weight:600;letter-spacing:-.02em}
 .mx-links{display:none;gap:28px;margin-left:36px;font-size:14px;color:#98989D}.mx-links a:hover{color:#fff}
 .mx-pill{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 18px;border-radius:9999px;font:600 14px Inter,system-ui,sans-serif;cursor:pointer;border:1px solid rgba(255,255,255,.18);background:transparent;color:#fff;white-space:nowrap}
 .mx-cta{background:#0EA5E9;border-color:#0EA5E9;color:#00131D}
@@ -25,7 +25,7 @@ body.lp-on{background:#161617}body.lp-on #app{max-width:none}
 .mx h1{font-size:clamp(40px,10vw,72px);line-height:1.02;letter-spacing:-.045em;font-weight:700;margin:0}
 .mx h1 span{color:#98989D}
 .mx-prec{display:inline-flex;align-items:center;gap:12px;margin-top:22px;padding:8px 16px 8px 8px;border-radius:9999px;background:#212124;border:1px solid rgba(255,255,255,.08);font-size:14px;color:#A1A1A6}
-.mx-prec .mono{background:rgba(255,159,10,.14);color:#FF9F0A;border-radius:9999px;padding:6px 12px;font-size:15px;font-weight:600}.mx-prec i{font-style:normal;font-weight:400;opacity:.8}
+.mx-prec .mono{white-space:nowrap;background:rgba(255,159,10,.14);color:#FF9F0A;border-radius:9999px;padding:6px 12px;font-size:15px;font-weight:600}.mx-prec i{font-style:normal;font-weight:400;opacity:.8}
 body.lp-on #betabar{background:#161617;color:#98989D;border-bottom:1px solid rgba(255,255,255,.06)}body.lp-on #betabar button{background:transparent;color:#0EA5E9;border:1px solid rgba(14,165,233,.5)}
 .mx-sub{font-size:19px;line-height:1.5;color:#A1A1A6;margin:20px 0 0;max-width:32em}
 .mx-btns{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
@@ -34,11 +34,11 @@ body.lp-on #betabar{background:#161617;color:#98989D;border-bottom:1px solid rgb
 .mx-trust span{display:inline-flex;align-items:center;gap:7px}.mx-trust i{width:6px;height:6px;border-radius:50%;background:#30D158;box-shadow:0 0 8px #30D158}
 .mx-stage{position:relative;height:620px;display:flex;justify-content:center;align-items:center}
 .mx-glow{position:absolute;width:520px;height:520px;border-radius:50%;background:radial-gradient(closest-side,rgba(14,165,233,.22),transparent);filter:blur(10px)}
-.mx-phone{position:relative;width:280px;aspect-ratio:9/19.3;border-radius:50px;padding:11px;background:linear-gradient(145deg,#3A3A3D,#1C1C1E 40%,#2A2A2D);box-shadow:0 40px 90px rgba(0,0,0,.65),inset 0 0 0 1px rgba(255,255,255,.12),inset 0 0 0 2px #0b0b0c}
-.mx-phone .scr{position:relative;width:100%;height:100%;border-radius:40px;overflow:hidden;background:#000}
+.mx-phone{position:relative;width:280px;height:600px;flex:none;border-radius:50px;padding:11px;background:linear-gradient(145deg,#3A3A3D,#1C1C1E 40%,#2A2A2D);box-shadow:0 40px 90px rgba(0,0,0,.65),inset 0 0 0 1px rgba(255,255,255,.12),inset 0 0 0 2px #0b0b0c}
+.mx-phone .mx-scr{position:relative;width:100%;height:100%;border-radius:40px;overflow:hidden;background:#000}
 .mx-phone video,.mx-phone img{width:100%;height:100%;object-fit:cover;display:block}
 .mx-phone .isl{position:absolute;top:10px;left:50%;width:84px;height:24px;margin-left:-42px;border-radius:12px;background:#000;z-index:2}
-.mx-p2{position:absolute;width:230px;right:calc(50% - 300px);top:70px;transform:rotate(7deg);opacity:.92;z-index:0}
+.mx-p2{position:absolute;width:230px;height:493px;right:calc(50% - 300px);top:70px;transform:rotate(7deg);opacity:.92;z-index:0}
 .mx-p1{z-index:1;animation:mxf 7s ease-in-out infinite}
 @keyframes mxf{50%{transform:translateY(-10px)}}
 .mx-cap{position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);z-index:3;white-space:nowrap;font-size:12px;color:#A1A1A6;background:rgba(33,33,36,.9);border:1px solid rgba(255,255,255,.08);border-radius:9999px;padding:7px 14px}
@@ -52,7 +52,7 @@ body.lp-on #betabar{background:#161617;color:#98989D;border-bottom:1px solid rgb
 .mx-ico{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:rgba(14,165,233,.12);color:#0EA5E9;margin-bottom:16px}
 .mx-ico svg{width:22px;height:22px}
 .mx-metric{display:flex;align-items:baseline;gap:8px;margin-top:16px}.mx-metric .mono{font-size:28px;font-weight:600;color:#fff}.mx-metric small{color:#86868B;font-size:15px}
-.mx-ba{display:grid;gap:14px;margin-top:30px}
+.mx-ba{display:grid;gap:14px;margin-top:30px;align-items:start}
 .mx-ba .mx-card{padding:20px}
 .mx-row{display:flex;align-items:center;gap:10px;padding:14px 0;border-top:1px solid rgba(255,255,255,.06);font-size:15px}
 .mx-row:first-of-type{border-top:0}
@@ -106,8 +106,8 @@ export function landing(o) {
         <div class="mx-trust"><span><i></i>Фото остаются на телефоне специалиста</span><span><i></i>Значение <span class="mono">± погрешность</span></span><span><i></i>Вывод помечен «гипотеза»</span></div>
       </div>
       <div class="mx-stage mx-in"><div class="mx-glow"></div>
-        <div class="mx-phone mx-p2" aria-hidden="true"><div class="scr"><img src="img/lp/screen-passport.webp" alt="" loading="lazy"></div></div>
-        <div class="mx-phone mx-p1"><div class="scr"><span class="isl"></span><video id="lpv" autoplay muted loop playsinline preload="metadata" poster="img/lp/demo-poster-v4.webp" aria-label="Как проходит быстрый тест: 4 фото, точки, 3D-фигура, отчет"><source src="img/lp/demo-v4.mp4" type="video/mp4"></video></div></div>
+        <div class="mx-phone mx-p2" aria-hidden="true"><div class="mx-scr"><img src="img/lp/screen-passport.webp" alt="" loading="lazy"></div></div>
+        <div class="mx-phone mx-p1"><div class="mx-scr"><video id="lpv" autoplay muted loop playsinline preload="metadata" poster="img/lp/demo-poster-v4.webp" aria-label="Как проходит быстрый тест: 4 фото, точки, 3D-фигура, отчет"><source src="img/lp/demo-v4.mp4" type="video/mp4"></video></div></div>
         <span class="mx-cap">Реальные экраны приложения</span></div>
     </section>
     <section class="mx-sec" id="mxf"><div class="mx-in"><h2>Инструмент, а не догадка.</h2><p class="mx-lead">Каждое число измерено по фото и показано с погрешностью. Что считать проблемой, решаете вы.</p></div>
@@ -120,11 +120,11 @@ export function landing(o) {
     <section class="mx-sec" id="mxba" style="padding-top:20px"><div class="mx-in"><h2>Прогресс, который видно.</h2><p class="mx-lead">Клиент возвращается, когда видит изменения. Повторный замер показывает их в цифрах.</p></div>
       <div class="mx-ba">
         <div class="mx-card mx-in" style="padding:0;overflow:hidden"><img src="img/lp/screen-compare.webp" alt="Экран «Было → стало» в приложении" loading="lazy" style="width:100%;display:block"></div>
-        <div class="mx-card mx-in"><div class="row" style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:17px">Изменения</b><span class="mx-tag c">пример</span></div>
-          <div class="mx-row"><span style="flex:1">Голова относительно плеча</span><span class="mono">18,2° → 11,4°</span><span class="mx-tag g">меньше</span></div>
-          <div class="mx-row"><span style="flex:1">Линия таза</span><span class="mono">2,6° → 0,9°</span><span class="mx-tag g">меньше</span></div>
-          <div class="mx-row"><span style="flex:1">Линия плеч</span><span class="mono">1,1° → 0,8°</span><span class="mx-tag n">без изменений</span></div>
-          <p style="font-size:13px;color:#86868B;margin:12px 0 0">«Без изменений»: разница в пределах погрешности. Значения в карточке для примера.</p></div>
+        <div class="mx-card mx-in"><div class="row" style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:17px">Изменения</b><span class="mx-tag c">демо-данные</span></div>
+          <div class="mx-row"><span style="flex:1">Голова относительно плеча</span><span class="mono">31,6° → 13,4°</span><span class="mx-tag g">меньше</span></div>
+          <div class="mx-row"><span style="flex:1">Наклон головы</span><span class="mono">9,2° → 1,4°</span><span class="mx-tag g">меньше</span></div>
+          <div class="mx-row"><span style="flex:1">Линия плеч</span><span class="mono">4,6° → 0,3°</span><span class="mx-tag g">меньше</span></div>
+          <p style="font-size:13px;color:#86868B;margin:12px 0 0">Экран слева и значения справа из демо-данных. «Без изменений» приложение пишет, когда разница в пределах погрешности.</p></div>
       </div></section>
     <section class="mx-sec" id="mxs" style="padding-top:20px"><div class="mx-in"><h2>Три шага, пять минут.</h2></div>
       <div class="mx-steps">
