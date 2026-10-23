@@ -254,10 +254,11 @@ const SIDE_PT = { right: { [P.L_EAR]: P.R_EAR, [P.L_SHOULDER]: P.R_SHOULDER, [P.
 const loadedImg = new Map();
 const imgOf = src => { if (!loadedImg.has(src)) loadedImg.set(src, new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; })); return loadedImg.get(src); };
 /** Фото вида с замерами. x: { photo, w, h, pts }, ms: показатели этого вида (quick-metrics). Холст 4:5, тело по центру. */
-async function drawMeasure(cv, x, view, ms) {
+async function drawMeasure(cv, x, view, ms, compact = false) {
   const im = x && x.photo ? await imgOf(x.photo) : null; if (!im || !cv.isConnected) return false;
   try { await Promise.all([document.fonts.load(`600 20px ${MONO}`), document.fonts.load(`500 20px ${SANS}`)]); } catch (e) {}
-  const d = Math.min(2, devicePixelRatio || 1), W = Math.round(cv.clientWidth * d) || 600, H = Math.round(W * 1.25); cv.width = W; cv.height = H;
+  // компактно (два фото рядом): холст крупнее при тех же размерах подписей, поэтому подписи относительно мельче
+  const d = Math.min(2, devicePixelRatio || 1), W = Math.round(cv.clientWidth * d * (compact ? 1.7 : 1)) || 600, H = Math.round(W * 1.25); cv.width = W; cv.height = H;
   const g = cv.getContext('2d'), pts = x.pts, ids = EDIT_POINTS[view];
   // кадр по телу: от макушки до стоп с запасом, пропорция холста
   let bx = 0, by = 0, bw = x.w, bh = x.h;
@@ -284,6 +285,7 @@ async function drawMeasure(cv, x, view, ms) {
     const axp = pi.reduce((s, i) => s + X(i), 0) / pi.length, ayp = pi.reduce((s, i) => s + Y(i), 0) / pi.length, isOut = out.has(k);
     const v = `${num(m.v)}${m.unit.trim() === '°' ? '°' : m.unit.includes('см') ? ' см' : '%'} ± ${num(m.err)}${m.unit.trim() === '°' ? '°' : ''}`;
     // в пределах погрешности: тихая пилюля «Плечи · в пределах» с зеленой точкой, без цифр
+    if (!isOut && compact) return;
     if (!isOut) { g.font = `500 ${12 * d}px ${SANS}`; const t = `${name} · в пределах`, tw = g.measureText(t).width + 30 * d, lft = side++ % 2 === 0 ? axp > W / 2 : axp <= W / 2;
       let tx = lft ? 12 * d : W - tw - 12 * d, ty = ayp - 12 * d; for (const p of placed) if (Math.abs(p.y - ty) < 40 * d && p.left === lft) ty = p.y + 42 * d; ty = Math.max(8 * d, Math.min(H - 30 * d, ty)); placed.push({ y: ty, left: lft });
       g.strokeStyle = 'rgba(255,255,255,.28)'; g.lineWidth = 1 * d; g.beginPath(); g.moveTo(axp, ayp); g.lineTo(lft ? tx + tw : tx, ty + 12 * d); g.stroke();
@@ -292,11 +294,11 @@ async function drawMeasure(cv, x, view, ms) {
     g.font = `600 ${15 * d}px ${MONO}`; const vw = g.measureText(v).width + 20 * d;
     g.font = `500 ${12 * d}px ${SANS}`; const sub = isOut ? `${name}: ${m.dir.replace(' (переразгибание)', '').replace(' (согнуто)', '')}` : name, sw = g.measureText(sub).width + 18 * d;
     const bwid = Math.max(vw, sw), left = side++ % 2 === 0 ? axp > W / 2 : axp <= W / 2; let lx = left ? 12 * d : W - bwid - 12 * d, ly = ayp - 20 * d;
-    for (const p of placed) if (Math.abs(p.y - ly) < 50 * d && p.left === left) ly = p.y + 52 * d; ly = Math.max(8 * d, Math.min(H - 52 * d, ly)); placed.push({ y: ly, left });
+    for (const p of placed) if (Math.abs(p.y - ly) < (compact ? 30 : 50) * d && p.left === left) ly = p.y + (compact ? 32 : 52) * d; ly = Math.max(8 * d, Math.min(H - 52 * d, ly)); placed.push({ y: ly, left });
     g.strokeStyle = isOut ? 'rgba(255,159,10,.75)' : 'rgba(255,255,255,.35)'; g.lineWidth = 1 * d; g.beginPath(); g.moveTo(axp, ayp); g.lineTo(left ? lx + bwid : lx, ly + 14 * d); g.stroke();
     g.fillStyle = isOut ? 'rgba(58,36,6,.92)' : 'rgba(18,48,28,.9)'; g.beginPath(); g.roundRect(lx, ly, vw, 28 * d, 14 * d); g.fill();
     g.strokeStyle = isOut ? 'rgba(255,159,10,.55)' : 'rgba(48,209,88,.45)'; g.stroke(); g.fillStyle = isOut ? AM : '#30D158'; g.font = `600 ${15 * d}px ${MONO}`; g.textBaseline = 'middle'; g.fillText(isOut ? v : 'в пределах', lx + 10 * d, ly + 14.5 * d);
-    if (isOut) { g.fillStyle = 'rgba(28,28,30,.88)'; g.beginPath(); g.roundRect(lx, ly + 31 * d, sw, 22 * d, 11 * d); g.fill(); g.fillStyle = '#E5E5EA'; g.font = `500 ${12 * d}px ${SANS}`; g.fillText(sub, lx + 9 * d, ly + 42.5 * d); }
+    if (isOut && !compact) { g.fillStyle = 'rgba(28,28,30,.88)'; g.beginPath(); g.roundRect(lx, ly + 31 * d, sw, 22 * d, 11 * d); g.fill(); g.fillStyle = '#E5E5EA'; g.font = `500 ${12 * d}px ${SANS}`; g.fillText(sub, lx + 9 * d, ly + 42.5 * d); }
     g.textBaseline = 'alphabetic'; };
   // сначала вне погрешности (главное), потом остальные
   for (const m of [...ms].sort((a, b) => (out.has(b.key) ? 1 : 0) - (out.has(a.key) ? 1 : 0))) label(m.key, m);
@@ -434,7 +436,7 @@ export async function quickCompare(prevId, curId) {
     <p class="mt-cal">«Без изменений»: разница в пределах погрешности замера · «меньше»: отклонение от вертикали уменьшилось</p></div></div>`);
   $('#back').onclick = () => clientCard(B.clientId);
   const draw = async () => { for (const [i, x, ph] of [[0, qa, pa], [1, qb, pb]]) { const cv = $('#cmp' + i); if (!cv) return;
-    if (mode === 'ph') { await drawMeasure(cv, ph[view], view, (x.by || {})[view] || []); continue; }
+    if (mode === 'ph') { await drawMeasure(cv, ph[view], view, (x.by || {})[view] || [], true); continue; }
     const im = await posedFigure(zSpots(x.zones || []), poseOf({ by: x.by || {}, h: x.h || 170 }, 1), view, 400, 880); if (!im) { if (!hasPh) { const f = $('#cmpf'); if (f) f.remove(); } return; }
     cv.width = 400; cv.height = 500; const g = cv.getContext('2d'), fw = 500 * 400 / 880; g.clearRect(0, 0, 400, 500); g.strokeStyle = '#0EA5E9'; g.lineWidth = 2; g.setLineDash([10, 8]); g.beginPath(); g.moveTo(200, 0); g.lineTo(200, 500); g.stroke(); g.setLineDash([]); g.drawImage(im, 200 - fw / 2, 0, fw, 500); } };
   draw();
