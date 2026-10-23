@@ -28,3 +28,11 @@ test('«Усилить» ×2 удваивает отклонение от ней
   const q = { by: { front: [{ key: 'shoulderTilt', v: 2 }, { key: 'headTilt', v: 1 }], right: [{ key: 'headForward', v: 20, unit: '°' }, { key: 'hipShift', v: 3, unit: ' см' }] }, h: 170 };
   const p = poseOf(q, 1.5); assert.equal(p.shoulderTilt, 3); assert.ok(Math.abs(p.hipShift - 3 / 170 * 1.5) < 1e-9);
 });
+test('голень и бедро прямые: середина голени смещается на половину колена', () => {
+  const a = new Float32Array([-90, 0, 280, -90, 0, 480, -90, 0, 715]), o = poseVerts(a, { kneeHyper: -10, headForward: NEUTRAL.headForward });
+  assert.ok(o[4] < -30); assert.ok(Math.abs(o[1] - o[4] * (280 - 80) / 400) < 1); assert.ok(Math.abs(o[7] - o[4] / 2) < 1);
+});
+test('голова вперед: макушка и подбородок сдвигаются почти одинаково, шея не ломается', () => {
+  const a = new Float32Array([0, 0, 1700, 0, -80, 1520]), o = poseVerts(a, { headForward: 40 });
+  assert.ok(o[1] < -50); assert.ok(Math.abs(o[1] - (o[4] + 80)) < 40);
+});

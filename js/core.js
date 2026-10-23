@@ -637,7 +637,12 @@ export async function body3D(container, spots0, onPick, opts = {}) {
   const p2 = new Float32Array(m.nv * 3), n2 = new Float32Array(m.nv * 3);
   for (let i = 0; i < m.nv; i++) { p2[i * 3] = m.pos[i * 3]; p2[i * 3 + 1] = m.pos[i * 3 + 2]; p2[i * 3 + 2] = -m.pos[i * 3 + 1];
     n2[i * 3] = m.nrm[i * 3] / 127; n2[i * 3 + 1] = m.nrm[i * 3 + 2] / 127; n2[i * 3 + 2] = -m.nrm[i * 3 + 1] / 127; }
-  geo.setAttribute('position', new THREE.BufferAttribute(p2, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(n2, 3));
+  // фигура в позе клиента (быстрый тест): вершины и центры мышц сдвигаются по замерам, нормали пересчитываются
+  const PF = opts.pose ? await import('./pose-figure.js') : null; let curPose = opts.pose || null;
+  const bend = pose => { const pv = PF.poseVerts(m.pos, pose, m.meta.zmax); for (let i = 0; i < m.nv; i++) { p2[i * 3] = pv[i * 3]; p2[i * 3 + 1] = pv[i * 3 + 2]; p2[i * 3 + 2] = -pv[i * 3 + 1]; } };
+  const at3 = c => { if (!curPose) return new THREE.Vector3(c[0], c[2], -c[1]); const q = PF.poseVerts(Float32Array.of(c[0], c[1], c[2]), curPose, m.meta.zmax); return new THREE.Vector3(q[0], q[2], -q[1]); };
+  if (curPose) bend(curPose);
+  geo.setAttribute('position', new THREE.BufferAttribute(p2, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(n2, 3)); if (curPose) geo.computeVertexNormals();
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); let curIx = meshIndex(m, spots); geo.setIndex(new THREE.BufferAttribute(curIx, 1));
   const scene = new THREE.Scene(); scene.background = new THREE.Color(bg3);
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .85, metalness: 0, side: THREE.DoubleSide });
@@ -657,7 +662,7 @@ export async function body3D(container, spots0, onPick, opts = {}) {
   const ray = new THREE.Raycaster(); let down = null;
   // плавный перелет камеры к зоне
   let fly = null; const flyTo = (target, dist, back) => { const from = { t: ctl.target.clone(), p: camera.position.clone() };
-    const dir = back === undefined ? camera.position.clone().sub(ctl.target).normalize() : new THREE.Vector3(0, 0, back ? -1 : 1);
+    const dir = back === undefined ? camera.position.clone().sub(ctl.target).normalize() : back.isVector3 ? back.clone() : new THREE.Vector3(0, 0, back ? -1 : 1);
     fly = { from, to: { t: target.clone(), p: target.clone().add(dir.multiplyScalar(dist)) }, k: 0 }; };
   const H0 = 2; // рост модели в сцене
   container.querySelectorAll('.ctl3d [data-c]').forEach(b => b.onclick = e => { e.stopPropagation(); const c = b.dataset.c, d = camera.position.distanceTo(ctl.target);
@@ -675,10 +680,10 @@ export async function body3D(container, spots0, onPick, opts = {}) {
   // маркеры состояния поверх модели. Видимость без трассировки лучей: маркер виден, если его сторона тела смотрит на камеру
   // (трассировка по сетке на каждом кадре тормозила вращение на телефонах)
   let marks = [], only = null, lastSpots = spots;
-  const buildMarks = spots => { marks.forEach(x => x.el.remove());
+  const buildMarks = spots => { marks.forEach(x => x.el.remove()); if (opts.noMarks) { marks = []; return; }
     marks = spots.filter(s => s.k !== 'OK' && s.k !== 'DONE' && s.k !== 'NT' && order.indexOf(s.id) >= 0).map(s => { const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0), c = m.meta.blobs[g]; if (!c) return null;
       const el = document.createElement('button'); el.className = 'mark3d'; el.setAttribute('aria-label', s.key); el.innerHTML = `<span class="mark ${s.k}"${s.derived && !s.edited ? ' style="opacity:.75"' : ''}></span>`;
-      el.onclick = () => onPick && onPick(s.key); container.appendChild(el); return { el, local: new THREE.Vector3(c[0], c[2], -c[1]), vis: null }; }).filter(Boolean); };
+      el.onclick = () => onPick && onPick(s.key); container.appendChild(el); return { el, c, local: at3(c), vis: null }; }).filter(Boolean); };
   buildMarks(spots);
   // Поток частиц по волокнам, как ветер на погодной карте: главная ось мышцы (PCA по ее наружной поверхности) ≈ направление
   // волокон, поперек оси несколько дорожек на всю ширину мышцы. Гипертонус: частицы стекаются с концов к центру и гаснут
@@ -754,6 +759,11 @@ export async function body3D(container, spots0, onPick, opts = {}) {
   let isBack = false;
   const api = { turn(back) { isBack = back; const d = camera.position.distanceTo(ctl.target); flyTo(ctl.target, d, back); if (opts.onTurn) opts.onTurn(back); },
     focus(zone) { const [y, d] = ZONES[zone] || ZONES.all; flyTo(new THREE.Vector3(0, y, 0), d, isBack); },
+    /** Ракурс: 'front' | 'right' | 'back' | 'left' (правый бок клиента к камере, как на фото «Справа»). */
+    look(view) { const a = { front: 0, right: -Math.PI / 2, back: Math.PI, left: Math.PI / 2 }[view] || 0; isBack = view === 'back';
+      flyTo(new THREE.Vector3(0, 0, 0), ZONES.all[1], new THREE.Vector3(Math.sin(a), 0, Math.cos(a))); },
+    /** Новая поза (кнопки «Усилить») без пересоздания сцены. */
+    pose(p) { if (!PF) return; curPose = p; bend(p); geo.attributes.position.needsUpdate = true; geo.computeVertexNormals(); marks.forEach(x => { x.local = at3(x.c); }); dirty = true; },
     /** Новая раскраска и маркеры (правка специалиста) без пересоздания сцены и сброса камеры. */
     /** Слой мышц: ids — набор видимых и кликабельных мышц, null — все слои. */
     only(ids) { only = ids; api.update(lastSpots); },

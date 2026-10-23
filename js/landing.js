@@ -59,7 +59,7 @@ export function landing({ onTry, onSelf, onLogin }) {
         <p class="lp-sub">4 фото клиента, точки ставятся сами, отчёт с замером за 5 минут. Прямо в браузере телефона, без установки.</p>
         ${cta('lpgo')}<p class="lp-note">Без карты. Потом можно остаться на бесплатном тарифе.</p></div>
       <div class="lp-phone"><div class="lp-glow"></div>
-        <video id="lpv" autoplay muted loop playsinline preload="metadata" poster="img/lp/demo-poster-v2.webp" aria-label="Как проходит быстрый тест: 4 фото, точки, отчет"><source src="img/lp/demo-v2.mp4" type="video/mp4"></video>
+        <video id="lpv" autoplay muted loop playsinline preload="metadata" poster="img/lp/demo-poster-v3.webp" aria-label="Как проходит быстрый тест: 4 фото, точки, отчет"><source src="img/lp/demo-v3.mp4" type="video/mp4"></video>
         <span class="lp-cap">Реальные экраны приложения</span></div>
     </section>
     <section class="lp-sec"><h2>Три шага, пять минут</h2>
@@ -81,7 +81,8 @@ export function landing({ onTry, onSelf, onLogin }) {
   const go2 = id => () => { track('pro_click', { c: 'landing_' + id }, false); onTry(); };
   for (const id of ['lpgo', 'lpgo2', 'lpgo3']) document.getElementById(id).onclick = go2(id);
   document.getElementById('lpin').onclick = onLogin; document.getElementById('lpself').onclick = onSelf;
-  // нижняя кнопка не дублирует первую, пока та на экране
-  const st = document.getElementById('lpst'), first = document.getElementById('lpgo');
-  if ('IntersectionObserver' in window) new IntersectionObserver(([e]) => { st.style.opacity = e.isIntersecting ? '0' : '1'; st.style.pointerEvents = e.isIntersecting ? 'none' : 'auto'; }).observe(first);
+  // нижняя кнопка не дублирует другие: прячется, пока на экране верхняя или финальная кнопка
+  const st = document.getElementById('lpst'), seen = new Set();
+  if ('IntersectionObserver' in window) { const io = new IntersectionObserver(es => { for (const e of es) e.isIntersecting ? seen.add(e.target) : seen.delete(e.target); const hide = seen.size > 0; st.style.opacity = hide ? '0' : '1'; st.style.pointerEvents = hide ? 'none' : 'auto'; });
+    ['lpgo', 'lpgo2'].forEach(id => io.observe(document.getElementById(id))); }
 }

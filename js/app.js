@@ -2014,6 +2014,7 @@ export async function adminScreen(back) {
     <div class="pad" style="display:flex;flex-direction:column;gap:12px;padding-bottom:32px">
      <div class="card"><b>Режим приложения</b><div class="seg" style="margin-top:10px"><button id="mb" class="${beta ? 'on' : ''}">Бета</button><button id="mf" class="${beta ? '' : 'on'}">Полный</button></div>
       <p class="sub" style="font-size:13px;margin-top:8px">${beta ? 'Бета: у всех специалистов открыты все возможности, об оплате нигде не говорится, видна пометка «бета».' : 'Полный: тариф Free (5 клиентов) и PRO с оплатой через lava.top.'}</p></div>
+     <label class="card row" style="align-items:flex-start"><input type="checkbox" class="check" id="fullm" ${localStorage.getItem('bp_full') === '1' ? 'checked' : ''}><div style="flex:1"><b style="font-size:15px">Полная версия</b><div class="sub" style="font-size:13px">Тест по видео, тест из дома по ссылке и сеанс в кабинете. Выключено: основа кабинета быстрый тест по 4 фото, прежние результаты по видео открываются как раньше. Действует на этом устройстве</div></div></label>
      <div class="card"><b>Режим сеанса</b><p class="sub" style="font-size:13px;margin-top:4px">Кнопка «Сеанс» в кабинете специалиста: жалобы, короткий тест, правка руками, повтор и «было → стало». Видно только вам.</p>
       <label class="row" style="margin-top:10px;gap:10px"><input type="checkbox" class="check" id="sesm" ${localStorage.getItem('bp_session_mode') === '1' ? 'checked' : ''}><span style="flex:1;font-size:15px">Включить режим сеанса</span></label>
       <label class="row" style="margin-top:6px;gap:10px"><input type="checkbox" class="check" id="sesc" ${localStorage.getItem('bp_session_ctl') === '1' ? 'checked' : ''}><span style="flex:1;font-size:15px">Контрольный повтор сразу после первого теста</span></label></div>
@@ -2033,6 +2034,7 @@ export async function adminScreen(back) {
   const mode = async v => { try { await setAppMode(v); await getMe(true); toast(v ? 'Включена бета' : 'Включен полный режим'); adminScreen(back); } catch (e) { toast('Не получилось: ' + e.message); } };
   $('#mb').onclick = () => { if (!beta) mode(true); }; $('#mf').onclick = () => { if (beta) mode(false); };
   $('#noev').onchange = e => { localStorage.setItem('bp_noev', e.target.checked ? '1' : '0'); };
+  $('#fullm').onchange = e => { localStorage.setItem('bp_full', e.target.checked ? '1' : '0'); toast(e.target.checked ? 'Полная версия включена' : 'Основа: быстрый тест'); };
   $('#sesm').onchange = e => localStorage.setItem('bp_session_mode', e.target.checked ? '1' : '0'); $('#sesc').onchange = e => localStorage.setItem('bp_session_ctl', e.target.checked ? '1' : '0');
   $('#afun').onclick = () => funnelScreen();
   $('#acal').onclick = () => calibInbox(() => adminScreen(back));
