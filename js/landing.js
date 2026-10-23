@@ -73,6 +73,34 @@ body.lp-on #betabar{background:#161617;color:#98989D;border-bottom:1px solid rgb
 @media(min-width:760px){.mx-grid{grid-template-columns:1fr 1fr}.mx-ba{grid-template-columns:1.1fr .9fr}.mx-steps{grid-template-columns:repeat(3,1fr)}}
 @media(min-width:960px){.mx-links{display:flex}.mx-hero{grid-template-columns:1.05fr .95fr;padding:72px 0 80px}.mx-sticky{display:none}.mx-grid{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:959px){.mx-p2{display:none}.mx-stage{height:auto;padding:10px 0 30px}}
+/* v2 первого экрана: по центру, как продуктовая страница Apple; визуал из настоящей 3D-фигуры и реального ролика */
+.mx-top{text-align:center;padding:56px 0 0;overflow:hidden;background:radial-gradient(120% 70% at 50% 0%,#232326 0%,#161617 60%)}
+.mx-eye{font-size:15px;font-weight:500;color:#98989D;margin:0 0 14px}
+.mx-top h1{font-size:clamp(42px,9.6vw,84px);line-height:1.02;letter-spacing:-.05em;font-weight:700;margin:0 auto;max-width:12em}
+.mx-top h1 span,.mx h2 span{background:linear-gradient(180deg,#F5F5F7 0%,#8E8E93 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.mx-top .mx-sub{margin:22px auto 0;font-size:clamp(18px,2.4vw,22px);line-height:1.45;color:#A1A1A6;max-width:28em}
+.mx-top .mx-btns{justify-content:center;align-items:center;gap:22px;margin-top:30px}
+.mx-cta.mx-big{background:linear-gradient(180deg,#45C3F5 0%,#0EA5E9 52%,#0A92CF 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),inset 0 -1px 0 rgba(0,0,0,.18),0 14px 40px rgba(14,165,233,.35)}
+.mx-link{display:inline-flex;align-items:center;gap:2px;color:#0EA5E9!important;font-size:17px;font-weight:500}
+.mx-top .mx-note{margin-top:14px}
+.mx-stage{position:relative;height:640px;margin-top:36px;display:flex;justify-content:center;align-items:flex-start}
+.mx-glow{position:absolute;top:60px;width:760px;height:560px;border-radius:50%;background:radial-gradient(closest-side,rgba(14,165,233,.2),transparent);filter:blur(20px)}
+.mx-fig{position:absolute;height:600px;width:auto;top:20px;left:calc(50% - 400px);filter:drop-shadow(0 30px 60px rgba(0,0,0,.6)) drop-shadow(0 0 40px rgba(14,165,233,.15));-webkit-mask-image:linear-gradient(180deg,#000 75%,transparent);mask-image:linear-gradient(180deg,#000 75%,transparent)}
+.mx-p1{position:relative;z-index:2;animation:none}
+.mx-p2{position:absolute;width:230px;height:493px;left:calc(50% + 170px);right:auto;top:70px;transform:rotate(6deg);opacity:.9;z-index:1}
+.mx-cap{bottom:auto;top:612px}
+.mx-c{text-align:center}.mx-c h2{margin:0 auto}
+.mx-sec{padding:88px 0 0}
+.mx-g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))!important}
+.mx-card{background:linear-gradient(180deg,#262629 0%,#1F1F22 100%);border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 18px 40px rgba(0,0,0,.25)}
+.mx-ba{display:grid;gap:36px;align-items:center}
+.mx-list{list-style:none;margin:24px 0 0;padding:0;display:grid;gap:12px;font-size:17px;color:#E5E5EA}.mx-list li{display:flex;gap:12px;align-items:flex-start}
+.mx-list li:before{content:'';flex:none;width:8px;height:8px;border-radius:50%;margin-top:8px;background:#0EA5E9;box-shadow:0 0 10px #0EA5E9}
+.mx-shot{justify-self:center;width:min(360px,100%);border-radius:36px;overflow:hidden;border:1px solid rgba(255,255,255,.08);box-shadow:0 30px 80px rgba(0,0,0,.55)}.mx-shot img{display:block;width:100%}
+.mx-auth{justify-content:center;margin-top:36px}.mx-auth div{font-size:15px;line-height:1.45;text-align:left}.mx-auth b{display:block}.mx-auth span{color:#86868B}
+.mx-final{padding:110px 0 90px}
+@media(min-width:760px){.mx-ba{grid-template-columns:1fr 1fr}}
+@media(max-width:959px){.mx-fig{display:none}.mx-stage{height:660px}.mx-cap{top:616px}.mx-top .mx-btns{flex-direction:column;gap:16px}}
 @media(prefers-reduced-motion:reduce){.mx-p1{animation:none}.mx-in{opacity:1;transform:none;transition:none}}
 `;
 const I = {
@@ -90,55 +118,49 @@ export function landing(o) {
   // уход с лендинга (вход, тест для себя): обычный фон и ширина приложения
   const leave = f => () => { document.body.classList.remove('lp-on'); f(); };
   onTry = leave(onTry); onLogin = leave(onLogin); onSelf = leave(onSelf);
-  const cta = (id, big = true) => `<button class="mx-pill mx-cta${big ? ' mx-big' : ''}" id="${id}">Попробовать бесплатно 30 дней ${ic('arrow-right', 's')}</button>`;
+  const cta = (id, big = true) => `<button class="mx-pill mx-cta${big ? ' mx-big' : ''}" id="${id}">Попробовать бесплатно</button>`;
   go(`<div class="mx fade"><style>${CSS}</style>
-    <nav class="mx-nav"><div class="w"><img src="icons/mark.svg" width="28" height="28" alt=""><b>BodyPassport</b>
+    <nav class="mx-nav"><div class="w"><img src="icons/bp6-64.png" width="28" height="28" alt="" style="border-radius:7px"><b>BodyPassport</b>
       <div class="mx-links"><a href="#mxf">Возможности</a><a href="#mxba">Было → стало</a><a href="#mxs">Как это работает</a><a href="/pricing">Цены</a></div>
       <span style="flex:1"></span><button class="mx-pill" id="lpin">Войти</button></div></nav>
-    <div class="w">
-    <section class="mx-hero">
-      <div class="mx-in">
-        <h1>BodyPassport.<br><span>Замер осанки по фото.</span></h1>
-        <div class="mx-prec"><span class="mono">1,9° <i>± 1,5°</i></span><span>у каждого числа своя погрешность</span></div>
-        <p class="mx-sub">Для тренеров, реабилитологов и массажистов. 4 фото клиента, точки ставятся сами, отчёт с замером и 3D-фигурой за 5 минут. Прямо в браузере телефона.</p>
-        <div class="mx-btns">${cta('lpgo')}<a class="mx-pill mx-big" href="#mxs">Как это работает</a></div>
-        <p class="mx-note">Без карты. Потом можно остаться на бесплатном тарифе.</p>
-        <div class="mx-trust"><span><i></i>Фото остаются на телефоне специалиста</span><span><i></i>Значение <span class="mono">± погрешность</span></span><span><i></i>Вывод помечен «гипотеза»</span></div>
-      </div>
+    <header class="mx-top"><div class="w">
+      <p class="mx-eye mx-in">Для тренеров, реабилитологов и массажистов</p>
+      <h1 class="mx-in">Покажите клиенту,<br><span>как он стоит.</span></h1>
+      <p class="mx-sub mx-in">Четыре фото, пять минут. Замер, 3D-фигура в его позе и отчёт, который он сохранит.</p>
+      <div class="mx-btns mx-in">${cta('lpgo')}<a class="mx-link" href="#mxs">Как это работает ${ic('chevron-right', 's')}</a></div>
+      <p class="mx-note mx-in">30 дней бесплатно, без карты. Работает в браузере телефона.</p></div>
       <div class="mx-stage mx-in"><div class="mx-glow"></div>
-        <div class="mx-phone mx-p2" aria-hidden="true"><div class="mx-scr"><img src="img/lp/screen-passport.webp" alt="" loading="lazy"></div></div>
+        <img class="mx-fig" src="img/lp/hero-figure.webp" alt="3D-фигура в позе клиента" width="348" height="1000">
         <div class="mx-phone mx-p1"><div class="mx-scr"><video id="lpv" autoplay muted loop playsinline preload="metadata" poster="img/lp/demo-poster-v4.webp" aria-label="Как проходит быстрый тест: 4 фото, точки, 3D-фигура, отчет"><source src="img/lp/demo-v4.mp4" type="video/mp4"></video></div></div>
+        <div class="mx-phone mx-p2" aria-hidden="true"><div class="mx-scr"><img src="img/lp/screen-passport.webp" alt="" loading="lazy"></div></div>
         <span class="mx-cap">Реальные экраны приложения</span></div>
-    </section>
-    <section class="mx-sec" id="mxf"><div class="mx-in"><h2>Инструмент, а не догадка.</h2><p class="mx-lead">Каждое число измерено по фото и показано с погрешностью. Что считать проблемой, решаете вы.</p></div>
+    </header>
+    <div class="w">
+    <section class="mx-sec" id="mxf"><div class="mx-in mx-c"><h2>Всё, что нужно на приёме.<br><span>Ничего лишнего.</span></h2></div>
       <div class="mx-grid">
-        <div class="mx-card mx-in"><div class="mx-ico">${I.photo}</div><b>Замер по фото</b><p>8 показателей: голова, плечи, таз, корпус, колени. Точки ставятся сами, неточную поправите пальцем с лупой.</p><div class="mx-metric"><span class="mono">1,9°</span><small class="mono">± 1,5°</small></div></div>
-        <div class="mx-card mx-in"><div class="mx-ico">${I.cube}</div><b>3D-фигура в позе клиента</b><p>Анатомическая модель повторяет наклоны и смещения. Можно покрутить и усилить, чтобы клиент увидел разницу.</p></div>
-        <div class="mx-card mx-in"><div class="mx-ico">${I.cmp}</div><b>Было → стало</b><p>Повторный тест рядом с первым: что изменилось больше погрешности, а что нет.</p></div>
-        <div class="mx-card mx-in"><div class="mx-ico">${I.pdf}</div><b>Отчёт клиенту</b><p>PDF в мессенджер: фото с линиями, 3D-фигура, замер и ваши рекомендации.</p></div>
+        <div class="mx-card mx-in"><div class="mx-ico">${I.photo}</div><b>Замер по четырём фото</b><p>Точки встают сами. Неточную поправите пальцем, лупа покажет место.</p></div>
+        <div class="mx-card mx-in"><div class="mx-ico">${I.cube}</div><b>3D-фигура в позе клиента</b><p>Анатомическая модель повторяет его наклоны. Покрутите и покажите крупнее, чтобы он увидел сам.</p></div>
+        <div class="mx-card mx-in"><div class="mx-ico">${I.cmp}</div><b>Было → стало</b><p>Повторный тест рядом с первым. Видно, что изменилось на самом деле.</p></div>
+        <div class="mx-card mx-in"><div class="mx-ico">${I.pdf}</div><b>Отчёт за минуту</b><p>PDF в мессенджер: фото, фигура, ваш вывод и упражнения. С ним клиент возвращается к вам.</p></div>
       </div></section>
-    <section class="mx-sec" id="mxba" style="padding-top:20px"><div class="mx-in"><h2>Прогресс, который видно.</h2><p class="mx-lead">Клиент возвращается, когда видит изменения. Повторный замер показывает их в цифрах.</p></div>
-      <div class="mx-ba">
-        <div class="mx-card mx-in" style="padding:0;overflow:hidden"><img src="img/lp/screen-compare.webp" alt="Экран «Было → стало» в приложении" loading="lazy" style="width:100%;display:block"></div>
-        <div class="mx-card mx-in"><div class="row" style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:17px">Изменения</b><span class="mx-tag c">демо-данные</span></div>
-          <div class="mx-row"><span style="flex:1">Голова относительно плеча</span><span class="mono">31,6° → 13,4°</span><span class="mx-tag g">меньше</span></div>
-          <div class="mx-row"><span style="flex:1">Наклон головы</span><span class="mono">9,2° → 1,4°</span><span class="mx-tag g">меньше</span></div>
-          <div class="mx-row"><span style="flex:1">Линия плеч</span><span class="mono">4,6° → 0,3°</span><span class="mx-tag g">меньше</span></div>
-          <p style="font-size:13px;color:#86868B;margin:12px 0 0">Экран слева и значения справа из демо-данных. «Без изменений» приложение пишет, когда разница в пределах погрешности.</p></div>
+    <section class="mx-sec" id="mxba"><div class="mx-ba">
+        <div class="mx-in"><h2>Прогресс,<br><span>который клиент видит сам.</span></h2><p class="mx-lead">Повторный замер ставит два теста рядом. Лучший аргумент продолжить работу говорит не специалист, а фото.</p>
+          <ul class="mx-list"><li>Фото до и после с теми же линиями</li><li>Отмечено только то, что изменилось больше погрешности</li><li>Клиент видит результат своих усилий</li></ul></div>
+        <div class="mx-shot mx-in"><img src="img/lp/screen-compare.webp" alt="Экран «Было → стало» в приложении" loading="lazy"></div>
       </div></section>
-    <section class="mx-sec" id="mxs" style="padding-top:20px"><div class="mx-in"><h2>Три шага, пять минут.</h2></div>
+    <section class="mx-sec" id="mxs"><div class="mx-in mx-c"><h2>Пять минут<br><span>от фото до отчёта.</span></h2></div>
       <div class="mx-steps">
-        <div class="mx-card mx-step mx-in"><span class="n">1</span><div><b>4 фото</b><p>Спереди, справа, сзади, слева. Контур, инклинометр и подсказки по свету.</p></div></div>
-        <div class="mx-card mx-step mx-in"><span class="n">2</span><div><b>Проверка точек</b><p>Точки встают сами. Сетка, отвес и лупа, значения пересчитываются сразу.</p></div></div>
-        <div class="mx-card mx-step mx-in"><span class="n">3</span><div><b>Отчёт клиенту</b><p>Замер, 3D-фигура, ваш вывод и рекомендации. PDF в мессенджер.</p></div></div>
+        <div class="mx-card mx-step mx-in"><span class="n">1</span><div><b>Снимите</b><p>Спереди, сбоку, сзади. Контур и уровень подскажут, как держать телефон.</p></div></div>
+        <div class="mx-card mx-step mx-in"><span class="n">2</span><div><b>Проверьте</b><p>Точки уже на месте. Вы подтверждаете или правите одним касанием.</p></div></div>
+        <div class="mx-card mx-step mx-in"><span class="n">3</span><div><b>Покажите</b><p>3D-фигура на экране и отчёт в мессенджер. Клиент уходит с планом.</p></div></div>
       </div></section>
-    <section class="mx-sec" style="padding-top:20px"><div class="mx-legal mx-in"><b>Не диагноз и не медицинское заключение.</b> Приложение измеряет углы и смещения по фото, решения принимает специалист.</div>
-      <div class="mx-grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
-        <div class="mx-card mx-in"><b>Данные клиентов у вас</b><p>Фото, точки и выводы «Быстрого теста» хранятся на вашем телефоне и на сервер не отправляются. Копию можно сохранить файлом с паролем.</p></div>
-        <div class="mx-card mx-in"><b>Клиент видит то, что подтвердили вы</b><p>В отчёт попадают замер с пометкой «ЗАМЕР» и ваш вывод с пометкой «гипотеза специалиста».</p></div>
+    <section class="mx-sec"><div class="mx-in mx-c"><h2>Данные остаются у вас.</h2></div>
+      <div class="mx-grid mx-g2">
+        <div class="mx-card mx-in"><b>Фото не уходят на сервер</b><p>Фото, точки и выводы хранятся на вашем телефоне. Копию можно сохранить файлом с паролем.</p></div>
+        <div class="mx-card mx-in"><b>Решение за вами</b><p>Приложение измеряет, вы делаете вывод. В отчёте он помечен как «гипотеза специалиста». Это не диагноз и не медицинское заключение.</p></div>
       </div>
-      <div class="mx-auth mx-in"><img src="img/rifat.jpg" alt="Рифат Аюпов"><div style="font-size:15px;line-height:1.45"><b style="display:block">Рифат Аюпов</b><span style="color:#86868B">кинезиотерапевт, автор методики. Отвечаю специалистам сам</span></div></div></section>
-    <section class="mx-final mx-in"><h2>Попробуйте на следующем клиенте.</h2><div style="display:flex;justify-content:center;margin-top:28px">${cta('lpgo2')}</div></section>
+      <div class="mx-auth mx-in"><img src="img/rifat.jpg" alt="Рифат Аюпов"><div><b>Рифат Аюпов</b><span>кинезиотерапевт, автор методики. Отвечаю специалистам сам</span></div></div></section>
+    <section class="mx-final mx-in"><h2>Начните<br><span>со следующего клиента.</span></h2><div style="display:flex;justify-content:center;margin-top:28px">${cta('lpgo2')}</div></section>
     <footer class="mx-foot"><a href="/pricing">Тарифы</a><a href="/privacy">Конфиденциальность</a><button id="lpself">Пройти тест для себя</button><span style="margin-left:auto">© BodyPassport</span></footer>
   </div><div class="mx-sticky" id="lpst">${cta('lpgo3')}</div></div>`);
   const go2 = id => () => { track('pro_click', { c: 'landing_' + id }, false); onTry(); };
