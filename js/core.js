@@ -449,7 +449,8 @@ export async function posedFigure(spots, pose, view, wpx, hpx) {
   if (!S.p0) { S.p0 = pa.array.slice(); S.n0 = na.array.slice(); }
   const pv = poseVerts(m.pos, pose, m.meta.zmax);
   for (let i = 0; i < m.nv; i++) { pa.array[i * 3] = pv[i * 3]; pa.array[i * 3 + 1] = pv[i * 3 + 2]; pa.array[i * 3 + 2] = -pv[i * 3 + 1]; }
-  pa.needsUpdate = true; S.geo.computeVertexNormals();
+  // нормали оставляем исходные: у анатомической сетки двойные слои, пересчет дает «хромированные» разводы; изгибы малы, свет почти не меняется
+  pa.needsUpdate = true;
   const sp = alias3d(spots || [], m.meta.order); paintMesh(m, sp, S.col); S.geo.attributes.color.needsUpdate = true;
   { const ix = meshIndex(m, sp); if (S.ix !== ix) { S.ix = ix; S.geo.setIndex(new S.THREE.BufferAttribute(ix, 1)); } }
   S.root.rotation.y = { front: 0, back: Math.PI, right: Math.PI / 2, left: -Math.PI / 2 }[view] || 0;
@@ -642,7 +643,7 @@ export async function body3D(container, spots0, onPick, opts = {}) {
   const bend = pose => { const pv = PF.poseVerts(m.pos, pose, m.meta.zmax); for (let i = 0; i < m.nv; i++) { p2[i * 3] = pv[i * 3]; p2[i * 3 + 1] = pv[i * 3 + 2]; p2[i * 3 + 2] = -pv[i * 3 + 1]; } };
   const at3 = c => { if (!curPose) return new THREE.Vector3(c[0], c[2], -c[1]); const q = PF.poseVerts(Float32Array.of(c[0], c[1], c[2]), curPose, m.meta.zmax); return new THREE.Vector3(q[0], q[2], -q[1]); };
   if (curPose) bend(curPose);
-  geo.setAttribute('position', new THREE.BufferAttribute(p2, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(n2, 3)); if (curPose) geo.computeVertexNormals();
+  geo.setAttribute('position', new THREE.BufferAttribute(p2, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(n2, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); let curIx = meshIndex(m, spots); geo.setIndex(new THREE.BufferAttribute(curIx, 1));
   const scene = new THREE.Scene(); scene.background = new THREE.Color(bg3);
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .85, metalness: 0, side: THREE.DoubleSide });
@@ -763,7 +764,7 @@ export async function body3D(container, spots0, onPick, opts = {}) {
     look(view) { const a = { front: 0, right: -Math.PI / 2, back: Math.PI, left: Math.PI / 2 }[view] || 0; isBack = view === 'back';
       flyTo(new THREE.Vector3(0, 0, 0), ZONES.all[1], new THREE.Vector3(Math.sin(a), 0, Math.cos(a))); },
     /** Новая поза (кнопки «Усилить») без пересоздания сцены. */
-    pose(p) { if (!PF) return; curPose = p; bend(p); geo.attributes.position.needsUpdate = true; geo.computeVertexNormals(); marks.forEach(x => { x.local = at3(x.c); }); dirty = true; },
+    pose(p) { if (!PF) return; curPose = p; bend(p); geo.attributes.position.needsUpdate = true; marks.forEach(x => { x.local = at3(x.c); }); dirty = true; },
     /** Новая раскраска и маркеры (правка специалиста) без пересоздания сцены и сброса камеры. */
     /** Слой мышц: ids — набор видимых и кликабельных мышц, null — все слои. */
     only(ids) { only = ids; api.update(lastSpots); },
