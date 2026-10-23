@@ -197,6 +197,14 @@ async function photoEditor(src, set0) {
 }
 // пример клиента: специалист видит результат до первой своей съемки
 async function openDemo() {
+  // основа кабинета с 23.10 — быстрый тест: пример тоже быстрый тест (2 замера одного клиента, фото и точки заранее), тест по видео только в «Полной версии»
+  if (!fullMode()) { try { const r = await fetch('data/demo-quick.json').then(x => x.json()), now = Date.now();
+    for (const id of ['demo-1', 'demo-2', 'demo-q1', 'demo-q2']) { await del('assessments', id).catch(() => {}); await del('poses', id).catch(() => {}); }
+    await put('clients', { ...r.client, id: 'demo', demo: true, created: now - r.tests[0].daysAgo * DAY });
+    for (const [i, t] of r.tests.entries()) { const id = 'demo-q' + (i + 1), date = now - t.daysAgo * DAY;
+      await put('assessments', { ...t.a, id, clientId: 'demo', date, prevId: i ? 'demo-q' + i : null });
+      await put('poses', { assessmentId: id, poses: [], photos: t.photos }); }
+    return clientCard('demo'); } catch (e) { toast('Пример не открылся: ' + e.message); return; } }
   const now = Date.now(), d0 = now - 34 * DAY, d1 = now - 2 * DAY;
   const base = { protocol: ['stand', 'ohs_front', 'sls', 'side'], full: true, quality: {}, limits: {}, setup: {}, template: 'knee', templateName: 'Колено', pain: { knee: 4 }, plan: null, note: '', draft: false };
   const m0 = { snapshot: { shoulderTilt: 5.2, pelvicTilt: -4.6, headTilt: 1, trunkLateral: 1.5 }, side: { headForwardDeg: 21, kneeHyperDeg: 2, shoulderShift: .01, hipShift: 0 },
@@ -1334,6 +1342,8 @@ export async function compare(prevId, curId) {
 
 // отчет клиенту: паспорт движения (что увидели, что делаем, было → стало, проверим снова), без технических показателей
 async function report(aid) {
+  // быстрый тест: тот же отчет, что после теста и в карточке клиента (одна версия везде)
+  { const q = await get('assessments', aid); if (q && q.template === 'quick') return quickJs().then(m => m.quickResult(aid)); }
   const a = await get('assessments', aid), c = await get('clients', a.clientId), prev = a.prevId ? await get('assessments', a.prevId) : null;
   const author = (await meta('profile')) || defaultAuthor(), contact = await meta('contact');
   const sp = proSpots(a), an = analyze(a, C), top = sp.filter(s => s.k !== 'OK' && (!s.derived || s.edited || s.byChain)).sort((x, y) => Math.abs(y.tone) - Math.abs(x.tone)).slice(0, 5);
