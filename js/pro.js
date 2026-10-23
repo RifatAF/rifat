@@ -335,7 +335,12 @@ export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC
   const tool = (title, ok, act) => () => { const cs = sorted.filter(c => ok(lastTwo(c.id))); if (!cs.length) return toast('Пока нет подходящих клиентов'); if (cs.length === 1) return act(cs[0], lastTwo(cs[0].id)); pickClient(title, cs, c => act(c, lastTwo(c.id))); };
   $('#rtq').onclick = tool('Ретест', l => l.length >= 1, async (c, l) => { if (!fullMode() || l.at(-1).template === 'quick') return quickJs().then(m => m.quickTest(c.id)); if (await canTrack(c)) newAssessment(c.id, l.at(-1).id); });
   $('#repq').onclick = tool('Отчёт клиенту', l => l.length >= 1, (c, l) => report(l.at(-1).id));
-  $('#cmpq').onclick = tool('Было → стало', l => l.length >= 2, (c, l) => compare(l[0].id, l[1].id));
+  // «Было → стало»: всегда сначала выбор клиента; у кого один тест, тот виден с подсказкой. Пара: два последних быстрых теста, иначе два последних любых
+  const pair = id => { const all = asses.filter(a => a.clientId === id).sort((x, y) => x.date - y.date), q = all.filter(a => a.template === 'quick'); return (q.length >= 2 ? q : all).slice(-2); };
+  $('#cmpq').onclick = () => { const cs = sorted.filter(c => !c.demo); if (!cs.length) return toast('Пока нет клиентов');
+    const n = c => asses.filter(a => a.clientId === c.id).length;
+    pickClient('Было → стало: чей прогресс?', [...cs.filter(c => n(c) >= 2), ...cs.filter(c => n(c) < 2)], c => { const l = pair(c.id); compare(l[0].id, l[1].id); },
+      { max: 8, ok: c => n(c) >= 2, sub: c => n(c) >= 2 ? `тестов: ${n(c)} · последний ${fmtDate(last(c.id).date)}` : 'нужен повторный тест' }); };
   if ($('#allc')) $('#allc').onclick = () => allClients();
   if ($('#q')) $('#q').oninput = e => { clearTimeout(window._qt); window._qt = setTimeout(() => proHome(e.target.value).then(() => { const i = $('#q'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }), 250); };
   document.querySelectorAll('[data-id]').forEach(el => el.onclick = () => clientCard(el.dataset.id));
@@ -352,10 +357,11 @@ function bindProNav() {
   if (b('nclients')) b('nclients').onclick = () => allClients(); if (b('hcal')) b('hcal').onclick = calendarScreen; if (b('menu')) b('menu').onclick = proMenu;
 }
 // шторка выбора клиента для инструментов «Сегодня»: 5 последних и поиск
-function pickClient(title, cs, then) {
+function pickClient(title, cs, then, o = {}) {
   const d = document.createElement('div'); d.className = 'sheet';
-  const draw = q => { const l = cs.filter(c => !q || c.name.toLowerCase().includes(q.toLowerCase())).slice(0, 5);
-    d.querySelector('#pcl').innerHTML = l.map(c => `<button class="row-link" data-pc="${c.id}"><span class="avatar">${esc(c.name.slice(0, 1).toUpperCase())}</span><span>${esc(c.name)}</span>${ic('chevron-right', 's chev')}</button>`).join('') || '<p class="sub" style="padding:12px 0">Никого не нашлось.</p>';
+  // o.sub(c): подпись под именем; o.ok(c) === false: клиент виден, но выбрать нельзя (подпись объясняет почему)
+  const draw = q => { const l = cs.filter(c => !q || c.name.toLowerCase().includes(q.toLowerCase())).slice(0, o.max || 5);
+    d.querySelector('#pcl').innerHTML = l.map(c => { const ok = !o.ok || o.ok(c); return `<button class="row-link" ${ok ? `data-pc="${c.id}"` : 'disabled style="opacity:.5;cursor:default"'}><span class="avatar" style="flex:none">${esc(c.name.slice(0, 1).toUpperCase())}</span><span style="flex:1;text-align:left">${esc(c.name)}${o.sub ? `<br><small class="sub" style="font-size:13px">${o.sub(c)}</small>` : ''}</span>${ok ? ic('chevron-right', 's chev') : ''}</button>`; }).join('') || '<p class="sub" style="padding:12px 0">Никого не нашлось.</p>';
     d.querySelectorAll('[data-pc]').forEach(b => b.onclick = () => { d.remove(); then(cs.find(c => c.id === b.dataset.pc)); }); };
   d.innerHTML = `<div><h2>${title}</h2><input class="field" id="pcq" placeholder="Найти клиента" style="margin-top:var(--s4);height:48px"><div class="group" id="pcl" style="margin-top:var(--s3)"></div><button class="btn ghost" id="pcx" style="margin-top:var(--s2)">Отмена</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; d.querySelector('#pcx').onclick = () => d.remove();

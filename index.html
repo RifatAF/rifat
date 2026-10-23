@@ -79,10 +79,11 @@
 /* кабинет специалиста: глубокий navy */
 :root[data-session=SPECIALIST_OPERATED]{
   color-scheme:dark;
-  --bg:#0B1220;--surface:#121C31;--surface-2:#1A2640;--line:#26334F;--line-2:#1E2A44;--figure:#1E2A44;
-  --ink:#EEF2FA;--text:#EEF2FA;--sub:#9FAAC2;--faint:#6E7A94;--focus:#8F88FF;
-  --brand:#6C63FF;--brand-s:rgba(108,99,255,.2);--violet-s:rgba(108,99,255,.18);
-  --src-measured:#EEF2FA;--src-hyp:#9C96FF;
+  /* графит и точный бирюзовый: инструмент измерения, а не развлекательное приложение; шампанское только в мелких премиальных деталях */
+  --bg:#080C13;--surface:#0F151F;--surface-2:#161E2B;--line:#243042;--line-2:#1B2433;--figure:#1B2433;
+  --ink:#E9EEF5;--text:#E9EEF5;--sub:#94A1B5;--faint:#617086;--focus:#4FD1D9;
+  --brand:#4FD1D9;--brand-ink:#03232A;--brand-s:rgba(79,209,217,.16);--violet:#4FD1D9;--violet-s:rgba(79,209,217,.14);--gold:#D6B98A;
+  --src-measured:#E9EEF5;--src-hyp:#D6B98A;
   --over-t:#FF8F8F;--over-s:rgba(239,68,68,.16);--short-t:#FF8F8F;--short-s:rgba(239,68,68,.16);
   --weak-t:#93B4FF;--weak-s:rgba(59,115,217,.2);--ok-t:#5BDB8A;--ok-s:rgba(34,197,94,.16);
   --edge:#F6B54A;--edge-s:rgba(245,158,11,.16);--hyperT:#F6B54A;--hyperS:rgba(245,158,11,.16);
@@ -343,7 +344,7 @@ details.q>div .mark{vertical-align:middle}
 /* ===== v4: раскадровка UXUI v2 ===== */
 /* ярлык «Отзыв» перекрывал содержимое и дублировал «Оценить работу» в верхней плашке (аудит, п. 33) */
 #bugtab{display:none!important}
-:root[data-theme=pro]{color-scheme:dark;--bg:#0B1220;--surface:#121C31;--surface-2:#1A2640;--line:#26334F;--line-2:#1E2A44;--ink:#EEF2FA;--text:#EEF2FA;--sub:#9FAAC2;--faint:#6E7A94;--focus:#8F88FF;--brand:#6C63FF;--brand-s:rgba(108,99,255,.2)}
+:root[data-theme=pro]{color-scheme:dark;--bg:#080C13;--surface:#0F151F;--surface-2:#161E2B;--line:#243042;--line-2:#1B2433;--ink:#E9EEF5;--text:#E9EEF5;--sub:#94A1B5;--faint:#617086;--focus:#4FD1D9;--brand:#4FD1D9;--brand-ink:#03232A;--brand-s:rgba(79,209,217,.16);--violet:#4FD1D9;--gold:#D6B98A}
 h1{letter-spacing:-.025em;font-weight:800}h2,h3{font-weight:700}
 .btn{border-radius:16px;box-shadow:0 6px 18px rgba(11,27,59,.18)}
 .btn.line,.btn.ghost,.btn.glass{box-shadow:none}
@@ -378,12 +379,24 @@ h1{letter-spacing:-.025em;font-weight:800}h2,h3{font-weight:700}
 /* кабинет специалиста: тёмные исключения */
 :root[data-session=SPECIALIST_OPERATED] .toast,:root[data-session=SPECIALIST_OPERATED] .qpop{background:#26334F;color:#fff}
 :root[data-session=SPECIALIST_OPERATED] .src{color:#0B1220}
-:root[data-session=SPECIALIST_OPERATED] .dock{background:linear-gradient(rgba(11,18,32,0),var(--bg) 24%)}
-:root[data-session=SPECIALIST_OPERATED] .dock.bar{background:rgba(11,18,32,.92)}
+:root[data-session=SPECIALIST_OPERATED] .dock{background:linear-gradient(rgba(8,12,19,0),var(--bg) 24%)}
+:root[data-session=SPECIALIST_OPERATED] .dock.bar{background:rgba(8,12,19,.92)}
 :root[data-session=SPECIALIST_OPERATED] .btn.line{background:var(--surface-2);border-color:var(--line);color:var(--text)}
-:root[data-session=SPECIALIST_OPERATED] .ctl3d button{background:rgba(26,38,64,.92);color:var(--text);border-color:var(--line)}
+:root[data-session=SPECIALIST_OPERATED] .ctl3d button{background:rgba(22,30,43,.92);color:var(--text);border-color:var(--line)}
 :root[data-session=SPECIALIST_OPERATED] .tip>div{background:var(--surface)}
 :root[data-session=SPECIALIST_OPERATED] .sheet{background:rgba(0,0,0,.55)}
+/* кабинет специалиста: акцент светлый, текст на нем темный (контраст > 9:1); цифры табличные, карточки с тонкой линией вместо теней */
+:is(:root[data-session=SPECIALIST_OPERATED],:root[data-theme=pro]) body{font-variant-numeric:tabular-nums}
+:is(:root[data-session=SPECIALIST_OPERATED],:root[data-theme=pro]) .btn:not(.line):not(.ghost):not(.white):not(.grad){color:var(--brand-ink);box-shadow:0 8px 24px rgba(79,209,217,.18)}
+:is(:root[data-session=SPECIALIST_OPERATED],:root[data-theme=pro]) :is(.chip2.on,.pill.tog.on){color:var(--brand-ink)}
+:is(:root[data-session=SPECIALIST_OPERATED],:root[data-theme=pro]) :is(.card,.group,.list-item,.kpi div,.tile,.tool){box-shadow:none;border:1px solid var(--line-2)}
+:is(:root[data-session=SPECIALIST_OPERATED],:root[data-theme=pro]) .group .list-item{border:0}
+:is(:root[data-session=SPECIALIST_OPERATED],:root[data-theme=pro]) .seg{background:var(--surface-2);border:1px solid var(--line-2)}
+:is(:root[data-session=SPECIALIST_OPERATED],:root[data-theme=pro]) .seg button.on{background:var(--bg);color:var(--brand);box-shadow:inset 0 0 0 1px rgba(79,209,217,.35)}
+:is(:root[data-session=SPECIALIST_OPERATED],:root[data-theme=pro]) .eyebrow{color:var(--sub);text-transform:uppercase;letter-spacing:.08em;font-size:11.5px}
+:is(:root[data-session=SPECIALIST_OPERATED],:root[data-theme=pro]) #betabar{background:#0F151F;color:var(--sub);border-bottom:1px solid var(--line-2)}
+:is(:root[data-session=SPECIALIST_OPERATED],:root[data-theme=pro]) #betabar button{background:transparent;color:var(--gold);border:1px solid rgba(214,185,138,.5)}
+:is(:root[data-session=SPECIALIST_OPERATED],:root[data-theme=pro]) .swipe{background:var(--brand)}
 .cam-confirm{position:absolute;inset:0;z-index:40;background:rgba(4,8,18,.72);display:flex;align-items:flex-end;padding:0 var(--s3) calc(env(safe-area-inset-bottom) + 20px);animation:fdin var(--d2) var(--ease-out)}
 .cam-confirm>div{width:100%;background:#121C31;border:1px solid var(--cam-line);border-radius:var(--r-xl);padding:var(--s5);display:flex;flex-direction:column;gap:var(--s2);animation:up var(--d3) var(--ease-out)}
 .cam-confirm h2{color:#fff}.cam-confirm p{color:var(--cam-sub);margin-bottom:var(--s3)}

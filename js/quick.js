@@ -154,9 +154,9 @@ function editor(i) {
       g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 3 * d; g.stroke(); g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineWidth = 1 * d; g.stroke(); }
     const p = pts(); if (!p.length) return;
     if (showPlumb) { const ax = v.id === 'right' ? p[P.R_ANKLE].x : v.id === 'left' ? p[P.L_ANKLE].x : (p[P.L_ANKLE].x + p[P.R_ANKLE].x) / 2; g.strokeStyle = '#FBBF24'; g.lineWidth = 2 * devicePixelRatio; g.setLineDash([8, 6]); g.beginPath(); g.moveTo(ax * s, 0); g.lineTo(ax * s, cv.height); g.stroke(); g.setLineDash([]); }
-    g.strokeStyle = 'rgba(108,99,255,.95)'; g.lineWidth = 2.5 * devicePixelRatio;
+    g.strokeStyle = 'rgba(79,209,217,.95)'; g.lineWidth = 2.5 * devicePixelRatio;
     for (const [a, b] of LINES[v.id]) { g.beginPath(); g.moveTo(p[a].x * s, p[a].y * s); g.lineTo(p[b].x * s, p[b].y * s); g.stroke(); }
-    for (const k of EDIT_POINTS[v.id]) { g.beginPath(); g.arc(p[k].x * s, p[k].y * s, (k === drag ? 9 : 6.5) * devicePixelRatio, 0, 7); g.fillStyle = k === drag ? '#FF7A45' : '#fff'; g.fill(); g.lineWidth = 2 * devicePixelRatio; g.strokeStyle = '#6C63FF'; g.stroke(); }
+    for (const k of EDIT_POINTS[v.id]) { g.beginPath(); g.arc(p[k].x * s, p[k].y * s, (k === drag ? 9 : 6.5) * devicePixelRatio, 0, 7); g.fillStyle = k === drag ? '#FF7A45' : '#fff'; g.fill(); g.lineWidth = 2 * devicePixelRatio; g.strokeStyle = '#0E9AA7'; g.stroke(); }
   };
   const metrics = () => { const m = viewMetrics(v.id, x.pts, x.w, x.h, x.roll, heightCm()); $('#qm').innerHTML = m ? metricRows(m) : '<p class="sub">Точки не найдены: переснимите фото или загрузите другое.</p>'; };
   const at = e => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * x.w, y: (e.clientY - r.top) / r.height * x.h, cx: e.clientX - r.left, cy: e.clientY - r.top, rw: r.width }; };
@@ -273,7 +273,7 @@ function addZone(onAdd) {
 /** «Показать клиенту»: полный экран, крутящаяся фигура с зонами в цветах задач, 2–3 коротких фразы и задачи. Без кнопок специалиста. */
 function showClient(st, name) {
   const d = document.createElement('div'), obs = plainObs(st.by), groups = taskGroups(st.zones);
-  d.style.cssText = 'position:fixed;inset:0;z-index:60;background:#0B1226;color:#fff;overflow:auto;padding:calc(env(safe-area-inset-top) + 16px) 20px calc(env(safe-area-inset-bottom) + 24px)';
+  d.style.cssText = 'position:fixed;inset:0;z-index:60;background:#080C13;color:#fff;overflow:auto;padding:calc(env(safe-area-inset-top) + 16px) 20px calc(env(safe-area-inset-bottom) + 24px)';
   d.innerHTML = `<button id="scx" aria-label="Закрыть" style="position:absolute;z-index:2;right:16px;top:calc(env(safe-area-inset-top) + 12px);width:48px;height:48px;border-radius:50%;border:0;background:rgba(255,255,255,.12);color:#fff;font-size:22px">✕</button>
     <div style="font-size:15px;opacity:.7;min-height:18px">${esc(name || '')}</div><div style="font-size:28px;font-weight:800;line-height:1.1;margin-top:4px;padding-right:56px">Ваше положение тела</div>
     <div id="sc3" style="height:min(54vh,460px);margin-top:14px"></div>
@@ -292,11 +292,13 @@ function showClient(st, name) {
 export async function quickCard(host, aid, prevId) {
   const a = await row('assessments', aid), c = await row('clients', a.clientId), qz = a.quick || {};
   const st = { by: qz.by || {}, zones: (qz.zones || []).map(z => ({ ...z })), gain: 1, h: qz.h || 170 };
+  // действия под рукой: отчет, показать клиенту, было → стало (до повторного теста кнопка видна, но неактивна)
+  const tool = (id, icon, t, off) => `<button class="tool" id="${id}"${off ? ' disabled style="opacity:.45"' : ''}>${ic(icon)}<span>${t}</span></button>`;
   host.innerHTML = `<div class="pad" style="margin-top:12px;display:flex;flex-direction:column;gap:16px"><div class="row" style="gap:8px"><b style="flex:1;font-size:17px">Быстрый тест · ${_pro.fmtDate(a.date)}</b></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${tool('qcrep', 'share', 'Отчет клиенту')}${tool('qcshow', 'maximize', 'Показать клиенту')}${tool('qccmp', 'arrow-right-left', 'Было → стало', !prevId)}</div>
+    ${prevId ? '' : '<p class="sub" style="font-size:12px;margin-top:-8px">«Было → стало» откроется после повторного теста этого клиента.</p>'}
     <div id="qcp" style="display:flex;flex-direction:column;gap:16px"></div>
-    ${a.note ? `<div><div class="eyebrow">Ваш вывод · ГИПОТЕЗА</div><div class="card" style="font-size:15px;line-height:1.45;white-space:pre-line">${esc(a.note)}</div></div>` : ''}
-    <button class="btn" id="qcrep">${ic('share', 's')}Отчет клиенту</button>
-    <div class="row" style="gap:8px"><button class="btn line" id="qcshow" style="flex:1">${ic('maximize', 's')}Показать клиенту</button>${prevId ? `<button class="btn line" id="qccmp" style="flex:1">${ic('arrow-right-left', 's')}Было → стало</button>` : ''}</div></div>`;
+    ${a.note ? `<div><div class="eyebrow">Ваш вывод · ГИПОТЕЗА</div><div class="card" style="font-size:15px;line-height:1.45;white-space:pre-line">${esc(a.note)}</div></div>` : ''}</div>`;
   panel(host.querySelector('#qcp'), st, { onChange: async s => { a.quick = { ...a.quick, zones: s.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), confirmed: true }; await _pro.put('assessments', a); } });
   host.querySelector('#qcrep').onclick = () => report(aid);
   host.querySelector('#qcshow').onclick = () => showClient(st, c && !c.nocard ? c.name : '');
@@ -362,7 +364,7 @@ function wrap(g, text, x, y, maxW, lh) { const words = String(text).split(' '); 
   if (line) { g.fillText(line, x, y); y += lh; } return y; }
 /** Отчет 1080 px шириной: шапка, 4 фото с линиями, ЗАМЕР, что видно, ГИПОТЕЗА специалиста, рекомендации, юридическая строка. */
 export async function renderReport(a, c, photos) {
-  const W = 1080, PAD = 64, F = 'Manrope, system-ui, sans-serif', INK = '#0B1B3B', SUB = '#566079', VIO = '#5148E0';
+  const W = 1080, PAD = 64, F = 'Manrope, system-ui, sans-serif', INK = '#0B1B3B', SUB = '#566079', VIO = '#0E7C86';
   const author = (await _pro.meta('profile')) || _pro.author(), contact = (await _pro.meta('contact')) || '';
   const imgs = {}; for (const v of VIEWS) if (photos[v.id]) imgs[v.id] = await loadImg(photos[v.id].photo);
   const cv = document.createElement('canvas'); cv.width = W; cv.height = 4200; const g = cv.getContext('2d'), breaks = [];
@@ -380,7 +382,7 @@ export async function renderReport(a, c, photos) {
     if (pts) { const X = i => ox + (pts[i].x - bx) * sc, Y = i => oy + (pts[i].y - by) * sc;
       const ax = v.id === 'right' ? pts[P.R_ANKLE].x : v.id === 'left' ? pts[P.L_ANKLE].x : (pts[P.L_ANKLE].x + pts[P.R_ANKLE].x) / 2;
       g.strokeStyle = '#FBBF24'; g.lineWidth = 2; g.setLineDash([7, 6]); g.beginPath(); g.moveTo(ox + (ax - bx) * sc, y); g.lineTo(ox + (ax - bx) * sc, y + ch); g.stroke(); g.setLineDash([]);
-      g.strokeStyle = 'rgba(108,99,255,.95)'; g.lineWidth = 3; for (const [m, n] of LINES[v.id]) { g.beginPath(); g.moveTo(X(m), Y(m)); g.lineTo(X(n), Y(n)); g.stroke(); }
+      g.strokeStyle = '#11A3AE'; g.lineWidth = 3; for (const [m, n] of LINES[v.id]) { g.beginPath(); g.moveTo(X(m), Y(m)); g.lineTo(X(n), Y(n)); g.stroke(); }
       for (const i of EDIT_POINTS[v.id]) { g.beginPath(); g.arc(X(i), Y(i), 5, 0, 7); g.fillStyle = '#fff'; g.fill(); } }
     g.restore(); g.fillStyle = SUB; g.font = `600 22px ${F}`; g.textAlign = 'center'; g.fillText(v.name, x0 + cw / 2, y + ch + 32); g.textAlign = 'left'; });
   y += ch + 70;
