@@ -27,7 +27,7 @@
 <link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash-1320x2868.jpg">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="BodyPassport"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="format-detection" content="telephone=no">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script>if (/tgWebApp/.test(location.hash + location.search) || sessionStorage.getItem('bp_tg')) { sessionStorage.setItem('bp_tg', '1'); document.write('<script src="https://telegram.org/js/telegram-web-app.js"><\/script>'); }</script>
 <style>
 /* BodyPassport — дизайн-система v3. Заменяет весь блок <style> в index.html.
@@ -442,6 +442,56 @@ body:has(.welcome) #betabar{background:rgba(11,27,59,.72);backdrop-filter:blur(1
 .bas-list{display:flex;flex-direction:column;margin-top:10px}.bas-row{display:flex;align-items:center;gap:10px;padding:10px 4px;border-top:1px solid var(--line)}.bas-row>div:first-child{flex:1;font-size:14px;line-height:1.3}.bas-row small{display:block;color:var(--sub);font-size:12px}
 .bas-p{display:flex;gap:6px;align-items:baseline;font-variant-numeric:tabular-nums;font-size:15px}.bas-p span:first-child{color:var(--sub)}.bas-p span:last-child{font-weight:700}.bas-p i{font-style:normal;color:var(--faint)}
 .bas-row>b{width:58px;text-align:right;font-size:13px;color:var(--sub)}.bas-row>b.up{color:var(--ok-t)}.bas-row>b.down{color:var(--over-t)}.bas-note{font-size:12px;color:var(--sub);margin-top:8px}
+
+/* ===== Apple Matte (html[data-ds=matte]): матовый графит, голубой акцент, пилюли, числа моноширинным шрифтом.
+   Весь новый вид только в этом блоке: при bp_ds = v3 атрибута нет и действует прежняя система выше ===== */
+:root[data-ds=matte]{--font:Inter,-apple-system,'SF Pro Display',system-ui,sans-serif;--mono:'JetBrains Mono','SF Mono',ui-monospace,monospace;
+  --r-lg:28px;--r-xl:32px;--r-md:20px;--r-sm:14px;--btn-h:54px}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]){color-scheme:dark;
+  --bg:#161617;--surface:#212124;--surface-2:#2C2C2F;--line:rgba(255,255,255,.08);--line-2:rgba(255,255,255,.06);--figure:#2C2C2F;
+  --ink:#FFFFFF;--text:#FFFFFF;--sub:#98989D;--faint:#6E6E73;--focus:#0EA5E9;
+  --brand:#0EA5E9;--brand-ink:#00131D;--brand-s:rgba(14,165,233,.16);--violet:#0EA5E9;--violet-s:rgba(14,165,233,.14);--gold:#0EA5E9;
+  --src-measured:#FFFFFF;--src-hyp:#0EA5E9;
+  --ok:#30D158;--ok-t:#30D158;--ok-s:rgba(48,209,88,.14);--over-t:#FF9F0A;--over-s:rgba(255,159,10,.14);
+  --short:#FF453A;--short-t:#FF6961;--short-s:rgba(255,69,58,.14);--weak:#0A84FF;--weak-t:#64A8FF;--weak-s:rgba(10,132,255,.16);
+  --edge:#FF9F0A;--edge-s:rgba(255,159,10,.14);--hyperT:#FF9F0A;--hyperS:rgba(255,159,10,.14);
+  /* кабинет: метки = состояния (как в прежней системе), задачи клиента только на экранах клиента */
+  --act-weak:#0A84FF;--act-weak-t:#64A8FF;--act-weak-s:rgba(10,132,255,.16);--act-hyper:#FF9F0A;--act-hyper-t:#FF9F0A;--act-hyper-s:rgba(255,159,10,.14);--act-short:#FF453A;--act-short-t:#FF6961;--act-short-s:rgba(255,69,58,.14);
+  --sh-1:none;--sh-2:0 20px 50px rgba(0,0,0,.5);--sh-3:0 -16px 50px rgba(0,0,0,.55)}
+:root[data-ds=matte] body{font-family:var(--font);letter-spacing:-.011em;font-feature-settings:'cv11','ss01'}
+:root[data-ds=matte] h1{font-weight:700;letter-spacing:-.03em}
+:root[data-ds=matte] :is(.btn,.pill,.chip2,.seg,.seg button,.tool-pill){border-radius:9999px}
+:root[data-ds=matte] .mono,:root[data-ds=matte] .num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:0}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) body{background:#161617}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) :is(.card,.group,.list-item,.kpi div,.tile,.tool){background:#212124;border:1px solid rgba(255,255,255,.08);box-shadow:none}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) :is(.card,.kpi div,.tile,.tool){border-radius:28px}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) .group{border-radius:24px}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) .group .list-item{border:0;background:transparent}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) .btn:not(.line):not(.ghost):not(.white):not(.grad){background:#0EA5E9;color:#00131D;font-weight:600;box-shadow:0 10px 30px rgba(14,165,233,.28)}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) .btn.line{background:#2C2C2F;border:1px solid rgba(255,255,255,.08);color:#fff}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) .seg{background:#1C1C1E;border:1px solid rgba(255,255,255,.08);padding:3px}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) .seg button{color:#98989D;font-weight:500}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) .seg button.on{background:#3A3A3C;color:#fff;box-shadow:none}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) .pill{background:#2C2C2F;border:1px solid rgba(255,255,255,.08)}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) :is(.pill.tog.on,.chip2.on){background:#0EA5E9;color:#00131D;border-color:transparent}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) .field{background:#1C1C1E;border:1px solid rgba(255,255,255,.1);border-radius:16px}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) .eyebrow{color:#98989D;text-transform:none;letter-spacing:0;font-size:13px;font-weight:600}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) details.acc{background:#212124;border:1px solid rgba(255,255,255,.08);border-radius:20px}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) #betabar{background:#161617;color:#98989D;border-bottom:1px solid rgba(255,255,255,.06)}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) #betabar button{background:transparent;color:#0EA5E9;border:1px solid rgba(14,165,233,.5)}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) .dock{background:linear-gradient(rgba(22,22,23,0),#161617 26%)}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) .dock.bar{background:rgba(22,22,23,.86);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-top:1px solid rgba(255,255,255,.06)}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) .ctl3d button{background:rgba(44,44,47,.9);border:1px solid rgba(255,255,255,.08);border-radius:9999px;color:#fff}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) .sheet>div{background:#212124;border-top:1px solid rgba(255,255,255,.08)}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) .toast{background:#3A3A3C;color:#fff}
+:root[data-ds=matte]:is([data-session=SPECIALIST_OPERATED],[data-theme=pro]) .avatar{background:#2C2C2F;color:#fff}
+/* компоненты Matte: тег-пилюля, метрика «1,9° ± 1,5°», карточка гипотезы, инструментальная панель */
+.mt-tag{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:9999px;font:600 13px var(--font);white-space:nowrap}
+.mt-tag.g{background:rgba(48,209,88,.16);color:#30D158}.mt-tag.a{background:rgba(255,159,10,.16);color:#FF9F0A}.mt-tag.c{background:rgba(14,165,233,.16);color:#0EA5E9}.mt-tag.m{background:rgba(102,212,207,.16);color:#66D4CF}.mt-tag.n{background:rgba(255,255,255,.08);color:#98989D}
+.mt-val{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600;letter-spacing:0}.mt-val small{font-weight:400;color:var(--sub);font-size:.82em}
+.mt-hyp{display:grid;grid-template-columns:1fr 1fr;gap:10px}.mt-hyp>div{background:#212124;border:1px solid rgba(255,255,255,.08);border-radius:24px;padding:14px}
+.mt-hyp b{display:block;font-size:13px;color:#98989D;font-weight:500;margin-bottom:8px}.mt-hyp ul{margin:8px 0 0;padding-left:16px;font-size:14px;line-height:1.45;color:#fff}
+.mt-cal{font:400 11.5px var(--mono);color:#6E6E73;text-align:center;letter-spacing:0}
 </style>
 </head>
 <body>
