@@ -441,6 +441,24 @@ function draw3D(spots, back, wpx, hpx) {
     pos.set(s.key, [(X + SNAP_HW) / (2 * SNAP_HW), (SNAP_HT - Y) / (2 * SNAP_HT)]); }
   return { img, pos };
 }
+/** Типовая фигура в позе клиента (ТЗ v4, п. 3.5): view 'front' | 'back' | 'right' | 'left', pose из pose-figure.poseOf.
+ *  Возвращает canvas wpx×hpx с прозрачным фоном или null, если 3D недоступна. Сетку после снимка возвращаем в исходный вид. */
+export async function posedFigure(spots, pose, view, wpx, hpx) {
+  let S; try { S = await ready3D(); } catch (e) { return null; }
+  const { poseVerts } = await import('./pose-figure.js'), m = S.m, pa = S.geo.attributes.position, na = S.geo.attributes.normal;
+  if (!S.p0) { S.p0 = pa.array.slice(); S.n0 = na.array.slice(); }
+  const pv = poseVerts(m.pos, pose, m.meta.zmax);
+  for (let i = 0; i < m.nv; i++) { pa.array[i * 3] = pv[i * 3]; pa.array[i * 3 + 1] = pv[i * 3 + 2]; pa.array[i * 3 + 2] = -pv[i * 3 + 1]; }
+  pa.needsUpdate = true; S.geo.computeVertexNormals();
+  const sp = alias3d(spots || [], m.meta.order); paintMesh(m, sp, S.col); S.geo.attributes.color.needsUpdate = true;
+  { const ix = meshIndex(m, sp); if (S.ix !== ix) { S.ix = ix; S.geo.setIndex(new S.THREE.BufferAttribute(ix, 1)); } }
+  S.root.rotation.y = { front: 0, back: Math.PI, right: Math.PI / 2, left: -Math.PI / 2 }[view] || 0;
+  if (S.renderer.domElement.width !== wpx || S.renderer.domElement.height !== hpx) S.renderer.setSize(wpx, hpx, false);
+  S.renderer.render(S.scene, S.cam);
+  const img = document.createElement('canvas'); img.width = wpx; img.height = hpx; img.getContext('2d').drawImage(S.renderer.domElement, 0, 0);
+  pa.array.set(S.p0); pa.needsUpdate = true; na.array.set(S.n0); na.needsUpdate = true; S.root.rotation.y = 0;
+  return img;
+}
 export function drawHeat(cv, spots0, back, selected, labels = [], opts = {}) {
   const use3 = !!snap3 && !opts.flat; cv._tok = (cv._tok || 0) + 1; const tok = cv._tok;
   if (!snap3 && !snapFail && device.webgl2 && !opts.flat) ready3D().then(() => { if (cv.isConnected && cv._tok === tok) drawHeat(cv, spots0, back, selected, labels, { ...opts, reveal: false }); }).catch(() => {});
