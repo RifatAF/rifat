@@ -26,6 +26,9 @@ async function trackedIds() { const since = Date.now() - 30 * DAY, [cs, as] = aw
 /** Можно ли вести этого клиента: он уже в ведении или есть свободное место. Нет: шторка «ведение без лимита». */
 async function canTrack(c) { if (isPro()) return true; const ids = await trackedIds(); if (ids.has(c.id)) return true; return checkClientSlotAvailable(ids.size); }
 const $ = s => document.querySelector(s);
+/** Полная версия (тест по видео, тест из дома, сеанс) включается в «Администрировании»; без нее основа кабинета: быстрый тест по 4 фото. */
+export const fullMode = () => localStorage.getItem('bp_full') === '1';
+const quickJs = () => import('./quick.js');
 // имя специалиста для отчетов по умолчанию: из аккаунта (в бете кабинетом пользуются разные специалисты)
 const defaultAuthor = () => { const u = meSync(); return u && u.name ? u.name : 'Специалист'; };
 const esc = s => String(s ?? '').replace(/[&<>"'`]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' })[c]);
@@ -292,9 +295,9 @@ export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC
     ${real.length ? `<div class="pad kpi" style="margin-top:var(--s4)"><div><b>${real.filter(c => { const a = last(c.id); return a && Date.now() - a.date < 60 * DAY; }).length}</b><span>активных</span></div><div><b>${review.length + consults.filter(x => new Date(x.v.t).toDateString() === new Date().toDateString()).length}</b><span>на сегодня</span></div><div><b>${real.length}</b><span>всего</span></div></div>` : ''}
     ${slotWidget(slots((await trackedIds()).size))}
     <div class="pad" style="margin-top:var(--s4)"><button class="btn" id="qquick" style="height:72px;font-size:19px;gap:12px;justify-content:flex-start;padding:0 20px">${ic('camera')}<span style="text-align:left;line-height:1.2">Быстрый тест<br><small style="font-size:13px;font-weight:500;opacity:.75">4 фото клиента, точки и отчет</small></span></button></div>
-    <div class="pad" style="margin-top:var(--s3)"><details class="acc" id="qmore"${localStorage.getItem('bp_more_open') === '1' ? ' open' : ''}><summary style="font-weight:600;font-size:15px">Ещё: тест по видео, тест из дома</summary><div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    ${fullMode() ? `<div class="pad" style="margin-top:var(--s3)"><details class="acc" id="qmore"${localStorage.getItem('bp_more_open') === '1' ? ' open' : ''}><summary style="font-weight:600;font-size:15px">Полная версия: тест по видео, тест из дома</summary><div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <button class="card" id="qa1" style="border:0;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:14px;display:flex;flex-direction:column;gap:6px">${ic('play')}<b style="font-size:16px;line-height:1.2">Тест по видео</b><span style="font-size:12px;color:var(--sub)">клиент рядом, движения на камеру</span></button>
-      <button class="card" id="qa2" style="border:0;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:14px;display:flex;flex-direction:column;gap:6px">${ic('mail')}<b style="font-size:16px;line-height:1.2">Тест из дома</b><span style="font-size:12px;color:var(--sub)">ссылка клиенту, результат придет сюда</span></button>${(meSync() || {}).admin && localStorage.getItem('bp_session_mode') === '1' ? `<button class="card row" id="qses" style="grid-column:1/-1;border:0;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:14px;gap:10px">${ic('rotate-ccw')}<div style="flex:1"><b style="font-size:16px">Сеанс</b><div style="font-size:12px;color:var(--sub)">тест, правка руками, повтор</div></div></button>` : ''}</div></details></div>
+      <button class="card" id="qa2" style="border:0;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:14px;display:flex;flex-direction:column;gap:6px">${ic('mail')}<b style="font-size:16px;line-height:1.2">Тест из дома</b><span style="font-size:12px;color:var(--sub)">ссылка клиенту, результат придет сюда</span></button>${(meSync() || {}).admin && localStorage.getItem('bp_session_mode') === '1' ? `<button class="card row" id="qses" style="grid-column:1/-1;border:0;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:14px;gap:10px">${ic('rotate-ccw')}<div style="flex:1"><b style="font-size:16px">Сеанс</b><div style="font-size:12px;color:var(--sub)">тест, правка руками, повтор</div></div></button>` : ''}</div></details></div>` : ''}
     ${real.length && !review.length && !soon.length && !consults.length ? `<div class="pad" style="margin-top:var(--s3)"><div class="card row" style="gap:10px;font-size:14px;padding:12px 14px">${ic('check', 's')}<span style="flex:1">Новых результатов, ретестов и консультаций на неделе нет</span></div></div>` : ''}
     <div class="pad tools" id="toolsH" hidden><button class="tool" id="join">${ic('mail')}Тест по ссылке</button><button class="tool" id="rtq">${ic('rotate-ccw')}Ретест</button><button class="tool" id="repq">${ic('file-text')}Отчёт</button><button class="tool" id="cmpq">${ic('arrow-right-left')}Было→стало</button></div>
     ${review.length ? h3('Новые результаты: разобрать', review.length) + `<div class="pad"><div class="group">${review.map(a => `<div class="list-item" data-a="${a.id}" style="border-radius:0;padding:var(--s3) 0;background:transparent"><span class="dot"></span><div style="flex:1;min-width:0"><b>${esc(byId[a.clientId].name)}</b><div style="font-size:13px;color:var(--sub)">${a.source === 'home' ? 'прошёл тест по ссылке' : 'гипотеза не подтверждена'} · ${esc(a.templateName || 'оценка')} · ${fmtDate(a.date)}</div></div><span class="chev">${ic('chevron-right', 's')}</span></div>`).join('')}</div></div>` : ''}
@@ -304,7 +307,7 @@ export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC
     ${h3(q ? 'Поиск' : 'Последние клиенты', clients.length > list.length && !q ? 'из ' + clients.length : '')}
     ${clients.length > 6 || q ? `<div class="pad" style="margin-bottom:var(--s2)"><input id="q" class="field" style="height:48px" value="${esc(query)}" placeholder="Найти клиента"></div>` : ''}
     <div class="pad">${list.length ? `<div class="group">${list.map(c => { const a = last(c.id); return row(c, a ? fmtDate(a.date) + ' · ' + esc(a.templateName || 'оценка') : 'оценок пока нет'); }).join('')}</div>`
-      : q ? '<p class="sub">Никого не нашлось.</p>' : `<div class="card empty">${ic('file-text')}<b>Посмотрите, что получите</b><span class="sub" style="font-size:14px">Готовая оценка клиента с болью в колене: замер, гипотеза, решение и отчет.</span><button class="btn line" id="demo" style="margin-top:4px">Открыть пример</button></div>`}</div>
+      : q ? '<p class="sub">Никого не нашлось.</p>' : !fullMode() ? `<div class="card empty">${ic('camera')}<b>Клиентов пока нет</b><span class="sub" style="font-size:14px">Сделайте быстрый тест: 4 фото, точки и отчет клиенту за 5 минут.</span></div>` : `<div class="card empty">${ic('file-text')}<b>Посмотрите, что получите</b><span class="sub" style="font-size:14px">Готовая оценка клиента с болью в колене: замер, гипотеза, решение и отчет.</span><button class="btn line" id="demo" style="margin-top:4px">Открыть пример</button></div>`}</div>
     ${clients.filter(c => !c.demo).length && !q ? `<div class="pad" style="margin-top:var(--s2)"><button class="btn line" id="allc" style="height:48px">${ic('search', 's')}Все клиенты · ${clients.filter(c => !c.demo).length}</button></div>` : ''}
     ${lost ? `<div class="pad" style="margin-top:var(--s3)"><div class="card" style="border:1px solid var(--over-t);font-size:14px;line-height:1.45"><b>Кабинет пуст, хотя здесь было ${was} ${plural(was)}</b><div style="margin-top:6px">Телефон мог очистить данные сайта. Восстановите кабинет из копии через меню «Восстановить из копии». Если копии нет, напишите нам через «Отзыв».</div></div></div>` : ''}
     ${iosRisk ? `<div class="pad" style="margin-top:var(--s3)"><div class="card" style="font-size:14px;line-height:1.45"><b>Защитите базу клиентов</b><div style="margin-top:6px">Safari на iPhone может стереть кабинет, если не открывать его неделю. Установите приложение на экран «Домой»: «Поделиться» → «На экран Домой», и раз в неделю сохраняйте копию.</div><button class="btn line" id="bk2" style="height:44px;margin-top:10px">Сохранить копию сейчас</button></div></div>` : ''}
@@ -313,14 +316,14 @@ export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC
   </div><div class="dock">${proNav('home')}</div></div>`);
   if (pulled && pulled.length) toast('Пришли результаты по ссылке: ' + pulled.join(', '));
   if ($('#demo')) $('#demo').onclick = openDemo;
-  $('#qmore').ontoggle = e => localStorage.setItem('bp_more_open', e.target.open ? '1' : '0');
+  if ($('#qmore')) { $('#qmore').ontoggle = e => localStorage.setItem('bp_more_open', e.target.open ? '1' : '0'); $('#qa1').onclick = () => { useHit('act', 'qs'); quickStart(); }; $('#qa2').onclick = () => { useHit('act', 'join'); sendJoin(); }; }
   $('#qquick').onclick = () => { useHit('act', 'quick'); import('./quick.js').then(m => m.quickTest()).catch(e => toast('Не открылось: ' + e.message)); };
-  $('#qa1').onclick = () => { useHit('act', 'qs'); quickStart(); }; $('#qa2').onclick = () => { useHit('act', 'join'); sendJoin(); }; if ($('#qses')) $('#qses').onclick = () => import('./session.js').then(m => m.sessionStart(() => proHome())).catch(e => toast('Не открылось: ' + e.message));
+  if ($('#qses')) $('#qses').onclick = () => import('./session.js').then(m => m.sessionStart(() => proHome())).catch(e => toast('Не открылось: ' + e.message));
   bindInstall(); if ($('#mph')) $('#mph').onclick = profileForm; 
   // одна кнопка «+»: все действия в одном списке, главный экран без лишних кнопок
   $('#new').onclick = () => { const d = document.createElement('div'); d.className = 'sheet';
     const it = (id, icon, t, sub) => `<button class="row-link" data-act="${id}">${ic(icon, 's')}<span style="flex:1;text-align:left"><b style="font-weight:600">${t}</b><br><small class="sub" style="font-size:13px">${sub}</small></span>${ic('chevron-right', 's chev')}</button>`;
-    const acts = [['quick', 'camera', 'Быстрый тест', '4 фото клиента, точки и отчет'], ['qs', 'play', ({ trainer: 'Скрининг клиента', manual: 'До сеанса', sport: 'Спортивный тест' })[sp] || 'Новая оценка', 'Клиент рядом, тест на этом телефоне'],
+    const acts = !fullMode() ? [['quick', 'camera', 'Быстрый тест', '4 фото клиента, точки и отчет'], ['rtq', 'rotate-ccw', 'Повторный тест', 'Быстрый тест того же клиента'], ['repq', 'file-text', 'Отчёт клиенту', 'PDF или картинка'], ['cmpq', 'arrow-right-left', 'Было → стало', 'Сравнить два теста']] : [['quick', 'camera', 'Быстрый тест', '4 фото клиента, точки и отчет'], ['qs', 'play', ({ trainer: 'Скрининг клиента', manual: 'До сеанса', sport: 'Спортивный тест' })[sp] || 'Новая оценка', 'Клиент рядом, тест на этом телефоне'],
       ['join', 'mail', 'Тест по ссылке', 'Клиент пройдет тест дома'], ['rtq', 'rotate-ccw', 'Ретест', 'Повторный тест того же клиента'], ['repq', 'file-text', 'Отчёт клиенту', 'PDF, картинка или ссылка'],
       ['cmpq', 'arrow-right-left', 'Было → стало', 'Сравнить два теста'], ...(isBeta() && (meSync() || {}).admin ? [['calq', 'star', 'Калибровка (бета)', 'Вы знаете проблему человека, он проходит тест, данные уходят на настройку']] : [])];
     // чаще используемое наверху: список подстраивается под специалиста
@@ -330,7 +333,7 @@ export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC
   // инструменты в одно касание: клиент один — сразу действие, иначе выбор из последних
   const lastTwo = id => asses.filter(a => a.clientId === id).sort((x, y) => x.date - y.date).slice(-2);
   const tool = (title, ok, act) => () => { const cs = sorted.filter(c => ok(lastTwo(c.id))); if (!cs.length) return toast('Пока нет подходящих клиентов'); if (cs.length === 1) return act(cs[0], lastTwo(cs[0].id)); pickClient(title, cs, c => act(c, lastTwo(c.id))); };
-  $('#rtq').onclick = tool('Ретест', l => l.length >= 1, async (c, l) => { if (await canTrack(c)) newAssessment(c.id, l.at(-1).id); });
+  $('#rtq').onclick = tool('Ретест', l => l.length >= 1, async (c, l) => { if (!fullMode() || l.at(-1).template === 'quick') return quickJs().then(m => m.quickTest(c.id)); if (await canTrack(c)) newAssessment(c.id, l.at(-1).id); });
   $('#repq').onclick = tool('Отчёт клиенту', l => l.length >= 1, (c, l) => report(l.at(-1).id));
   $('#cmpq').onclick = tool('Было → стало', l => l.length >= 2, (c, l) => compare(l[0].id, l[1].id));
   if ($('#allc')) $('#allc').onclick = () => allClients();
@@ -507,7 +510,7 @@ const sexOf = c => (c && (c.sex || (c.selfReport && c.selfReport.sex))) || 'M';
 export async function clientCard(id) {
   const c = await get('clients', id); if (!c) return proHome(); setBodySex(sexOf(c));
   if (c.locked) { delete c.locked; await put('clients', c); } // старые версии закрывали клиентов сверх лимита: теперь первые тесты без лимита
-  const as = await byClient(id); const last = as.at(-1);
+  const as = await byClient(id); const last = as.at(-1), qs = as.filter(a => a.template === 'quick'), lastQ = last && last.template === 'quick';
   const age = c.dob ? Math.floor((Date.now() - new Date(c.dob)) / (365.25 * DAY)) : null;
   const visits = (c.visits || []).slice().sort((x, y) => x.t - y.t), now = Date.now();
   const done = visits.filter(v => v.done), next = visits.find(v => !v.done && v.t > now - DAY), pending = visits.filter(v => !v.done && v.t <= now - 3600e3);
@@ -528,7 +531,8 @@ export async function clientCard(id) {
      ${c.selfReport ? `<p style="font-size:14px;line-height:1.4;margin-top:8px"><span class="sub">Сам человек:</span> ${esc(c.selfReport.complaints || 'жалобы не написал')}${c.selfReport.activity ? ' · ' + esc(c.selfReport.activity) : ''}</p>` : ''}
      <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;font-size:14px">${[['Ваша оценка', true], ['Человек прошел тест по ссылке', as.length > 0], ['Данные отправлены на калибровку', !!c.calib.sentAt]].map(([t, ok], i) => `<div class="row" style="gap:8px"><span class="step-n" style="width:20px;color:${ok ? 'var(--ok-t,#15803D)' : 'var(--sub)'}">${ok ? '✓' : i + 1}</span><span style="flex:1;${ok ? '' : 'color:var(--sub)'}">${t}${i === 2 && c.calib.sentAt ? ', ' + new Date(c.calib.sentAt).toLocaleDateString('ru') : ''}</span></div>`).join('')}</div>
      ${as.length ? `<button class="btn" id="calsend" style="margin-top:12px;height:48px">${c.calib.sentAt ? 'Отправить еще раз' : 'Отправить на калибровку'}</button><p class="sub" style="font-size:12px;margin-top:6px">Уйдут ваша оценка, анкета, замеры и запись движения. Имени человека в данных нет.</p>` : `<p class="sub" style="font-size:13px;margin-top:10px">Ждем, пока человек пройдет тест по ссылке. Результат придет сюда сам, когда вы откроете приложение.</p>`}</div></div>` : ''}
-   ${last ? `<div class="pad" style="margin-top:12px"><div class="card">
+   ${lastQ ? '<div id="qcard"></div>' : ''}
+   ${last && !lastQ ? `<div class="pad" style="margin-top:12px"><div class="card">
      <div class="row" style="flex-wrap:wrap;gap:8px"><b style="flex:1 1 160px">Карта тела · ${fmtDate(last.date)}</b><div class="seg" style="width:auto"><button id="vf" class="on" style="min-height:32px;padding:0 10px;font-size:13px">Спереди</button><button id="vb" style="min-height:32px;padding:0 10px;font-size:13px">Сзади</button><button id="v3" style="min-height:32px;padding:0 10px;font-size:13px">3D</button></div></div>
      <div class="row" style="align-items:flex-start;gap:12px;margin-top:8px"><div id="cvis" style="flex:none;width:130px;display:flex;justify-content:center"><canvas id="cheat" style="width:130px;display:block"></canvas></div>
        <ol id="cfind" style="list-style:none;margin:0;padding:0;flex:1;min-width:0;display:flex;flex-direction:column;gap:10px">${cFacts.length ? cFacts.map((f, i) => `<li class="row" style="gap:8px;align-items:flex-start;font-size:14px;line-height:1.35"><span class="num" style="flex:none;width:20px;height:20px;border-radius:50%;background:var(--brand);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">${i + 1}</span><span>${esc(f)}</span></li>`).join('') : '<li class="sub" style="font-size:14px">Значимых отклонений нет</li>'}</ol></div>
@@ -539,12 +543,12 @@ export async function clientCard(id) {
    <div class="pad" style="margin-top:12px"><div class="card"><div class="eyebrow">Следующие шаги</div>
      <div class="row" style="margin-top:10px;align-items:flex-start"><span style="color:var(--sub);padding-top:2px">${ic('rotate-ccw', 's')}</span><div style="flex:1;min-width:0"><b>Повторный тест</b><div style="font-size:14px;color:${rdays != null && rdays <= 0 ? 'var(--over-t)' : 'var(--sub)'}">${rd ? fmtDate(rd) + (rdays < 0 ? ', просрочен' : rdays === 0 ? ', сегодня' : `, через ${rdays} дн.`) : 'дата не назначена'}</div>
        ${c.retestSent ? `<div style="font-size:13px;color:var(--ok-t)">Ссылка отправлена ${new Date(c.retestSent).toLocaleDateString('ru', { day: 'numeric', month: 'long' })}</div>` : ''}</div><button class="pill" id="rdate">${rd ? 'Изменить' : 'Назначить'}</button></div>
-     ${rd ? `<button class="btn${c.retestSent && c.retestSent > rd - 45 * DAY ? ' line' : ''}" id="rinv" style="margin-top:10px;height:48px">${c.retestSent && c.retestSent > rd - 45 * DAY ? 'Отправить ссылку еще раз' : 'Отправить клиенту ссылку'}</button>` : `<button class="btn" id="rset" style="margin-top:10px;height:48px">Назначить и отправить ссылку</button>`}
+     ${!fullMode() ? '' : rd ? `<button class="btn${c.retestSent && c.retestSent > rd - 45 * DAY ? ' line' : ''}" id="rinv" style="margin-top:10px;height:48px">${c.retestSent && c.retestSent > rd - 45 * DAY ? 'Отправить ссылку еще раз' : 'Отправить клиенту ссылку'}</button>` : `<button class="btn" id="rset" style="margin-top:10px;height:48px">Назначить и отправить ссылку</button>`}
      <div class="row" style="margin-top:14px;align-items:flex-start;border-top:1px solid var(--line-2);padding-top:12px"><span style="color:var(--sub);padding-top:2px">${ic('calendar', 's')}</span><div style="flex:1;min-width:0"><b>Консультация</b><div style="font-size:14px;color:var(--sub)">${next ? when(next.t) : 'не запланирована'}${done.length ? ` · прошло: ${done.length}` : ''}</div></div><button class="pill" id="vadd">${next ? 'Изменить' : 'Назначить'}</button></div>
      ${pending.map(v => `<div class="row" style="margin-top:8px;font-size:14px;background:var(--surface);border-radius:12px;padding:8px 10px"><span style="flex:1">${when(v.t)}: консультация состоялась?</span><button class="pill" data-vy="${v.id}">Да</button><button class="pill" data-vn="${v.id}" style="margin-left:6px">Нет</button></div>`).join('')}
      ${next ? `<button class="btn line" id="vinv" style="margin-top:10px;height:44px">Отправить клиенту приглашение</button>` : ''}
 </div></div>
-   <div class="pad" style="margin-top:12px;display:flex;flex-direction:column;gap:10px"><button class="btn line" id="na">${last ? 'Повторный тест здесь, на приеме' : 'Первая оценка'}</button><button class="btn ghost" id="inv" style="background:var(--surface)">Ссылка на тест из дома</button>${last ? '<button class="btn ghost" id="nb">Оценка с другим протоколом</button>' : ''}${as.length >= 3 ? '<button class="btn ghost" id="rel">Повторяемость: 3 последних теста</button>' : ''}</div>
+   <div class="pad" style="margin-top:12px;display:flex;flex-direction:column;gap:10px"><button class="btn" id="nq">${ic('camera', 's')}${qs.length ? 'Повторный быстрый тест' : 'Быстрый тест'}</button>${fullMode() ? `<button class="btn line" id="na">${last ? 'Повторный тест по видео' : 'Тест по видео'}</button><button class="btn ghost" id="inv" style="background:var(--surface)">Ссылка на тест из дома</button>${last ? '<button class="btn ghost" id="nb">Оценка с другим протоколом</button>' : ''}${as.length >= 3 ? '<button class="btn ghost" id="rel">Повторяемость: 3 последних теста</button>' : ''}` : ''}</div>
    ${c.notes ? `<div class="pad" style="margin-top:12px"><div class="card" style="font-size:15px;line-height:1.4"><div class="eyebrow">Заметки</div>${esc(c.notes)}</div></div>` : ''}
    <h3 class="pad" style="margin:22px 0 8px;font-size:17px">История</h3>
    <div class="pad" style="display:flex;flex-direction:column;gap:8px">${as.length || done.length ? [...as.map(a => ({ t: a.date, a })), ...done.map(v => ({ t: v.t, v }))].sort((x, y) => y.t - x.t).map(({ a, v }) => {
@@ -557,17 +561,19 @@ export async function clientCard(id) {
   if ($('#caledit')) $('#caledit').onclick = () => calibSheet(c);
   $('#back').onclick = () => proHome(); $('#edit').onclick = () => clientForm(id);
   document.querySelectorAll('.gopro-home').forEach(b => b.onclick = () => gate('home', c.name.split(' ')[0]));
-  if (last) { const sp = proSpots(last); let v3 = null;
+  if (lastQ) quickJs().then(m => m.quickCard($('#qcard'), last.id, qs.length >= 2 ? qs.at(-2).id : null)).catch(e => toast('Не открылось: ' + e.message));
+  $('#nq').onclick = () => quickJs().then(m => m.quickTest(id));
+  if (last && !lastQ) { const sp = proSpots(last); let v3 = null;
     const show = back => { if (v3) { v3.dispose(); v3 = null; } $('#cvis').style.height = ''; $('#cvis').innerHTML = '<canvas id="cheat" style="width:150px;display:block"></canvas>'; $('#cvis').style.width = '130px'; $('#cfind').style.display = ''; drawHeat($('#cheat'), onlyKeys(sp, mainKeys(last, sp)), back, null, cNum); ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === (back ? 'vb' : 'vf'))); };
     show(cNum.filter(l => (sp.find(x => x.key === l.key) || {}).back).length > cNum.length / 2); $('#vf').onclick = () => show(false); $('#vb').onclick = () => show(true);
     $('#v3').onclick = async () => { ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === 'v3')); $('#cvis').style.height = '340px'; $('#cvis').style.width = '100%'; $('#cfind').style.display = 'none'; $('#cvis').innerHTML = '';
       try { v3 = await body3D($('#cvis'), onlyKeys(sp, mainKeys(last, sp)), key => muscleInfo(key, sp, analyze(last, C), { pro: true }), { arrows: true }); } catch (e) { toast('3D не загрузилось'); show(false); } };
     $('#open').onclick = () => result(last.id); $('#rep').onclick = () => report(last.id);
     $('#mvr').onclick = async () => { const pp = await get('poses', last.id); motionViewer(pp && pp.poses, last.setup, () => clientCard(id), `${c.name} · ${fmtDate(last.date)}`); }; }
-  $('#na').onclick = async () => { if (last && !(await canTrack(c))) return; newAssessment(id, last ? last.id : null); }; if ($('#nb')) $('#nb').onclick = async () => { if (!(await canTrack(c))) return; newAssessment(id); };
+  if ($('#na')) $('#na').onclick = async () => { if (last && !(await canTrack(c))) return; newAssessment(id, last ? last.id : null); }; if ($('#nb')) $('#nb').onclick = async () => { if (!(await canTrack(c))) return; newAssessment(id); };
   if ($('#cmp')) $('#cmp').onclick = () => compare(as.at(-2).id, last.id);
   if ($('#rel')) $('#rel').onclick = () => repeatability(as.slice(-3), id);
-  $('#inv').onclick = () => sendInvite(c);
+  if ($('#inv')) $('#inv').onclick = () => sendInvite(c);
   if ($('#rinv')) $('#rinv').onclick = async () => { if (await retestInvite(c, last)) clientCard(id); };
   $('#rdate').onclick = async () => { if (await retestSheet(c, last)) clientCard(id); }; if ($('#rset')) $('#rset').onclick = $('#rdate').onclick;
   $('#vadd').onclick = async () => { const t = await datePick('Консультация', next ? next.t : now + 7 * DAY, true); if (!t) return;
@@ -1275,6 +1281,7 @@ export async function compare(prevId, curId) {
     const lastTwo = ca ? (await byClient(ca.clientId)).slice(-2).map(x => x.id) : [];
     if (!same && !(lastTwo.includes(prevId) && lastTwo.includes(curId)) && !gate('history', (await get('clients', ca && ca.clientId) || {}).name)) return; }
   const [pa, ca, pp, cp] = await Promise.all([get('assessments', prevId), get('assessments', curId), get('poses', prevId), get('poses', curId)]);
+  if (pa.template === 'quick' && ca.template === 'quick') return quickJs().then(m => m.quickCompare(prevId, curId));
   const c = await get('clients', ca.clientId);
   const keys = Object.keys((cp && cp.poses) || {}).filter(k => pp && pp.poses && pp.poses[k]);
   let key = keys.includes('ohs_front') ? 'ohs_front' : keys[0], k = 0, playing = true, raf = 0;

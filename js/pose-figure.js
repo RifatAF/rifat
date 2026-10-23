@@ -37,17 +37,22 @@ export function poseVerts(pos, pose, H = 1705) {
   // фронтальная плоскость: у всех наклонов + значит «правая сторона ниже / верх вправо», правая сторона это x < 0, и поворот
   // на +a делает то же самое. Замеры абсолютные, поэтому дочерней части даем угол за вычетом родительского
   const aPel = (p.pelvicTilt || 0) * D2R, aTrunk = (p.trunkLateral || 0) * D2R, aSh = ((p.shoulderTilt || 0) - (p.trunkLateral || 0)) * D2R, aHead = ((p.headTilt || 0) - (p.shoulderTilt || 0)) * D2R;
-  // сагиттальная: вперед это y < 0
-  const aHeadF = ((p.headForward ?? NEUTRAL.headForward) - NEUTRAL.headForward) * D2R, shF = -(p.shoulderShift || 0) * H, hipF = -(p.hipShift || 0) * H, knee = Math.tan((p.kneeHyper || 0) * D2R) * 420 * k;
+  // сагиттальная: вперед это y < 0. Голова вперед: шея наклоняется, голова выдвигается почти без поворота (взгляд остается прямым),
+  // как при реальной позе «голова вперед»; угол ограничен, чтобы «Усилить ×3» не ломало шею
+  const hf = Math.min(62, Math.max(-20, p.headForward ?? NEUTRAL.headForward)), headD = (Math.tan(hf * D2R) - Math.tan(NEUTRAL.headForward * D2R)) * 170 * k, aNod = (hf - NEUTRAL.headForward) * .25 * D2R;
+  const shF = -(p.shoulderShift || 0) * H, hipF = -(p.hipShift || 0) * H, knee = Math.tan(Math.max(-35, Math.min(35, p.kneeHyper || 0)) * D2R) * 230 * k;
+  const ank = 80 * k, lin = (a, b, z) => Math.max(0, Math.min(1, (z - a) / (b - a)));
   for (let i = 0; i < n; i++) {
     let x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
     // руки висят от плеча: для них вес считаем по высоте плеча, иначе кисть отрывалась бы от предплечья при наклоне корпуса
     const arm = Math.abs(x) > 185 * k && z > 600 * k, zw = arm ? z0.chest + 60 * k : z;
-    // сагиттальная плоскость: колено назад, таз и все выше вперед, плечи вперед, голова вперед
-    y += knee * bump(z0.knee - 230 * k, z0.knee, z0.knee, z0.knee + 230 * k, z);
-    y += hipF * smooth(120 * k, z0.hip, z);
-    y += shF * smooth(z0.waist, z0.chest + 40 * k, zw);
-    if (aHeadF && zw > z0.neck - 60 * k) { const w = smooth(z0.neck - 60 * k, z0.neck + 40 * k, z); [y, z] = rot(y, z, hipF + shF, z0.neck, aHeadF, w); }
+    // сагиттальная плоскость. Кости прямые: голень и бедро смещаются линейно (колено вершиной треугольника), без S-изгиба
+    if (z < z0.hip) y += knee * (z < z0.knee ? lin(ank, z0.knee, z) : 1 - lin(z0.knee, z0.hip, z));
+    y += hipF * lin(ank, z0.hip, z);
+    // корпус: плавный изгиб от таза к груди, руки идут вместе с плечевым поясом
+    y += shF * smooth(z0.hip, z0.chest + 40 * k, zw);
+    if (headD && !arm) { const w = smooth(z0.chest + 50 * k, z0.neck + 70 * k, z); y -= headD * w;
+      if (aNod) [y, z] = rot(y, z, hipF + shF - headD, z0.neck + 40 * k, aNod, smooth(z0.neck + 20 * k, z0.neck + 80 * k, z)); }
     // фронтальная: от головы к тазу, дочерние повороты раньше родительских
     if (aHead) [x, z] = rot(x, z, 0, z0.neck, aHead, smooth(z0.neck - 40 * k, z0.neck + 50 * k, zw));
     if (aSh) [x, z] = rot(x, z, 0, z0.chest, aSh, smooth(z0.chest - 150 * k, z0.chest + 30 * k, zw));
