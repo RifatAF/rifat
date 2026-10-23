@@ -457,7 +457,7 @@ export async function posedFigure(spots, pose, view, wpx, hpx) {
   pa.needsUpdate = true;
   const sp = alias3d(spots || [], m.meta.order); paintMesh(m, sp, S.col, true); S.geo.attributes.color.needsUpdate = true;
   { const ix = m.idx; if (S.ix !== ix) { S.ix = ix; S.geo.setIndex(new S.THREE.BufferAttribute(ix, 1)); } }
-  S.root.rotation.y = { front: 0, back: Math.PI, right: Math.PI / 2, left: -Math.PI / 2 }[view] || 0;
+  S.root.rotation.y = typeof view === 'number' ? view : { front: 0, back: Math.PI, right: Math.PI / 2, left: -Math.PI / 2 }[view] || 0; // число: свой угол (лендинг, 3/4)
   if (S.renderer.domElement.width !== wpx || S.renderer.domElement.height !== hpx) S.renderer.setSize(wpx, hpx, false);
   S.renderer.render(S.scene, S.cam);
   const img = document.createElement('canvas'); img.width = wpx; img.height = hpx; img.getContext('2d').drawImage(S.renderer.domElement, 0, 0);

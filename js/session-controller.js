@@ -37,7 +37,9 @@ export const DEFAULT_ROLE = 'client';
 /** Цвет строки состояния и панели браузера под экран: тёмный на первом экране, камере и в кабинете, иначе светлый. */
 export function syncThemeColor() {
   try { const root = document.documentElement, dark = !!document.querySelector('.welcome,.cam,.dark') || root.dataset.session === MODES.SPEC || root.dataset.theme === 'pro';
-    const c = document.querySelector('.welcome') ? '#0B1B3B' : document.querySelector('.cam,.dark') ? '#070C18' : dark ? '#0B1220' : '#F5F6FA';
+    // Apple Matte: кабинет, камера и лендинг одного цвета #161617, полоса статуса сливается с экраном
+    const mt = root.dataset.ds === 'matte' && (dark || document.body.classList.contains('lp-on'));
+    const c = mt ? '#161617' : document.querySelector('.welcome') ? '#0B1B3B' : document.querySelector('.cam,.dark') ? '#070C18' : dark ? '#0B1220' : '#F5F6FA';
     let m = document.querySelector('meta[name=theme-color]'); if (!m) { m = document.createElement('meta'); m.name = 'theme-color'; document.head.appendChild(m); } m.content = c; } catch (e) {}
 }
 

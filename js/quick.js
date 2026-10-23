@@ -93,12 +93,11 @@ function camMatte(i, v) {
       <button class="cam-btn mt-glass" id="qx" aria-label="Закрыть" style="width:44px;height:44px;padding:0;border-radius:50%">${ic('x', 's')}</button>
       <div style="flex:1;display:flex;justify-content:center"><div class="mt-inc mt-glass"><span>Инклинометр</span><b id="qinc">0,0°</b><i><em id="qbub"></em></i></div></div>
       <div class="mt-chip mt-glass" id="qlight" style="min-width:44px">Свет<br>…</div></div>
-    <div style="position:relative;padding:12px 18px 0;text-shadow:0 1px 8px rgba(0,0,0,.6)">
-      <div style="font:600 12px 'JetBrains Mono',monospace;color:#0EA5E9;letter-spacing:.04em">${i + 1} / 4 · ${v.name.toUpperCase()}</div>
-      <div style="font:700 22px Inter,system-ui;line-height:1.2;margin-top:4px;letter-spacing:-.02em">«${v.say}»</div>
-      <div id="qhint" style="display:inline-block;margin-top:8px;font:600 13px Inter,system-ui;padding:6px 12px;border-radius:9999px;background:rgba(22,22,23,.6)"></div></div>
     <div id="qlevel" style="position:absolute;left:50%;top:50%;width:120px;height:3px;margin-left:-60px;border-radius:2px;background:rgba(255,255,255,.7);transition:transform .1s;pointer-events:none"></div>
     <div class="mt-glass" style="margin:auto 10px calc(env(safe-area-inset-bottom) + 10px);position:relative;border-radius:30px;padding:12px">
+      <!-- инструкция внизу, а не поверх головы человека в кадре -->
+      <div style="padding:2px 6px 12px"><div class="row" style="gap:8px;justify-content:space-between"><span style="font:600 12px 'JetBrains Mono',monospace;color:#0EA5E9;letter-spacing:.04em">${i + 1} / 4 · ${v.name.toUpperCase()}</span><span id="qhint" style="font:600 12px Inter,system-ui;padding:4px 10px;border-radius:9999px;background:rgba(255,255,255,.08)"></span></div>
+        <div style="font:700 19px Inter,system-ui;line-height:1.25;margin-top:6px;letter-spacing:-.02em">«${v.say}»</div></div>
       <div class="mt-steps">${VIEWS.map((w, k) => `<div class="${k === i ? 'on' : Q.views[w.id] ? 'ok' : ''}">${Q.views[w.id] && k !== i ? '<svg viewBox="0 0 24 24" fill="none" stroke="#30D158" stroke-width="2.4" stroke-linecap="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : STEP_IC[w.id]}${w.name}</div>`).join('')}</div>
       <div style="display:flex;align-items:center;gap:10px;margin-top:12px"><label class="mt-glass" style="height:56px;padding:0 16px;border-radius:9999px;display:grid;place-items:center;font:500 15px Inter,system-ui;cursor:pointer">Загрузить<input type="file" id="qfile" accept="image/*" style="display:none"></label>
         <button id="qshot" class="mt-shot" aria-label="Сделать снимок">${ic('camera', 's')}Сделать снимок</button></div>
@@ -128,7 +127,7 @@ function shoot(i, single = false) {
     lv.style.transform = `rotate(${-roll}deg)`; lv.style.background = Math.abs(roll) <= 2 ? '#34D399' : 'rgba(255,255,255,.7)';
     const now = performance.now(); if (now - lumT > 900) { lumT = now; try { const x = lumCv.getContext('2d', { willReadFrequently: true }); x.drawImage(video, 0, 0, 24, 24); const d = x.getImageData(0, 0, 24, 24).data; let s = 0; for (let k = 0; k < d.length; k += 4) s += d[k] * .3 + d[k + 1] * .59 + d[k + 2] * .11; lum = s / 576; } catch (e) {} }
     const h = Math.abs(roll) > 2.5 && phone.ok ? 'Выровняйте телефон: полоска станет зеленой' : lum < 45 ? 'Мало света: включите свет или повернитесь к окну' : f.pose ? frameIssue(v.id, f.pose, f.w, f.h) : 'Клиент целиком в контуре';
-    $('#qhint').textContent = h; $('#qhint').style.color = h ? '#FDE68A' : '#86EFAC'; if (!h) $('#qhint').textContent = matte() ? 'Тело в кадре · можно снимать' : 'Можно снимать';
+    $('#qhint').textContent = h; $('#qhint').style.color = h ? '#FDE68A' : '#86EFAC'; if (!h) $('#qhint').textContent = 'Можно снимать';
     if ($('#qinc')) { const r = phone.ok ? roll : 0, ok = Math.abs(r) <= 2; $('#qinc').textContent = (r < 0 ? '−' : '') + Math.abs(r).toFixed(1).replace('.', ',') + '°'; $('#qinc').style.color = ok ? '#30D158' : '#FF9F0A';
       $('#qbub').style.transform = `translateX(${Math.max(-48, Math.min(48, r * 4))}px)`; $('#qbub').style.background = ok ? '#30D158' : '#FF9F0A';
       $('#qlight').innerHTML = `Свет<br>${lum < 45 ? '<span style="color:#FF9F0A">мало</span>' : 'норм'}`; }
@@ -217,7 +216,7 @@ function editor(i) {
 }
 const heightCm = () => +((Q && Q.client && Q.client.height) || 0) || 0;
 const num = v => String(Math.abs(v)).replace('.', ',');
-const metricRows = m => `<div class="group">${m.map(r => `<div class="row" style="min-height:52px;gap:10px;align-items:flex-start;padding:10px 14px"><span style="font:700 10px var(--font);letter-spacing:.06em;color:var(--src-measured);border:1px solid var(--line);border-radius:6px;padding:2px 5px;flex:none;margin-top:2px">ЗАМЕР</span><span style="flex:1;font-size:14px;line-height:1.35">${r.name}<br><span class="sub" style="font-size:13px">${r.dir}</span></span><b class="mt-val" style="font-size:15px;white-space:nowrap">${num(r.v)}${r.unit.trim() === '°' ? '°' : r.unit} <small>± ${num(r.err)}</small></b></div>`).join('')}</div>`;
+const metricRows = m => `<div class="group">${m.map(r => `<div class="row" style="min-height:52px;gap:10px;align-items:flex-start;padding:10px 14px"><span style="font:700 10px var(--font);letter-spacing:.06em;color:var(--src-measured);border:1px solid var(--line);border-radius:6px;padding:2px 5px;flex:none;margin-top:2px">ЗАМЕР</span><span style="flex:1;font-size:14px;line-height:1.35">${r.name}<br><span class="sub" style="font-size:13px">${r.dir}</span></span><b class="mt-val" style="font-size:15px;white-space:nowrap">${num(r.v)}${r.unit.trim() === '°' ? '°' : r.unit}</b></div>`).join('')}</div>`;
 
 // ---------- 5. результат: фигура в позе клиента с зонами → что видно → замеры → вывод специалиста ----------
 // статусы зон для специалиста (ТЗ v4, п. 3.5); клиент видит не статус, а задачу тренировки
@@ -245,7 +244,7 @@ export function taskGroups(zones) { const g = new Map();
   for (const z of zones || []) { if (!g.has(z.k)) g.set(z.k, new Map()); const m = g.get(z.k), nm = ((C.muscles[z.id] || {}).zone || zoneName(z)).toLowerCase(); if (!m.has(nm)) m.set(nm, new Set()); m.get(nm).add(z.side); }
   return [...g].map(([k, m]) => ({ k, t: TASK[k], list: [...m].map(([nm, s]) => s.size > 1 ? nm : `${nm} ${sideRu([...s][0])}`.trim()) })); }
 const gainPlate = g => g > 1 ? `<div style="font-size:13px;font-weight:700;color:#B45309;background:#FEF3C7;border-radius:10px;padding:6px 10px;margin-top:8px">Показано с увеличением ×${String(g).replace('.', ',')}, не реальный масштаб</div>` : '';
-// ---------- замеры на фото: линии, отвес и подписи «1,9° ± 1,5°» прямо у суставов (паспорт, было → стало) ----------
+// ---------- замеры на фото: линии, отвес и подписи отклонений прямо у суставов (паспорт, было → стало) ----------
 const MONO = "'JetBrains Mono', ui-monospace, monospace", SANS = "Inter, -apple-system, system-ui, sans-serif";
 // у какого сустава подписать показатель и с какой стороны тела ставить подпись
 const ANCHOR = { headTilt: [[P.L_EAR, P.R_EAR], 'Голова'], shoulderTilt: [[P.L_SHOULDER, P.R_SHOULDER], 'Плечи'], pelvicTilt: [[P.L_HIP, P.R_HIP], 'Таз'], trunkLateral: [[P.L_SHOULDER, P.R_SHOULDER, P.L_HIP, P.R_HIP], 'Корпус'],
@@ -283,9 +282,10 @@ async function drawMeasure(cv, x, view, ms, compact = false) {
   const placed = []; let side = 0;
   const label = (k, m) => { const [pp, name] = ANCHOR[k] || []; if (!pp) return; const pi = pp.map(i => (SIDE_PT[view] || {})[i] ?? i);
     const axp = pi.reduce((s, i) => s + X(i), 0) / pi.length, ayp = pi.reduce((s, i) => s + Y(i), 0) / pi.length, isOut = out.has(k);
-    const v = `${num(m.v)}${m.unit.trim() === '°' ? '°' : m.unit.includes('см') ? ' см' : '%'} ± ${num(m.err)}${m.unit.trim() === '°' ? '°' : ''}`;
+    const v = `${num(m.v)}${m.unit.trim() === '°' ? '°' : m.unit.includes('см') ? ' см' : '%'}`;
     // в пределах погрешности: тихая пилюля «Плечи · в пределах» с зеленой точкой, без цифр
-    if (!isOut && compact) return;
+    // в пределах погрешности подписи нет: на фото только то, на что стоит посмотреть (меньше цифр, глаз не сбивается)
+    if (!isOut) return;
     if (!isOut) { g.font = `500 ${12 * d}px ${SANS}`; const t = `${name} · в пределах`, tw = g.measureText(t).width + 30 * d, lft = side++ % 2 === 0 ? axp > W / 2 : axp <= W / 2;
       let tx = lft ? 12 * d : W - tw - 12 * d, ty = ayp - 12 * d; for (const p of placed) if (Math.abs(p.y - ty) < 40 * d && p.left === lft) ty = p.y + 42 * d; ty = Math.max(8 * d, Math.min(H - 30 * d, ty)); placed.push({ y: ty, left: lft });
       g.strokeStyle = 'rgba(255,255,255,.28)'; g.lineWidth = 1 * d; g.beginPath(); g.moveTo(axp, ayp); g.lineTo(lft ? tx + tw : tx, ty + 12 * d); g.stroke();
@@ -309,7 +309,7 @@ const HYPCLS = { WEAK: 'g', HYPER: 'm', SHORT: 'a' };
 const hypCards = zones => taskGroups(zones).map(g => `<div><b>Гипотеза специалиста</b><span class="mt-tag ${HYPCLS[g.k]}">${g.t}</span><ul>${g.list.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>`).join('');
 /** Что видно: показатели вне погрешности, самые заметные первыми; значение и погрешность моноширинным. */
 const obsRows = by => { const r = []; for (const v of VIEWS) for (const m of by[v.id] || []) if (m.dir !== 'в пределах погрешности') r.push({ v, m, sc: Math.abs(m.v) / m.err });
-  return r.sort((a, b) => b.sc - a.sc).slice(0, 4).map(({ v, m }) => `<div class="row" style="gap:10px;align-items:center;padding:12px 14px;min-height:56px"><span style="flex:1;font-size:15px;line-height:1.3">${m.name}<br><span class="sub" style="font-size:13px">${v.name} · ${m.dir}</span></span><span class="mt-val" style="font-size:15px;white-space:nowrap;color:#FF9F0A">${num(m.v)}${m.unit.trim() === '°' ? '°' : m.unit} <small>± ${num(m.err)}</small></span></div>`).join(''); };
+  return r.sort((a, b) => b.sc - a.sc).slice(0, 4).map(({ v, m }) => `<div class="row" style="gap:10px;align-items:center;padding:12px 14px;min-height:56px"><span style="flex:1;font-size:15px;line-height:1.3">${m.name}<br><span class="sub" style="font-size:13px">${v.name} · ${m.dir}</span></span><span class="mt-val" style="font-size:15px;white-space:nowrap;color:#FF9F0A">${num(m.v)}${m.unit.trim() === '°' ? '°' : m.unit}</span></div>`).join(''); };
 /** Блок результата (после теста и в карточке клиента): сцена «3D | Фото» с ракурсами, «Усилить», гипотезы по задачам,
  *  зоны со статусами, что видно, все замеры. st: { by, zones, gain, h }; photos: { front: { photo, w, h, pts }, … }. */
 function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} } = {}) {
@@ -328,7 +328,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
       <p class="sub" style="font-size:12px;margin-top:6px">Касание по статусу меняет его, крестик убирает зону. Клиент увидит зоны как задачи: «Укрепить», «Расслабить».</p></div>
     <div><div class="eyebrow">Что видно</div>${out ? `<div class="group" style="padding:0">${obsRows(st.by)}</div>` : '<div class="card" style="font-size:15px">Все значения в пределах погрешности</div>'}</div>
     <details class="acc"><summary style="font-weight:600;font-size:15px">Все замеры: <span class="mono">${n}</span>, вне погрешности <span class="mono">${out}</span></summary><div style="display:flex;flex-direction:column;gap:12px;margin-top:10px">${VIEWS.filter(v => st.by[v.id]).map(v => `<div><div class="eyebrow">${v.name}</div>${metricRows(st.by[v.id])}</div>`).join('')}</div></details>
-    <p class="mt-cal">Поправка на крен телефона учтена · у каждого числа своя погрешность</p>`;
+    <p class="mt-cal">Поправка на крен телефона учтена · погрешности замера в методике</p>`;
   const $h = s => host.querySelector(s);
   const hyp = () => { $h('#qhyp').innerHTML = hypCards(st.zones); $h('#qhyp').style.display = st.zones.length ? '' : 'none'; };
   const changed = () => { if (v3) v3.update(zSpots(st.zones)); zl(); hyp(); onChange(st); };
@@ -341,7 +341,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
   const setMode = md => { mode = md; host.querySelectorAll('[data-md]').forEach(x => x.classList.toggle('on', x.dataset.md === md));
     $h('#q3d').style.display = md === '3d' ? '' : 'none'; $h('#qph').style.display = md === 'ph' ? 'block' : 'none'; $h('#qgr').style.display = md === '3d' ? '' : 'none';
     if ($h('#qmlbl')) $h('#qmlbl').textContent = md === '3d' ? 'Типовая фигура' : 'Фото клиента';
-    $h('#qcap').textContent = md === '3d' ? 'Положение на типовой фигуре, а не тело клиента. Цветом отмечены зоны' : 'Замер по фото: значение и погрешность у каждой точки, линия: вертикаль от стоп';
+    $h('#qcap').textContent = md === '3d' ? 'Положение на типовой фигуре, а не тело клиента. Цветом отмечены зоны' : 'Подписаны только отклонения больше погрешности. Линия: вертикаль от стоп';
     if (md === 'ph') photoView(); else if (v3) v3.look(view); };
   host.querySelectorAll('[data-md]').forEach(b => b.onclick = () => setMode(b.dataset.md));
   $h('#qadd').onclick = () => addZone(z => { if (st.zones.length >= 8) return toast('Не больше 8 зон'); st.zones = st.zones.filter(x => !(x.id === z.id && x.side === z.side)); st.zones.push(z); changed(); });
@@ -432,7 +432,7 @@ export async function quickCompare(prevId, curId) {
     <div class="card" id="cmpf" style="padding:12px">${hasPh ? '<div class="seg" id="cmpm" style="width:auto;display:inline-flex"><button data-md="ph" class="on" style="padding:0 18px">Фото</button><button data-md="3d" style="padding:0 18px">3D</button></div>' : ''}
      <div class="row" style="justify-content:center;gap:8px;margin-top:10px;align-items:flex-start">${[A, B].map((x, i) => `<div style="flex:1;max-width:230px;text-align:center"><div class="row" style="justify-content:center;gap:6px;margin-bottom:6px"><b style="font-size:14px">${i ? 'После' : 'До'}</b><span class="sub mono" style="font-size:12px">${new Date(x.date).toLocaleDateString('ru')}</span></div><canvas id="cmp${i}" style="width:100%;aspect-ratio:4/5;border-radius:18px;background:#1C1C1E"></canvas></div>`).join('')}</div>
      <div class="seg" id="cmpv" style="margin-top:10px">${VIEWS.map((v, i) => `<button data-vw="${v.id}" class="${i ? '' : 'on'}" style="padding:0 6px">${v.name}</button>`).join('')}</div></div>
-    <div><div class="eyebrow">Изменения</div><div class="group" style="padding:0">${rows.map(r => `<div class="row" style="gap:10px;align-items:center;padding:12px 14px"><span style="flex:1;font-size:14px;line-height:1.35">${r.m.name}<br><span class="sub" style="font-size:12px">${r.v.name}</span></span><span style="text-align:right;line-height:1.5"><span class="mt-val" style="font-size:14px">${num(r.p.v)}${u(r.m)} → ${num(r.m.v)}${u(r.m)}</span><br><span class="mt-val" style="font-size:12px;color:var(--sub)">Δ ${r.d < 0 ? '−' : '+'}${num(Math.round(Math.abs(r.d) * 10) / 10)}${u(r.m)}</span> ${tag(r)}</span></div>`).join('') || '<div class="row sub" style="padding:12px 14px">Нет общих замеров</div>'}</div></div>
+    <div><div class="eyebrow">Изменения</div><div class="group" style="padding:0">${rows.map(r => `<div class="row" style="gap:10px;align-items:center;padding:12px 14px"><span style="flex:1;font-size:14px;line-height:1.35">${r.m.name}<br><span class="sub" style="font-size:12px">${r.v.name}</span></span><span style="text-align:right;line-height:1.5"><span class="mt-val" style="font-size:14px">${num(r.p.v)}${u(r.m)} → ${num(r.m.v)}${u(r.m)}</span><br>${tag(r)}</span></div>`).join('') || '<div class="row sub" style="padding:12px 14px">Нет общих замеров</div>'}</div></div>
     <p class="mt-cal">«Без изменений»: разница в пределах погрешности замера · «меньше»: отклонение от вертикали уменьшилось</p></div></div>`);
   $('#back').onclick = () => clientCard(B.clientId);
   const draw = async () => { for (const [i, x, ph] of [[0, qa, pa], [1, qb, pb]]) { const cv = $('#cmp' + i); if (!cv) return;
@@ -527,7 +527,7 @@ export async function renderReport(a, c, photos) {
   head('Измерено', 'ЗАМЕР', INK); let inTol = 0;
   for (const v of VIEWS) { const m = (qz.by || {})[v.id]; if (!m) continue; const outs = m.filter(r => r.dir !== 'в пределах погрешности'); inTol += m.length - outs.length; if (!outs.length) continue;
     y += 44; g.fillStyle = SUB; g.font = `700 19px ${F}`; g.fillText(v.name.toUpperCase(), PAD, y);
-    for (const r of outs) { y += 38; g.fillStyle = INK; g.font = `500 25px ${F}`; g.fillText(`${r.name}: ${r.dir}`, PAD, y); g.font = `600 24px ${M ? MN : F}`; g.textAlign = 'right'; g.fillText(`${num(r.v)}${r.unit} ±${num(r.err)}`, W - PAD, y); g.textAlign = 'left'; } }
+    for (const r of outs) { y += 38; g.fillStyle = INK; g.font = `500 25px ${F}`; g.fillText(`${r.name}: ${r.dir}`, PAD, y); g.font = `600 24px ${M ? MN : F}`; g.textAlign = 'right'; g.fillText(`${num(r.v)}${r.unit.trim() === '°' ? '°' : r.unit}`, W - PAD, y); g.textAlign = 'left'; } }
   if (inTol) { y += 40; g.fillStyle = SUB; g.font = `400 21px ${F}`; g.fillText(`Еще ${inTol} ${inTol % 10 === 1 && inTol % 100 !== 11 ? 'значение' : [2, 3, 4].includes(inTol % 10) && ![12, 13, 14].includes(inTol % 100) ? 'значения' : 'значений'} в пределах погрешности`, PAD, y); }
   if (zones.length || a.note) { y += 60; head('Над чем работаем', 'ГИПОТЕЗА СПЕЦИАЛИСТА', VIO); y += 10;
     for (const gr of taskGroups(zones)) { y += 40; g.fillStyle = { WEAK: '#C2410C', HYPER: '#A16207', SHORT: '#1D4ED8' }[gr.k] || INK; g.font = `700 26px ${F}`; const t = gr.t + ': '; g.fillText(t, PAD, y); const tw = g.measureText(t).width; g.fillStyle = INK; g.font = `500 26px ${F}`;
@@ -539,7 +539,7 @@ export async function renderReport(a, c, photos) {
     exs.forEach((e, n) => { y = wrap(g, `${n + 1}. ${e.title.split(' (')[0]}${e.dose ? ': ' + e.dose : ''}`, PAD, y + 30, W - PAD * 2, 34) - 4; });
     if (a.plan && a.plan.text) for (const para of a.plan.text.split('\n')) y = wrap(g, para, PAD, y + 30, W - PAD * 2, 34); }
   y += 50; breaks.push(y - 20); g.fillStyle = SUB; g.font = `400 21px ${F}`;
-  y = wrap(g, 'Замер по фото с погрешностью, указанной у каждого значения. Положение на фото зависит от стойки в момент съемки.', PAD, y, W - PAD * 2, 30);
+  y = wrap(g, 'Замер по фото. Показаны значения больше погрешности замера. Положение на фото зависит от стойки в момент съемки.', PAD, y, W - PAD * 2, 30);
   g.fillStyle = INK; g.font = `700 22px ${F}`; y = wrap(g, LEGAL, PAD, y + 10, W - PAD * 2, 30);
   y += 30; g.fillStyle = BAND; g.fillRect(0, y, W, 120); g.fillStyle = '#fff'; g.font = `700 26px ${F}`; g.fillText(author, PAD, y + 52);
   g.font = `400 21px ${F}`; g.fillStyle = 'rgba(255,255,255,.75)'; g.fillText(contact ? 'Запись: ' + contact : 'Сделано в BodyPassport', PAD, y + 86);
