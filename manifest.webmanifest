@@ -10,25 +10,25 @@
   "lang": "ru",
   "icons": [
     {
-      "src": "icons/bp6-192.png",
+      "src": "icons/bp7-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/bp6-512.png",
+      "src": "icons/bp7-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/bp6-mask-192.png",
+      "src": "icons/bp7-mask-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "icons/bp6-mask-512.png",
+      "src": "icons/bp7-mask-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
