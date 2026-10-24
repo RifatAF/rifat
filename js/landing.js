@@ -14,7 +14,7 @@ body.lp-on{background:#161617}body.lp-on #app{max-width:none}
 .mx .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:0}
 .mx-nav{position:sticky;top:0;z-index:6;background:rgba(22,22,23,.78);-webkit-backdrop-filter:saturate(1.6) blur(20px);backdrop-filter:saturate(1.6) blur(20px);border-bottom:1px solid rgba(255,255,255,.06)}
 .mx-nav .w{display:flex;align-items:center;gap:12px;height:60px}
-.mx-nav img{filter:grayscale(1) brightness(1.7)}.mx-nav b{font-size:17px;font-weight:600;letter-spacing:-.02em}
+.mx-nav b{font-size:17px;font-weight:600;letter-spacing:-.02em}
 .mx-links{display:none;gap:28px;margin-left:36px;font-size:14px;color:#98989D}.mx-links a:hover{color:#fff}
 .mx-pill{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 18px;border-radius:9999px;font:600 14px Inter,system-ui,sans-serif;cursor:pointer;border:1px solid rgba(255,255,255,.18);background:transparent;color:#fff;white-space:nowrap}
 .mx-cta{background:#0EA5E9;border-color:#0EA5E9;color:#00131D}
@@ -135,7 +135,7 @@ export function landing(o) {
   onTry = leave(onTry); onLogin = leave(onLogin); onSelf = leave(onSelf);
   const cta = (id, big = true) => `<button class="mx-pill mx-cta${big ? ' mx-big' : ''}" id="${id}">Попробовать бесплатно</button>`;
   go(`<div class="mx fade"><style>${CSS}</style>
-    <nav class="mx-nav"><div class="w"><img src="icons/bp6-64.png" width="28" height="28" alt="" style="border-radius:7px"><b>BodyPassport</b>
+    <nav class="mx-nav"><div class="w"><img src="icons/bp7-64.png" width="28" height="28" alt="" style="border-radius:7px"><b>BodyPassport</b>
       <div class="mx-links"><a href="#mxtry">Пример</a><a href="#mxf">Возможности</a><a href="#mxba">Было → стало</a><a href="#mxs">Как это работает</a><a href="/pricing">Цены</a></div>
       <span style="flex:1"></span><button class="mx-pill" id="lpin">Войти</button></div></nav>
     <header class="mx-top"><div class="w">

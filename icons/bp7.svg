@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- BodyPassport v7: «измерительный скелет», как линии замера в приложении (голова, плечи, позвоночник, таз, ноги), отвес.
+       Фон к краям уходит в #161617 (цвет заставки): в круглой маске Android и на заставке не видно квадрата. Знак в безопасной зоне 80% -->
+  <defs>
+<radialGradient id="bg" cx=".5" cy=".46" r=".5"><stop offset="0" stop-color="#2C2C30"/><stop offset=".7" stop-color="#1A1A1C"/><stop offset="1" stop-color="#161617"/></radialGradient>
+<radialGradient id="halo" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#0EA5E9" stop-opacity=".28"/><stop offset="1" stop-color="#0EA5E9" stop-opacity="0"/></radialGradient>
+<linearGradient id="cy" gradientUnits="userSpaceOnUse" x1="0" y1="190" x2="0" y2="880"><stop offset="0" stop-color="#9BE3FF"/><stop offset=".5" stop-color="#38BDF8"/><stop offset="1" stop-color="#0284C7"/></linearGradient>
+<filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="16"/></filter>
+</defs>
+<rect width="1024" height="1024" fill="url(#bg)"/>
+<circle cx="512" cy="512" r="380" fill="url(#halo)"/><line x1="512" y1="120" x2="512" y2="910" stroke="#fff" stroke-opacity=".3" stroke-width="7" stroke-dasharray="2 20" stroke-linecap="round"/><g filter="url(#glow)" opacity=".45"><g stroke="url(#cy)" stroke-width="40" stroke-linecap="round" fill="none"><path d="M512 400 V 612"/><path d="M356 400 H 668"/><path d="M420 612 H 604"/><path d="M430 612 L 420 852"/><path d="M594 612 L 604 852"/></g><circle cx="512" cy="268" r="70" fill="url(#cy)"/><g fill="#fff"><circle cx="356" cy="400" r="24"/><circle cx="668" cy="400" r="24"/><circle cx="420" cy="612" r="21"/><circle cx="604" cy="612" r="21"/><circle cx="420" cy="852" r="19"/><circle cx="604" cy="852" r="19"/></g></g><g stroke="url(#cy)" stroke-width="40" stroke-linecap="round" fill="none"><path d="M512 400 V 612"/><path d="M356 400 H 668"/><path d="M420 612 H 604"/><path d="M430 612 L 420 852"/><path d="M594 612 L 604 852"/></g><circle cx="512" cy="268" r="70" fill="url(#cy)"/><g fill="#fff"><circle cx="356" cy="400" r="24"/><circle cx="668" cy="400" r="24"/><circle cx="420" cy="612" r="21"/><circle cx="604" cy="612" r="21"/><circle cx="420" cy="852" r="19"/><circle cx="604" cy="852" r="19"/></g></svg>
