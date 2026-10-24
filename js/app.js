@@ -1,5 +1,5 @@
 // BodyPassport web: тот же поток, тексты и дизайн, что в Android-версии.
-import './ds.js';
+import { matte as isMatte } from './ds.js';
 import { backupSoon, restoreIfEmpty, downloadBackup, pickRestore } from './backup.js';
 import { stateScores, cnsDelta } from './muscle-logic.js';
 import { P, F, G, Movement, sideView, levelled, analyze, fmt, standSnapshot, sideSnapshot, features } from './analysis.js';
@@ -319,7 +319,9 @@ export function onboarding() {
   // «тест для себя» помнится только до закрытия вкладки: раньше флаг жил навсегда, и лендинг больше не открывался
   try { localStorage.removeItem('bp_self'); } catch (e) {}
   const self = (() => { try { return sessionStorage.getItem('bp_self'); } catch (e) { return null; } })();
-  if (!INV() && !tests().length && !localStorage.getItem('bp_acc') && !self)
+  // новый дизайн (Apple Matte): старый экран «тест для себя» открывается только по приглашению клиента или в старом дизайне
+  // (галочка «Новый дизайн» в «Администрировании»)
+  if (!INV() && (isMatte() || (!tests().length && !localStorage.getItem('bp_acc') && !self)))
     return import('./landing.js').then(m => m.landing({ onTry: () => openPro(), onLogin: () => openPro(), onSelf: () => { try { sessionStorage.setItem('bp_self', '1'); } catch (e) {} onboarding(); } }));
   go(`<div class="scr welcome fade">
     <img class="welcome-bg" src="img/bp-hero-client.webp" alt="">

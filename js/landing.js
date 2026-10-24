@@ -187,11 +187,11 @@ export function landing(o) {
       </div>
       <div class="mx-auth mx-in"><img src="img/rifat.jpg" alt="Рифат Аюпов"><div><b>Рифат Аюпов</b><span>кинезиотерапевт, автор методики. Отвечаю специалистам сам</span></div></div></section>
     <section class="mx-final mx-in"><h2>Начните<br><span>со следующего клиента.</span></h2><div style="display:flex;justify-content:center;margin-top:28px">${cta('lpgo2')}</div></section>
-    <footer class="mx-foot"><a href="/pricing">Тарифы</a><a href="/privacy">Конфиденциальность</a><button id="lpself">Пройти тест для себя</button><span style="margin-left:auto">© BodyPassport</span></footer>
+    <footer class="mx-foot"><a href="/pricing">Тарифы</a><a href="/privacy">Конфиденциальность</a><span style="margin-left:auto">© BodyPassport</span></footer>
   </div><div class="mx-sticky" id="lpst">${cta('lpgo3')}</div></div>`);
   const go2 = id => () => { track('pro_click', { c: 'landing_' + id }, false); onTry(); };
   for (const id of ['lpgo', 'lpgo2', 'lpgo3']) document.getElementById(id).onclick = go2(id);
-  document.getElementById('lpin').onclick = onLogin; document.getElementById('lpself').onclick = onSelf;
+  document.getElementById('lpin').onclick = onLogin; 
   // ссылки на разделы прокручивают страницу, а не меняют адрес приложения
   document.querySelectorAll('.mx a[href^="#"]').forEach(a => a.onclick = e => { e.preventDefault(); const t = document.querySelector(a.getAttribute('href')); if (t) t.scrollIntoView({ behavior: 'smooth' }); });
   // нижняя кнопка не дублирует другие: прячется, пока на экране верхняя или финальная кнопка
