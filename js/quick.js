@@ -138,7 +138,7 @@ function shoot(i, single = false) {
     cv.getContext('2d').drawImage(src, 0, 0, cv.width, cv.height);
     let pts = null; try { pts = await detectStill(cv); } catch (e) {}
     const issue = frameIssue(v.id, pts, cv.width, cv.height);
-    Q.views[v.id] = { photo: cv.toDataURL('image/jpeg', .85), w: cv.width, h: cv.height, pts, roll, ok: false, issue };
+    Q.views[v.id] = { photo: cv.toDataURL('image/jpeg', .85), w: cv.width, h: cv.height, pts, auto: pts ? pts.map(p => ({ ...p })) : null, roll, ok: false, issue };
     if (issue) return review(i, single);
     next(i, single);
   };
@@ -169,14 +169,14 @@ let showGrid = localStorage.getItem('bp_q_grid') === '1', showPlumb = localStora
 function editor(i) {
   const v = VIEWS[i], x = Q.views[v.id];
   if (!x) return shoot(i, true);
-  go(`<div class="scr fade" style="padding-bottom:110px"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>Точки · ${v.name}</b></div></div>
+  go(`<div class="scr fade" style="padding-bottom:110px"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>Точки · ${v.name}</b>${Q.editId ? `<br><span class="sub" style="font-size:12px">Правка до ${new Date(Q.until).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>` : ''}</div></div>
    <div class="pad" style="margin-top:8px"><div class="row" style="gap:6px">${VIEWS.map((w, k) => { const y = Q.views[w.id];
      return `<button data-v="${k}" style="flex:1;height:58px;border-radius:12px;border:2px solid ${k === i ? 'var(--ink)' : 'var(--line)'};background:${y ? `center/cover url(${y.photo})` : 'var(--surface-2)'};position:relative;cursor:pointer" aria-label="${w.name}">${y && y.ok ? `<span style="position:absolute;right:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#16A34A;color:#fff;display:grid;place-items:center">${ic('check', 's')}</span>` : ''}${!y ? `<span style="font-size:11px;color:var(--sub)">${w.name}</span>` : ''}</button>`; }).join('')}</div>
     ${x.issue ? `<p style="font-size:13px;color:var(--over-t);margin-top:8px">${esc(x.issue)}</p>` : ''}
     <div id="qbox" style="position:relative;margin-top:10px;touch-action:pan-y;user-select:none;-webkit-user-select:none"><canvas id="qcv" style="width:100%;display:block;border-radius:14px;background:#111"></canvas><canvas id="qloupe" width="240" height="240" style="position:absolute;top:8px;left:8px;width:120px;height:120px;border-radius:50%;border:3px solid #fff;box-shadow:0 4px 18px rgba(0,0,0,.4);display:none;pointer-events:none;z-index:3"></canvas>
       <button class="pill" id="qnextv" style="position:absolute;right:10px;top:10px;height:40px;font-weight:600;background:rgba(22,22,23,.78);color:#fff;border-color:rgba(255,255,255,.18);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)">${i < VIEWS.length - 1 ? 'Следующий снимок' : 'К первому снимку'} ${ic('chevron-right', 's')}</button></div>
     <p class="sub" style="font-size:13px;margin-top:6px">Проверьте точки. Неточную перетащите пальцем: лупа покажет место. ${v.id === 'front' || v.id === 'back' ? 'Две точки у головы: на ушах, у козелка (хрящ перед слуховым проходом); сзади там же, по краю головы.' : 'Точка у головы: на ухе, у козелка (хрящ перед слуховым проходом).'}</p>
-    <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="pill tog${showGrid ? ' on' : ''}" id="qgrid" aria-pressed="${showGrid}">Сетка</button><button class="pill tog${showPlumb ? ' on' : ''}" id="qplumb" aria-pressed="${showPlumb}">Отвес</button><button class="pill" id="qretake">${ic('camera', 's')} Переснять</button></div>
+    <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="pill tog${showGrid ? ' on' : ''}" id="qgrid" aria-pressed="${showGrid}">Сетка</button><button class="pill tog${showPlumb ? ' on' : ''}" id="qplumb" aria-pressed="${showPlumb}">Отвес</button>${Q.editId ? '' : `<button class="pill" id="qretake">${ic('camera', 's')} Переснять</button>`}</div>
     <div id="qm" style="margin-top:12px"></div>
    </div>
    <div class="dock"><button class="btn" id="qok">${ic('check', 's')}Все точки верны · ${VIEWS.filter(w => Q.views[w.id]).length} фото</button></div></div>`);
@@ -222,13 +222,14 @@ function editor(i) {
   document.querySelectorAll('[data-v]').forEach(b => b.onclick = () => editor(+b.dataset.v));
   $('#qgrid').onclick = () => { showGrid = !showGrid; localStorage.setItem('bp_q_grid', showGrid ? '1' : '0'); $('#qgrid').classList.toggle('on', showGrid); $('#qgrid').setAttribute('aria-pressed', showGrid); draw(); };
   $('#qplumb').onclick = () => { showPlumb = !showPlumb; localStorage.setItem('bp_q_plumb', showPlumb ? '1' : '0'); $('#qplumb').classList.toggle('on', showPlumb); $('#qplumb').setAttribute('aria-pressed', showPlumb); draw(); };
-  $('#qretake').onclick = () => { Q.wasBack = cam.back; cam.back = true; shoot(i, true); };
-  $('#back').onclick = () => { if (confirm('Выйти без сохранения? Фото этого теста удалятся.')) { Q = null; proHome(); } };
+  if ($('#qretake')) $('#qretake').onclick = () => { Q.wasBack = cam.back; cam.back = true; shoot(i, true); };
+  $('#back').onclick = () => { if (Q.editId) { if (confirm('Выйти без сохранения правок?')) { const id = Q.client.id; Q = null; clientCard(id); } return; }
+    if (confirm('Выйти без сохранения? Фото этого теста удалятся.')) { Q = null; proHome(); } };
   // «Следующий снимок»: этот вид проверен, к следующему; «Все точки верны» подтверждает сразу все фото
   $('#qnextv').onclick = () => { if (x.pts) x.ok = true; editor((i + 1) % VIEWS.length); };
   $('#qok').onclick = () => { const miss = VIEWS.findIndex(w => !Q.views[w.id] || !Q.views[w.id].pts);
     if (miss >= 0) { toast(Q.views[VIEWS[miss].id] ? `${VIEWS[miss].name}: точек нет, переснимите` : `Нет фото: ${VIEWS[miss].name.toLowerCase()}`); return miss === i ? null : editor(miss); }
-    VIEWS.forEach(w => { Q.views[w.id].ok = true; }); results(); };
+    VIEWS.forEach(w => { Q.views[w.id].ok = true; }); Q.metrics = null; results(); };
 }
 const heightCm = () => +((Q && Q.client && Q.client.height) || 0) || 0;
 const num = v => String(Math.abs(v)).replace('.', ',');
@@ -288,7 +289,7 @@ async function drawMeasure(cv, x, view, ms, compact = false) {
   let bx = 0, by = 0, bw = x.w, bh = x.h;
   if (pts) { const ys = ids.map(i => pts[i].y), xs = ids.map(i => pts[i].x), top = Math.min(...ys), bot = Math.max(...ys), span = bot - top;
     bh = Math.min(x.h, span * 1.5); bw = Math.min(x.w, bh * W / H); if (bw === x.w) bh = Math.min(x.h, bw * H / W);
-    by = Math.max(0, Math.min(x.h - bh, top - span * .28)); bx = Math.max(0, Math.min(x.w - bw, (Math.min(...xs) + Math.max(...xs)) / 2 - bw / 2)); }
+    by = Math.max(0, Math.min(x.h - bh, top - Math.max(0, bh - span) * .7)); bx = Math.max(0, Math.min(x.w - bw, (Math.min(...xs) + Math.max(...xs)) / 2 - bw / 2)); }
   const sc = Math.min(W / bw, H / bh), ox = (W - bw * sc) / 2, oy = (H - bh * sc) / 2;
   g.fillStyle = '#1C1C1E'; g.fillRect(0, 0, W, H); g.drawImage(im, bx, by, bw, bh, ox, oy, bw * sc, bh * sc);
   g.fillStyle = 'rgba(10,10,12,.22)'; g.fillRect(0, 0, W, H);
@@ -308,8 +309,14 @@ async function drawMeasure(cv, x, view, ms, compact = false) {
   for (const i of ids) { g.beginPath(); g.arc(X(i), Y(i), 5.5 * d, 0, 7); g.fillStyle = 'rgba(14,165,233,.25)'; g.fill(); g.beginPath(); g.arc(X(i), Y(i), 3 * d, 0, 7); g.fillStyle = '#E0F2FE'; g.fill(); g.lineWidth = 1.5 * d; g.strokeStyle = CY; g.stroke(); }
   // подписи: значение моноширинным в пилюле, под ней что это; по очереди слева и справа от тела
   const placed = []; let side = 0;
+  // голова: подписи не кладем на лицо, а ставим над головой (или под подбородком, если сверху мало места)
+  const hp = [P.NOSE, P.L_EAR, P.R_EAR].filter(i => pts[i]), span = Math.max(...ids.map(Y)) - Math.min(...ids.map(Y));
+  const hx = hp.reduce((a, i) => a + X(i), 0) / hp.length, hy = hp.reduce((a, i) => a + Y(i), 0) / hp.length;
+  const head = { l: hx - span * .08, r: hx + span * .08, t: hy - span * .09, b: hy + span * .08 };
+  const offHead = (lx, ly, w, h) => { if (lx > head.r || lx + w < head.l || ly > head.b || ly + h < head.t) return ly;
+    return head.t - h - 6 * d >= 8 * d ? head.t - h - 6 * d : head.b + 6 * d; };
   const label = (k, m) => { const [pp, name] = ANCHOR[k] || []; if (!pp) return; const pi = pp.map(i => (SIDE_PT[view] || {})[i] ?? i);
-    const axp = pi.reduce((s, i) => s + X(i), 0) / pi.length, ayp = pi.reduce((s, i) => s + Y(i), 0) / pi.length, isOut = out.has(k);
+    const axp = pi.reduce((s, i) => s + X(i), 0) / pi.length; let ayp = pi.reduce((s, i) => s + Y(i), 0) / pi.length, isOut = out.has(k);
     const v = `${num(m.v)}${m.unit.trim() === '°' ? '°' : m.unit.includes('см') ? ' см' : '%'}`;
     // в пределах погрешности: тихая пилюля «Плечи · в пределах» с зеленой точкой, без цифр
     // в пределах погрешности подписи нет: на фото только то, на что стоит посмотреть (меньше цифр, глаз не сбивается)
@@ -322,7 +329,9 @@ async function drawMeasure(cv, x, view, ms, compact = false) {
     g.font = `600 ${15 * d}px ${MONO}`; const vw = g.measureText(v).width + 20 * d;
     g.font = `500 ${12 * d}px ${SANS}`; const sub = isOut ? `${name}: ${m.dir.replace(' (переразгибание)', '').replace(' (согнуто)', '')}` : name, sw = g.measureText(sub).width + 18 * d;
     const bwid = Math.max(vw, sw), left = side++ % 2 === 0 ? axp > W / 2 : axp <= W / 2; let lx = left ? 12 * d : W - bwid - 12 * d, ly = ayp - 20 * d;
-    for (const p of placed) if (Math.abs(p.y - ly) < (compact ? 30 : 50) * d && p.left === left) ly = p.y + (compact ? 32 : 52) * d; ly = Math.max(8 * d, Math.min(H - 52 * d, ly)); placed.push({ y: ly, left });
+    for (const p of placed) if (Math.abs(p.y - ly) < (compact ? 30 : 50) * d && p.left === left) ly = p.y + (compact ? 32 : 52) * d; const ly0 = ly; ly = Math.max(8 * d, Math.min(H - 52 * d, offHead(lx, ly, bwid, (compact ? 28 : 53) * d))); placed.push({ y: ly, left });
+    // подпись ушла с лица: выноска от макушки или подбородка, а не через лицо
+    if (ly !== ly0 && axp > head.l && axp < head.r && ayp > head.t && ayp < head.b) ayp = ly < head.t ? head.t : head.b;
     g.strokeStyle = isOut ? 'rgba(255,159,10,.75)' : 'rgba(255,255,255,.35)'; g.lineWidth = 1 * d; g.beginPath(); g.moveTo(axp, ayp); g.lineTo(left ? lx + bwid : lx, ly + 14 * d); g.stroke();
     g.fillStyle = isOut ? 'rgba(58,36,6,.92)' : 'rgba(18,48,28,.9)'; g.beginPath(); g.roundRect(lx, ly, vw, 28 * d, 14 * d); g.fill();
     g.strokeStyle = isOut ? 'rgba(255,159,10,.55)' : 'rgba(48,209,88,.45)'; g.stroke(); g.fillStyle = isOut ? AM : '#30D158'; g.font = `600 ${15 * d}px ${MONO}`; g.textBaseline = 'middle'; g.fillText(isOut ? v : 'в пределах', lx + 10 * d, ly + 14.5 * d);
@@ -390,13 +399,13 @@ function results() {
     <div><div class="eyebrow">Рекомендации</div><textarea id="qrec" class="field" rows="2" maxlength="1200" placeholder="Необязательно: упражнения из карточек зон добавятся сами" style="height:auto;padding:12px 16px">${esc(Q.rec || '')}</textarea></div>
     <label class="row" id="qgl" style="gap:10px;font-size:14px"><input type="checkbox" id="qgpdf"${Q.gainPdf ? ' checked' : ''} style="width:20px;height:20px"> В отчет с увеличением (с той же пометкой)</label>
    </div>
-   <div class="dock"><button class="btn line" id="qshow">${ic('maximize', 's')}Показать клиенту</button><button class="btn" id="qsave" style="margin-top:8px">${ic('file-text', 's')}Сохранить и отчет</button></div></div>`);
+   <div class="dock"><button class="btn line" id="qshow">${ic('maximize', 's')}Показать клиенту</button><button class="btn" id="qsave" style="margin-top:8px">${ic('file-text', 's')}${Q.editId ? 'Сохранить правку' : 'Сохранить и отчет'}</button></div></div>`);
   const st = { by: q.by, zones: Q.zones, gain: Q.gain, h: heightCm() || 170 };
   panel($('#qpanel'), st, { photos: Q.views, onChange: s => { Q.zones = s.zones; Q.gain = s.gain; }, onNoFig: () => { const l = $('#qgl'); if (l) l.remove(); } });
   const keep = () => { Q.note = $('#qcon').value.trim(); Q.rec = $('#qrec').value.trim(); Q.gainPdf = !!($('#qgpdf') && $('#qgpdf').checked); };
   $('#qshow').onclick = () => { keep(); showClient(st, Q.client.nocard ? '' : Q.client.name); };
   $('#back').onclick = () => { keep(); editor(3); };
-  $('#qsave').onclick = async () => { keep(); const id = await save(); report(id); };
+  $('#qsave').onclick = async () => { keep(); const id = await save(); if (id) report(id); };
 }
 function addZone(onAdd) {
   const ids = Object.keys(C.muscles).filter(id => C.muscles[id].name).sort((a, b) => C.muscles[a].name.localeCompare(C.muscles[b].name, 'ru'));
@@ -433,16 +442,19 @@ function showClient(st, name) {
 /** Карточка клиента: тот же блок, что после быстрого теста. Правка зон сохраняется в оценку. */
 export async function quickCard(host, aid, prevId) {
   const a = await row('assessments', aid), c = await row('clients', a.clientId), qz = a.quick || {};
-  const st = { by: qz.by || {}, zones: (qz.zones || []).map(z => ({ ...z })), gain: 1, h: qz.h || 170 };
+  const st = { by: qz.by || {}, zones: (qz.zones || []).map(z => ({ ...z })), gain: 1, h: qz.h || 170 }, es = await editState(a);
   // действия под рукой: отчет, показать клиенту, было → стало (до повторного теста кнопка видна, но неактивна)
   const tool = (id, icon, t, off) => `<button class="tool" id="${id}"${off ? ' disabled style="opacity:.45"' : ''}>${ic(icon)}<span>${t}</span></button>`;
   host.innerHTML = `<div class="pad" style="margin-top:12px;display:flex;flex-direction:column;gap:16px"><div class="row" style="gap:8px"><b style="flex:1;font-size:17px">Быстрый тест · ${_pro.fmtDate(a.date)}</b></div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${tool('qcrep', 'share', 'Отчет клиенту')}${tool('qcshow', 'maximize', 'Показать клиенту')}${tool('qccmp', 'arrow-right-left', 'Было → стало', !prevId)}</div>
     ${prevId ? '' : '<p class="sub" style="font-size:12px;margin-top:-8px">«Было → стало» откроется после повторного теста этого клиента.</p>'}
+    ${es.ok ? `<button class="btn line" id="qcedit">${ic('pencil', 's')}Поправить точки · до ${new Date(es.until).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</button>` : ''}
+    <p class="sub" style="font-size:12px;margin-top:-8px">${es.ok ? 'Через 2 часа после сохранения или после следующего теста точки закроются, чтобы замер нельзя было подогнать.' : esc(es.why)}${editNote(a) ? ' · ' + esc(editNote(a)) : ''}</p>
     <div id="qcp" style="display:flex;flex-direction:column;gap:16px"></div>
     ${a.note ? `<div><div class="eyebrow">Ваш вывод · ГИПОТЕЗА</div><div class="card" style="font-size:15px;line-height:1.45;white-space:pre-line">${esc(a.note)}</div></div>` : ''}</div>`;
   panel(host.querySelector('#qcp'), st, { photos: ((await row('poses', aid)) || {}).photos || {}, onChange: async s => { a.quick = { ...a.quick, zones: s.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), confirmed: true }; await _pro.put('assessments', a); } });
   host.querySelector('#qcrep').onclick = () => report(aid);
+  if (host.querySelector('#qcedit')) host.querySelector('#qcedit').onclick = () => editSaved(aid);
   host.querySelector('#qcshow').onclick = () => showClient(st, c && !c.nocard ? c.name : '');
   if (prevId) host.querySelector('#qccmp').onclick = () => quickCompare(prevId, aid);
 }
@@ -463,7 +475,8 @@ export async function quickCompare(prevId, curId) {
      <div class="row" style="justify-content:center;gap:8px;margin-top:10px;align-items:flex-start">${[A, B].map((x, i) => `<div style="flex:1;max-width:230px;text-align:center"><div class="row" style="justify-content:center;gap:6px;margin-bottom:6px"><b style="font-size:14px">${i ? 'После' : 'До'}</b><span class="sub mono" style="font-size:12px">${new Date(x.date).toLocaleDateString('ru')}</span></div><canvas id="cmp${i}" style="width:100%;aspect-ratio:4/5;border-radius:18px;background:#1C1C1E"></canvas></div>`).join('')}</div>
      <div class="seg" id="cmpv" style="margin-top:10px">${VIEWS.map((v, i) => `<button data-vw="${v.id}" class="${i ? '' : 'on'}" style="padding:0 6px">${v.name}</button>`).join('')}</div></div>
     <div><div class="eyebrow">Изменения</div><div class="group" style="padding:0">${rows.map(r => `<div class="row" style="gap:10px;align-items:center;padding:12px 14px"><span style="flex:1;font-size:14px;line-height:1.35">${r.m.name}<br><span class="sub" style="font-size:12px">${r.v.name}</span></span><span style="text-align:right;line-height:1.5"><span class="mt-val" style="font-size:14px">${num(r.p.v)}${u(r.m)} → ${num(r.m.v)}${u(r.m)}</span><br>${tag(r)}</span></div>`).join('') || '<div class="row sub" style="padding:12px 14px">Нет общих замеров</div>'}</div></div>
-    <p class="mt-cal">«Без изменений»: разница в пределах погрешности замера · «меньше»: отклонение от вертикали уменьшилось</p></div></div>`);
+    <p class="mt-cal">«Без изменений»: разница в пределах погрешности замера · «меньше»: отклонение от вертикали уменьшилось</p>
+    ${[['До', A], ['После', B]].filter(([, x]) => editNote(x)).map(([t, x]) => `<p class="mt-cal">${t}: ${esc(editNote(x).toLowerCase())}</p>`).join('')}</div></div>`);
   $('#back').onclick = () => clientCard(B.clientId);
   const draw = async () => { for (const [i, x, ph] of [[0, qa, pa], [1, qb, pb]]) { const cv = $('#cmp' + i); if (!cv) return;
     if (mode === 'ph') { await drawMeasure(cv, ph[view], view, (x.by || {})[view] || [], true); continue; }
@@ -475,16 +488,51 @@ export async function quickCompare(prevId, curId) {
   track('screen', { c: 'quick_compare' }, false);
 }
 async function save() {
+  if (Q.editId) return saveEdit();
   const c = Q.client; if (!(await row('clients', c.id))) await _pro.put('clients', { ...c }); else if (Q.consent && !Q.consent.reused) await _pro.put('clients', { ...(await row('clients', c.id)), consent: Q.consent });
   const id = _pro.uid(), q = Q.metrics, prev = (await _pro.all('assessments')).filter(a => a.clientId === c.id).sort((a, b) => b.date - a.date)[0];
   const a = { id, clientId: c.id, date: Q.date, template: 'quick', templateName: 'Быстрый тест', quick: { by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), confirmed: true, gain: Q.gainPdf ? Q.gain : 1, h: heightCm() || 170, views: VIEWS.filter(v => Q.views[v.id]).map(v => v.id), edited: VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id) },
-    snapshot: q.snapshot, side: q.side, consent: Q.consent, note: Q.note, plan: { ex: [], text: Q.rec }, protocol: [], moves: {}, quality: {}, limits: {}, setup: {}, pain: {}, hyp: {}, check: {}, draft: false, prevId: prev ? prev.id : null };
+    snapshot: q.snapshot, side: q.side, consent: Q.consent, note: Q.note, plan: { ex: [], text: Q.rec }, protocol: [], moves: {}, quality: {}, limits: {}, setup: {}, pain: {}, hyp: {}, check: {}, draft: false, prevId: prev ? prev.id : null, savedAt: Date.now() };
   await _pro.put('assessments', a);
-  await _pro.put('poses', { assessmentId: id, photos: Object.fromEntries(VIEWS.filter(v => Q.views[v.id]).map(v => { const x = Q.views[v.id]; return [v.id, { photo: x.photo, w: x.w, h: x.h, pts: x.pts, roll: x.roll }]; })) });
+  await _pro.put('poses', { assessmentId: id, photos: Object.fromEntries(VIEWS.filter(v => Q.views[v.id]).map(v => { const x = Q.views[v.id]; return [v.id, { photo: x.photo, w: x.w, h: x.h, pts: x.pts, auto: x.auto || null, roll: x.roll }]; })) });
   track('assess_done', { n: a.quick.views.length, c: 'quick' }, false);
   if (prev && Q.date - prev.date <= 14 * 864e5) track('retest_14d', null, false);
   return id;
 }
+
+// ---------- правка точек сохраненного теста ----------
+// Защита клиента от подгонки: правка только 2 часа после сохранения и только пока нет более позднего теста этого клиента;
+// фото не переснять, автоточки хранятся, каждая правка записывается и видна в отчете и в «Было → стало».
+const EDIT_WIN = 2 * 3600e3;
+const hm = t => new Date(t).toLocaleString('ru', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+export async function editState(a) {
+  const t0 = a.savedAt || a.date, now = Date.now();
+  if ((await _pro.all('assessments')).some(b => b.clientId === a.clientId && b.id !== a.id && b.date > a.date)) return { ok: false, why: 'Точки закрыты: у клиента есть более поздний тест' };
+  // часы телефона переведены назад: правку тоже закрываем
+  if (now < t0 - 6e4 || now > t0 + EDIT_WIN) return { ok: false, why: 'Точки закрыты: правка возможна 2 часа после сохранения' };
+  return { ok: true, until: t0 + EDIT_WIN };
+}
+async function editSaved(aid) {
+  const a = await row('assessments', aid), c = await row('clients', a.clientId), ps = await row('poses', aid), es = await editState(a);
+  if (!es.ok) return toast(es.why); if (!ps || !ps.photos) return toast('Фото этого теста нет на телефоне');
+  const qz = a.quick || {};
+  Q = { client: c, date: a.date, editId: aid, until: es.until, consent: a.consent, zones: (qz.zones || []).map(z => ({ ...z })), gain: qz.gain || 1, gainPdf: (qz.gain || 1) > 1, note: a.note || '', rec: (a.plan && a.plan.text) || '',
+    views: Object.fromEntries(Object.entries(ps.photos).map(([k, x]) => [k, { ...x, pts: x.pts && x.pts.map(p => ({ ...p })), ok: true, edited: false }])) };
+  editor(0);
+}
+async function saveEdit() {
+  const a = await row('assessments', Q.editId), ps = await row('poses', Q.editId), es = await editState(a), cid = Q.client.id;
+  if (!es.ok) { toast(es.why + '. Правка не сохранена'); Q = null; clientCard(cid); return null; }
+  const q = Q.metrics, views = VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id);
+  a.quick = { ...a.quick, by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), gain: Q.gainPdf ? Q.gain : 1,
+    edited: [...new Set([...(a.quick.edited || []), ...views])], edits: views.length ? [...(a.quick.edits || []), { at: Date.now(), views }] : a.quick.edits || [] };
+  Object.assign(a, { snapshot: q.snapshot, side: q.side, note: Q.note, plan: { ...(a.plan || {}), text: Q.rec } });
+  for (const v of views) ps.photos[v].pts = Q.views[v].pts;
+  await _pro.put('assessments', a); await _pro.put('poses', ps);
+  if (views.length) track('points_edit', { n: views.length }, false);
+  Q = null; return a.id;
+}
+const editNote = a => { const e = ((a.quick || {}).edits || []).at(-1); return e ? `Точки поправлены после сохранения: ${hm(e.at)}` : ''; };
 
 // ---------- 6. отчет: PDF и картинка ----------
 export async function quickResult(aid) { return report(aid); }
@@ -569,7 +617,7 @@ export async function renderReport(a, c, photos) {
     exs.forEach((e, n) => { y = wrap(g, `${n + 1}. ${e.title.split(' (')[0]}${e.dose ? ': ' + e.dose : ''}`, PAD, y + 30, W - PAD * 2, 34) - 4; });
     if (a.plan && a.plan.text) for (const para of a.plan.text.split('\n')) y = wrap(g, para, PAD, y + 30, W - PAD * 2, 34); }
   y += 50; breaks.push(y - 20); g.fillStyle = SUB; g.font = `400 21px ${F}`;
-  y = wrap(g, 'Замер по фото. Показаны значения больше погрешности замера. Положение на фото зависит от стойки в момент съемки.', PAD, y, W - PAD * 2, 30);
+  y = wrap(g, 'Замер по фото. Показаны значения больше погрешности замера. Положение на фото зависит от стойки в момент съемки.' + (editNote(a) ? ' ' + editNote(a) + '.' : ''), PAD, y, W - PAD * 2, 30);
   g.fillStyle = INK; g.font = `700 22px ${F}`; y = wrap(g, LEGAL, PAD, y + 10, W - PAD * 2, 30);
   y += 30; g.fillStyle = BAND; g.fillRect(0, y, W, 120); g.fillStyle = '#fff'; g.font = `700 26px ${F}`; g.fillText(author, PAD, y + 52);
   g.font = `400 21px ${F}`; g.fillStyle = 'rgba(255,255,255,.75)'; g.fillText(contact ? 'Запись: ' + contact : 'Сделано в BodyPassport', PAD, y + 86);
