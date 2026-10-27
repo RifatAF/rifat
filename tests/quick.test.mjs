@@ -22,9 +22,18 @@ function sideR({ earFwd = 0 } = {}) {
 
 test('спереди: ровная стойка в пределах погрешности, правое плечо ниже определяется со стороной', () => {
   const even = viewMetrics('front', front(), 800, 1200);
-  assert.equal(even.length, 4); assert.ok(even.every(m => m.dir === 'в пределах погрешности'));
+  assert.equal(even.length, 6); assert.ok(even.every(m => m.dir === 'в пределах погрешности'));
   const drop = viewMetrics('front', front({ rShDrop: 16 }), 800, 1200).find(m => m.key === 'shoulderTilt');
   assert.equal(drop.dir, 'правое ниже'); assert.ok(drop.v > 4.4 && drop.v < 4.8, String(drop.v));
+});
+test('колени спереди: внутрь (Х) и наружу (О) от линии бедро–лодыжка, полуприсед идет в правила зон', () => {
+  const p = front(); p[26] = { x: 375, y: 850, visibility: 1 }; p[25] = { x: 425, y: 850, visibility: 1 };
+  const m = viewMetrics('front', p, 800, 1200), r = m.find(x => x.key === 'kneeR'), l = m.find(x => x.key === 'kneeL');
+  assert.equal(r.dir, 'внутрь'); assert.equal(l.dir, 'внутрь'); assert.ok(r.v > 5, String(r.v));
+  const o = front(); o[26] = { x: 325, y: 850, visibility: 1 }; assert.equal(viewMetrics('front', o, 800, 1200).find(x => x.key === 'kneeR').dir, 'наружу');
+  const sq = viewMetrics('squat', p, 800, 1200); assert.deepEqual(sq.map(x => x.key), ['squatKneeR', 'squatKneeL', 'squatPelvis']);
+  const q = quickMetrics({ front: { pts: front(), w: 800, h: 1200 }, squat: { pts: p, w: 800, h: 1200 } });
+  assert.ok(q.moves.ohs_front.f.ohs_valgus_r > 5); assert.deepEqual(quickMetrics({ front: { pts: front(), w: 800, h: 1200 } }).moves, {});
 });
 test('крен телефона вычитается', () => {
   const p = front(); const a = 4 * Math.PI / 180, cx = 400, cy = 600;

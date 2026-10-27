@@ -4,7 +4,7 @@ import { _pro, proHome, clientCard } from './pro.js';
 import { go, esc, ic, toast, spots, topOf, plan, asClient } from './app.js';
 import { C, cam, startCamera, stopCamera, detectStill, initPose, startMotion, phone, cameraBlocked, openInBrowserSheet, posedFigure, body3D } from './core.js';
 import { poseOf } from './pose-figure.js';
-import { VIEWS, EDIT_POINTS, POINT_NAMES, quickMetrics, viewMetrics, observations, frameIssue } from './quick-metrics.js';
+import { VIEWS as REQ, ALL_VIEWS as VIEWS, EDIT_POINTS, POINT_NAMES, quickMetrics, viewMetrics, observations, frameIssue } from './quick-metrics.js';
 import { P, analyze } from './analysis.js';
 import { track } from './track.js';
 import { matte } from './ds.js';
@@ -80,11 +80,13 @@ const CAM_CSS = `.mt-cam #qhint:empty{display:none}.mt-cam .mt-glass{background:
 .mt-inc b{font:600 17px 'JetBrains Mono',ui-monospace,monospace;color:#fff}.mt-inc i{position:relative;display:block;width:110px;height:6px;border-radius:3px;background:rgba(255,255,255,.14)}
 .mt-inc i:after{content:'';position:absolute;left:50%;top:-2px;width:1px;height:10px;background:rgba(255,255,255,.5)}.mt-inc em{position:absolute;top:-1px;left:50%;width:14px;height:8px;margin-left:-7px;border-radius:4px;background:#30D158;transition:transform .12s}
 .mt-chip{font:500 11.5px 'JetBrains Mono',ui-monospace,monospace;color:#E5E5EA;padding:6px 10px;border-radius:12px;line-height:1.35}
-.mt-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.mt-steps div{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;border-radius:16px;font:500 12px Inter,system-ui;color:#98989D;border:1px solid transparent}
+.mt-steps{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}.mt-steps div.opt{border:1px dashed rgba(255,255,255,.22)}.mt-steps div.opt.on{border-style:solid}.mt-steps div{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;border-radius:16px;font:500 12px Inter,system-ui;color:#98989D;border:1px solid transparent}
 .mt-steps div.on{color:#0EA5E9;border-color:rgba(14,165,233,.6);background:rgba(14,165,233,.12)}.mt-steps div.ok{color:#E5E5EA}.mt-steps svg{width:22px;height:22px}
 .mt-shot{flex:1;height:56px;border:0;border-radius:9999px;background:#0EA5E9;color:#00131D;font:600 17px Inter,system-ui;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 30px rgba(14,165,233,.35);cursor:pointer}`;
 const STEP_IC = { front: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2.6"/><path d="M8.5 9h7l-.8 6.5H13l-.5 6.5h-1L11 15.5H9.3z"/></svg>', back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="5" r="2.4"/><path d="M8.5 9h7l-.8 6.5H13l-.5 6.5h-1L11 15.5H9.3z"/></svg>',
-  right: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12h12M12 7l5 5-5 5M20 5v14"/></svg>', left: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 12H8M12 7l-5 5 5 5M4 5v14"/></svg>' };
+  right: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12h12M12 7l5 5-5 5M20 5v14"/></svg>',
+  squat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2.2"/><path d="M12 7.5v5.5M6 10h12M12 13l-4 2 1 6M12 13l4 2-1 6"/></svg>', left: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 12H8M12 7l-5 5 5 5M4 5v14"/></svg>' };
+const OPT_NOTE = '<div style="font:400 13px Inter,system-ui;line-height:1.35;color:#C7C7CC;margin-top:6px">Для точности: видно, как колени и таз ведут себя под нагрузкой. Можно пропустить.</div>';
 function camMatte(i, v) {
   return `<div class="cam qcam mt-cam" style="display:flex;flex-direction:column"><style>${CAM_CSS}</style>
     <video id="qv" playsinline muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000"></video>
@@ -96,11 +98,11 @@ function camMatte(i, v) {
     <div id="qlevel" style="position:absolute;left:50%;top:50%;width:120px;height:3px;margin-left:-60px;border-radius:2px;background:rgba(255,255,255,.7);transition:transform .1s;pointer-events:none"></div>
     <div class="mt-glass" style="margin:auto 10px calc(env(safe-area-inset-bottom) + 10px);position:relative;border-radius:30px;padding:12px">
       <!-- инструкция внизу, а не поверх головы человека в кадре -->
-      <div style="padding:2px 6px 12px"><div class="row" style="gap:8px;justify-content:space-between"><span style="font:600 12px 'JetBrains Mono',monospace;color:#0EA5E9;letter-spacing:.04em">${i + 1} / 4 · ${v.name.toUpperCase()}</span><span id="qhint" style="font:600 12px Inter,system-ui;padding:4px 10px;border-radius:9999px;background:rgba(255,255,255,.08)"></span></div>
-        <div style="font:700 19px Inter,system-ui;line-height:1.25;margin-top:6px;letter-spacing:-.02em">«${v.say}»</div></div>
-      <div class="mt-steps">${VIEWS.map((w, k) => `<div class="${k === i ? 'on' : Q.views[w.id] ? 'ok' : ''}">${Q.views[w.id] && k !== i ? '<svg viewBox="0 0 24 24" fill="none" stroke="#30D158" stroke-width="2.4" stroke-linecap="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : STEP_IC[w.id]}${w.name}</div>`).join('')}</div>
+      <div style="padding:2px 6px 12px"><div class="row" style="gap:8px;justify-content:space-between"><span style="font:600 12px 'JetBrains Mono',monospace;color:#0EA5E9;letter-spacing:.04em">${v.opt ? 'ДОП. СНИМОК · НЕОБЯЗАТЕЛЬНО' : `${i + 1} / 4 · ${v.name.toUpperCase()}`}</span><span id="qhint" style="font:600 12px Inter,system-ui;padding:4px 10px;border-radius:9999px;background:rgba(255,255,255,.08)"></span></div>
+        <div style="font:700 19px Inter,system-ui;line-height:1.25;margin-top:6px;letter-spacing:-.02em">«${v.say}»</div>${v.opt ? OPT_NOTE : ''}</div>
+      <div class="mt-steps">${VIEWS.map((w, k) => `<div class="${k === i ? 'on' : Q.views[w.id] ? 'ok' : ''}${w.opt ? ' opt' : ''}">${Q.views[w.id] && k !== i ? '<svg viewBox="0 0 24 24" fill="none" stroke="#30D158" stroke-width="2.4" stroke-linecap="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : STEP_IC[w.id]}${w.short || w.name}${w.opt ? '<span style="font-size:9.5px;margin-top:-3px;opacity:.8">доп.</span>' : ''}</div>`).join('')}</div>
       <div style="display:flex;align-items:center;gap:10px;margin-top:12px"><label class="mt-glass" style="height:56px;padding:0 16px;border-radius:9999px;display:grid;place-items:center;font:500 15px Inter,system-ui;cursor:pointer">Загрузить<input type="file" id="qfile" accept="image/*" style="display:none"></label>
-        <button id="qshot" class="mt-shot" aria-label="Сделать снимок">${ic('camera', 's')}Сделать снимок</button></div>
+        <button id="qshot" class="mt-shot" aria-label="Сделать снимок">${ic('camera', 's')}Сделать снимок</button></div>${v.opt ? '<button id="qskip" class="mt-glass" style="width:100%;height:48px;margin-top:8px;border-radius:9999px;color:#fff;font:600 15px Inter,system-ui;cursor:pointer">Пропустить и проверить точки</button>' : ''}
       <div style="text-align:center;font:400 11.5px Inter,system-ui;color:#98989D;margin-top:8px">Снимок с поправкой на крен телефона</div></div>
     <div id="qflash" style="position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s"></div></div>`;
 }
@@ -110,14 +112,14 @@ function shoot(i, single = false) {
     <video id="qv" playsinline muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000"></video>
     <svg viewBox="0 0 100 120" preserveAspectRatio="xMidYMid meet" style="position:absolute;left:50%;top:8%;height:84%;transform:translateX(-50%);fill:none;stroke:rgba(255,255,255,.55);stroke-width:.7;stroke-dasharray:2 1.6;pointer-events:none" aria-hidden="true">${v.id === 'front' || v.id === 'back' ? SIL.front : SIL.side}</svg>
     <div style="position:relative;padding:calc(env(safe-area-inset-top) + 12px) 16px 0;display:flex;align-items:flex-start;gap:12px">
-      <div style="flex:1"><div class="cam-status">${i + 1} / 4 · ${v.name.toUpperCase()}</div><div style="font-size:22px;font-weight:700;line-height:1.2;margin-top:4px;text-shadow:0 1px 6px #000">«${v.say}»</div>
+      <div style="flex:1"><div class="cam-status">${v.opt ? 'ДОП. СНИМОК · НЕОБЯЗАТЕЛЬНО' : `${i + 1} / 4 · ${v.name.toUpperCase()}`}</div><div style="font-size:22px;font-weight:700;line-height:1.2;margin-top:4px;text-shadow:0 1px 6px #000">«${v.say}»</div>${v.opt ? OPT_NOTE : ''}
         <div id="qhint" style="margin-top:8px;font-size:15px;font-weight:600;min-height:22px;text-shadow:0 1px 6px #000"></div></div>
       <button class="cam-btn" id="qx" aria-label="Закрыть" style="width:48px;padding:0">${ic('x', 's')}</button></div>
     <div id="qlevel" style="position:absolute;left:50%;top:50%;width:120px;height:4px;margin-left:-60px;border-radius:2px;background:rgba(255,255,255,.7);transition:transform .1s;pointer-events:none"></div>
     <div style="margin-top:auto;position:relative;padding:0 16px calc(env(safe-area-inset-bottom) + 18px);display:flex;align-items:center;justify-content:space-between">
       <label class="cam-btn" style="display:grid;place-items:center;cursor:pointer">Загрузить<input type="file" id="qfile" accept="image/*" style="display:none"></label>
       <button id="qshot" aria-label="Сделать фото" style="width:78px;height:78px;border-radius:50%;border:5px solid #fff;background:rgba(255,255,255,.25);cursor:pointer"></button>
-      <span style="width:96px"></span></div>
+      ${v.opt ? '<button class="cam-btn" id="qskip">Пропустить</button>' : '<span style="width:96px"></span>'}</div>
     <div id="qflash" style="position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s"></div>
    </div>`);
   const video = $('#qv'); let lum = 255, lumT = 0, busy = false;
@@ -144,10 +146,11 @@ function shoot(i, single = false) {
   };
   $('#qshot').onclick = () => { if (video.readyState < 2) return; done(video, video.videoWidth, video.videoHeight, (cam.back ? -1 : 1) * (phone.ok ? phone.roll : 0)); };
   $('#qfile').onchange = e => { const f = e.target.files[0]; if (!f) return; const img = new Image(); img.onload = () => { done(img, img.naturalWidth, img.naturalHeight, 0); URL.revokeObjectURL(img.src); }; img.src = URL.createObjectURL(f); };
+  if ($('#qskip')) $('#qskip').onclick = () => { finish(); if (!single) track('test_done', { c: 'quick' }, false); editor(single ? firstOpen() : 0); };
   $('#qx').onclick = () => { finish(); if (Object.keys(Q.views).length) editor(firstOpen()); else proHome(); };
   (async () => { try { await Promise.all([startCamera(video), initPose()]); } catch (e) { $('#qhint').textContent = 'Камера недоступна. Загрузите фото кнопкой «Загрузить»'; } })();
 }
-function next(i, single) { if (single) { finish(); return editor(i); } if (i < 3) return shoot(i + 1); finish(); track('test_done', { c: 'quick' }, false); editor(0); }
+function next(i, single) { if (single) { finish(); return editor(i); } if (i < VIEWS.length - 1 && !Q.views[VIEWS[i + 1].id]) return shoot(i + 1); finish(); track('test_done', { c: 'quick' }, false); editor(0); }
 function finish() { cam.onFrame = null; stopCamera(); if (Q && Q.wasBack != null) { cam.back = Q.wasBack; } }
 const firstOpen = () => Math.max(0, VIEWS.findIndex(v => Q.views[v.id] && !Q.views[v.id].ok));
 // плохой кадр: показываем фото и причину, специалист решает переснять или оставить
@@ -164,19 +167,21 @@ function review(i, single) {
 // ---------- 4. точки: правка касанием с лупой, сетка, отвес ----------
 const LINES = { front: [[P.L_EAR, P.R_EAR], [P.L_SHOULDER, P.R_SHOULDER], [P.L_HIP, P.R_HIP], [P.L_HIP, P.L_KNEE], [P.L_KNEE, P.L_ANKLE], [P.R_HIP, P.R_KNEE], [P.R_KNEE, P.R_ANKLE]],
   right: [[P.R_EAR, P.R_SHOULDER], [P.R_SHOULDER, P.R_HIP], [P.R_HIP, P.R_KNEE], [P.R_KNEE, P.R_ANKLE]], left: [[P.L_EAR, P.L_SHOULDER], [P.L_SHOULDER, P.L_HIP], [P.L_HIP, P.L_KNEE], [P.L_KNEE, P.L_ANKLE]] };
-LINES.back = LINES.front;
+LINES.back = LINES.front; LINES.squat = LINES.front.slice(1);
 let showGrid = localStorage.getItem('bp_q_grid') === '1', showPlumb = localStorage.getItem('bp_q_plumb') !== '0';
 function editor(i) {
   const v = VIEWS[i], x = Q.views[v.id];
-  if (!x) return shoot(i, true);
+  if (!x) { if (Q.editId) return; return shoot(i, true); }
+  // следующий снятый ракурс по кругу (доп. снимок, если его нет, пропускаем)
+  const nx = [1, 2, 3, 4, 5].map(d => (i + d) % VIEWS.length).find(k => Q.views[VIEWS[k].id]);
   go(`<div class="scr fade" style="padding-bottom:110px"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>Точки · ${v.name}</b>${Q.editId ? `<br><span class="sub" style="font-size:12px">Правка до ${new Date(Q.until).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>` : ''}</div></div>
    <div class="pad" style="margin-top:8px"><div class="row" style="gap:6px">${VIEWS.map((w, k) => { const y = Q.views[w.id];
-     return `<button data-v="${k}" style="flex:1;height:58px;border-radius:12px;border:2px solid ${k === i ? 'var(--ink)' : 'var(--line)'};background:${y ? `center/cover url(${y.photo})` : 'var(--surface-2)'};position:relative;cursor:pointer" aria-label="${w.name}">${y && y.ok ? `<span style="position:absolute;right:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#16A34A;color:#fff;display:grid;place-items:center">${ic('check', 's')}</span>` : ''}${!y ? `<span style="font-size:11px;color:var(--sub)">${w.name}</span>` : ''}</button>`; }).join('')}</div>
+     return `<button data-v="${k}"${!y && Q.editId ? ' disabled' : ''} style="flex:1;height:58px;border-radius:12px;border:2px ${!y && w.opt ? 'dashed' : 'solid'} ${k === i ? 'var(--ink)' : 'var(--line)'};background:${y ? `center/cover url(${y.photo})` : 'var(--surface-2)'};position:relative;cursor:pointer" aria-label="${w.name}">${y && y.ok ? `<span style="position:absolute;right:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#16A34A;color:#fff;display:grid;place-items:center">${ic('check', 's')}</span>` : ''}${!y ? `<span style="font-size:11px;color:var(--sub);line-height:1.2">${w.opt ? `+ ${w.short}<br>необяз.` : w.name}</span>` : ''}</button>`; }).join('')}</div>
     ${x.issue ? `<p style="font-size:13px;color:var(--over-t);margin-top:8px">${esc(x.issue)}</p>` : ''}
     <div id="qbox" style="position:relative;margin-top:10px;touch-action:pan-y;user-select:none;-webkit-user-select:none"><canvas id="qcv" style="width:100%;display:block;border-radius:14px;background:#111"></canvas><canvas id="qloupe" width="240" height="240" style="position:absolute;top:8px;left:8px;width:120px;height:120px;border-radius:50%;border:3px solid #fff;box-shadow:0 4px 18px rgba(0,0,0,.4);display:none;pointer-events:none;z-index:3"></canvas>
-      <button class="pill" id="qnextv" style="position:absolute;right:10px;top:10px;height:40px;font-weight:600;background:rgba(22,22,23,.78);color:#fff;border-color:rgba(255,255,255,.18);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)">${i < VIEWS.length - 1 ? 'Следующий снимок' : 'К первому снимку'} ${ic('chevron-right', 's')}</button></div>
-    <p class="sub" style="font-size:13px;margin-top:6px">Проверьте точки. Неточную перетащите пальцем: лупа покажет место. ${v.id === 'front' || v.id === 'back' ? 'Две точки у головы: на ушах, у козелка (хрящ перед слуховым проходом); сзади там же, по краю головы.' : 'Точка у головы: на ухе, у козелка (хрящ перед слуховым проходом).'}</p>
-    <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="pill tog${showGrid ? ' on' : ''}" id="qgrid" aria-pressed="${showGrid}">Сетка</button><button class="pill tog${showPlumb ? ' on' : ''}" id="qplumb" aria-pressed="${showPlumb}">Отвес</button>${Q.editId ? '' : `<button class="pill" id="qretake">${ic('camera', 's')} Переснять</button>`}</div>
+      <button class="pill" id="qnextv" style="position:absolute;right:10px;top:10px;height:40px;font-weight:600;background:rgba(22,22,23,.78);color:#fff;border-color:rgba(255,255,255,.18);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)">${nx > i ? 'Следующий снимок' : 'К первому снимку'} ${ic('chevron-right', 's')}</button></div>
+    <p class="sub" style="font-size:13px;margin-top:6px">Проверьте точки. Неточную перетащите пальцем: лупа покажет место. ${v.opt ? 'Дополнительный снимок: проверьте точки таза, коленей и лодыжек.' : v.id === 'front' || v.id === 'back' ? 'Две точки у головы: на ушах, у козелка (хрящ перед слуховым проходом); сзади там же, по краю головы.' : 'Точка у головы: на ухе, у козелка (хрящ перед слуховым проходом).'}</p>
+    <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="pill tog${showGrid ? ' on' : ''}" id="qgrid" aria-pressed="${showGrid}">Сетка</button><button class="pill tog${showPlumb ? ' on' : ''}" id="qplumb" aria-pressed="${showPlumb}">Отвес</button>${Q.editId ? '' : `<button class="pill" id="qretake">${ic('camera', 's')} Переснять</button>${v.opt ? `<button class="pill" id="qdrop">${ic('x', 's')} Убрать снимок</button>` : ''}`}</div>
     <div id="qm" style="margin-top:12px"></div>
    </div>
    <div class="dock"><button class="btn" id="qok">${ic('check', 's')}Все точки верны · ${VIEWS.filter(w => Q.views[w.id]).length} фото</button></div></div>`);
@@ -226,10 +231,12 @@ function editor(i) {
   $('#back').onclick = () => { if (Q.editId) { if (confirm('Выйти без сохранения правок?')) { const id = Q.client.id; Q = null; clientCard(id); } return; }
     if (confirm('Выйти без сохранения? Фото этого теста удалятся.')) { Q = null; proHome(); } };
   // «Следующий снимок»: этот вид проверен, к следующему; «Все точки верны» подтверждает сразу все фото
-  $('#qnextv').onclick = () => { if (x.pts) x.ok = true; editor((i + 1) % VIEWS.length); };
-  $('#qok').onclick = () => { const miss = VIEWS.findIndex(w => !Q.views[w.id] || !Q.views[w.id].pts);
-    if (miss >= 0) { toast(Q.views[VIEWS[miss].id] ? `${VIEWS[miss].name}: точек нет, переснимите` : `Нет фото: ${VIEWS[miss].name.toLowerCase()}`); return miss === i ? null : editor(miss); }
-    VIEWS.forEach(w => { Q.views[w.id].ok = true; }); Q.metrics = null; results(); };
+  $('#qnextv').onclick = () => { if (x.pts) x.ok = true; editor(nx); };
+  if ($('#qdrop')) $('#qdrop').onclick = () => { delete Q.views[v.id]; editor(0); };
+  // обязательны 4 ракурса; доп. снимок без точек просто не считается
+  $('#qok').onclick = () => { const miss = REQ.findIndex(w => !Q.views[w.id] || !Q.views[w.id].pts);
+    if (miss >= 0) { toast(Q.views[REQ[miss].id] ? `${REQ[miss].name}: точек нет, переснимите` : `Нет фото: ${REQ[miss].name.toLowerCase()}`); return miss === i ? null : editor(miss); }
+    VIEWS.forEach(w => { if (Q.views[w.id]) Q.views[w.id].ok = true; }); Q.metrics = null; results(); };
 }
 const heightCm = () => +((Q && Q.client && Q.client.height) || 0) || 0;
 const num = v => String(Math.abs(v)).replace('.', ',');
@@ -252,7 +259,7 @@ const relax = (t, e) => t == null ? t : Math.sign(t) * Math.max(Math.abs(t) * RE
 const REGION = y => y < .23 ? 0 : y < .38 ? 1 : y < .52 ? 2 : y < .63 ? 3 : 4;
 export function zonesOf(q) {
   try { const rules = C.bodymap.rules.map(r => FERR[r.feature] == null ? r : { ...r, absGreater: relax(r.absGreater, FERR[r.feature]), greater: relax(r.greater, FERR[r.feature]), less: relax(r.less, FERR[r.feature]) });
-    const a = analyze({ snapshot: q.snapshot, side: q.side, moves: {}, protocol: [] }, { ...C, bodymap: { ...C.bodymap, rules } });
+    const a = analyze({ snapshot: q.snapshot, side: q.side, moves: q.moves || {}, protocol: [] }, { ...C, bodymap: { ...C.bodymap, rules } });
     const seen = new Set(), per = [0, 0, 0, 0, 0], out = [];
     for (const s of topOf(spots(a))) { const k = s.id + ':' + s.side, r = REGION(s.y); if (seen.has(k) || per[r] >= 4) continue; seen.add(k); per[r]++; out.push(s); if (out.length >= 10) break; }
     return out.map(s => ({ id: s.id, side: s.side, k: s.k, key: s.key })); }
@@ -261,7 +268,10 @@ const zSpots = zones => zones.map(z => ({ ...z, key: z.key || z.id + ':' + z.sid
 // клиенту: одна короткая фраза на показатель, без чисел (числа у специалиста и в «Измерено»)
 const PLAIN = { headForward: ['Голова выдвинута вперед', 'Голова отведена назад'], headTilt: ['Голова наклонена к правому плечу', 'Голова наклонена к левому плечу'],
   shoulderTilt: ['Правое плечо ниже левого', 'Левое плечо ниже правого'], pelvicTilt: ['Таз: правая сторона ниже', 'Таз: левая сторона ниже'], trunkLateral: ['Корпус смещен вправо', 'Корпус смещен влево'],
-  shoulderShift: ['Плечи впереди таза', 'Плечи позади таза'], hipShift: ['Таз смещен вперед', 'Таз смещен назад'], kneeHyper: ['Колени переразогнуты', 'Колени согнуты'] };
+  shoulderShift: ['Плечи впереди таза', 'Плечи позади таза'], hipShift: ['Таз смещен вперед', 'Таз смещен назад'], kneeHyper: ['Колени переразогнуты', 'Колени согнуты'],
+  kneeR: ['Правое колено уходит внутрь', 'Правое колено уходит наружу'], kneeL: ['Левое колено уходит внутрь', 'Левое колено уходит наружу'],
+  squatKneeR: ['В полуприседе правое колено уходит внутрь', 'В полуприседе правое колено уходит наружу'], squatKneeL: ['В полуприседе левое колено уходит внутрь', 'В полуприседе левое колено уходит наружу'],
+  squatPelvis: ['В полуприседе таз перекошен: правая сторона ниже', 'В полуприседе таз перекошен: левая сторона ниже'] };
 export function plainObs(by, max = 3) { const best = {};
   for (const v of VIEWS) for (const m of (by || {})[v.id] || []) { if (m.dir === 'в пределах погрешности' || !PLAIN[m.key]) continue; const sc = Math.abs(m.v) / m.err; if (!best[m.key] || sc > best[m.key].sc) best[m.key] = { sc, t: PLAIN[m.key][m.v > 0 ? 0 : 1] }; }
   return Object.values(best).sort((a, b) => b.sc - a.sc).slice(0, max).map(x => x.t); }
@@ -274,7 +284,8 @@ const gainPlate = g => g > 1 ? `<div style="font-size:13px;font-weight:700;color
 const MONO = "'JetBrains Mono', ui-monospace, monospace", SANS = "Inter, -apple-system, system-ui, sans-serif";
 // у какого сустава подписать показатель и с какой стороны тела ставить подпись
 const ANCHOR = { headTilt: [[P.L_EAR, P.R_EAR], 'Голова'], shoulderTilt: [[P.L_SHOULDER, P.R_SHOULDER], 'Плечи'], pelvicTilt: [[P.L_HIP, P.R_HIP], 'Таз'], trunkLateral: [[P.L_SHOULDER, P.R_SHOULDER, P.L_HIP, P.R_HIP], 'Корпус'],
-  headForward: [[P.L_EAR, P.R_EAR], 'Голова'], shoulderShift: [[P.L_SHOULDER, P.R_SHOULDER], 'Плечо'], hipShift: [[P.L_HIP, P.R_HIP], 'Таз'], kneeHyper: [[P.L_KNEE, P.R_KNEE], 'Колено'] };
+  headForward: [[P.L_EAR, P.R_EAR], 'Голова'], shoulderShift: [[P.L_SHOULDER, P.R_SHOULDER], 'Плечо'], hipShift: [[P.L_HIP, P.R_HIP], 'Таз'], kneeHyper: [[P.L_KNEE, P.R_KNEE], 'Колено'],
+  kneeR: [[P.R_KNEE], 'Колено'], kneeL: [[P.L_KNEE], 'Колено'], squatKneeR: [[P.R_KNEE], 'Колено'], squatKneeL: [[P.L_KNEE], 'Колено'], squatPelvis: [[P.L_HIP, P.R_HIP], 'Таз'] };
 const SIDE_PT = { right: { [P.L_EAR]: P.R_EAR, [P.L_SHOULDER]: P.R_SHOULDER, [P.L_HIP]: P.R_HIP, [P.L_KNEE]: P.R_KNEE }, left: { [P.R_EAR]: P.L_EAR, [P.R_SHOULDER]: P.L_SHOULDER, [P.R_HIP]: P.L_HIP, [P.R_KNEE]: P.L_KNEE } };
 const loadedImg = new Map();
 const imgOf = src => { if (!loadedImg.has(src)) loadedImg.set(src, new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; })); return loadedImg.get(src); };
@@ -303,7 +314,9 @@ async function drawMeasure(cv, x, view, ms, compact = false) {
   const ax = view === 'right' ? X(P.R_ANKLE) : view === 'left' ? X(P.L_ANKLE) : (X(P.L_ANKLE) + X(P.R_ANKLE)) / 2;
   g.save(); g.shadowColor = 'rgba(14,165,233,.8)'; g.shadowBlur = 8 * d; g.strokeStyle = 'rgba(14,165,233,.9)'; g.lineWidth = 1 * d; g.beginPath(); g.moveTo(ax, 0); g.lineTo(ax, H); g.stroke(); g.restore();
   // скелет: сегмент с показателем вне погрешности янтарный
-  const hot = { front: { [P.L_SHOULDER + ':' + P.R_SHOULDER]: 'shoulderTilt', [P.L_HIP + ':' + P.R_HIP]: 'pelvicTilt', [P.L_EAR + ':' + P.R_EAR]: 'headTilt' } }; hot.back = hot.front;
+  const hot = { front: { [P.L_SHOULDER + ':' + P.R_SHOULDER]: 'shoulderTilt', [P.L_HIP + ':' + P.R_HIP]: 'pelvicTilt', [P.L_EAR + ':' + P.R_EAR]: 'headTilt',
+    [P.R_HIP + ':' + P.R_KNEE]: 'kneeR', [P.R_KNEE + ':' + P.R_ANKLE]: 'kneeR', [P.L_HIP + ':' + P.L_KNEE]: 'kneeL', [P.L_KNEE + ':' + P.L_ANKLE]: 'kneeL' } }; hot.back = hot.front;
+  hot.squat = { [P.L_HIP + ':' + P.R_HIP]: 'squatPelvis', [P.R_HIP + ':' + P.R_KNEE]: 'squatKneeR', [P.R_KNEE + ':' + P.R_ANKLE]: 'squatKneeR', [P.L_HIP + ':' + P.L_KNEE]: 'squatKneeL', [P.L_KNEE + ':' + P.L_ANKLE]: 'squatKneeL' };
   for (const [a, b] of LINES[view]) { const k = (hot[view] || {})[a + ':' + b], on = k && out.has(k);
     g.save(); g.shadowColor = on ? 'rgba(255,159,10,.7)' : 'rgba(14,165,233,.7)'; g.shadowBlur = 6 * d; g.strokeStyle = on ? AM : CY; g.lineWidth = 1.5 * d; g.beginPath(); g.moveTo(X(a), Y(a)); g.lineTo(X(b), Y(b)); g.stroke(); g.restore(); }
   for (const i of ids) { g.beginPath(); g.arc(X(i), Y(i), 5.5 * d, 0, 7); g.fillStyle = 'rgba(14,165,233,.25)'; g.fill(); g.beginPath(); g.arc(X(i), Y(i), 3 * d, 0, 7); g.fillStyle = '#E0F2FE'; g.fill(); g.lineWidth = 1.5 * d; g.strokeStyle = CY; g.stroke(); }
@@ -328,7 +341,8 @@ async function drawMeasure(cv, x, view, ms, compact = false) {
       g.fillStyle = '#E5E5EA'; g.textBaseline = 'middle'; g.fillText(t, tx + 21 * d, ty + 12.5 * d); g.textBaseline = 'alphabetic'; return; }
     g.font = `600 ${15 * d}px ${MONO}`; const vw = g.measureText(v).width + 20 * d;
     g.font = `500 ${12 * d}px ${SANS}`; const sub = isOut ? `${name}: ${m.dir.replace(' (переразгибание)', '').replace(' (согнуто)', '')}` : name, sw = g.measureText(sub).width + 18 * d;
-    const bwid = Math.max(vw, sw), left = side++ % 2 === 0 ? axp > W / 2 : axp <= W / 2; let lx = left ? 12 * d : W - bwid - 12 * d, ly = ayp - 20 * d;
+    // колено: подпись со своей стороны, снаружи ноги
+    const bwid = Math.max(vw, sw), left = /nee[RL]$/.test(k) ? axp < W / 2 : side++ % 2 === 0 ? axp > W / 2 : axp <= W / 2; let lx = left ? 12 * d : W - bwid - 12 * d, ly = ayp - 20 * d;
     for (const p of placed) if (Math.abs(p.y - ly) < (compact ? 30 : 50) * d && p.left === left) ly = p.y + (compact ? 32 : 52) * d; const ly0 = ly; ly = Math.max(8 * d, Math.min(H - 52 * d, offHead(lx, ly, bwid, (compact ? 28 : 53) * d))); placed.push({ y: ly, left });
     // подпись ушла с лица: выноска от макушки или подбородка, а не через лицо
     if (ly !== ly0 && axp > head.l && axp < head.r && ayp > head.t && ayp < head.b) ayp = ly < head.t ? head.t : head.b;
@@ -356,7 +370,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
   host.innerHTML = `<div class="card" id="qfcard" style="padding:12px">
       ${hasPh ? `<div class="row" style="justify-content:space-between;gap:8px"><div class="seg" id="qmode" style="width:auto;flex:none"><button data-md="3d" class="on" style="padding:0 18px">3D</button><button data-md="ph" style="padding:0 18px">Фото</button></div><span style="flex:1"></span><button class="pill tog${showGrid ? ' on' : ''}" id="qpgrid" aria-pressed="${showGrid}" style="display:none;height:34px">Сетка</button><span class="mt-tag n" id="qmlbl">Типовая фигура</span></div>` : ''}
       <div id="q3d" style="height:min(58vh,420px);margin-top:10px"></div><canvas id="qph" style="width:100%;display:none;margin-top:10px;border-radius:22px"></canvas>
-      <div class="seg" id="qview" style="margin-top:10px">${VIEWS.map((v, i) => `<button data-vw="${v.id}" class="${i ? '' : 'on'}" style="padding:0 6px">${v.name}</button>`).join('')}</div>
+      <div class="seg" id="qview" style="margin-top:10px">${VIEWS.filter(v => !v.opt || (photos[v.id] && photos[v.id].pts)).map((v, i) => `<button data-vw="${v.id}" class="${i ? '' : 'on'}" style="padding:0 6px">${v.short || v.name}</button>`).join('')}</div>
       <div id="qgr"><div class="row" style="gap:10px;margin-top:10px"><span class="sub" style="font-size:13px;flex:none">Усилить</span><div class="seg" id="qgain" style="flex:1">${GAINS.map(g => `<button data-g="${g}" class="${g === st.gain ? 'on' : ''}" style="padding:0 6px">×${String(g).replace('.', ',')}</button>`).join('')}</div></div><div id="qplate">${gainPlate(st.gain)}</div></div>
       <div class="sub" id="qcap" style="font-size:12px;text-align:center;margin-top:8px">Положение на типовой фигуре, а не тело клиента. Цветом отмечены зоны</div></div>
     <div class="mt-hyp" id="qhyp"></div>
@@ -380,11 +394,11 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
     if ($h('#qmlbl')) $h('#qmlbl').textContent = md === '3d' ? 'Типовая фигура' : 'Фото клиента';
     if ($h('#qpgrid')) $h('#qpgrid').style.display = md === 'ph' ? '' : 'none';
     $h('#qcap').textContent = md === '3d' ? 'Положение на типовой фигуре, а не тело клиента. Цветом отмечены зоны' : 'Подписаны только отклонения больше погрешности. Линия: вертикаль от стоп';
-    if (md === 'ph') photoView(); else if (v3) v3.look(view); };
+    if (md === 'ph') photoView(); else if (v3) v3.look(view === 'squat' ? 'front' : view); };
   host.querySelectorAll('[data-md]').forEach(b => b.onclick = () => setMode(b.dataset.md));
   if ($h('#qpgrid')) $h('#qpgrid').onclick = () => { showGrid = !showGrid; localStorage.setItem('bp_q_grid', showGrid ? '1' : '0'); $h('#qpgrid').classList.toggle('on', showGrid); $h('#qpgrid').setAttribute('aria-pressed', showGrid); photoView(); };
   $h('#qadd').onclick = () => addZone(zs => { const rest = st.zones.filter(x => !zs.some(z => x.id === z.id && x.side === z.side)); if (rest.length + zs.length > 12) return toast('Не больше 12 зон'); st.zones = [...rest, ...zs]; changed(); });
-  host.querySelectorAll('[data-vw]').forEach(b => b.onclick = () => { view = b.dataset.vw; host.querySelectorAll('[data-vw]').forEach(x => x.classList.toggle('on', x === b)); if (mode === 'ph') photoView(); else if (v3) v3.look(view); });
+  host.querySelectorAll('[data-vw]').forEach(b => b.onclick = () => { view = b.dataset.vw; host.querySelectorAll('[data-vw]').forEach(x => x.classList.toggle('on', x === b)); if (mode === 'ph') photoView(); else if (v3) v3.look(view === 'squat' ? 'front' : view); });
   host.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { st.gain = +b.dataset.g; host.querySelectorAll('[data-g]').forEach(x => x.classList.toggle('on', x === b)); $h('#qplate').innerHTML = gainPlate(st.gain); if (v3) v3.pose(pose()); onChange(st); });
   // без WebGL2 3D-фигуры нет: остаются фото с замерами (если есть) или блок прячется
   body3D($h('#q3d'), zSpots(st.zones), key => { const z = st.zones.find(x => (x.key || x.id + ':' + x.side) === key); if (z) toast(`${zoneName(z)} ${sideRu(z.side)}: ${ZST[z.k]}`); }, { pose: pose() })
@@ -473,7 +487,7 @@ export async function quickCompare(prevId, curId) {
    <div class="pad" style="display:flex;flex-direction:column;gap:16px;margin-top:8px">
     <div class="card" id="cmpf" style="padding:12px">${hasPh ? '<div class="seg" id="cmpm" style="width:auto;display:inline-flex"><button data-md="ph" class="on" style="padding:0 18px">Фото</button><button data-md="3d" style="padding:0 18px">3D</button></div>' : ''}
      <div class="row" style="justify-content:center;gap:8px;margin-top:10px;align-items:flex-start">${[A, B].map((x, i) => `<div style="flex:1;max-width:230px;text-align:center"><div class="row" style="justify-content:center;gap:6px;margin-bottom:6px"><b style="font-size:14px">${i ? 'После' : 'До'}</b><span class="sub mono" style="font-size:12px">${new Date(x.date).toLocaleDateString('ru')}</span></div><canvas id="cmp${i}" style="width:100%;aspect-ratio:4/5;border-radius:18px;background:#1C1C1E"></canvas></div>`).join('')}</div>
-     <div class="seg" id="cmpv" style="margin-top:10px">${VIEWS.map((v, i) => `<button data-vw="${v.id}" class="${i ? '' : 'on'}" style="padding:0 6px">${v.name}</button>`).join('')}</div></div>
+     <div class="seg" id="cmpv" style="margin-top:10px">${VIEWS.filter(v => !v.opt || (pa[v.id] && pb[v.id])).map((v, i) => `<button data-vw="${v.id}" class="${i ? '' : 'on'}" style="padding:0 6px">${v.short || v.name}</button>`).join('')}</div></div>
     <div><div class="eyebrow">Изменения</div><div class="group" style="padding:0">${rows.map(r => `<div class="row" style="gap:10px;align-items:center;padding:12px 14px"><span style="flex:1;font-size:14px;line-height:1.35">${r.m.name}<br><span class="sub" style="font-size:12px">${r.v.name}</span></span><span style="text-align:right;line-height:1.5"><span class="mt-val" style="font-size:14px">${num(r.p.v)}${u(r.m)} → ${num(r.m.v)}${u(r.m)}</span><br>${tag(r)}</span></div>`).join('') || '<div class="row sub" style="padding:12px 14px">Нет общих замеров</div>'}</div></div>
     <button class="btn" id="cmprep">${ic('share', 's')}Отчет клиенту: до и после</button>
     <p class="mt-cal">«Без изменений»: разница в пределах погрешности замера · «меньше»: отклонение от вертикали уменьшилось</p>
@@ -482,7 +496,7 @@ export async function quickCompare(prevId, curId) {
   $('#cmprep').onclick = async () => { const b = $('#cmprep'); b.disabled = true; try { await reportCompare(prevId, curId); } finally { b.disabled = false; } };
   const draw = async () => { for (const [i, x, ph] of [[0, qa, pa], [1, qb, pb]]) { const cv = $('#cmp' + i); if (!cv) return;
     if (mode === 'ph') { await drawMeasure(cv, ph[view], view, (x.by || {})[view] || [], true); continue; }
-    const im = await posedFigure(zSpots(x.zones || []), poseOf({ by: x.by || {}, h: x.h || 170 }, 1), view, 400, 880); if (!im) { if (!hasPh) { const f = $('#cmpf'); if (f) f.remove(); } return; }
+    const im = await posedFigure(zSpots(x.zones || []), poseOf({ by: x.by || {}, h: x.h || 170 }, 1), view === 'squat' ? 'front' : view, 400, 880); if (!im) { if (!hasPh) { const f = $('#cmpf'); if (f) f.remove(); } return; }
     cv.width = 400; cv.height = 500; const g = cv.getContext('2d'), fw = 500 * 400 / 880; g.clearRect(0, 0, 400, 500); g.strokeStyle = '#0EA5E9'; g.lineWidth = 2; g.setLineDash([10, 8]); g.beginPath(); g.moveTo(200, 0); g.lineTo(200, 500); g.stroke(); g.setLineDash([]); g.drawImage(im, 200 - fw / 2, 0, fw, 500); } };
   draw();
   document.querySelectorAll('#cmpv [data-vw]').forEach(b => b.onclick = () => { view = b.dataset.vw; document.querySelectorAll('#cmpv [data-vw]').forEach(x => x.classList.toggle('on', x === b)); draw(); });
