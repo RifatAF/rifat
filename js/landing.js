@@ -1,6 +1,7 @@
 // Лендинг для специалистов (ТЗ v4, п. 8) в стиле Apple Matte: матовый графит, голубой акцент, числа моноширинным.
 // Тексты в границах обещаний (docs/legal_texts/blacklist.md): замер и наблюдение с погрешностью, без диагнозов.
 // Откат дизайна (bp_ds = v3) открывает прежний лендинг из landing-v1.js.
+import { cookieBar } from './pixel.js';
 import { go, ic } from './app.js';
 import { track } from './track.js';
 import { matte } from './ds.js';
@@ -130,6 +131,7 @@ export function landing(o) {
   if (!matte()) return landingV1(o);
   let { onTry, onSelf, onLogin } = o;
   track('page_view', { c: 'landing' }, false); document.body.classList.add('lp-on');
+  setTimeout(cookieBar, 1200);
   // уход с лендинга (вход, тест для себя): обычный фон и ширина приложения
   const leave = f => () => { document.body.classList.remove('lp-on'); f(); };
   onTry = leave(onTry); onLogin = leave(onLogin); onSelf = leave(onSelf);
