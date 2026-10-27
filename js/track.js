@@ -17,6 +17,7 @@ const EVENTS = new Set(['app_open', 'plan_minutes', 'onb_done', 'login_ok', 'saf
   'main_recognize', 'workout_pain_block', 'update_offer', 'retest_after', 'ba_period', 'session_start', 'session_done', 'pay_redirect',
   // чтение: глубина и скорость листания экрана, мгновенный уход назад (зашел не туда), пара тестов до и после комплекса
   'scroll', 'qback', 'retest_pair', 'menu']);
+import { pixel } from './pixel.js';
 let sid; try { sid = sessionStorage.getItem('bp_sid'); if (!sid) { sid = Math.random().toString(36).slice(2, 12); sessionStorage.setItem('bp_sid', sid); } } catch (e) { sid = Math.random().toString(36).slice(2, 12); }
 const t0 = Date.now(), q = [], seen = new Set(); let errs = 0;
 const role = () => { try { return localStorage.getItem('bp_mode') === 'pro' ? 'pro' : 'client'; } catch (e) { return 'client'; } };
@@ -37,6 +38,7 @@ function flush() {
 /** Шаг воронки. once: считать один раз за вкладку (открытие экрана, а не каждое перерисовывание). */
 export function track(e, p, once = true) {
   if (!EVENTS.has(e)) return;
+  try { pixel(e); } catch (x) {}
   if (once && !p) { if (seen.has(e)) return; seen.add(e); }
   const ev = { e, t: Date.now() - t0 };
   if (p) ev.p = Object.fromEntries(Object.entries(p).slice(0, 4).map(([k, v]) => [k, typeof v === 'number' ? Math.round(v * 10) / 10 : clip(v).slice(0, 60)]));
