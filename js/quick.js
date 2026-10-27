@@ -475,9 +475,11 @@ export async function quickCompare(prevId, curId) {
      <div class="row" style="justify-content:center;gap:8px;margin-top:10px;align-items:flex-start">${[A, B].map((x, i) => `<div style="flex:1;max-width:230px;text-align:center"><div class="row" style="justify-content:center;gap:6px;margin-bottom:6px"><b style="font-size:14px">${i ? 'После' : 'До'}</b><span class="sub mono" style="font-size:12px">${new Date(x.date).toLocaleDateString('ru')}</span></div><canvas id="cmp${i}" style="width:100%;aspect-ratio:4/5;border-radius:18px;background:#1C1C1E"></canvas></div>`).join('')}</div>
      <div class="seg" id="cmpv" style="margin-top:10px">${VIEWS.map((v, i) => `<button data-vw="${v.id}" class="${i ? '' : 'on'}" style="padding:0 6px">${v.name}</button>`).join('')}</div></div>
     <div><div class="eyebrow">Изменения</div><div class="group" style="padding:0">${rows.map(r => `<div class="row" style="gap:10px;align-items:center;padding:12px 14px"><span style="flex:1;font-size:14px;line-height:1.35">${r.m.name}<br><span class="sub" style="font-size:12px">${r.v.name}</span></span><span style="text-align:right;line-height:1.5"><span class="mt-val" style="font-size:14px">${num(r.p.v)}${u(r.m)} → ${num(r.m.v)}${u(r.m)}</span><br>${tag(r)}</span></div>`).join('') || '<div class="row sub" style="padding:12px 14px">Нет общих замеров</div>'}</div></div>
+    <button class="btn" id="cmprep">${ic('share', 's')}Отчет клиенту: до и после</button>
     <p class="mt-cal">«Без изменений»: разница в пределах погрешности замера · «меньше»: отклонение от вертикали уменьшилось</p>
     ${[['До', A], ['После', B]].filter(([, x]) => editNote(x)).map(([t, x]) => `<p class="mt-cal">${t}: ${esc(editNote(x).toLowerCase())}</p>`).join('')}</div></div>`);
   $('#back').onclick = () => clientCard(B.clientId);
+  $('#cmprep').onclick = async () => { const b = $('#cmprep'); b.disabled = true; try { await reportCompare(prevId, curId); } finally { b.disabled = false; } };
   const draw = async () => { for (const [i, x, ph] of [[0, qa, pa], [1, qb, pb]]) { const cv = $('#cmp' + i); if (!cv) return;
     if (mode === 'ph') { await drawMeasure(cv, ph[view], view, (x.by || {})[view] || [], true); continue; }
     const im = await posedFigure(zSpots(x.zones || []), poseOf({ by: x.by || {}, h: x.h || 170 }, 1), view, 400, 880); if (!im) { if (!hasPh) { const f = $('#cmpf'); if (f) f.remove(); } return; }
@@ -539,18 +541,27 @@ export async function quickResult(aid) { return report(aid); }
 async function report(aid) {
   const a = await row('assessments', aid), c = await row('clients', a.clientId), ph = (await row('poses', aid)) || {};
   const cv = await renderReport(a, c, ph.photos || {});
-  const base = `bodypassport-${(c.nocard ? 'zamer' : c.name).replace(/[^\p{L}\p{N}]+/gu, '-')}-${new Date(a.date).toISOString().slice(0, 10)}`;
+  shareSheet(cv, `bodypassport-${(c.nocard ? 'zamer' : c.name).replace(/[^\p{L}\p{N}]+/gu, '-')}-${new Date(a.date).toISOString().slice(0, 10)}`, c, 'quick');
+}
+/** Отчет «До и после» двух быстрых тестов: фото рядом, что изменилось больше погрешности, над чем работаем дальше. */
+async function reportCompare(prevId, curId) {
+  const A = await row('assessments', prevId), B = await row('assessments', curId), c = await row('clients', B.clientId);
+  const pa = ((await row('poses', prevId)) || {}).photos || {}, pb = ((await row('poses', curId)) || {}).photos || {};
+  const cv = await renderCompare(A, B, c, pa, pb);
+  shareSheet(cv, `bodypassport-do-posle-${(c.nocard ? 'zamer' : c.name).replace(/[^\p{L}\p{N}]+/gu, '-')}-${new Date(B.date).toISOString().slice(0, 10)}`, c, 'compare', 'Отчет: до и после');
+}
+function shareSheet(cv, base, c, kind, title = 'Отчет клиенту') {
   const d = document.createElement('div'); d.className = 'sheet';
-  d.innerHTML = `<div><h2 style="font-size:20px">Отчет клиенту</h2><p class="sub" style="font-size:13px;margin-top:4px">Так его увидит клиент.</p>
+  d.innerHTML = `<div><h2 style="font-size:20px">${title}</h2><p class="sub" style="font-size:13px;margin-top:4px">Так его увидит клиент.</p>
     <div style="margin-top:12px;max-height:50dvh;overflow:auto;border-radius:16px;border:1px solid var(--line)"><img src="${cv.toDataURL('image/jpeg', .8)}" alt="Отчет" style="width:100%;display:block"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn" id="qpdf">${ic('file-text', 's')}PDF</button><button class="btn line" id="qpng">${ic('image', 's')}Картинка</button></div>
-    <button class="btn ghost" id="qcard" style="margin-top:8px;border:0">${c.nocard ? 'В кабинет' : 'К карточке клиента'}</button></div>`;
+    <button class="btn ghost" id="qcard" style="margin-top:8px;border:0">${kind === 'compare' ? 'Закрыть' : c.nocard ? 'В кабинет' : 'К карточке клиента'}</button></div>`;
   document.body.appendChild(d);
-  const close = () => { d.remove(); c.nocard ? proHome() : clientCard(c.id); };
+  const close = () => { d.remove(); if (kind !== 'compare') c.nocard ? proHome() : clientCard(c.id); };
   d.onclick = e => { if (e.target === d) close(); }; d.querySelector('#qcard').onclick = close;
-  const send = async (blob, name, type, kind) => { const file = new File([blob], name, { type });
+  const send = async (blob, name, type, fmt) => { const file = new File([blob], name, { type });
     if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: 'Замер осанки' }); } catch (e) {} } else { const l = document.createElement('a'); l.href = URL.createObjectURL(blob); l.download = name; l.click(); }
-    track('report_shared', { c: 'quick_' + kind }, false);
+    track('report_shared', { c: kind + '_' + fmt }, false);
     if (!localStorage.getItem('bp_first_report')) { localStorage.setItem('bp_first_report', String(Date.now())); track('first_report', null, false); const g = await import('./grow.js'); setTimeout(() => g.installSheet(_pro.backup), 1200); } };
   d.querySelector('#qpdf').onclick = async () => { const b = d.querySelector('#qpdf'); b.disabled = true; b.textContent = 'Собираю PDF…';
     try { const { canvasToPdf } = await import('./pdf.js'); await send(await canvasToPdf(cv, 'BodyPassport'), base + '.pdf', 'application/pdf', 'pdf'); } catch (e) { toast('Не удалось собрать PDF: ' + e.message); }
@@ -563,6 +574,18 @@ function wrap(g, text, x, y, maxW, lh) { const words = String(text).split(' '); 
   for (const w of words) { const t = line ? line + ' ' + w : w; if (g.measureText(t).width > maxW && line) { g.fillText(line, x, y); y += lh; line = w; } else line = t; }
   if (line) { g.fillText(line, x, y); y += lh; } return y; }
 /** Отчет 1080 px шириной: шапка, 4 фото с линиями, ЗАМЕР, что видно, ГИПОТЕЗА специалиста, рекомендации, юридическая строка. */
+/** Фото в отчете: обрезка по телу, отвес, линии и точки как у специалиста. */
+function tile(g, im, p, view, x0, y, cw, ch, LN) { const pts = p.pts;
+    let bx = 0, by = 0, bw = p.w, bh = p.h; if (pts) { const ys = EDIT_POINTS[view].map(i => pts[i].y), xs = EDIT_POINTS[view].map(i => pts[i].x); const top = Math.min(...ys), bot = Math.max(...ys), hh = (bot - top) * 1.35, cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+      bh = Math.min(p.h, hh); bw = Math.min(p.w, bh / 2); by = Math.max(0, Math.min(p.h - bh, top - (bot - top) * .2)); bx = Math.max(0, Math.min(p.w - bw, cx - bw / 2)); }
+    g.save(); g.beginPath(); g.roundRect(x0, y, cw, ch, 18); g.clip(); g.fillStyle = '#111'; g.fillRect(x0, y, cw, ch);
+    const sc = Math.min(cw / bw, ch / bh), dw = bw * sc, dh = bh * sc, ox = x0 + (cw - dw) / 2, oy = y + (ch - dh) / 2; g.drawImage(im, bx, by, bw, bh, ox, oy, dw, dh);
+    if (pts) { const X = i => ox + (pts[i].x - bx) * sc, Y = i => oy + (pts[i].y - by) * sc;
+      const ax = view === 'right' ? pts[P.R_ANKLE].x : view === 'left' ? pts[P.L_ANKLE].x : (pts[P.L_ANKLE].x + pts[P.R_ANKLE].x) / 2;
+      g.strokeStyle = '#FBBF24'; g.lineWidth = 2; g.setLineDash([7, 6]); g.beginPath(); g.moveTo(ox + (ax - bx) * sc, y); g.lineTo(ox + (ax - bx) * sc, y + ch); g.stroke(); g.setLineDash([]);
+      g.strokeStyle = LN; g.lineWidth = 3; for (const [m, n] of LINES[view]) { g.beginPath(); g.moveTo(X(m), Y(m)); g.lineTo(X(n), Y(n)); g.stroke(); }
+      for (const i of EDIT_POINTS[view]) { g.beginPath(); g.arc(X(i), Y(i), 5, 0, 7); g.fillStyle = '#fff'; g.fill(); } }
+  g.restore(); }
 export async function renderReport(a, c, photos) {
   // Matte: Inter, числа JetBrains Mono, голубой акцент; v3: прежние Manrope и бирюза
   const M = matte(), W = 1080, PAD = 64, F = M ? 'Inter, system-ui, sans-serif' : 'Manrope, system-ui, sans-serif', MN = "'JetBrains Mono', ui-monospace, monospace", INK = M ? '#1D1D1F' : '#0B1B3B', SUB = M ? '#6E6E73' : '#566079', VIO = M ? '#0284C7' : '#0E7C86', LN = M ? '#0EA5E9' : '#11A3AE', BAND = M ? '#161617' : '#0B1B3B';
@@ -576,17 +599,8 @@ export async function renderReport(a, c, photos) {
   y += 44; g.fillStyle = SUB; g.font = `500 26px ${F}`; g.fillText(_pro.fmtDate(a.date) + ' · ' + author, PAD, y); y += 40;
   // фото: обрезка по телу, линии и точки как у специалиста
   const shown = VIEWS.filter(v => imgs[v.id]), cw = (W - PAD * 2 - 24 * (shown.length - 1)) / Math.max(1, shown.length), ch = cw * 2;
-  shown.forEach((v, k) => { const x0 = PAD + k * (cw + 24), p = photos[v.id], im = imgs[v.id], pts = p.pts;
-    let bx = 0, by = 0, bw = p.w, bh = p.h; if (pts) { const ys = EDIT_POINTS[v.id].map(i => pts[i].y), xs = EDIT_POINTS[v.id].map(i => pts[i].x); const top = Math.min(...ys), bot = Math.max(...ys), hh = (bot - top) * 1.35, cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-      bh = Math.min(p.h, hh); bw = Math.min(p.w, bh / 2); by = Math.max(0, Math.min(p.h - bh, top - (bot - top) * .2)); bx = Math.max(0, Math.min(p.w - bw, cx - bw / 2)); }
-    g.save(); g.beginPath(); g.roundRect(x0, y, cw, ch, 18); g.clip(); g.fillStyle = '#111'; g.fillRect(x0, y, cw, ch);
-    const sc = Math.min(cw / bw, ch / bh), dw = bw * sc, dh = bh * sc, ox = x0 + (cw - dw) / 2, oy = y + (ch - dh) / 2; g.drawImage(im, bx, by, bw, bh, ox, oy, dw, dh);
-    if (pts) { const X = i => ox + (pts[i].x - bx) * sc, Y = i => oy + (pts[i].y - by) * sc;
-      const ax = v.id === 'right' ? pts[P.R_ANKLE].x : v.id === 'left' ? pts[P.L_ANKLE].x : (pts[P.L_ANKLE].x + pts[P.R_ANKLE].x) / 2;
-      g.strokeStyle = '#FBBF24'; g.lineWidth = 2; g.setLineDash([7, 6]); g.beginPath(); g.moveTo(ox + (ax - bx) * sc, y); g.lineTo(ox + (ax - bx) * sc, y + ch); g.stroke(); g.setLineDash([]);
-      g.strokeStyle = LN; g.lineWidth = 3; for (const [m, n] of LINES[v.id]) { g.beginPath(); g.moveTo(X(m), Y(m)); g.lineTo(X(n), Y(n)); g.stroke(); }
-      for (const i of EDIT_POINTS[v.id]) { g.beginPath(); g.arc(X(i), Y(i), 5, 0, 7); g.fillStyle = '#fff'; g.fill(); } }
-    g.restore(); g.fillStyle = SUB; g.font = `600 22px ${F}`; g.textAlign = 'center'; g.fillText(v.name, x0 + cw / 2, y + ch + 32); g.textAlign = 'left'; });
+  shown.forEach((v, k) => { const x0 = PAD + k * (cw + 24); tile(g, imgs[v.id], photos[v.id], v.id, x0, y, cw, ch, LN);
+    g.fillStyle = SUB; g.font = `600 22px ${F}`; g.textAlign = 'center'; g.fillText(v.name, x0 + cw / 2, y + ch + 32); g.textAlign = 'left'; });
   y += ch + 70;
   const head = (t, tag, col) => { breaks.push(y - 40); g.fillStyle = INK; g.font = `800 32px ${F}`; g.fillText(t, PAD, y); if (tag) { const tw = g.measureText(t).width; g.font = `700 16px ${F}`; const w2 = g.measureText(tag).width + 18;
     g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.roundRect(PAD + tw + 16, y - 24, w2, 30, 8); g.stroke(); g.fillStyle = col; g.fillText(tag, PAD + tw + 25, y - 3); } y += 22; };
@@ -618,6 +632,58 @@ export async function renderReport(a, c, photos) {
     if (a.plan && a.plan.text) for (const para of a.plan.text.split('\n')) y = wrap(g, para, PAD, y + 30, W - PAD * 2, 34); }
   y += 50; breaks.push(y - 20); g.fillStyle = SUB; g.font = `400 21px ${F}`;
   y = wrap(g, 'Замер по фото. Показаны значения больше погрешности замера. Положение на фото зависит от стойки в момент съемки.' + (editNote(a) ? ' ' + editNote(a) + '.' : ''), PAD, y, W - PAD * 2, 30);
+  g.fillStyle = INK; g.font = `700 22px ${F}`; y = wrap(g, LEGAL, PAD, y + 10, W - PAD * 2, 30);
+  y += 30; g.fillStyle = BAND; g.fillRect(0, y, W, 120); g.fillStyle = '#fff'; g.font = `700 26px ${F}`; g.fillText(author, PAD, y + 52);
+  g.font = `400 21px ${F}`; g.fillStyle = 'rgba(255,255,255,.75)'; g.fillText(contact ? 'Запись: ' + contact : 'Сделано в BodyPassport', PAD, y + 86);
+  if (contact) { g.textAlign = 'right'; g.fillText('Сделано в BodyPassport', W - PAD, y + 86); g.textAlign = 'left'; }
+  y += 120;
+  const out = document.createElement('canvas'); out.width = W; out.height = y; out.getContext('2d').drawImage(cv, 0, 0); out.breaks = breaks; return out;
+}
+/** Отчет клиенту «До и после»: фото двух тестов рядом, изменения больше погрешности, над чем работаем дальше.
+ *  Клиенту без состояний мышц и диагнозов: только замер, его изменение и задачи тренировки. */
+export async function renderCompare(A, B, c, pa, pb) {
+  const M = matte(), W = 1080, PAD = 64, F = M ? 'Inter, system-ui, sans-serif' : 'Manrope, system-ui, sans-serif', MN = "'JetBrains Mono', ui-monospace, monospace", INK = M ? '#1D1D1F' : '#0B1B3B', SUB = M ? '#6E6E73' : '#566079', LN = M ? '#0EA5E9' : '#11A3AE', BAND = M ? '#161617' : '#0B1B3B', GOOD = '#15803D', MORE = '#B45309';
+  try { await Promise.all([document.fonts.load(`600 24px ${MN}`), document.fonts.load(`700 24px ${F}`)]); } catch (e) {}
+  const author = (await _pro.meta('profile')) || _pro.author(), contact = (await _pro.meta('contact')) || '';
+  const qa = A.quick || {}, qb = B.quick || {}, cv = document.createElement('canvas'); cv.width = W; cv.height = 5200; const g = cv.getContext('2d'), breaks = [];
+  g.fillStyle = '#fff'; g.fillRect(0, 0, W, cv.height); g.textBaseline = 'alphabetic';
+  const dd = t => new Date(t).toLocaleDateString('ru'), weeks = Math.max(1, Math.round((B.date - A.date) / 6048e5)), u = m => m.unit.trim() === '°' ? '°' : m.unit.includes('см') ? ' см' : '%';
+  let y = 90; g.fillStyle = SUB; g.font = `700 22px ${F}`; g.fillText('ЗАМЕР ОСАНКИ · ДО И ПОСЛЕ', PAD, y);
+  y += 58; g.fillStyle = INK; g.font = `800 48px ${F}`; g.fillText(c.nocard ? 'Замер' : c.name, PAD, y);
+  y += 44; g.fillStyle = SUB; g.font = `500 26px ${F}`; g.fillText(`${dd(A.date)} → ${dd(B.date)} · ${B.date - A.date < 6048e5 ? 'через несколько дней' : `через ${weeks} ${weeks % 10 === 1 && weeks % 100 !== 11 ? 'неделю' : [2, 3, 4].includes(weeks % 10) && ![12, 13, 14].includes(weeks % 100) ? 'недели' : 'недель'}`} · ${author}`, PAD, y);
+  // изменения: те же показатели двух тестов, разница больше погрешности замера
+  const rows = []; for (const v of VIEWS) for (const m of (qb.by || {})[v.id] || []) { const p = ((qa.by || {})[v.id] || []).find(x => x.key === m.key); if (!p) continue;
+    rows.push({ v, m, p, d: Math.abs(m.v) - Math.abs(p.v), same: Math.abs(m.v - p.v) <= m.err }); }
+  const ch = rows.filter(r => !r.same).sort((x, z) => Math.abs(z.d) / z.m.err - Math.abs(x.d) / x.m.err), less = ch.filter(r => r.d < 0).length;
+  // итог крупно
+  y += 40; g.fillStyle = M ? '#F5F5F7' : '#F1F5F9'; g.beginPath(); g.roundRect(PAD, y, W - PAD * 2, 150, 28); g.fill();
+  g.fillStyle = less ? GOOD : INK; g.font = `700 64px ${MN}`; const big = `${less}`; g.fillText(big, PAD + 36, y + 92); const bw = g.measureText(big).width;
+  g.fillStyle = INK; g.font = `700 28px ${F}`; g.fillText(less ? `${less % 10 === 1 && less % 100 !== 11 ? 'показатель стал' : [2, 3, 4].includes(less % 10) && ![12, 13, 14].includes(less % 100) ? 'показателя стали' : 'показателей стали'} ближе к вертикали` : 'Заметных изменений пока нет', PAD + 36 + bw + 20, y + 70);
+  g.fillStyle = SUB; g.font = `400 22px ${F}`; g.fillText(`Из ${rows.length} измеренных: изменились больше погрешности ${ch.length}${ch.length - less ? `, из них отклонение больше ${ch.length - less}` : ''}`, PAD + 36 + bw + 20, y + 106);
+  y += 150 + 60;
+  // фото: по ракурсу пара «до | после», два ракурса в ряд
+  const pairs = VIEWS.filter(v => pa[v.id] && pb[v.id]); const imgs = {};
+  for (const v of pairs) imgs[v.id] = [await loadImg(pa[v.id].photo), await loadImg(pb[v.id].photo)];
+  const tw = (W - PAD * 2 - 24 * 3) / 4, th = tw * 2;
+  for (let r = 0; r < pairs.length; r += 2) { breaks.push(y - 30);
+    pairs.slice(r, r + 2).forEach((v, k) => { const x0 = PAD + k * (tw * 2 + 48);
+      g.fillStyle = INK; g.font = `700 24px ${F}`; g.fillText(v.name, x0, y);
+      [[pa, 0, 'До', A], [pb, 1, 'После', B]].forEach(([ph, n, t, x]) => { const xx = x0 + n * (tw + 24); if (imgs[v.id][n]) tile(g, imgs[v.id][n], ph[v.id], v.id, xx, y + 18, tw, th, LN);
+        g.fillStyle = SUB; g.font = `600 20px ${F}`; g.textAlign = 'center'; g.fillText(`${t} · ${dd(x.date)}`, xx + tw / 2, y + 18 + th + 30); g.textAlign = 'left'; }); });
+    y += 18 + th + 80; }
+  const head = t => { breaks.push(y - 40); g.fillStyle = INK; g.font = `800 32px ${F}`; g.fillText(t, PAD, y); y += 22; };
+  if (ch.length) { y += 20; head('Что изменилось'); for (const r of ch) { y += 50; g.fillStyle = INK; g.font = `500 25px ${F}`; g.fillText(r.m.name, PAD, y); g.fillStyle = SUB; g.font = `400 20px ${F}`; g.fillText(r.v.name, PAD, y + 28);
+      g.font = `600 25px ${MN}`; g.fillStyle = INK; g.textAlign = 'right'; g.fillText(`${num(r.p.v)}${u(r.m)} → ${num(r.m.v)}${u(r.m)}`, W - PAD, y);
+      g.font = `600 20px ${F}`; g.fillStyle = r.d < 0 ? GOOD : MORE; g.fillText(r.d < 0 ? 'ближе к вертикали' : 'отклонение больше', W - PAD, y + 28); g.textAlign = 'left'; y += 28; }
+    y += 30; }
+  const same = rows.length - ch.length; if (same) { y += 20; g.fillStyle = SUB; g.font = `400 22px ${F}`; y = wrap(g, `Без изменений (в пределах погрешности): ${same} ${same % 10 === 1 && same % 100 !== 11 ? 'показатель' : [2, 3, 4].includes(same % 10) && ![12, 13, 14].includes(same % 100) ? 'показателя' : 'показателей'}.`, PAD, y, W - PAD * 2, 30); }
+  const groups = taskGroups(qb.zones || []);
+  if (groups.length) { y += 50; head('Над чем работаем дальше'); g.fillStyle = SUB; g.font = `400 20px ${F}`; g.fillText('Гипотеза специалиста', PAD, y + 4); y += 6;
+    for (const gr of groups) { y += 40; g.fillStyle = { WEAK: '#C2410C', HYPER: '#A16207', SHORT: '#1D4ED8' }[gr.k] || INK; g.font = `700 26px ${F}`; const t = gr.t + ': '; g.fillText(t, PAD, y); const w2 = g.measureText(t).width; g.fillStyle = INK; g.font = `500 26px ${F}`;
+      y = wrap(g, gr.list.join(', '), PAD + w2, y, W - PAD * 2 - w2, 36) - 36; } }
+  y += 60; breaks.push(y - 20); g.fillStyle = SUB; g.font = `400 21px ${F}`;
+  const notes = [editNote(A) && 'До: ' + editNote(A).toLowerCase(), editNote(B) && 'После: ' + editNote(B).toLowerCase()].filter(Boolean).join('. ');
+  y = wrap(g, 'Сравниваются одни и те же показатели двух замеров по фото. «Ближе к вертикали»: отклонение уменьшилось больше погрешности замера. Положение на фото зависит от стойки в момент съемки.' + (notes ? ' ' + notes + '.' : ''), PAD, y, W - PAD * 2, 30);
   g.fillStyle = INK; g.font = `700 22px ${F}`; y = wrap(g, LEGAL, PAD, y + 10, W - PAD * 2, 30);
   y += 30; g.fillStyle = BAND; g.fillRect(0, y, W, 120); g.fillStyle = '#fff'; g.font = `700 26px ${F}`; g.fillText(author, PAD, y + 52);
   g.font = `400 21px ${F}`; g.fillStyle = 'rgba(255,255,255,.75)'; g.fillText(contact ? 'Запись: ' + contact : 'Сделано в BodyPassport', PAD, y + 86);
