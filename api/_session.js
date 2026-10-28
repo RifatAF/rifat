@@ -62,7 +62,8 @@ export async function loadApp(force) {
 }
 export async function saveApp(beta) { APP.beta = !!beta; APP.at = Date.now(); await put('config/app.json', JSON.stringify({ beta: APP.beta, t: Date.now() }), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true }); return APP; }
 // пробный PRO: 30 дней или до первого ретеста клиента, что раньше (только в полном режиме)
-export const TRIAL_DAYS = 30, PRO_PRICE = 899, REF_SHARE = 0.2, REF_MONTHS = 24;
+export const TRIAL_DAYS = 30, PRO_PRICE = 725, // месяц PRO с баланса в рублях, ≈ $9
+   REF_SHARE = 0.2, REF_MONTHS = 24;
 export const trialActive = u => !!u && u.trialUntil > Date.now() && !u.trialEndedBy;
 export function effectivePlan(u) {
   if (u && ['pro', 'studio'].includes(u.plan) && (u.planUntil || 0) > Date.now()) return { plan: u.plan, until: u.planUntil, beta: false };

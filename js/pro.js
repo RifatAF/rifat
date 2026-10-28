@@ -12,7 +12,7 @@ import { painWord, PAIN_SCALE } from './vas.js';
 import { npsCard, bindNps, installCard, bindInstall, installNow, canInstall, feedbackSheet, referralSheet, myRef, bugSheet, DEV, proSurvey, proSurveyDue, installSheet } from './grow.js';
 import { meSync, logout, getMe } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
-import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS } from './plans.js';
+import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS, BAL_PRO } from './plans.js';
 import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast, preload3D, saveBlob , setBodySex, cameraBlocked, openInBrowserSheet } from './core.js';
 import { baBlock, bindBa } from './app.js';
 import { asClient, cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, mainOf, TONE_HELP, applyMain, fromMain, muscleInfo, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen, TIP_ACT } from './app.js';
@@ -665,7 +665,7 @@ async function trialEndScreen() {
     <h1>Вот что вы успели</h1>
     <div class="kpi"><div><b>${new Set(mine.map(a => a.clientId)).size}</b><span>клиентов</span></div><div><b>${retests.length}</b><span>повторных тестов</span></div><div><b style="color:var(--ok-t)">${better}</b><span>с меньшей болью</span></div></div>
     ${better ? `<p class="sub">У ${better} ${better === 1 ? 'клиента' : 'клиентов'} боль снизилась в среднем на ${fixed(sum / better)} балла. История и данные остаются у вас на любом тарифе.</p>` : '<p class="sub">История и данные остаются у вас на любом тарифе.</p>'}
-    <button class="btn" id="tem">Оставить PRO · 899 ₽ в месяц</button>
+    <button class="btn" id="tem">Оставить PRO · $9 в месяц</button>
     <button class="btn ghost" id="tef">Остаться на Free</button>
     <p class="sub" style="font-size:12px;text-align:center">На Free: тесты новых клиентов без лимита, ведение 5 клиентов, отчет с плашкой BodyPassport.</p></div>`);
   const seen = () => fetch('/api/auth?a=trialseen', { method: 'POST' }).then(() => getMe(true)).catch(() => {});
@@ -679,13 +679,13 @@ async function balanceScreen() {
     <div class="pad" style="display:flex;flex-direction:column;gap:12px;padding-bottom:32px">
      <div class="card"><div class="eyebrow">На балансе</div><b style="font-size:40px;display:block;margin-top:4px">${bal.toLocaleString('ru')} ₽</b>
       <p class="sub" style="font-size:13px;margin-top:6px">Когда приглашенный вами коллега оплачивает PRO, 20% его оплаты приходят сюда в течение 24 месяцев. Баланс тратится на ваш PRO, вывести его деньгами нельзя.</p>
-      <button class="btn" id="bpay" style="margin-top:12px" ${bal < 899 ? 'disabled' : ''}>${bal < 899 ? `До месяца PRO не хватает ${(899 - bal).toLocaleString('ru')} ₽` : 'Оплатить месяц PRO балансом'}</button>
+      <button class="btn" id="bpay" style="margin-top:12px" ${bal < BAL_PRO ? 'disabled' : ''}>${bal < BAL_PRO ? `До месяца PRO не хватает ${(BAL_PRO - bal).toLocaleString('ru')} ₽` : 'Оплатить месяц PRO балансом'}</button>
       <button class="btn line" id="binv" style="margin-top:8px">Пригласить коллегу</button></div>
      <h3 style="margin:8px 0 0;font-size:16px">История</h3>
      ${log.length ? `<div class="group">${log.map(x => `<div class="row" style="min-height:52px;font-size:14px"><span style="flex:1">${x.k === 'ref' ? 'Оплата коллеги' + (x.n ? ': ' + esc(x.n) : '') : 'Оплата PRO'}<br><span class="sub" style="font-size:12px">${new Date(x.t).toLocaleDateString('ru', { day: 'numeric', month: 'long' })}</span></span><b style="color:${x.a > 0 ? 'var(--ok-t)' : 'var(--ink)'}">${x.a > 0 ? '+' : '−'}${Math.abs(x.a).toLocaleString('ru')} ₽</b></div>`).join('')}</div>` : '<p class="sub">Пока начислений нет.</p>'}
     </div></div>`);
   $('#back').onclick = () => proHome(); $('#binv').onclick = () => copyRefText();
-  $('#bpay').onclick = async () => { if (!(await confirm2('Списать 899 ₽ с баланса и продлить PRO на 31 день?', 'Оплатить', false))) return;
+  $('#bpay').onclick = async () => { if (!(await confirm2(`Списать ${BAL_PRO} ₽ с баланса и продлить PRO на 31 день?`, 'Оплатить', false))) return;
     const r = await fetch('/api/auth?a=paybalance', { method: 'POST' }); const j = await r.json().catch(() => ({}));
     if (r.ok) { track('balance_pay', {}, false); toast('PRO продлен'); await getMe(true); balanceScreen(); } else toast(j.error || 'Не получилось'); };
 }

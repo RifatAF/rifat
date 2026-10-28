@@ -154,7 +154,7 @@ export default async function handler(req, res) {
     // первый ретест клиента завершает пробный PRO (момент, когда специалист увидел «до/после»)
     if (a === 'trialend') { if (trialActive(u)) { u.trialEndedBy = 'retest'; u.trialEndedAt = Date.now(); await saveUser(u); } return res.status(200).json({ user: publicUser(u) }); }
     if (a === 'trialseen') { u.trialEndSeen = true; await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
-    // баланс за коллег тратится только на свой PRO: 899 ₽ = 31 день
+    // баланс за коллег тратится только на свой PRO: PRO_PRICE ₽ (≈ $9) = 31 день
     if (a === 'paybalance') { if ((u.balance || 0) < PRO_PRICE) return res.status(400).json({ error: 'на балансе меньше ' + PRO_PRICE + ' ₽' });
       u.balance -= PRO_PRICE; u.plan = 'pro'; u.planUntil = Math.max(Date.now(), u.planUntil || 0) + 31 * 864e5; u.paidEver = true;
       u.balanceLog = [...(u.balanceLog || []), { t: Date.now(), a: -PRO_PRICE, k: 'pro' }].slice(-100); await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }

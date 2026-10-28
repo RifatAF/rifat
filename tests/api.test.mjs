@@ -256,7 +256,12 @@ test('баланс за коллег: 20% от оплаты коллеги, го
   let me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_900') } }); assert.equal(me.j.user.balance, 800 + 1398);
   assert.equal(me.j.user.balanceLog.at(-1).n, 'Коллега');
   me = await call(auth, { method: 'POST', query: { a: 'paybalance' }, headers: { cookie: cookie('t_900') } });
-  assert.equal(me.j.user.balance, 800 + 1398 - 899); assert.equal(me.j.user.isPro, true);
+  assert.equal(me.j.user.balance, 800 + 1398 - 725); assert.equal(me.j.user.isPro, true);
+  // цена в долларах: $90 за год — это год, коллеге 20% в рублях по курсу (80 по умолчанию)
+  store.set('users/t_903.json', { body: JSON.stringify({ id: 't_903', role: 'specialist', consentVersion: '2026-10-v3', trialUntil: 1, referredBy: 't_900', payEmail: 'usd@x.ru' }), uploadedAt: '' });
+  const ru = await call(lava, { method: 'POST', body: { eventType: 'payment.success', contractId: 'y-usd', buyer: { email: 'usd@x.ru' }, amount: 90, currency: 'USD' }, headers: h });
+  assert.ok(ru.j.until > Date.now() + 360 * 864e5, 'годовой в долларах');
+  me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_900') } }); assert.equal(me.j.user.balance, 800 + 1398 - 725 + 1440);
   store.set('users/t_902.json', { body: JSON.stringify({ id: 't_902', role: 'specialist', consentVersion: '2026-10-v3', trialUntil: 1, balance: 100 }), uploadedAt: '' });
   assert.equal((await call(auth, { method: 'POST', query: { a: 'paybalance' }, headers: { cookie: cookie('t_902') } })).code, 400, 'мало на балансе');
   delete process.env.LAVA_WEBHOOK_BASIC;

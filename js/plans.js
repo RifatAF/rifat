@@ -7,7 +7,8 @@ import { track } from './track.js';
 // v2.0: Старт = 5 слотов клиентов навсегда, +3 слота за каждого приглашенного коллегу; Про = безлимит и свой бренд в отчетах.
 // Числа совпадают с api/_session.js (BASE_SLOTS, REF_SLOTS): сервер считает, приложение показывает
 export const BASE_SLOTS = 5, REF_SLOTS = 3, START_CLIENTS = BASE_SLOTS;
-export const PRO_PRICE = '899 ₽ в месяц', PRO_YEAR = '6 990 ₽ в год';
+// цена в lava.top в долларах, рублями платят по курсу; баланс за коллег в рублях (месяц PRO = BAL_PRO ₽, ≈ $9)
+export const PRO_PRICE = '$9 в месяц', PRO_YEAR = '$90 в год', BAL_PRO = 725;
 // ссылка на годовой продукт lava.top: пусто, пока основатель его не создал (тогда кнопки «Год» нет)
 export const PAY_URL_YEAR = '';
 export const PAY_URL = 'https://app.lava.top/products/4ffb6883-76b0-46f9-b109-b2fe71c0f3a2/af840345-4288-4395-b221-2044c7fdc255';
@@ -83,7 +84,7 @@ export function slotSheet(s = slots()) {
   const d = document.createElement('div'); d.className = 'sheet';
   d.innerHTML = `<div><h2>Вы ведете ${s.used} из ${s.max} клиентов</h2>
     <p class="sub" style="margin-top:8px">На Free можно вести ${s.max} клиентов одновременно: повторные тесты, ссылки на ретест и тест из дома за последние 30 дней. Первые тесты новых клиентов без лимита.</p>
-    <button class="btn" id="slpro" style="margin-top:var(--s5)">PRO: ведение без лимита · 899 ₽</button>
+    <button class="btn" id="slpro" style="margin-top:var(--s5)">PRO: ведение без лимита · $9 в месяц</button>
     <button class="btn line" id="slref" style="margin-top:var(--s2)">Пригласить коллегу: 20% его оплат вам на баланс</button>
     <button class="btn ghost" id="slx" style="margin-top:var(--s2)">Не сейчас</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'slx') d.remove(); };
@@ -113,8 +114,8 @@ export function gate(f, ctx) {
   const d = document.createElement('div'), t = GATE[f] || 'Эта функция'; d.className = 'sheet';
   d.innerHTML = `<div><div class="eyebrow">PRO</div><h2 style="margin-top:6px">${t}${ctx ? ': ' + String(ctx).replace(/[<>&"]/g, '') : ''}</h2>
     <p class="sub" style="margin-top:8px">${pitch()}</p>
-    <button class="btn" id="pwm" style="margin-top:var(--s5)">PRO на месяц · 899 ₽</button>
-    ${PAY_URL_YEAR ? '<button class="btn line" id="pwy" style="margin-top:var(--s2)">PRO на год · 6 990 ₽ (2 месяца в подарок)</button>' : ''}
+    <button class="btn" id="pwm" style="margin-top:var(--s5)">PRO на месяц · $9</button>
+    ${PAY_URL_YEAR ? '<button class="btn line" id="pwy" style="margin-top:var(--s2)">PRO на год · $90 (2 месяца в подарок)</button>' : ''}
     <button class="btn ghost" id="pwr" style="margin-top:var(--s2)">Пригласить коллегу</button>
     <button class="btn ghost" id="pwx" style="margin-top:var(--s1);border:0">Не сейчас</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'pwx') d.remove(); };
