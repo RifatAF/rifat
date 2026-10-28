@@ -117,6 +117,25 @@ body.lp-on #betabar{background:#161617;color:#98989D;border-bottom:1px solid rgb
 .mx-tcap{font-size:12.5px;color:#86868B;text-align:center;margin:10px 0 0}
 .mx-hyp{display:grid;gap:8px;margin-top:12px}.mx-hyp div{display:grid;grid-template-columns:12px auto 1fr;gap:4px 10px;align-items:baseline;padding:12px 14px;border-radius:18px;background:#141416;font-size:14px}
 .mx-hyp i{width:10px;height:10px;border-radius:50%;align-self:center}.mx-hyp b{font-weight:600}.mx-hyp span{color:#A1A1A6}
+.mx-cmp,.mx-rp{max-width:440px;width:100%;justify-self:center;margin-top:0}
+.mx-bab{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.mx-bab figure{margin:0}
+.mx-bab figcaption{display:flex;justify-content:center;gap:6px;align-items:baseline;font-size:14px;margin-bottom:6px}.mx-bab figcaption .mono{font-size:12px;color:#86868B}
+.mx-bab .ph{position:relative;aspect-ratio:4/5;border-radius:18px;overflow:hidden;background:#D9D9D6}.mx-bab .ph.d3{background:radial-gradient(80% 60% at 50% 40%,#16202E,#0F151F)}
+.mx-bab img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .25s}.mx-bab .d3 img{object-fit:contain}
+#bvw{margin-top:10px}#bvw button{padding:0 6px}
+.mx-chg{margin-top:12px;border-radius:18px;background:#141416;overflow:hidden}
+.mx-chg button{display:flex;width:100%;align-items:center;gap:10px;padding:12px 14px;border:0;border-top:1px solid rgba(255,255,255,.05);background:transparent;color:#F5F5F7;font:inherit;text-align:left;cursor:pointer;transition:background .2s}
+.mx-chg button:first-child{border-top:0}.mx-chg button.on{background:rgba(14,165,233,.1);box-shadow:inset 3px 0 0 #0EA5E9}
+.mx-chg .nm{flex:1;font-size:14px;line-height:1.35}.mx-chg .nm small{display:block;color:#86868B;font-size:12px}
+.mx-chg .vl{text-align:right;font-size:13.5px;white-space:nowrap}.mx-chg .vl .mx-tag{margin-top:4px;height:22px;font-size:11.5px}
+.mx-more{display:block;width:100%;margin-top:8px;background:none;border:0;color:#0EA5E9;font:500 14px Inter,system-ui,sans-serif;cursor:pointer;padding:6px}
+.mx-paper{position:relative;margin-top:12px;height:540px;border-radius:20px;background:#fff;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;box-shadow:0 20px 50px rgba(0,0,0,.45)}
+.mx-paper img{display:block;width:100%;height:auto}
+.mx-rfade{position:relative;height:0}.mx-rfade:after{content:'';position:absolute;left:0;right:0;bottom:0;height:70px;border-radius:0 0 20px 20px;background:linear-gradient(rgba(255,255,255,0),#fff);pointer-events:none}
+.mx-zoom{position:fixed;inset:0;z-index:20;background:rgba(10,10,11,.94);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.mx-zoom img{display:block;width:min(760px,100%);margin:0 auto;padding:64px 0 40px}
+.mx-zoom button{position:fixed;top:calc(env(safe-area-inset-top) + 12px);right:12px;z-index:21}
+.mx-rep{display:grid;gap:36px;align-items:center}@media(min-width:760px){.mx-rep{grid-template-columns:1fr 1fr}}
 @media(prefers-reduced-motion:reduce){.mx-p1{animation:none}.mx-in{opacity:1;transform:none;transition:none}}
 `;
 const I = {
@@ -138,7 +157,7 @@ export function landing(o) {
   const cta = (id, big = true) => `<button class="mx-pill mx-cta${big ? ' mx-big' : ''}" id="${id}">Попробовать бесплатно</button>`;
   go(`<div class="mx fade"><style>${CSS}</style>
     <nav class="mx-nav"><div class="w"><img src="icons/bp7-64.png" width="28" height="28" alt="" style="border-radius:7px"><b>BodyPassport</b>
-      <div class="mx-links"><a href="#mxtry">Пример</a><a href="#mxf">Возможности</a><a href="#mxba">Было → стало</a><a href="#mxs">Как это работает</a><a href="/pricing">Цены</a></div>
+      <div class="mx-links"><a href="#mxtry">Пример</a><a href="#mxrep">Отчёт клиенту</a><a href="#mxf">Возможности</a><a href="#mxba">Было → стало</a><a href="#mxs">Как это работает</a><a href="/pricing">Цены</a></div>
       <span style="flex:1"></span><button class="mx-pill" id="lpin">Войти</button></div></nav>
     <header class="mx-top"><div class="w">
       <p class="mx-eye mx-in">Для тренеров, реабилитологов и массажистов</p>
@@ -164,6 +183,14 @@ export function landing(o) {
         <div class="mx-hyp"><div><i style="background:#FF9F0A"></i><b>Расслабить</b><span>поясница, передняя сторона бедра, грудь</span></div><div><i style="background:#30D158"></i><b>Укрепить</b><span>ягодица, задняя сторона бедра</span></div></div>
         <p class="mx-tcap">Зоны предлагает специалист: это его гипотеза, не диагноз</p>
       </div></section>
+    <section class="mx-sec" id="mxrep"><div class="mx-rep">
+        <div class="mx-in"><h2>Отчёт клиенту<br><span>с вашим именем.</span></h2><p class="mx-lead">Одна кнопка после теста: картинка или PDF в WhatsApp и Telegram. Клиент показывает его дома, а внизу ваше имя и контакты для записи.</p>
+          <ul class="mx-list"><li>Фото с линиями и 3D-фигура в позе клиента</li><li>Только отклонения больше погрешности замера</li><li>Ваша гипотеза: что расслабить, что укрепить, упражнения на дом</li><li>Через месяц отчёт «До и после»: что стало ближе к вертикали</li></ul></div>
+        <div class="mx-try mx-rp mx-in"><div class="mx-seg" id="rmd"><button data-r="test" class="on">После теста</button><button data-r="compare">До и после</button></div>
+          <div class="mx-paper" id="rpap"><img id="rimg" src="img/lp/report-test.webp" width="1080" height="2936" alt="Пример отчёта клиенту после теста" loading="lazy"></div><div class="mx-rfade"></div>
+          <button class="mx-pill" id="rfull" style="width:100%;margin-top:12px">Открыть целиком</button>
+          <p class="mx-tcap">Пример. Имя и контакты берутся из вашего профиля</p></div>
+      </div></section>
     <section class="mx-sec" id="mxf"><div class="mx-in mx-c"><h2>Всё, что нужно на приёме.<br><span>Ничего лишнего.</span></h2></div>
       <div class="mx-grid">
         <div class="mx-card mx-in"><div class="mx-ico">${I.photo}</div><b>Замер по четырём фото</b><p>Точки встают сами. Неточную поправите пальцем, лупа покажет место.</p></div>
@@ -174,7 +201,11 @@ export function landing(o) {
     <section class="mx-sec" id="mxba"><div class="mx-ba">
         <div class="mx-in"><h2>Прогресс,<br><span>который клиент видит сам.</span></h2><p class="mx-lead">Повторный замер ставит два теста рядом. Лучший аргумент продолжить работу говорит не специалист, а фото.</p>
           <ul class="mx-list"><li>Фото до и после с теми же линиями</li><li>Отмечено только то, что изменилось больше погрешности</li><li>Клиент видит результат своих усилий</li></ul></div>
-        <div class="mx-shot mx-in"><img src="img/lp/screen-compare-v5.webp" alt="Экран «Было → стало» в приложении" loading="lazy"></div>
+        <div class="mx-try mx-cmp mx-in"><div class="mx-trow"><div class="mx-seg" id="bmd"><button data-md="ph" class="on">Фото</button><button data-md="3d">3D</button></div><span class="mx-tag g">6 ближе к вертикали</span></div>
+          <div class="mx-bab">${['До', 'После'].map((t, i) => `<figure><figcaption><b>${t}</b><span class="mono">${i ? '26.10' : '28.09'}</span></figcaption><div class="ph" id="bph${i}"><img id="ba${i}" src="img/lp/ba-front-${i}.webp" alt="${t}: фото спереди с замерами" loading="lazy"></div></figure>`).join('')}</div>
+          <div class="mx-seg" id="bvw"><button data-vw="front" class="on">Спереди</button><button data-vw="right">Справа</button><button data-vw="back">Сзади</button><button data-vw="left">Слева</button></div>
+          <div class="mx-chg" id="bchg"></div><button class="mx-more" id="bmore"></button>
+          <p class="mx-tcap">Нажмите на строку, откроется нужный ракурс. «Меньше»: отклонение уменьшилось больше погрешности</p></div>
       </div></section>
     <section class="mx-sec" id="mxs"><div class="mx-in mx-c"><h2>Пять минут<br><span>от фото до отчёта.</span></h2></div>
       <div class="mx-steps">
@@ -204,7 +235,40 @@ export function landing(o) {
     const ap = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('on'); ap.unobserve(e.target); } }), { rootMargin: '0px 0px -8% 0px' });
     document.querySelectorAll('.mx-in').forEach(el => ap.observe(el)); }
   else document.querySelectorAll('.mx-in').forEach(el => el.classList.add('on'));
-  tryDemo();
+  tryDemo(); baDemo(); reportDemo();
+}
+// пример «Было → стало»: тот же клиент, что в «Попробуйте сами», два замера через 4 недели (data/demo-quick.json)
+const BA = [['right', 'Голова относительно плеча', 31.2, 13.5, '°'], ['left', 'Голова относительно плеча', 31, 14.3, '°'], ['front', 'Наклон головы', 9.5, 1.4, '°'], ['front', 'Линия плеч', 5.8, .3, '°'],
+  ['right', 'Плечо относительно таза', 1.9, 0, '%'], ['right', 'Таз относительно лодыжки', 4.3, 2.6, '%'], ['right', 'Колено относительно линии бедро–лодыжка', .1, 1.8, '°', 1], ['front', 'Смещение корпуса', 1.4, 1.1, '°', 1],
+  ['front', 'Линия таза', .7, .8, '°', 1], ['back', 'Наклон головы', 2.4, 2.5, '°', 1], ['back', 'Линия плеч', .9, .9, '°', 1], ['back', 'Линия таза', 1.9, 1.9, '°', 1],
+  ['left', 'Плечо относительно таза', .7, .7, '%', 1], ['left', 'Таз относительно лодыжки', 2.6, 2.6, '%', 1], ['left', 'Колено относительно линии бедро–лодыжка', 1.7, 1.7, '°', 1]];
+const VN = { front: 'Спереди', right: 'Справа', back: 'Сзади', left: 'Слева' };
+function baDemo() {
+  const $ = id => document.getElementById(id); if (!$('bchg')) return; let mode = 'ph', view = 'front', all = false;
+  const n = x => String(x).replace('.', ',');
+  const draw = () => { for (const i of [0, 1]) { $('bph' + i).classList.toggle('d3', mode === '3d'); $('ba' + i).src = `img/lp/ba-${mode === '3d' ? '3d-' : ''}${view}-${i}.webp`; $('ba' + i).alt = `${i ? 'После' : 'До'}: ${VN[view].toLowerCase()}`; }
+    document.querySelectorAll('#bvw button').forEach(b => b.classList.toggle('on', b.dataset.vw === view)); document.querySelectorAll('#bmd button').forEach(b => b.classList.toggle('on', b.dataset.md === mode));
+    const rows = BA.filter(r => all || !r[5]);
+    $('bchg').innerHTML = rows.map((r, k) => `<button data-k="${BA.indexOf(r)}" class="${r[0] === view ? 'on' : ''}"><span class="nm">${r[1]}<small>${VN[r[0]]}</small></span><span class="vl"><span class="mono">${n(r[2])}${r[4]} → ${n(r[3])}${r[4]}</span><br><span class="mx-tag ${r[5] ? 'n' : 'g'}">${r[5] ? 'без изменений' : 'меньше'}</span></span></button>`).join('');
+    $('bmore').textContent = all ? 'Скрыть без изменений' : `Еще ${BA.filter(r => r[5]).length} без изменений`;
+    $('bchg').querySelectorAll('button').forEach(b => b.onclick = () => { view = BA[+b.dataset.k][0]; draw(); track('try_click', { c: 'ba_row' }, false); }); };
+  document.querySelectorAll('#bvw button').forEach(b => b.onclick = () => { view = b.dataset.vw; draw(); track('try_click', { c: 'ba_' + view }, false); });
+  document.querySelectorAll('#bmd button').forEach(b => b.onclick = () => { mode = b.dataset.md; draw(); track('try_click', { c: 'ba_' + mode }, false); });
+  $('bmore').onclick = () => { all = !all; draw(); };
+  // 3D-кадры подгружаем заранее, чтобы переключение было мгновенным
+  setTimeout(() => { for (const v of Object.keys(VN)) for (const i of [0, 1]) for (const p of ['', '3d-']) new Image().src = `img/lp/ba-${p}${v}-${i}.webp`; }, 3000);
+  draw();
+}
+// пример отчета клиенту: прокрутка внутри листа, переключение «после теста» / «до и после», открыть целиком
+function reportDemo() {
+  const $ = id => document.getElementById(id); if (!$('rimg')) return; let kind = 'test';
+  const H = { test: 2936, compare: 2606 }, ALT = { test: 'Пример отчёта клиенту после теста', compare: 'Пример отчёта клиенту «До и после»' };
+  document.querySelectorAll('#rmd button').forEach(b => b.onclick = () => { kind = b.dataset.r; document.querySelectorAll('#rmd button').forEach(x => x.classList.toggle('on', x === b));
+    $('rimg').src = `img/lp/report-${kind}.webp`; $('rimg').height = H[kind]; $('rimg').alt = ALT[kind]; $('rpap').scrollTop = 0; track('try_click', { c: 'rep_' + kind }, false); });
+  $('rfull').onclick = () => { track('try_click', { c: 'rep_full' }, false); const z = document.createElement('div'); z.className = 'mx-zoom'; z.setAttribute('role', 'dialog'); z.setAttribute('aria-label', ALT[kind]);
+    z.innerHTML = `<button class="mx-pill" style="background:rgba(33,33,36,.9)">Закрыть</button><img src="img/lp/report-${kind}.webp" alt="${ALT[kind]}">`; document.body.appendChild(z); document.body.style.overflow = 'hidden';
+    const close = () => { z.remove(); document.body.style.overflow = ''; removeEventListener('keydown', esc); }, esc = e => { if (e.key === 'Escape') close(); };
+    z.querySelector('button').onclick = close; z.onclick = e => { if (e.target === z) close(); }; addEventListener('keydown', esc); };
 }
 /** «Попробуйте сами»: 24 кадра настоящей 3D-фигуры (поворот пальцем) и 4 фото с замерами. Кнопки работают как в приложении. */
 function tryDemo() {
