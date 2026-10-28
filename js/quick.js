@@ -640,7 +640,7 @@ export async function renderReport(a, c, photos) {
       y = wrap(g, gr.list.join(', '), PAD + tw, y, W - PAD * 2 - tw, 36) - 36; }
     if (a.note) { y += 14; g.fillStyle = INK; g.font = `400 25px ${F}`; for (const para of a.note.split('\n')) y = wrap(g, para, PAD, y + 30, W - PAD * 2, 34); } }
   // рекомендации: упражнения из существующих карточек зон и текст специалиста
-  const exIds = zones.length ? plan(zSpots(zones).map(z => ({ ...z, k: z.k }))).slice(0, 4) : [], exs = exIds.map(id => C.exercises[id]).filter(Boolean);
+  const exIds = zones.length ? plan(zSpots(zones).map(z => ({ ...z, k: z.k }))) : [], exs = exIds.map(id => C.exercises[id]).filter((e, i, a) => e && a.findIndex(x => x && x.title.split(' (')[0] === e.title.split(' (')[0]) === i).slice(0, 4); // левая и правая версии одного упражнения: одна строка
   if (exs.length || (a.plan && a.plan.text)) { y += 60; head('Рекомендации специалиста', '', INK); y += 10; g.fillStyle = INK; g.font = `400 25px ${F}`;
     exs.forEach((e, n) => { y = wrap(g, `${n + 1}. ${e.title.split(' (')[0]}${e.dose ? ': ' + e.dose : ''}`, PAD, y + 30, W - PAD * 2, 34) - 4; });
     if (a.plan && a.plan.text) for (const para of a.plan.text.split('\n')) y = wrap(g, para, PAD, y + 30, W - PAD * 2, 34); }
