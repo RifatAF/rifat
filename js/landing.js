@@ -164,7 +164,7 @@ export function landing(o) {
       <h1 class="mx-in">Осанка в цифрах для&nbsp;вас.<br><span>В&nbsp;3D для&nbsp;клиента.</span></h1>
       <p class="mx-sub mx-in">По четырём фото приложение измерит наклоны и смещения головы, плеч и таза и покажет их на 3D‑фигуре в позе клиента. Ваша оценка объективна, клиент видит, за что платит.</p>
       <div class="mx-btns mx-in">${cta('lpgo')}<a class="mx-link" href="#mxtry">Попробовать на примере ${ic('chevron-right', 's')}</a></div>
-      <p class="mx-note mx-in">30 дней бесплатно, без карты. Работает в браузере телефона.</p></div>
+      <p class="mx-note mx-in">Пять клиентов бесплатно навсегда. Работает в браузере телефона.</p></div>
       <div class="mx-stage mx-in"><div class="mx-glow"></div>
         <img class="mx-fig" src="img/lp/hero-figure-v5.webp" alt="3D-фигура в позе клиента" width="343" height="1000">
         <div class="mx-phone mx-p1"><div class="mx-scr"><video id="lpv" autoplay muted loop playsinline preload="metadata" poster="img/lp/demo-poster-v5.webp" aria-label="Как проходит быстрый тест: 4 фото, точки, 3D-фигура, отчет"><source src="img/lp/demo-v5.mp4" type="video/mp4"></video></div></div>
@@ -184,23 +184,23 @@ export function landing(o) {
         <p class="mx-tcap">Зоны предлагает специалист: это его гипотеза, не диагноз</p>
       </div></section>
     <section class="mx-sec" id="mxrep"><div class="mx-rep">
-        <div class="mx-in"><h2>Отчёт клиенту<br><span>с вашим именем.</span></h2><p class="mx-lead">Одна кнопка после теста: картинка или PDF в WhatsApp и Telegram. Клиент показывает его дома, а внизу ваше имя и контакты для записи.</p>
-          <ul class="mx-list"><li>Фото с линиями и 3D-фигура в позе клиента</li><li>Только отклонения больше погрешности замера</li><li>Ваша гипотеза: что расслабить, что укрепить, упражнения на дом</li><li>Через месяц отчёт «До и после»: что стало ближе к вертикали</li></ul></div>
+        <div class="mx-in"><h2>Отчёт клиенту<br><span>с вашим именем.</span></h2><p class="mx-lead">После теста одна кнопка, и отчёт уходит клиенту в WhatsApp или Telegram. Он покажет его дома, а внизу ваш телефон для записи.</p>
+          <ul class="mx-list"><li>Фото с линиями и 3D-фигура</li><li>Что расслабить, что укрепить и упражнения на дом</li><li>Через месяц второй отчёт: «До и после»</li></ul></div>
         <div class="mx-try mx-rp mx-in"><div class="mx-seg" id="rmd"><button data-r="test" class="on">После теста</button><button data-r="compare">До и после</button></div>
           <div class="mx-paper" id="rpap"><img id="rimg" src="img/lp/report-test.webp" width="1080" height="2936" alt="Пример отчёта клиенту после теста" loading="lazy"></div><div class="mx-rfade"></div>
           <button class="mx-pill" id="rfull" style="width:100%;margin-top:12px">Открыть целиком</button>
           <p class="mx-tcap">Пример. Имя и контакты берутся из вашего профиля</p></div>
       </div></section>
-    <section class="mx-sec" id="mxf"><div class="mx-in mx-c"><h2>Всё, что нужно на приёме.<br><span>Ничего лишнего.</span></h2></div>
+    <section class="mx-sec" id="mxf"><div class="mx-in mx-c"><h2>Что умеет<br><span>BodyPassport.</span></h2></div>
       <div class="mx-grid">
-        <div class="mx-card mx-in"><div class="mx-ico">${I.photo}</div><b>Замер по четырём фото</b><p>Точки встают сами. Неточную поправите пальцем, лупа покажет место.</p></div>
-        <div class="mx-card mx-in"><div class="mx-ico">${I.cube}</div><b>3D-фигура в позе клиента</b><p>Анатомическая модель повторяет его наклоны. Покрутите и покажите крупнее, чтобы он увидел сам.</p></div>
-        <div class="mx-card mx-in"><div class="mx-ico">${I.cmp}</div><b>Было → стало</b><p>Повторный тест рядом с первым. Видно, что изменилось на самом деле.</p></div>
-        <div class="mx-card mx-in"><div class="mx-ico">${I.pdf}</div><b>Отчёт за минуту</b><p>PDF в мессенджер: фото, фигура, ваш вывод и упражнения. С ним клиент возвращается к вам.</p></div>
+        <div class="mx-card mx-in"><div class="mx-ico">${I.photo}</div><b>Замер по четырём фото</b><p>Точки встают сами. Если какая-то легла криво, передвиньте пальцем, лупа покажет куда.</p></div>
+        <div class="mx-card mx-in"><div class="mx-ico">${I.cube}</div><b>3D-фигура в позе клиента</b><p>Фигура наклоняется так же, как клиент на фото. Покрутите её вместе с ним: так понятнее, чем на словах.</p></div>
+        <div class="mx-card mx-in"><div class="mx-ico">${I.cmp}</div><b>Было → стало</b><p>Через месяц снимите снова. Фото встанут рядом, и будет видно, что изменилось.</p></div>
+        <div class="mx-card mx-in"><div class="mx-ico">${I.pdf}</div><b>Отчёт за минуту</b><p>Картинка или PDF в мессенджер. Внизу ваше имя и телефон.</p></div>
       </div></section>
     <section class="mx-sec" id="mxba"><div class="mx-ba">
-        <div class="mx-in"><h2>Прогресс,<br><span>который клиент видит сам.</span></h2><p class="mx-lead">Повторный замер ставит два теста рядом. Лучший аргумент продолжить работу говорит не специалист, а фото.</p>
-          <ul class="mx-list"><li>Фото до и после с теми же линиями</li><li>Отмечено только то, что изменилось больше погрешности</li><li>Клиент видит результат своих усилий</li></ul></div>
+        <div class="mx-in"><h2>Прогресс,<br><span>который клиент видит сам.</span></h2><p class="mx-lead">Клиенту не нужно верить вам на слово: фото до и после лежат рядом, цифры под ними.</p>
+          <ul class="mx-list"><li>Те же линии на обоих фото</li><li>Отмечено только то, что изменилось больше погрешности</li></ul></div>
         <div class="mx-try mx-cmp mx-in"><div class="mx-trow"><div class="mx-seg" id="bmd"><button data-md="ph" class="on">Фото</button><button data-md="3d">3D</button></div><span class="mx-tag g">6 ближе к вертикали</span></div>
           <div class="mx-bab">${['До', 'После'].map((t, i) => `<figure><figcaption><b>${t}</b><span class="mono">${i ? '26.10' : '28.09'}</span></figcaption><div class="ph" id="bph${i}"><img id="ba${i}" src="img/lp/ba-front-${i}.webp" alt="${t}: фото спереди с замерами" loading="lazy"></div></figure>`).join('')}</div>
           <div class="mx-seg" id="bvw"><button data-vw="front" class="on">Спереди</button><button data-vw="right">Справа</button><button data-vw="back">Сзади</button><button data-vw="left">Слева</button></div>
