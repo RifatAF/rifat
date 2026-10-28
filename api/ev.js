@@ -81,9 +81,35 @@ async function stats(days) {
   return out;
 }
 
+// Conversions API Meta: то же событие, что ушло из браузера (тот же event_id, Meta склеит дубли), но с сервера,
+// чтобы не терять события из-за блокировщиков. Только названия шагов, IP, браузер и cookie _fbp/_fbc, без имени и почты.
+// Токен в переменной окружения META_CAPI_TOKEN (Events Manager → Настройки → Conversions API); без токена ничего не уходит.
+const CAPI_EVENTS = new Set(['PageView', 'Lead', 'CompleteRegistration', 'FirstTest', 'FirstReport', 'InitiateCheckout']);
+async function capi(req, raw) {
+  const tok = process.env.META_CAPI_TOKEN, pid = process.env.META_PIXEL_ID || '1834974184392747'; if (!tok) return 204;
+  let b; try { b = JSON.parse(raw); } catch (e) { return 400; }
+  if (!b || !CAPI_EVENTS.has(b.n) || !/^[\w-]{8,64}$/.test(b.id || '')) return 400;
+  const url = /^https:\/\/(www\.)?bodypassport\.app\/[\w\/.-]*$/.test(b.u || '') ? b.u : 'https://www.bodypassport.app/';
+  const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || undefined;
+  const user_data = { client_ip_address: ip, client_user_agent: String(req.headers['user-agent'] || '').slice(0, 400) };
+  if (/^fb\.\d\.\d+\.[\w.-]+$/.test(b.fbp || '')) user_data.fbp = b.fbp; if (/^fb\.\d\.\d+\.[\w.-]+$/.test(b.fbc || '')) user_data.fbc = b.fbc;
+  const body = { data: [{ event_name: b.n, event_time: Math.floor(Date.now() / 1000), event_id: b.id, action_source: 'website', event_source_url: url, user_data }] };
+  if (process.env.META_TEST_CODE) body.test_event_code = process.env.META_TEST_CODE;
+  const r = await fetch(`https://graph.facebook.com/${process.env.META_API_VER || 'v25.0'}/${pid}/events?access_token=${encodeURIComponent(tok)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) console.error('capi', r.status, (await r.text()).slice(0, 300));
+  return 204;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   try {
+    if (req.method === 'POST' && req.query.a === 'capi') {
+      const origin = req.headers.origin; let oh = null; try { oh = origin ? new URL(origin).host : null; } catch (e) { oh = '?'; }
+      if (origin && oh !== req.headers.host) return res.status(403).json({ error: 'origin' });
+      const raw = typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {});
+      if (raw.length > 2048) return res.status(413).json({ error: 'too large' });
+      return res.status(await capi(req, raw)).end();
+    }
     if (req.method === 'POST') {
       const origin = req.headers.origin; let oh = null; try { oh = origin ? new URL(origin).host : null; } catch (e) { oh = '?'; }
       if (origin && oh !== req.headers.host) return res.status(403).json({ error: 'origin' });
