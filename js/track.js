@@ -41,7 +41,7 @@ export function track(e, p, once = true) {
   try { pixel(e); } catch (x) {}
   if (once && !p) { if (seen.has(e)) return; seen.add(e); }
   const ev = { e, t: Date.now() - t0 };
-  if (p) ev.p = Object.fromEntries(Object.entries(p).slice(0, 4).map(([k, v]) => [k, typeof v === 'number' ? Math.round(v * 10) / 10 : clip(v).slice(0, 60)]));
+  if (p) ev.p = Object.fromEntries(Object.entries(p).slice(0, 4).map(([k, v]) => [k, typeof v === 'number' ? Math.round(v * 10) / 10 : clip(v).slice(0, e === 'err' ? 150 : 60)]));
   remember(e + (ev.p ? ' ' + JSON.stringify(ev.p) : ''));
   q.push(ev); if (q.length >= 15) flush();
 }
@@ -99,8 +99,10 @@ try { let n = 0; new PerformanceObserver(l => { for (const x of l.getEntries()) 
 // ошибки JS: до 5 за вкладку, адреса без параметров и фрагмента (во фрагменте ссылки клиента лежит ключ шифрования)
 function err(m, f, l) { const x = { m: clip(m || 'unknown'), f: clip(f || '').split('/').pop(), l: l || 0 }; lastErrors.push(`${x.m} @ ${x.f}:${x.l}`); if (lastErrors.length > 10) lastErrors.shift();
   if (errs++ >= 5) return; track('err', x, false); flush(); }
-addEventListener('error', e => err(e.message, e.filename, e.lineno));
-addEventListener('unhandledrejection', e => { const r = e.reason; err(r && r.message ? r.message : String(r), r && r.stack ? (String(r.stack).match(/\/([\w.-]+\.js):(\d+)/) || [])[1] : '', r && r.stack ? +((String(r.stack).match(/\.js:(\d+)/) || [])[1] || 0) : 0); });
+// чужие скрипты (встроенные браузеры Instagram и Facebook, расширения) и безвредное предупреждение ResizeObserver не наши ошибки
+const foreign = (m, f) => /ResizeObserver loop|^Script error\.?$|Java object is gone|window\._M|M_ID/.test(m || '') || (!!f && !String(f).startsWith(location.origin));
+addEventListener('error', e => { if (!foreign(e.message, e.filename)) err(e.message, e.filename, e.lineno); });
+addEventListener('unhandledrejection', e => { const r = e.reason; if (foreign(r && r.message ? r.message : String(r))) return; err(r && r.message ? r.message : String(r), r && r.stack ? (String(r.stack).match(/\/([\w.-]+\.js):(\d+)/) || [])[1] : '', r && r.stack ? +((String(r.stack).match(/\.js:(\d+)/) || [])[1] || 0) : 0); });
 
 // шкала боли VAS 0–10 и комплаенс: чистые функции в js/vas.js (без DOM, проверяются в tests/api.test.mjs)
 export { vasDelta, vasLog, vasSave, vasStats } from './vas.js';

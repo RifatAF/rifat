@@ -49,6 +49,12 @@ export function isAdmin(u) {
   const list = OWNERS.concat(String(process.env.ADMIN_IDS || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean));
   return !!u && (list.includes(String(u.id).toLowerCase()) || (!!u.email && list.includes(String(u.email).toLowerCase())));
 }
+// аккаунты владельца и тестовые: их действия не попадают в статистику и отзывы (еще почты, id или @ник Telegram через запятую в STATS_EXCLUDE)
+const NO_STATS = ['aypovrifat@gmail.com', 'sportnauka1@gmail.com', 'mustardmood@gmail.com', 'rifataiupov@gmail.com', '@aypovrifat'];
+export function noStats(u) {
+  const list = NO_STATS.concat(String(process.env.STATS_EXCLUDE || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean));
+  return !!u && [u.id, u.email, u.payEmail, u.username && '@' + u.username].some(x => x && list.includes(String(x).toLowerCase()));
+}
 // тариф: Про только оплаченный, пока не истек. Бесплатного периода больше нет (v2.0): Старт = 5 слотов клиентов навсегда
 export const BASE_SLOTS = 5, REF_SLOTS = 3;
 // за каждого приглашенного коллегу, который открыл кабинет специалиста, +3 слота навсегда
@@ -103,7 +109,7 @@ export async function creditReferral(u, isNew) {
 // версия политики и согласий: при смене версии вошедших просим согласиться заново
 export const CONSENT_VERSION = '2026-10-v3';
 export const publicUser = u => { if (!u) return u; const p = effectivePlan(u);
-  return { id: u.id, provider: u.provider, name: u.name, givenName: u.givenName || null, familyName: u.familyName || null, email: u.email || null, photo: u.photo || null, role: u.role || null, specialty: u.specialty || null, admin: isAdmin(u), plan: p.plan, planUntil: p.until, planBeta: p.beta, consentOk: u.consentVersion === CONSENT_VERSION,
+  return { id: u.id, provider: u.provider, name: u.name, givenName: u.givenName || null, familyName: u.familyName || null, email: u.email || null, photo: u.photo || null, role: u.role || null, specialty: u.specialty || null, admin: isAdmin(u), noStats: noStats(u), plan: p.plan, planUntil: p.until, planBeta: p.beta, consentOk: u.consentVersion === CONSENT_VERSION,
     refCode: u.refCode || null, invited: u.invited || 0, invitedPro: u.invitedPro || 0, invitedColleagues: u.invitedPro || 0, maxClientSlots: maxClientSlots(u), isPro: p.plan !== 'start', planBeta: p.beta, payEmail: u.payEmail || null,
     trial: !!p.trial, trialUntil: u.trialUntil || null, trialEndedBy: u.trialEndedBy || null, trialEndSeen: !!u.trialEndSeen, paidEver: !!u.paidEver,
     balance: u.balance || 0, balanceLog: (u.balanceLog || []).slice(-20) }; };

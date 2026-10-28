@@ -378,3 +378,12 @@ test('вход по ссылке из письма: согласие и роль
     assert.equal(ok.code, 200); assert.equal(ok.j.user.role, 'specialist');
   } finally { globalThis.fetch = f0; delete process.env.RESEND_API_KEY; }
 });
+
+test('аккаунты владельца и тестовые не попадают в статистику', async () => {
+  const { noStats } = await import('../api/_session.js');
+  assert.equal(noStats({ id: 'g_1', email: 'SportNauka1@gmail.com' }), true);
+  assert.equal(noStats({ id: 't_2', username: 'aypovrifat' }), true);
+  assert.equal(noStats({ id: 'g_3', email: 'x@gmail.com', payEmail: 'mustardmood@gmail.com' }), true);
+  assert.equal(noStats({ id: 'g_4', email: 'learnnowru@gmail.com' }), false);
+  assert.equal(noStats(null), false);
+});
