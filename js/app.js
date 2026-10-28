@@ -648,12 +648,14 @@ async function runProtocol0(protocol, opts = {}) {
   // ---- экран и голос ----
   const segs = [...app.querySelectorAll('.segs b')]; let si = -1;
   const step = (i, title, sub, fc) => { pg.instr(); fs.reset(); if (i !== null) { si = i; segs.forEach((b, k) => b.style.width = k < i ? '100%' : k === i ? '8%' : '0'); stepLabel = `Шаг ${i + 1} из ${steps.length}`; lastStatus = ''; } if (fc !== undefined) focus = fc; $('#tt').textContent = title; $('#cue').textContent = sub || ''; bar(0, ''); $('#reps').hidden = true; };
-  const bar = (frac, label) => { $('#pbf').style.width = Math.max(0, Math.min(1, frac)) * 100 + '%'; if (label !== undefined) $('#pbt').textContent = label; if (segs[si]) segs[si].style.width = Math.max(8, frac * 100) + '%'; };
+  // ушли с экрана теста жестом «назад»: элементов нет, останавливаем запись, а не падаем на каждом кадре
+  const gone = el => { if (el) return false; if (!stop) { stop = true; try { stopCamera(); } catch (e) {} } return true; };
+  const bar = (frac, label) => { if (gone($('#pbf'))) return; $('#pbf').style.width = Math.max(0, Math.min(1, frac)) * 100 + '%'; if (label !== undefined) $('#pbt').textContent = label; if (segs[si]) segs[si].style.width = Math.max(8, frac * 100) + '%'; };
   const short = new Map(REPEAT ? Object.entries(BRIEF).map(([k, v]) => [SAY[k], v]) : []);
   const say = async text => { if (stop) return; if (short.has(text)) { text = short.get(text); if (!text) return; } $('#cue').textContent = text; await voice.speak(text); };
   let lastHint = '', lastHintAt = 0, hints = 0; const fpsS = [];
   // подсказки не давят: не перебивают говорящий голос, любая не чаще раза в 6 с, та же фраза не чаще раза в 12 с
-  const hint = (text, gap = 6000, force = false) => { const now = Date.now(); if (!force && (voice.busy() || now - lastHintAt < gap || (text === lastHint && now - lastHintAt < 12000))) return; lastHint = text; lastHintAt = now; hints++; lastIssue = text; $('#cue').textContent = text; voice.say(text); };
+  const hint = (text, gap = 6000, force = false) => { const now = Date.now(); if (!force && (voice.busy() || now - lastHintAt < gap || (text === lastHint && now - lastHintAt < 12000))) return; if (gone($('#cue'))) return; lastHint = text; lastHintAt = now; hints++; lastIssue = text; $('#cue').textContent = text; voice.say(text); };
   // ---- запись ----
   const grab = (fr, rolls) => { const f = cam.frame; if (f && f.pose && (!fr.length || fr.at(-1).t !== f.t)) { if (fg.state.skip && fr.length % (fg.state.skip + 1)) { fr.push(fr.at(-1)); return; } fr.push({ t: f.t, p: lev(f), w: f.world }); rolls.push(phone.roll); } };
   const poses = {}, quality = {}; let W = 1, H = 1;
@@ -2013,6 +2015,13 @@ async function calibInbox(back, flt = 'all') {
     try { const docs = []; for (const x of items) docs.push(await load(x.p)); save({ exported: new Date().toISOString(), cases: docs }, `bodypassport-calibration-all-${new Date().toISOString().slice(0, 10)}.json`); }
     catch (e) { toast('Не удалось скачать: ' + e.message); } b.disabled = false; b.textContent = 'Скачать все одним файлом'; };
 }
+// почему у участника такой тариф: оплата или «Про +30 дней», пробный месяц, бета у всех или Free после пробного
+const planWhy = x => { const dt = t => new Date(t).toLocaleDateString('ru');
+  if (x.paidUntil > Date.now()) return `PRO до ${dt(x.paidUntil)} (${x.paidEver ? 'оплата' : 'выдан вручную'})`;
+  if (x.plan === 'pro' && x.beta) return 'PRO: бета, у всех';
+  if (x.plan === 'pro' && x.trialUntil > Date.now()) return `PRO: пробный до ${dt(x.trialUntil)}`;
+  if (x.role !== 'specialist') return 'клиент, тариф не нужен';
+  return 'Free' + (x.trialEndedBy ? ': пробный закончился после повторного теста' : x.trialUntil ? `: пробный закончился ${dt(x.trialUntil)}` : ': пробный не начат, зайдет в кабинет и начнется'); };
 export async function adminScreen(back) {
   back = back || (localStorage.getItem('bp_mode') === 'pro' ? () => proHome() : () => (tests().length ? map() : onboarding()));
   const beta = configSync().beta !== false, noev = localStorage.getItem('bp_noev') === '1';
@@ -2062,7 +2071,7 @@ export async function adminScreen(back) {
     toast(r.ok ? 'Удалено записей: ' + j.deleted : 'Ошибка: ' + (j.error || r.status)); if (r.ok) adminScreen(back); };
   $('#ausers').onclick = async () => { try { const list = await betaUsers();
     go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:17px">Участники · ${list.length}</b></div>
-      <div class="pad" style="display:flex;flex-direction:column;gap:8px;padding-bottom:30px">${list.map(x => `<div class="card" style="padding:12px 14px;font-size:14px;line-height:1.4"><b>${esc(x.name)}</b> <span style="color:var(--sub)">${x.role === 'specialist' ? 'специалист' : 'клиент'} · ${x.provider === 'google' ? esc(x.email) : '@' + esc(x.username || 'telegram')}</span><div style="font-size:12px;color:var(--sub)">с ${new Date(x.created).toLocaleDateString('ru')}${x.ref ? ' · откуда: ' + esc(x.ref) : ''}${x.specialty ? ' · ' + esc(x.specialty) : ''} · тариф ${esc(x.plan)}${x.paidUntil > Date.now() ? ' до ' + new Date(x.paidUntil).toLocaleDateString('ru') : ''}</div>${x.role === 'specialist' ? `<button class="pill" data-pro="${esc(x.id)}" style="margin-top:8px;border:1.5px solid var(--line)">Про +30 дней</button>` : ''}</div>`).join('')}</div></div>`);
+      <div class="pad" style="display:flex;flex-direction:column;gap:8px;padding-bottom:30px">${list.map(x => `<div class="card" style="padding:12px 14px;font-size:14px;line-height:1.4"><b>${esc(x.name)}</b> <span style="color:var(--sub)">${x.role === 'specialist' ? 'специалист' : 'клиент'} · ${x.provider === 'google' ? esc(x.email) : '@' + esc(x.username || 'telegram')}</span><div style="font-size:12px;color:var(--sub)">с ${new Date(x.created).toLocaleDateString('ru')}${x.ref ? ' · откуда: ' + esc(x.ref) : ''}${x.specialty ? ' · ' + esc(x.specialty) : ''} · ${planWhy(x)}${x.noStats ? ' · не в статистике' : ''}</div>${x.role === 'specialist' ? `<button class="pill" data-pro="${esc(x.id)}" style="margin-top:8px;border:1.5px solid var(--line)">Про +30 дней</button>` : ''}</div>`).join('')}</div></div>`);
     $('#back').onclick = () => adminScreen(back);
     app.querySelectorAll('[data-pro]').forEach(btn => btn.onclick = async () => { if (!confirm('Продлить Про на 30 дней?')) return;
       const r = await fetch('/api/auth?a=setplan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: btn.dataset.pro, plan: 'pro', days: 30 }) }); btn.textContent = r.ok ? 'Продлено' : 'Ошибка'; });
@@ -2089,10 +2098,11 @@ export async function funnelScreen(days = 14) {
   const block = ([role, name, steps]) => { const base = sum(role + ':' + steps[0][0]) || 1;
     return `<div class="card" style="padding:14px 16px"><b>${name}</b>${steps.map(([k, t]) => { const n = sum(role + ':' + k);
       return `<div class="row" style="font-size:14px;margin-top:8px"><span style="flex:1">${t}</span><b>${n}</b><span style="width:52px;text-align:right;color:var(--sub)">${Math.round(n / base * 100)}%</span></div>`; }).join('')}</div>`; };
-  const errs = Object.entries(d.errors || {}).sort((a, b) => b[1] - a[1]).slice(0, 15);
+  // ошибки: { текст: { n, days: { дата: число }, own } }; старый ответ сервера был { текст: число }
+  const errs = Object.entries(d.errors || {}).map(([m, v]) => typeof v === 'number' ? [m, { n: v, days: {}, own: true }] : [m, v]).sort((a, b) => b[1].n - a[1].n);
   const src = Object.entries(d.sources || {}).sort((a, b) => b[1] - a[1]).slice(0, 10);
   const [fb, users] = await Promise.all([fetch('/api/feedback?days=' + Math.max(days, 30), { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null), betaUsers().catch(() => [])]);
-  const refs = users.filter(u => u.invited).sort((a, b) => b.invitedPro - a.invitedPro || b.invited - a.invited).slice(0, 10);
+  const refs = users.filter(u => u.invited && !u.noStats).sort((a, b) => b.invitedPro - a.invitedPro || b.invited - a.invited).slice(0, 10);
   const kind = { result: 'оценка теста', nps: 'порекомендует', free: 'отзыв', bug: 'проблема' };
   const bugs = fb ? fb.items.filter(x => x.k === 'bug') : [], M = d.medians || {}, med = (k, u = '') => M[k] ? `${M[k].p50}${u} <span style="color:var(--sub)">(p90 ${M[k].p90}, n ${M[k].n})</span>` : '—';
   const det = (k, t) => { const o = Object.entries((d.detail || {})[k] || {}).sort((a, b) => b[1] - a[1]).slice(0, 8); return o.length ? `<div style="margin-top:10px;font-size:13px"><b>${t}</b>${o.map(([c, n]) => `<div class="row" style="margin-top:4px"><span style="flex:1;word-break:break-word">${esc(c)}</span><b>${n}</b></div>`).join('')}</div>` : ''; };
@@ -2115,10 +2125,30 @@ export async function funnelScreen(days = 14) {
   const usersCard = `<div class="card" style="padding:14px 16px"><b>Специалисты по неделям</b><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px;font-size:13px">${weeks.length ? weeks.map(([w, n]) => `<span class="pill">с ${esc(w.slice(5))}: <b>${n}</b></span>`).join('') : '<span class="sub">Пока нет данных</span>'}</div>
     ${us.length ? `<div style="margin-top:10px;font-size:12px;color:var(--sub)">Псевдоним · активных дней · оценок · отчетов · ретестов · проблем</div>` + us.slice(0, 40).map(u => `<div class="row" style="font-size:13px;margin-top:4px;font-family:monospace"><span style="flex:1">${esc(u.id)}</span><span>${u.days} · ${u.assess} · ${u.reports} · ${u.retests} · ${u.bugs}</span></div>`).join('') : ''}
     <p class="sub" style="font-size:12px;margin-top:8px">Псевдоним одинаков у одного аккаунта, но имя и почту по нему не узнать.</p></div>`;
+  // главное по стратегии: ценность → использование → повтор → оплата; по дням столбиками
+  const both = k => sum('client:' + k) + sum('pro:' + k), perDay = k => d.days.map(x => ((d.events['client:' + k] || {})[x] || 0) + ((d.events['pro:' + k] || {})[x] || 0));
+  const pros = (d.users || []).filter(u => u.r === 'pro'), back2 = pros.filter(u => u.days >= 2).length;
+  const STEPS = [['page_view', 'Зашли на сайт'], ['pro_open', 'Открыли кабинет'], ['signup', 'Зарегистрировались'], ['first_test', 'Первый тест'], ['first_report', 'Первый отчет клиенту'], ['retest_14d', 'Повтор за 14 дней'], ['pay_redirect', 'Перешли к оплате'], ['paid', 'Оплатили']];
+  const cnt = k => k === 'paid' ? sum('pro:paid') : both(k);
+  const bars = (a, c = 'var(--accent, #0EA5E9)') => { const mx = Math.max(1, ...a); return `<div style="display:flex;align-items:flex-end;gap:2px;height:44px;margin-top:8px">${a.map((v, i) => `<i title="${d.days[i]}: ${v}" style="flex:1;min-width:2px;height:${v ? Math.max(6, v / mx * 100) : 2}%;background:${v ? c : 'var(--line-2)'};border-radius:2px"></i>`).join('')}</div><div class="row" style="font-size:11px;color:var(--sub);margin-top:2px"><span style="flex:1">${d.days[0].slice(5).split('-').reverse().join('.')}</span><span>${d.days.at(-1).slice(5).split('-').reverse().join('.')}</span></div>`; };
+  const mainCard = `<div class="card" style="padding:14px 16px"><b>Главное за ${days} дней</b>
+    <div class="kpi" style="margin-top:10px"><div><b class="mono">${pros.length}</b><span>специалистов работали</span></div><div><b class="mono">${back2}</b><span>вернулись 2+ дня</span></div><div><b class="mono">${sum('pro:paid')}</b><span>оплат</span></div></div>
+    ${STEPS.map(([k, t], i) => { const n = cnt(k), prev = i ? cnt(STEPS[i - 1][0]) : 0; return `<div class="row" style="font-size:14px;margin-top:8px"><span style="flex:1">${t}</span><b class="mono">${n}</b><span class="mono" style="width:56px;text-align:right;color:var(--sub)">${i && prev ? Math.round(n / prev * 100) + '%' : ''}</span></div>`; }).join('')}
+    <p class="sub" style="font-size:12px;margin-top:6px">Процент от шага выше. Вкладки, а не люди: один человек с двух устройств считается дважды.</p>
+    <div style="font-size:13px;margin-top:10px"><b>Заходы на сайт по дням</b>${bars(perDay('page_view'))}</div>
+    <div style="font-size:13px;margin-top:8px"><b>Тесты по дням</b>${bars(d.days.map((x, i) => perDay('first_test')[i] + ((d.events['pro:assess_done'] || {})[x] || 0)), '#34C759')}</div>
+    <p class="sub" style="font-size:12px;margin-top:8px">Без аккаунтов владельца и тестовых${d.excluded ? ` (отброшено записей: ${d.excluded})` : ''}.</p>
+    <button class="btn line" id="purge" style="margin-top:6px;height:44px">Удалить с сервера их прежние данные</button></div>`;
+  const own = errs.filter(([, v]) => v.own), ext = errs.filter(([, v]) => !v.own), fmt = x => x.slice(5).split('-').reverse().join('.');
+  const errRow = ([m, v]) => { const ds = Object.keys(v.days).sort(); return `<div style="font-size:13px;margin-top:10px;word-break:break-word"><b>${v.n}×</b> ${esc(m)}${ds.length ? `<div style="font-size:12px;color:var(--sub);margin-top:2px">${ds.length > 1 ? `с ${fmt(ds[0])} по ${fmt(ds.at(-1))} · ` : ''}${ds.slice(-8).map(x => fmt(x) + (v.days[x] > 1 ? ' ×' + v.days[x] : '')).join(', ')}</div>` : ''}</div>`; };
+  const errCard = `<div class="card" style="padding:14px 16px"><b>Ошибки приложения (${own.reduce((a, [, v]) => a + v.n, 0)})</b>${own.length ? bars(d.days.map(x => (d.errDays || {})[x] || 0), 'var(--over-t, #FF453A)') + own.slice(0, 15).map(errRow).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Ошибок нет</div>'}
+    ${ext.length ? `<details style="margin-top:12px"><summary class="sub" style="font-size:13px;cursor:pointer">Чужие скрипты (${ext.reduce((a, [, v]) => a + v.n, 0)}): встроенные браузеры Instagram и Facebook, расширения</summary>${ext.slice(0, 15).map(errRow).join('')}<p class="sub" style="font-size:12px;margin-top:8px">Не из кода BodyPassport, с 28.10 не записываются.</p></details>` : ''}</div>`;
   go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:17px">Статистика · ${days} дней</b></div>
     <div class="pad" style="display:flex;flex-direction:column;gap:10px;padding-bottom:30px">
      <p class="sub" style="font-size:13px">Число вкладок, где шаг был хотя бы раз, сумма по дням. Процент от первого шага.</p>
      <div class="seg">${[7, 30, 90].map(n => `<button data-d="${n}" class="${n === days ? 'on' : ''}">${n} дней</button>`).join('')}</div>
+     ${mainCard}
+     ${errCard}
      ${bugCard}
      ${chanCard(d)}${devCard(d)}${screensCard(d)}${stabilityCard()}
      ${proCard}
@@ -2133,10 +2163,13 @@ export async function funnelScreen(days = 14) {
      <div class="card" style="padding:14px 16px"><b>Откуда приходят</b>${src.length ? src.map(([k, n]) => `<div class="row" style="font-size:14px;margin-top:8px"><span style="flex:1;word-break:break-all">${esc(k)}</span><b>${n}</b></div>`).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Пока нет данных</div>'}<p class="sub" style="font-size:12px;margin-top:8px">Метка из ссылки ?ref= или ?utm_source=. Коды r… это приглашения пользователей.</p></div>
      <div class="card" style="padding:14px 16px"><b>Приглашения</b>${refs.length ? refs.map(u => `<div class="row" style="font-size:14px;margin-top:8px"><span style="flex:1">${esc(u.name)}</span><span style="color:var(--sub)">${u.invited} пришли · </span><b>${u.invitedPro} спец.</b></div>`).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Пока никто не пригласил</div>'}</div>
      <div class="card" style="padding:14px 16px"><b>Отзывы</b>${fb && fb.items.some(x => x.k !== 'bug') ? fb.items.filter(x => x.k !== 'bug').slice(0, 40).map(x => `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);font-size:14px;line-height:1.45"><div class="row" style="gap:8px;font-size:12px;color:var(--sub)"><span>${new Date(x.at).toLocaleDateString('ru', { day: 'numeric', month: 'short' })}</span><span>${x.r === 'pro' ? 'специалист' : 'клиент'}</span><span>${kind[x.k] || ''}${x.s != null ? ': <b style="color:var(--text)">' + x.s + '</b>' : ''}</span></div>${x.t ? `<div style="margin-top:4px">${esc(x.t)}</div>` : ''}${x.contact ? `<div style="margin-top:4px;font-size:13px;color:var(--weak-t)">Можно связаться: ${esc(x.contact.name)} ${esc(x.contact.handle)}</div>` : ''}</div>`).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Отзывов пока нет</div>'}</div>
-     <div class="card" style="padding:14px 16px"><b>Ошибки в браузере</b>${errs.length ? errs.map(([m, n]) => `<div style="font-size:13px;margin-top:8px;word-break:break-word"><b>${n}×</b> ${esc(m)}</div>`).join('') : '<div class="sub" style="font-size:13px;margin-top:6px">Ошибок нет</div>'}</div>
     </div></div>`);
   $('#back').onclick = () => adminScreen();
   app.querySelectorAll('[data-d]').forEach(b => b.onclick = () => funnelScreen(+b.dataset.d));
+  $('#purge').onclick = async () => { if (!confirm('Удалить с сервера все прежние события и отзывы аккаунтов владельца и тестовых? Остальные данные останутся.')) return;
+    const b = $('#purge'); b.disabled = true; b.textContent = 'Удаляю…';
+    const r = await fetch('/api/ev?a=purge', { method: 'DELETE' }).catch(() => null), j = r ? await r.json().catch(() => ({})) : {};
+    if (r && r.ok) { toast(`Удалено записей: ${j.deleted} из ${j.checked}`); funnelScreen(days); } else { b.disabled = false; b.textContent = 'Удалить с сервера их прежние данные'; toast('Ошибка: ' + (j.error || (r ? r.status : 'сеть'))); } };
 }
 
 /** Все данные клиента на этом телефоне: тесты, отчеты, занятия, анкета, ссылка, комментарии, записи движения. Настройки (звук, камера) и согласие остаются. */

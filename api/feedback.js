@@ -2,7 +2,7 @@
 // Имя и контакт сохраняются, только если человек сам отметил «можно со мной связаться».
 // Список видит только администратор беты: GET /api/feedback?days=90; анкета специалистов таблицей: GET /api/feedback?k=pro&format=csv.
 import { put, list, get } from './_store.js';
-import { currentUser, isAdmin } from './_session.js';
+import { currentUser, isAdmin, allUsers, noStats } from './_session.js';
 
 const KINDS = { result: [1, 5], nps: [0, 10], free: [0, 5], bug: [0, 0], exit: [1, 5], test: [1, 5], pro: [1, 10] };
 const PLACES = new Set(['map', 'result', 'home', 'menu', 'settings', 'done', 'any', 'exit', 'return', 'logout', 'banner', 'test', 'calib']);
@@ -75,6 +75,9 @@ export default async function handler(req, res) {
       const items = [];
       for (let i = 0; i < names.length; i += 10) await Promise.all(names.slice(i, i + 10).map(async n => {
         try { const r = await get(n, { access: 'private', useCache: false }); items.push(JSON.parse(await readAll(r.stream))); } catch (e) {} }));
+      // отзывы аккаунтов владельца и тестовых не считаем (noStats в _session.js)
+      const skip = new Set((await allUsers().catch(() => [])).filter(noStats).map(x => x.id));
+      for (let i = items.length - 1; i >= 0; i--) if (items[i].uid && skip.has(items[i].uid)) items.splice(i, 1);
       items.sort((x, y) => y.at - x.at);
       if (req.query.format === 'csv') return sendCsv(res, items.filter(x => x.k === (req.query.k || 'pro')));
       const nps = items.filter(x => x.k === 'nps' && x.s != null), res5 = items.filter(x => x.k === 'result' && x.s != null);

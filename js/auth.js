@@ -36,6 +36,8 @@ export async function mailLinkLogin() {
 export async function getMe(force) {
   if (me !== undefined && !force) return me;
   try { const r = await fetch('/api/auth?a=me', { cache: 'no-store' }); me = r.ok ? (await r.json()).user : null; } catch (e) { me = null; }
+  // аккаунт владельца или тестовый: на этом устройстве действия больше не уходят в статистику, даже до входа
+  try { if (me && me.noStats) localStorage.setItem('bp_noev', '1'); } catch (e) {}
   return me;
 }
 async function post(a, body) {
