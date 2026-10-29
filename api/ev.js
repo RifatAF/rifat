@@ -8,7 +8,7 @@ const alias = uid => uid && process.env.SESSION_SECRET ? crypto.createHmac('sha2
 
 const NAMES = new Set(['app_open', 'plan_minutes', 'onb_done', 'login_ok', 'safety_ok', 'safety_stop', 'test_start', 'test_done', 'test_cancel', 'map_view', 'share_result',
   'inv_open', 'result_sent', 'result_fail', 'pro_open', 'assess_start', 'assess_done', 'invite_sent', 'join_sent', 'result_pulled', 'report_sent', 'retest_set', 'err',
-  'fb_sent', 'ref_share', 'install_shown', 'install_ok', 'install_guide', 'install_copy', 'install_later', 'paste_link_view', 'paste_link_ok',
+  'fb_sent', 'ref_share', 'install_shown', 'install_ok', 'install_guide', 'install_copy', 'install_later', 'paste_link_view', 'paste_link_ok', 'client_welcome', 'client_step',
   // воронка ТЗ v4 (п. 8.4): регистрация, первый тест, первый отчет, повтор за 14 дней, установка, оплата; плюс события, что раньше терялись
   'page_view', 'signup', 'first_test', 'first_report', 'retest_14d', 'install_click', 'profile_done', 'beta_skip_test', 'calib_sent',
   'pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'db_empty', 'db_other', 'backup_done', 'restore_done',
@@ -17,7 +17,7 @@ const NAMES = new Set(['app_open', 'plan_minutes', 'onb_done', 'login_ok', 'safe
   'paywall_view', 'limit_hit', 'trial_end', 'trial_end_view', 'balance_pay', 'pay_redirect', 'screen', 'back', 'device', 'main_recognize', 'workout_pain_block', 'update_offer', 'session_start', 'session_done', 'retest_after', 'ba_period', 'scroll', 'qback', 'retest_pair', 'menu', 'try_click']);
 const KEYS = new Set(['m', 'f', 'l', 'n', 'c', 'r', 'd', 's', 'q']); // ошибка, файл, строка, число, категория, источник, секунды, оценка, качество
 // события, у которых в сводке видна разбивка по категории (c) и медиана чисел (d, n, q)
-const DETAIL = new Set(['install_guide', 'hw_sent', 'try_click', 'menu', 'qback', 'pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'gate_hit', 'rage', 'slow', 'result_fail', 'test_done', 'assess_done', 'vas_done', 'report_link', 'paywall_view', 'limit_hit', 'trial_end', 'pro_click', 'fb_sent', 'main_recognize', 'workout_pain_block']);
+const DETAIL = new Set(['client_step', 'install_guide', 'hw_sent', 'try_click', 'menu', 'qback', 'pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'gate_hit', 'rage', 'slow', 'result_fail', 'test_done', 'assess_done', 'vas_done', 'report_link', 'paywall_view', 'limit_hit', 'trial_end', 'pro_click', 'fb_sent', 'main_recognize', 'workout_pain_block']);
 const MAX = 8 * 1024;
 // аккаунты вне статистики (noStats в _session.js): при записи проверяем вошедшего, в сводке и при очистке ищем по псевдониму
 const skipUid = new Map();

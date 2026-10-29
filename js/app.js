@@ -4,7 +4,7 @@ import { backupSoon, restoreIfEmpty, downloadBackup, pickRestore } from './backu
 import { stateScores, cnsDelta } from './muscle-logic.js';
 import { P, F, G, Movement, sideView, levelled, analyze, fmt, standSnapshot, sideSnapshot, features } from './analysis.js';
 import { track, vasSave, vasLog, vasStats, vasDelta, channel, screenView, deviceInfo } from './track.js';
-import { bugSheet, rateCard, bindRate, installCard, bindInstall, installNow, clientInstallCard, bindClientInstall, platform, canInstall, feedbackSheet, shareApp, appLink, mountBugTab, mountBetaBar, exitSurvey, testSurvey } from './grow.js';
+import { bugSheet, rateCard, bindRate, installCard, bindInstall, installNow, clientInstallCard, bindClientInstall, platform, installGuide, canInstall, feedbackSheet, shareApp, appLink, mountBugTab, mountBetaBar, exitSurvey, testSurvey } from './grow.js';
 import { proHome, motionViewer, consumerPoses, canSwitchMode } from './pro.js';
 import { seal } from './core.js';
 import { calibReport, reportCSV, caseLines, RES_NAMES, learnWeights } from './calibreport.js';
@@ -1566,6 +1566,7 @@ function vasSheet(title, init = 0, skip = 'Пропустить', cancel = false
     d.addEventListener('bp-close', () => res(cancel ? undefined : null)); if (cancel) d.querySelector('#vno').insertAdjacentHTML('afterend', '<button class="btn ghost" id="vcx" style="margin-top:4px;border:0;color:var(--sub)">Отмена</button>'), d.querySelector('#vcx').onclick = () => { d.remove(); res(undefined); }; });
 }
 export async function workout(ids, reasons = {}) {
+  try { localStorage.removeItem('bp_hw_new'); } catch (e) {}
   const pre = await vasSheet('Оцените уровень боли или дискомфорта прямо сейчас (0–10)', 0, 'Пропустить и начать', true);
   if (pre === undefined) return; // закрыли окно: остаемся на экране, тренировка не начинается
   // при сильной боли комплекс сам не запускаем: объясняем и даем безопасный шаг (аудит, п. 16)
@@ -1691,11 +1692,12 @@ async function done(list, pre = null, n = list.length) { camOff(); keepAwake(fal
   const w = vasStats(log, 7); sendProgress(log);
   go(`<div class="scr fade"><div class="empty" style="flex:1;justify-content:center"><span class="${dl > 0 ? 'pop' : ''}" style="width:88px;height:88px;border-radius:50%;background:var(--ok-s);color:var(--ok-t);display:flex;align-items:center;justify-content:center">${ic('check')}</span>
    <h1>${n < list.length ? `Сделано ${n} из ${list.length}` : 'Комплекс выполнен'}</h1>
-   ${dl > 0 ? `<p class="vasgood" style="font-size:18px;font-weight:600;color:var(--ok-t)">Отличный результат! Уровень боли снижен на ${dl} ${dl === 1 ? 'балл' : dl < 5 ? 'балла' : 'баллов'}</p>` : dl < 0 ? '<p class="sub">Боль после занятия выше. Уменьшите амплитуду, а если повторится, покажите это специалисту.</p>' : '<p class="sub">Делай так 2 недели и повтори тест. Сравним карты.</p>'}</div>
+   ${dl > 0 ? `<p class="vasgood" style="font-size:18px;font-weight:600;color:var(--ok-t)">Отличный результат! Уровень боли снижен на ${dl} ${dl === 1 ? 'балл' : dl < 5 ? 'балла' : 'баллов'}</p>` : dl < 0 ? '<p class="sub">Боль после занятия выше. Уменьшите амплитуду, а если повторится, покажите это специалисту.</p>' : (!tests().length && myReports().length ? '' : '<p class="sub">Делай так 2 недели и повтори тест. Сравним карты.</p>')}</div>
    <div class="pad kpi"><div><b>${n}</b><span>упражнения</span></div><div><b>${w.compliance}%</b><span>дней из 7</span></div><div><b>${s}</b><span>дн. подряд</span></div></div>
    ${progressChart(log)}
-   <div class="dock">${tests().length ? `<button class="btn" id="retest">${ic('activity', 's')}Посмотреть, как повлияли упражнения</button><button class="btn ghost" id="back">К карте тела</button><p style="text-align:center;font-size:13px;color:var(--sub)">Короткий повторный тест: сравним движения до и после занятия</p>` : '<button class="btn" id="back">К карте тела</button>'}</div></div>`);
-  $('#back').onclick = map;
+   ${!tests().length && myReports().length ? '<p class="sub pad" style="text-align:center;font-size:14px;margin-top:-8px">Отметка ушла специалисту. Завтра продолжим.</p>' : ''}
+   <div class="dock">${!tests().length && myReports().length ? '<button class="btn" id="back">В мой кабинет</button>' : tests().length ? `<button class="btn" id="retest">${ic('activity', 's')}Посмотреть, как повлияли упражнения</button><button class="btn ghost" id="back">К карте тела</button><p style="text-align:center;font-size:13px;color:var(--sub)">Короткий повторный тест: сравним движения до и после занятия</p>` : '<button class="btn" id="back">К карте тела</button>'}</div></div>`);
+  $('#back').onclick = !tests().length && myReports().length ? clientHome : map;
   // повторный тест сразу после комплекса: результат сравним с тестом до упражнений
   if ($('#retest')) $('#retest').onclick = () => { localStorage.setItem(K('bp_retest'), String(tests().at(-1).date)); track('retest_after', { n }, false); prep(); }; }
 // база сравнения за период: последний тест не позже начала периода (иначе самый ранний в периоде)
@@ -1785,15 +1787,36 @@ async function reportView(code) {
     const res = await fetch('/api/share?id=' + id, { cache: 'no-store' }); if (!res.ok) throw new Error(res.status);
     r = await seal.decrypt(k, await res.text()); if (typeof r.img !== 'string' || !r.img.startsWith('data:image/jpeg;base64,')) throw new Error('bad'); } catch (e) { r = null; }
   if (!r) { go(`<div class="scr pad fade" style="justify-content:center;gap:14px"><h1>Отчет не открылся</h1><p class="sub">Ссылка устарела (отчет хранится 90 дней) или скопирована не целиком. Попросите специалиста прислать ее снова.</p><button class="btn" id="tst">Пройти свой тест движения</button></div>`); $('#tst').onclick = () => { history.replaceState(null, '', location.pathname); onboarding(); }; return; }
-  const str = (v, n) => esc(String(v || '').slice(0, n)); saveReport(code, r); ackHw(myReports().find(x => x.code === String(code).slice(0, 80))); const exIds = (Array.isArray(r.ex) ? r.ex : []).filter(id => ex(id));
-  go(`<div class="fade" style="padding-bottom:32px"><div class="pad row" style="padding-top:12px"><span style="flex:1"></span><button class="pill" id="rcab">Мой прогресс</button></div><div class="pad" style="padding-top:4px"><div class="eyebrow">Биомеханический паспорт</div><h1 style="margin-top:6px">${str(r.name, 80)}</h1><p class="sub" style="font-size:14px">${str(r.date, 40)}${r.author ? ' · ' + str(r.author, 80) : ''}</p></div>
-    <div class="pad" style="margin-top:12px">${clientInstallCard()}</div>
+  saveReport(code, r); ackHw(myReports().find(x => x.code === String(code).slice(0, 80))); history.replaceState(null, '', location.pathname);
+  const first = !lsGet('bp_wel_' + id); lsSet('bp_wel_' + id, String(Date.now()));
+  return first ? clientWelcome(r, code) : reportScreen(r, code);
+}
+const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const nameFirst = n => String(n || '').trim().split(/\s+/)[0] || '';
+// первое открытие ссылки: от кого, что внутри и одна кнопка дальше
+function clientWelcome(r, code) {
+  track('client_welcome', {}, false); const exIds = (Array.isArray(r.ex) ? r.ex : []).filter(id => ex(id)), who = esc(String(r.author || 'Ваш специалист').slice(0, 80));
+  const item = (icon, t, sub) => `<div class="row" style="gap:14px;align-items:flex-start"><span style="flex:none;width:44px;height:44px;border-radius:14px;background:var(--surface-2);display:grid;place-items:center">${ic(icon)}</span><div style="flex:1"><b style="font-size:16px">${t}</b><div class="sub" style="font-size:14px;line-height:1.4;margin-top:2px">${sub}</div></div></div>`;
+  go(`<div class="scr fade"><div class="pad" style="padding-top:28px;display:flex;flex-direction:column;gap:18px;flex:1">
+    <span class="avatar" style="width:64px;height:64px;font-size:26px">${esc(String(r.author || 'B').slice(0, 1).toUpperCase())}</span>
+    <div><h1>${nameFirst(r.name) ? esc(nameFirst(r.name)) + ', здравствуйте!' : 'Здравствуйте!'}</h1><p class="sub" style="font-size:16px;margin-top:8px;line-height:1.45">Ваш специалист ${who}. Для вас готово:</p></div>
+    ${item('file-text', 'Отчёт по замеру', 'Что видно в положении тела и над чем будете работать')}
+    ${exIds.length ? item('play', `Домашнее задание · ${totalMin(exIds.map(ex))} мин`, `${exRowsN(exIds)} упр. Голос тренера ведёт по каждому, ничего запоминать не нужно`) : ''}
+    ${item('message-square', 'Связь со специалистом', 'Если что-то непонятно или больно, напишите прямо из приложения')}
+    <p class="sub" style="font-size:13px">Займёт пару минут: сначала отчёт, потом покажем, что делать дальше.</p></div>
+    <div class="dock"><button class="btn" id="wgo">Посмотреть отчёт</button></div></div>`);
+  $('#wgo').onclick = () => reportScreen(r, code);
+}
+const exRowsN = ids => new Set(ids.map(id => (ex(id).title || '').split(' (')[0])).size;
+function reportScreen(r, code) {
+  lsSet('bp_rep_seen', '1'); const str = (v, n) => esc(String(v || '').slice(0, n)), exIds = (Array.isArray(r.ex) ? r.ex : []).filter(id => ex(id));
+  go(`<div class="scr fade" style="padding-bottom:150px"><div class="top-bar"><button class="round" id="rback" aria-label="В кабинет">${ic('chevron-left')}</button><div class="t"><b>Ваш отчёт</b></div></div>
+    <div class="pad" style="padding-top:4px"><h1 style="font-size:24px">${str(r.name, 80)}</h1><p class="sub" style="font-size:14px">${str(r.date, 40)}${r.author ? ' · ' + str(r.author, 80) : ''}</p></div>
     <div class="pad" style="margin-top:12px"><img src="${r.img}" alt="Отчет" style="width:100%;display:block;border-radius:16px"></div>
-    <div class="pad" style="margin-top:14px;display:flex;flex-direction:column;gap:8px">${exIds.length ? `<button class="btn" id="rex">${ic('play', 's')}Начать упражнения · ${totalMin(exIds.map(ex))} мин</button>` : ''}<a class="btn${exIds.length ? ' line' : ''}" id="rdl" href="${r.img}" download="bodypassport-report.jpg" style="text-decoration:none">${ic('download', 's')}Сохранить картинку</a>
-    <p class="sub" style="font-size:12px;text-align:center">Отчет сохранен в вашем кабинете на этом телефоне. Он зашифрован, ключ есть только в ссылке.</p></div></div>`);
-  history.replaceState(null, '', location.pathname);
-  $('#rcab').onclick = clientHome; if ($('#rex')) $('#rex').onclick = () => workout(exIds);
-  bindClientInstall(location.origin + '/#rep=' + code, () => { const c = document.getElementById('cinstc'); if (c) c.remove(); });
+    <div class="pad" style="margin-top:12px"><a class="btn line" href="${r.img}" download="bodypassport-report.jpg" style="text-decoration:none">${ic('download', 's')}Сохранить картинку</a>
+    <p class="sub" style="font-size:12px;text-align:center;margin-top:8px">Отчёт сохранён в вашем кабинете на этом телефоне.</p></div>
+    <div class="dock"><button class="btn" id="rnext">${exIds.length ? 'Дальше: домашнее задание' : 'Дальше: мой кабинет'}${ic('arrow-right', 's')}</button></div></div>`);
+  $('#rback').onclick = clientHome; $('#rnext').onclick = clientHome;
 }
 
 // домашка живет по одной ссылке: специалист обновил упражнения, кабинет подтягивает новую версию сам
@@ -1801,7 +1824,7 @@ async function refreshHomework() {
   const rec = myReports().filter(r => r.upd).at(-1); if (!rec) return false; const [id, k] = rec.code.split('.');
   try { const res = await fetch('/api/share?id=' + id, { cache: 'no-store' }); if (!res.ok) return false;
     const r = await seal.decrypt(k, await res.text()); if (!(+r.upd > rec.upd)) { ackHw(rec); return false; }
-    saveReport(rec.code, r); ackHw(myReports().find(x => x.code === rec.code)); track('hw_seen', {}, false); return true; } catch (e) { return false; }
+    saveReport(rec.code, r); ackHw(myReports().find(x => x.code === rec.code)); lsSet('bp_hw_new', '1'); track('hw_seen', {}, false); return true; } catch (e) { return false; }
 }
 // специалист видит в карточке «клиент открыл»: короткое зашифрованное подтверждение в ящик из ссылки, один раз на версию
 async function ackHw(rec) { const b = rec && rec.box, u = rec && +rec.upd; if (!b || !u || localStorage.getItem('bp_hw_ack') === String(u)) return;
@@ -1848,15 +1871,29 @@ export function clientHome() {
   const delta = all.length >= 2 && all[0].snapshot && last.snapshot ? [['Наклон плеч', all[0].snapshot.shoulderTilt, last.snapshot.shoulderTilt], ['Наклон таза', all[0].snapshot.pelvicTilt, last.snapshot.pelvicTilt]]
     .filter(([, a, b]) => Number.isFinite(a) && Number.isFinite(b)).map(([n, a, b]) => { const better = Math.abs(b) < Math.abs(a) - .5, worse = Math.abs(b) > Math.abs(a) + .5;
       return `<div class="row" style="font-size:15px"><span style="flex:1">${n}</span><span class="num" style="color:var(--sub)">${Math.abs(a).toFixed(1)}°</span><span style="margin:0 8px;color:var(--faint)">→</span><b class="num" style="color:${better ? 'var(--ok-t)' : worse ? 'var(--over-t)' : 'var(--text)'}">${Math.abs(b).toFixed(1)}°</b></div>`; }).join('') : '';
-  go(`<div class="scr fade" style="padding-bottom:110px"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><span style="flex:1"></span><button class="round" id="cset" aria-label="Настройки">${ic('settings')}</button></div>
-   <div class="pad" style="padding-top:4px">${PROFILE() && PROFILE().name ? `<div class="eyebrow">${esc(PROFILE().name)}</div>` : ''}<h1 style="margin-top:6px">Мой прогресс</h1></div>
+  // путь клиента по ссылке: три первых шага с прогрессом, потом каждый день одна карточка «Сегодня»
+  const installed = !canInstall() || lsGet('bp_inst') === 'done', instLater = !!lsGet('bp_inst_later'), didWork = vl.some(r => (r.n || 0) > 0) || JSON.parse(localStorage.getItem(K('bp_done')) || '[]').length > 0;
+  const steps = rep ? [{ id: 'rep', t: 'Посмотреть отчёт', sub: 'Что видно и над чем работаем', done: !!lsGet('bp_rep_seen'), btn: 'Открыть отчёт' },
+    { id: 'inst', t: 'Установить приложение', sub: instLater && !installed ? 'Пропущено. Без иконки домашку легко потерять' : 'Иконка на экране: домашка под рукой и обновится сама', done: installed, skip: instLater, btn: 'Установить' },
+    { id: 'work', t: 'Первое занятие', sub: exIds.length ? `${totalMin(exIds.map(ex))} мин, голос ведёт по каждому упражнению` : 'Упражнения появятся, когда их назначит специалист', done: didWork, btn: 'Начать', off: !exIds.length }] : [];
+  const cur = steps.find(x => !x.done && !x.skip) || steps.find(x => !x.done), nDone = steps.filter(x => x.done).length, showSteps = steps.length && !(steps[0].done && steps[2].done && (installed || instLater));
+  const stepRow = (x, n) => `<div class="row" style="gap:12px;align-items:flex-start;${x === cur ? '' : 'opacity:' + (x.done ? '.6' : '.85')}"><span style="flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:700;${x.done ? 'background:var(--ok-s);color:var(--ok-t)' : x === cur ? 'background:var(--brand);color:#fff' : 'background:var(--surface-2)'}">${x.done ? ic('check', 's') : n + 1}</span>
+    <div style="flex:1;min-width:0"><b style="font-size:16px">${x.t}</b><div class="sub" style="font-size:13px;line-height:1.4;margin-top:2px">${x.sub}</div>${x === cur && !x.off ? `<button class="btn" data-step="${x.id}" style="margin-top:10px;height:46px">${x.btn}</button>${x.id === 'inst' ? '<button class="link" data-step="later" style="font-size:14px;margin-top:8px;display:block">Не сейчас</button>' : ''}` : !x.done && !x.off ? `<button class="link" data-step="${x.id}" style="font-size:14px;margin-top:4px">${x.btn}</button>` : ''}</div></div>`;
+  const stepsCard = showSteps ? `<div class="card" style="display:flex;flex-direction:column;gap:14px;border:1.5px solid var(--brand)"><div class="row"><b style="flex:1;font-size:18px">Первые шаги</b><span class="sub mono" style="font-size:13px">${nDone} из ${steps.length}</span></div>
+    <div style="height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden"><div style="height:100%;width:${Math.round(nDone / steps.length * 100)}%;background:var(--ok-t)"></div></div>${steps.map(stepRow).join('')}</div>` : '';
+  const today = doneDays.has(dayKey(Date.now())), sk = streak(), plural = (n, a, b, c) => n % 10 === 1 && n % 100 !== 11 ? a : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? b : c;
+  const todayCard = !showSteps && exIds.length ? `<div class="card" style="display:flex;flex-direction:column;gap:10px;${today ? '' : 'border:1.5px solid var(--brand)'}"><div class="eyebrow">Сегодня</div>${today
+    ? `<div class="row" style="gap:12px"><span style="flex:none;width:40px;height:40px;border-radius:50%;background:var(--ok-s);color:var(--ok-t);display:grid;place-items:center">${ic('check', 's')}</span><div><b style="font-size:17px">Занятие сделано</b><div class="sub" style="font-size:14px">${spec ? esc(spec) + ' видит отметку. ' : ''}Завтра продолжим${sk > 1 ? ` · ${sk} ${plural(sk, 'день', 'дня', 'дней')} подряд` : ''}</div></div></div>`
+    : `<b style="font-size:18px">Занятие на сегодня · ${totalMin(exIds.map(ex))} мин</b><div class="sub" style="font-size:14px;line-height:1.4">${exRowsN(exIds)} упр. Встаньте рядом с телефоном, голос подскажет, что делать${sk ? ` · ${sk} ${plural(sk, 'день', 'дня', 'дней')} подряд, не прерывайте` : ''}</div><button class="btn" id="ctoday">${ic('play', 's')}Начать занятие</button>`}</div>` : '';
+  go(`<div class="scr fade" style="padding-bottom:110px"><div class="top-bar">${all.length ? `<button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button>` : ''}<span style="flex:1"></span><button class="round" id="cset" aria-label="Настройки">${ic('settings')}</button></div>
+   <div class="pad" style="padding-top:4px">${PROFILE() && PROFILE().name ? `<div class="eyebrow">${esc(PROFILE().name)}</div>` : ''}<h1 style="margin-top:6px">${rep && nameFirst(rep.name) ? esc(nameFirst(rep.name)) + ', ваш кабинет' : 'Мой прогресс'}</h1></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s3)">
-    ${clientInstallCard()}
+    ${stepsCard}${todayCard}${showSteps ? '' : clientInstallCard()}
     ${spec || next ? card('Мой специалист', `${spec ? `<div class="row" style="gap:12px"><span class="avatar">${esc(spec.slice(0, 1).toUpperCase())}</span><div style="flex:1;min-width:0"><b style="font-size:17px">${esc(spec)}</b>${rep && rep.contact ? `<div class="sub" style="font-size:14px;user-select:text">${esc(rep.contact)}</div>` : ''}</div></div>` : ''}
       ${next ? `<div class="row" style="gap:10px;font-size:15px">${ic('calendar', 's')}<span style="flex:1">Повторный тест</span><b>${fmtD(next)}</b></div>` : ''}
       ${rep && rep.focus.length ? `<div style="font-size:15px;line-height:1.45"><div class="sub" style="font-size:13px;margin-bottom:4px">Над чем работаем</div>${rep.focus.map(x => `<div>• ${esc(x)}</div>`).join('')}</div>` : ''}
       ${rep && rep.note ? `<p style="font-size:15px;line-height:1.45;background:var(--surface-2);border-radius:12px;padding:10px 12px">${esc(rep.note)}</p>` : ''}`) : ''}
-    ${exIds.length ? card(assigned ? 'Упражнения от специалиста' : 'Упражнения по вашему тесту', `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${exIds.slice(0, 6).map(id => `<button class="cex" data-id="${id}" style="border:0;background:var(--surface-2);border-radius:14px;padding:4px 4px 8px;text-align:center;cursor:pointer;font:inherit;color:inherit">${exFigure(id)}<span style="display:block;font-size:12px;line-height:1.25;margin-top:2px">${esc(exLabel(ex(id)))}</span></button>`).join('')}</div>
+    ${exIds.length ? card(assigned ? `Упражнения от специалиста${lsGet('bp_hw_new') ? ' <span class="pill" style="background:var(--brand);color:#fff;font-size:11px;padding:2px 8px;min-height:0;margin-left:6px">Обновлено</span>' : ''}` : 'Упражнения по вашему тесту', `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${exIds.slice(0, 6).map(id => `<button class="cex" data-id="${id}" style="border:0;background:var(--surface-2);border-radius:14px;padding:4px 4px 8px;text-align:center;cursor:pointer;font:inherit;color:inherit">${exFigure(id)}<span style="display:block;font-size:12px;line-height:1.25;margin-top:2px">${esc(exLabel(ex(id)))}</span></button>`).join('')}</div>
       <button class="btn" id="cgo">${ic('play', 's')}Начать комплекс · ${totalMin(exIds.map(ex))} мин</button>
       ${assigned ? `<p class="sub" style="font-size:13px;line-height:1.45">Упражнения подобрал ваш специалист. Больно или сомневаетесь, можно ли вам упражнение, хотите добавить своё: не угадывайте, спросите его. Отметки занятий и боль до и после уходят только ему, зашифрованными.</p>${contactHref(rep.contact) || rep.box ? `<button class="btn line" id="cask">${ic('message-square', 's')}Написать специалисту</button>` : ''}` : ''}`) : ''}
     ${card('Занятия за 4 недели', `${heatmap4w(doneMinutes(JSON.parse(localStorage.getItem(K('bp_done')) || '[]')))}
@@ -1865,8 +1902,14 @@ export function clientHome() {
       ${all.length ? `<div class="group">${all.slice().reverse().slice(0, 8).map(t => `<button class="row-link ctest" data-d="${t.date}"><span style="flex:1;text-align:left"><b style="font-weight:600">${fmtD(t.date)} · ${testLabel(t)}</b><small class="sub" style="display:block;font-size:13px">${zonesOf(t) ? zonesOf(t) + ' ' + plural3(zonesOf(t), 'зона требует', 'зоны требуют', 'зон требуют') + ' внимания' : 'без выраженных перекосов'}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>` : '<p class="sub">Тестов пока нет.</p>'}
       ${all.length === 1 ? '<p class="sub" style="font-size:14px">Пройдите тест еще раз через 3–4 недели, и здесь появится сравнение.</p>' : ''}`)}
     ${reps.length ? card('Отчеты специалиста', `<div class="group">${reps.slice().reverse().map(r => `<button class="row-link crep" data-c="${esc(r.code)}">${ic('file-text', 's')}<span style="flex:1;text-align:left">${esc(r.date || fmtD(r.at))}<small class="sub" style="display:block;font-size:13px">${esc(r.author)}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>`) : ''}
-   </div><div class="dock"><button class="btn${exIds.length ? ' line' : ''}" id="ctest">${ic('rotate-ccw', 's')}Пройти тест${all.length ? ' снова' : ''}</button>${all.length ? clientNav('cab') : ''}</div></div>`);
-  $('#back').onclick = () => (all.length ? map() : onboarding()); $('#cset').onclick = settings;
+   </div><div class="dock"${assigned && !all.length ? ' style="display:none"' : ''}><button class="btn${exIds.length ? ' line' : ''}" id="ctest">${ic('rotate-ccw', 's')}Пройти тест${all.length ? ' снова' : ''}</button>${all.length ? clientNav('cab') : ''}</div></div>`);
+  if ($('#back')) $('#back').onclick = map; $('#cset').onclick = settings;
+  const repLink = rep ? location.origin + '/#rep=' + rep.code : location.origin;
+  app.querySelectorAll('[data-step]').forEach(b => b.onclick = () => { const st = b.dataset.step; track('client_step', { c: st }, false);
+    if (st === 'rep') return reportView(rep.code); if (st === 'work') return workout(exIds);
+    if (st === 'inst') return installGuide({ link: repLink, client: true });
+    if (st === 'later') { lsSet('bp_inst_later', String(Date.now())); track('install_later', {}, false); clientHome(); } });
+  if ($('#ctoday')) $('#ctoday').onclick = () => workout(exIds);
   if ($('#cgo')) $('#cgo').onclick = () => workout(exIds);
   if ($('#cask')) $('#cask').onclick = () => askSheet(rep);
   if (Date.now() - hwAt > 10 * 60e3) { hwAt = Date.now(); refreshHomework().then(ch => { if (ch && $('#cgo')) { toast('Специалист обновил домашнее задание'); clientHome(); } }); }
