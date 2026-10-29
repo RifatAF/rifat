@@ -48,7 +48,7 @@ async function notifyOwner(tag, origin) {
   const r = await get(ownerPath(tag), { access: 'private', useCache: false }).catch(() => null); if (!r || !r.stream) return;
   const { uid } = JSON.parse(await readAll(r.stream)); if (!/^t_\d+$/.test(uid || '')) return;
   await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(4000),
-    body: JSON.stringify({ chat_id: uid.slice(2), text: 'BodyPassport: клиент прошел тест по вашей ссылке. Результат в кабинете: ' + (origin || 'https://bodypassport.vercel.app') + '/?pro=1', disable_web_page_preview: true }) }).catch(() => {});
+    body: JSON.stringify({ chat_id: uid.slice(2), text: 'BodyPassport: клиент прошел тест по вашей ссылке. Результат в кабинете: ' + (origin || 'https://bodypassport.app') + '/?pro=1', disable_web_page_preview: true }) }).catch(() => {});
 }
 async function readAll(stream) { const chunks = []; for await (const c of stream) chunks.push(Buffer.from(c)); return Buffer.concat(chunks).toString('utf8'); }
 

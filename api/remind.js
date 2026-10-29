@@ -37,7 +37,7 @@ export function clientDue(r, now = Date.now()) { return !!(r && r.chat && r.d &&
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   try {
-    const origin0 = 'https://' + (req.headers.host || 'bodypassport.vercel.app');
+    const origin0 = 'https://' + (req.headers.host || 'bodypassport.app');
     // вебхук бота: Telegram присылает секрет в заголовке (setWebhook ... secret_token=TG_WEBHOOK_SECRET)
     if (req.method === 'POST' && req.query.a === 'tg') {
       const sec = process.env.TG_WEBHOOK_SECRET; if (!sec || req.headers['x-telegram-bot-api-secret-token'] !== sec) return res.status(401).json({ error: 'secret' });
@@ -70,7 +70,7 @@ export default async function handler(req, res) {
           for (const bl of r2.blobs) { if (bl.pathname.startsWith('remindc/chat/')) continue;
             const r = await readJSON(bl.pathname); if (!clientDue(r, now)) continue; if (await tgSend(r.chat, clientMessage(r, origin0, 'due'))) { r.sentFor = r.d; await save(bl.pathname, r); } } } while (cur2); }
       const tok = process.env.TELEGRAM_BOT_TOKEN; let sent = 0, cursor;
-      const origin = 'https://' + (req.headers.host || 'bodypassport.vercel.app');
+      const origin = 'https://' + (req.headers.host || 'bodypassport.app');
       await loadApp(true);
       do { const r = await list({ prefix: 'remind/', limit: 1000, cursor }); cursor = r.hasMore ? r.cursor : undefined;
         for (const b of r.blobs) { const uid = b.pathname.slice(7, -5); if (!/^t_\d+$/.test(uid) || !tok) continue;

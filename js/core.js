@@ -692,7 +692,7 @@ export async function body3D(container, spots0, onPick, opts = {}) {
   let marks = [], only = null, lastSpots = spots;
   const buildMarks = spots => { marks.forEach(x => x.el.remove()); if (opts.noMarks) { marks = []; return; }
     marks = spots.filter(s => s.k !== 'OK' && s.k !== 'DONE' && s.k !== 'NT' && order.indexOf(s.id) >= 0).map(s => { const g = 1 + order.indexOf(s.id) * 2 + (s.side === 'RIGHT' ? 1 : 0), c = m.meta.blobs[g]; if (!c) return null;
-      const el = document.createElement('button'); el.className = 'mark3d'; el.setAttribute('aria-label', s.key); el.innerHTML = `<span class="mark ${s.k}"${s.derived && !s.edited ? ' style="opacity:.75"' : ''}></span>`;
+      const el = document.createElement('button'); el.className = 'mark3d'; el.setAttribute('aria-label', [(C.muscles[s.id] || {}).name || (C.muscles[s.id] || {}).zone || 'Зона', s.side === 'RIGHT' ? 'справа' : s.side === 'LEFT' ? 'слева' : ''].filter(Boolean).join(' ')); el.innerHTML = `<span class="mark ${s.k}"${s.derived && !s.edited ? ' style="opacity:.75"' : ''}></span>`;
       el.onclick = () => onPick && onPick(s.key); container.appendChild(el); return { el, c, local: at3(c), n: new THREE.Vector3(c[0], 0, -(c[1] - 10)).normalize(), vis: null }; }).filter(Boolean); };
   buildMarks(spots);
   // Поток частиц по волокнам, как ветер на погодной карте: главная ось мышцы (PCA по ее наружной поверхности) ≈ направление

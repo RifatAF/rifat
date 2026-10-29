@@ -126,7 +126,7 @@ export default async function handler(req, res) {
     const b = req.body || {};
     if (a === 'google') return signIn(req, res, await verifyGoogle(b.credential));
     if (a === 'telegram') return signIn(req, res, b.initData ? verifyTgInitData(b.initData) : verifyTgWidget(b.data));
-    if (a === 'mailcode') { const r = await sendMailCode(b.email, 'https://' + String(req.headers.host || 'bodypassport.vercel.app'), b); return res.status(r.status).json(r.status === 200 ? { ok: true } : { error: r.error }); }
+    if (a === 'mailcode') { const r = await sendMailCode(b.email, 'https://' + String(req.headers.host || 'bodypassport.app'), b); return res.status(r.status).json(r.status === 200 ? { ok: true } : { error: r.error }); }
     if (a === 'mail') { const v = await verifyMailCode(b.email, b.code); if (!v) return res.status(401).json({ error: 'неверный или просроченный код' });
       req.body = { ...b, ...(v.consent ? { consent: true, health: true } : {}), role: b.role || v.role }; return signIn(req, res, v.ident); }
     const uid = sessionUid(req); const u = uid && await loadUser(uid);
