@@ -1067,7 +1067,7 @@ function bindRetestCard() { const t = document.getElementById('rttg'); if (t) t.
 // плашка об отправке только у теста, пройденного по этой ссылке; «отправляю» дольше 2 минут — значит, отправка прервалась
 function sentBanner(t) { const inv = INV(); if (!inv || (t && t.inv !== inv.i)) return ''; let st = localStorage.getItem('bp_sent'); if (!st) return '';
   if (st === 'sending' && Date.now() - +(localStorage.getItem('bp_sent_at') || 0) > 120000) st = 'fail';
-  return `<div class="pad" id="sentbox" style="padding-top:12px"><div class="card row" style="font-size:14px;gap:10px">${st === 'ok' ? `<span class="mark OK"></span><span style="flex:1">Результат отправлен: ${esc(inv.s)}${inv.cal ? '. Специалист сверит его со своей оценкой и отправит без вашего имени на настройку приложения' : ''}</span>` : st === 'fail' ? `<i class="dia" style="color:var(--short)"></i><span style="flex:1">Не удалось отправить результат</span><button class="pill" id="resend">Отправить снова</button>` : '<span class="spin" style="margin:0;width:16px;height:16px;border-width:2px"></span><span>Отправляю результат специалисту…</span>'}</div></div>`; }
+  return `<div class="pad" id="sentbox" style="padding-top:12px"><div class="card row" style="font-size:14px;gap:10px">${st === 'ok' ? `<span class="mark OK"></span><span style="flex:1">Результат отправлен: ${esc(inv.s)}${inv.cal ? '. Специалист сверит его со своей оценкой и отправит без вашего имени на настройку приложения' : ''}</span>${localStorage.getItem('bp_ask') ? `<a class="pill" href="${esc(localStorage.getItem('bp_ask'))}" target="_blank" rel="noopener" style="text-decoration:none">Написать</a>` : ''}` : st === 'fail' ? `<i class="dia" style="color:var(--short)"></i><span style="flex:1">Не удалось отправить результат</span><button class="pill" id="resend">Отправить снова</button>` : '<span class="spin" style="margin:0;width:16px;height:16px;border-width:2px"></span><span>Отправляю результат специалисту…</span>'}</div></div>`; }
 
 // ---------- 4. анализ: тёмный экран, фигура проявляется, три строки статуса ----------
 let REVEAL = false;
@@ -1814,6 +1814,21 @@ function saveReport(code, r) {
   try { localStorage.setItem(REPS_KEY, JSON.stringify([...myReports().filter(x => x.code !== rec.code), rec].sort((a, b) => a.at - b.at).slice(-30))); } catch (e) {}
 }
 let hwAt = 0;
+// «Написать специалисту»: по желанию сначала короткий тест перед камерой, результат уходит ему зашифрованным в ящик из домашки
+const ASK_UNITS = ['stand', 'ohs_front', 'sls', 'side'];
+function askSheet(rep) {
+  const href = contactHref(rep.contact), d = document.createElement('div'); d.className = 'sheet';
+  d.innerHTML = `<div><h2>Написать специалисту</h2>
+    ${rep.box ? `<p class="sub" style="margin-top:8px;line-height:1.45">Если есть несколько минут, сначала пройдите тест движения перед камерой. ${esc(rep.author || 'Специалист')} сразу увидит, как вы двигаетесь сейчас, и ответит точнее. Вопрос можно написать прямо в тесте. Это необязательно.</p>
+    <button class="btn" id="askt" style="margin-top:var(--s4)">${ic('camera', 's')}Пройти тест · ${mins(SETUP_SEC + secs(rowsOf(ASK_UNITS)))} мин</button>` : ''}
+    ${href ? `<a class="btn${rep.box ? ' line' : ''}" id="askw" href="${esc(href)}" target="_blank" rel="noopener" style="text-decoration:none;margin-top:8px">${ic('message-square', 's')}${rep.box ? 'Просто написать' : 'Написать'}</a>` : ''}
+    <button class="btn ghost" id="askx" style="margin-top:8px">Отмена</button></div>`;
+  document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'askx') d.remove(); };
+  if (d.querySelector('#askw')) d.querySelector('#askw').onclick = () => { track('hw_ask', { c: 'write' }, false); d.remove(); };
+  if (d.querySelector('#askt')) d.querySelector('#askt').onclick = () => { track('hw_ask', { c: 'test' }, false); d.remove();
+    localStorage.setItem('bp_inv', JSON.stringify({ i: rep.box.i, k: rep.box.k, s: String(rep.author || 'Специалист').slice(0, 80), p: ASK_UNITS })); localStorage.removeItem('bp_sent');
+    if (href) localStorage.setItem('bp_ask', href); else localStorage.removeItem('bp_ask'); inviteWelcome(); };
+}
 export function clientHome() {
   track('client_home'); const all = tests(), last = all.at(-1), reps = myReports(), rep = reps.at(-1), inv = INV();
   const fmtD = t => new Date(t).toLocaleDateString('ru', { day: 'numeric', month: 'long' });
@@ -1835,7 +1850,7 @@ export function clientHome() {
       ${rep && rep.note ? `<p style="font-size:15px;line-height:1.45;background:var(--surface-2);border-radius:12px;padding:10px 12px">${esc(rep.note)}</p>` : ''}`) : ''}
     ${exIds.length ? card(assigned ? 'Упражнения от специалиста' : 'Упражнения по вашему тесту', `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${exIds.slice(0, 6).map(id => `<button class="cex" data-id="${id}" style="border:0;background:var(--surface-2);border-radius:14px;padding:4px 4px 8px;text-align:center;cursor:pointer;font:inherit;color:inherit">${exFigure(id)}<span style="display:block;font-size:12px;line-height:1.25;margin-top:2px">${esc(exLabel(ex(id)))}</span></button>`).join('')}</div>
       <button class="btn" id="cgo">${ic('play', 's')}Начать комплекс · ${totalMin(exIds.map(ex))} мин</button>
-      ${assigned ? `<p class="sub" style="font-size:13px;line-height:1.45">Упражнения подобрал ваш специалист. Больно или сомневаетесь, можно ли вам упражнение, хотите добавить своё: не угадывайте, спросите его. Отметки занятий и боль до и после уходят только ему, зашифрованными.</p>${contactHref(rep.contact) ? `<a class="btn line" id="cask" href="${esc(contactHref(rep.contact))}" target="_blank" rel="noopener" style="text-decoration:none">${ic('message-square', 's')}Спросить специалиста</a>` : ''}` : ''}`) : ''}
+      ${assigned ? `<p class="sub" style="font-size:13px;line-height:1.45">Упражнения подобрал ваш специалист. Больно или сомневаетесь, можно ли вам упражнение, хотите добавить своё: не угадывайте, спросите его. Отметки занятий и боль до и после уходят только ему, зашифрованными.</p>${contactHref(rep.contact) || rep.box ? `<button class="btn line" id="cask">${ic('message-square', 's')}Написать специалисту</button>` : ''}` : ''}`) : ''}
     ${card('Занятия за 4 недели', `${heatmap4w(doneMinutes(JSON.parse(localStorage.getItem(K('bp_done')) || '[]')))}
       <div class="row" style="font-size:15px;gap:16px;flex-wrap:wrap"><span><b class="num">${st.activeDays || 0}</b> <span class="sub">дн. из 30</span></span>${st.avgPre != null && st.avgPost != null ? `<span><span class="sub">боль</span> <b class="num">${(+st.avgPre).toFixed(1)} → ${(+st.avgPost).toFixed(1)}</b></span>` : ''}</div>`)}
     ${card('Мои изменения', `${delta ? `${baPeriods(all)}<div id="bahw">${baBlock('bah')}</div><div style="display:flex;flex-direction:column;gap:8px"><div class="sub" style="font-size:13px">Первый тест → последний</div>${delta}</div>` : ''}
@@ -1845,7 +1860,7 @@ export function clientHome() {
    </div>${installCard()}<div class="dock"><button class="btn${exIds.length ? ' line' : ''}" id="ctest">${ic('rotate-ccw', 's')}Пройти тест${all.length ? ' снова' : ''}</button>${all.length ? clientNav('cab') : ''}</div></div>`);
   $('#back').onclick = () => (all.length ? map() : onboarding()); $('#cset').onclick = settings;
   if ($('#cgo')) $('#cgo').onclick = () => workout(exIds);
-  if ($('#cask')) $('#cask').onclick = () => track('hw_ask', {}, false);
+  if ($('#cask')) $('#cask').onclick = () => askSheet(rep);
   if (Date.now() - hwAt > 10 * 60e3) { hwAt = Date.now(); refreshHomework().then(ch => { if (ch && $('#cgo')) { toast('Специалист обновил домашнее задание'); clientHome(); } }); }
   app.querySelectorAll('.cex').forEach(b => b.onclick = () => workout([b.dataset.id]));
   app.querySelectorAll('.ctest').forEach(b => b.onclick = () => { SHOW_T = +b.dataset.d; map(); });
