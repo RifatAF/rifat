@@ -146,7 +146,47 @@ const inApp = () => /Telegram|Instagram|FBAN|FBAV|VKClient|wv\)/i.test(navigator
 export async function installNow(done) {
   track('install_click');
   if (deferred) { deferred.prompt(); const r = await deferred.userChoice.catch(() => null); deferred = null; if (r && r.outcome === 'accepted') { LS.set('bp_inst', 'done'); done && done(); } return; }
-  toast(iOS() ? 'Нажмите «Поделиться» → «На экран Домой»' : inApp() ? 'Откройте сайт в Chrome, там будет кнопка установки' : 'Меню ⋮ → «Установить приложение»');
+  installGuide();
+}
+// где открыта страница: от этого зависят шаги установки
+export function platform() { const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1), android = /Android/.test(ua);
+  if (standalone()) return 'installed'; if (deferred) return 'prompt';
+  if (ios) return /Telegram|Instagram|FBAN|FBAV|VKClient|Line\//i.test(ua) ? 'ios-inapp' : /CriOS|FxiOS|EdgiOS|YaBrowser/.test(ua) ? 'ios-other' : 'ios-safari';
+  if (android) return inApp() ? 'android-inapp' : 'android'; return 'desktop'; }
+const MORE_ICO = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-5px"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
+const DOTS_ICO = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-5px"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>';
+/** Пошаговая установка под телефон и браузер. link: ссылка, с которой человек должен открыть приложение в другом браузере или после установки на iPhone
+ *  (у Safari и установленного приложения на iPhone раздельная память, у встроенных браузеров Telegram и WhatsApp тоже). */
+export function installGuide({ link = location.href, client = false } = {}) {
+  const pf = platform(); track('install_guide', { c: pf }, false);
+  const step = (n, t) => `<div class="row" style="gap:12px;align-items:center;margin-top:12px;font-size:15px;line-height:1.4"><b style="flex:none;width:30px;height:30px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center">${n}</b><span>${t}</span></div>`;
+  const copy = `<button class="btn line" id="igc" style="margin-top:14px">Скопировать ссылку</button>`;
+  const body = {
+    prompt: `<p class="sub" style="margin-top:8px;font-size:15px">Одно нажатие, приложение появится на главном экране.</p><button class="btn" id="igp" style="margin-top:16px">Установить</button>`,
+    android: `${step(1, `Нажмите ${DOTS_ICO} справа вверху в Chrome`)}${step(2, '«Установить приложение» или «Добавить на главный экран»')}${step(3, 'Откройте BodyPassport с главного экрана')}`,
+    'android-inapp': `<p style="font-size:15px;margin-top:10px;line-height:1.45">Страница открыта внутри мессенджера, отсюда приложение не ставится. Откройте её в Chrome:</p>${step(1, `Нажмите ${DOTS_ICO} или ${MORE_ICO} вверху → «Открыть в браузере» или «Открыть в Chrome»`)}${step(2, 'Не получилось: скопируйте ссылку и вставьте её в адресную строку Chrome')}${step(3, `В Chrome: ${DOTS_ICO} → «Установить приложение»`)}${copy}`,
+    'ios-safari': `${client ? step(1, 'Скопируйте ссылку кнопкой ниже: на iPhone приложение откроется пустым, ссылку нужно будет вставить') : ''}${step(client ? 2 : 1, `Нажмите ${SHARE_ICO} «Поделиться» внизу экрана. Нет такой кнопки: сначала ${MORE_ICO} справа внизу`)}${step(client ? 3 : 2, `Прокрутите вниз и выберите ${ADD_ICO} «На экран Домой» → «Добавить»`)}${step(client ? 4 : 3, client ? 'Откройте приложение с экрана Домой и нажмите «Вставить ссылку»' : 'Откройте приложение с экрана Домой')}${client ? copy : ''}`,
+    'ios-other': `${client ? step(1, 'Скопируйте ссылку кнопкой ниже') : ''}${step(client ? 2 : 1, `Нажмите ${SHARE_ICO} в адресной строке`)}${step(client ? 3 : 2, `«На экран Домой» → «Добавить». Нет такого пункта: откройте ссылку в Safari`)}${client ? step(4, 'Откройте приложение с экрана Домой и нажмите «Вставить ссылку»') : ''}${copy}`,
+    'ios-inapp': `<p style="font-size:15px;margin-top:10px;line-height:1.45">Страница открыта внутри мессенджера, отсюда приложение не ставится. Откройте её в Safari:</p>${step(1, `Нажмите ${MORE_ICO} или значок компаса → «Открыть в Safari». Не получилось: скопируйте ссылку и вставьте в Safari`)}${step(2, `В Safari: ${SHARE_ICO} «Поделиться» → ${ADD_ICO} «На экран Домой»`)}${copy}`,
+    desktop: `<p style="font-size:15px;margin-top:10px;line-height:1.45">Приложение ставится на телефон. Откройте эту ссылку на телефоне в Chrome (Android) или Safari (iPhone).</p>${copy}`,
+    installed: `<p style="font-size:15px;margin-top:10px">Приложение уже установлено.</p>` }[pf];
+  const d = sheet(`<h2 style="font-size:22px">Установить приложение</h2>${client ? '<p class="sub" style="font-size:14px;margin-top:6px;line-height:1.45">Иконка на экране телефона: домашка и тренер всегда под рукой, новые упражнения от специалиста подтянутся сами.</p>' : ''}${body}<button class="btn ghost" id="igx" style="margin-top:8px;border:0">Закрыть</button>`);
+  d.querySelector('#igx').onclick = () => d.remove();
+  if (d.querySelector('#igp')) d.querySelector('#igp').onclick = async () => { deferred.prompt(); const r = await deferred.userChoice.catch(() => null); deferred = null; if (r && r.outcome === 'accepted') { LS.set('bp_inst', 'done'); d.remove(); } };
+  if (d.querySelector('#igc')) d.querySelector('#igc').onclick = async () => { track('install_copy', { c: pf }, false); try { await navigator.clipboard.writeText(link); toast('Ссылка скопирована'); } catch (e) { prompt('Скопируйте ссылку', link); } };
+}
+/** Клиенту: заметная карточка установки. «Не сейчас» прячет ее на 3 дня, вместо нее остается строка «Как установить», пока приложение не установлено. */
+export function clientInstallCard() {
+  if (!canInstall() || LS.get('bp_inst') === 'done') return '';
+  const later = +(LS.get('bp_inst_later') || 0) > Date.now() - 3 * 864e5;
+  if (later) return `<button class="row-link" id="cinst" style="gap:10px;border:1px solid var(--line);border-radius:16px;padding:10px 14px;width:100%;text-align:left"><img src="icons/bp7-192.png" alt="" width="28" height="28" style="border-radius:7px"><span style="flex:1;font-size:14px">Приложение не установлено · <b>Как установить</b></span></button>`;
+  return `<div class="card" id="cinstc" style="display:flex;flex-direction:column;gap:12px;background:var(--brand);color:#fff;border:0"><div class="row" style="gap:12px"><img src="icons/bp7-192.png" alt="" width="48" height="48" style="border-radius:12px;flex:none"><div style="flex:1;min-width:0"><b style="font-size:17px">Установите приложение</b><div style="font-size:14px;opacity:.9;line-height:1.4;margin-top:2px">Иконка на экране: домашка всегда под рукой и обновится сама</div></div></div>
+    <button class="btn" id="cinst" style="background:#fff;color:#111">Установить</button><button class="link" id="clater" style="color:#fff;opacity:.85;font-size:14px">Не сейчас</button></div>`;
+}
+export function bindClientInstall(link, rerender) {
+  const b = document.getElementById('cinst'); if (!b) return; track('install_shown', { c: 'client' }, false);
+  b.onclick = () => { if (deferred) return installNow(() => rerender && rerender()); installGuide({ link, client: true }); };
+  const l = document.getElementById('clater'); if (l) l.onclick = () => { LS.set('bp_inst_later', String(Date.now())); track('install_later', {}, false); rerender && rerender(); };
 }
 // иконка «Поделиться» в Safari, чтобы человек узнал кнопку на своем экране
 const SHARE_ICO = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-5px"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';

@@ -4,7 +4,7 @@ import { backupSoon, restoreIfEmpty, downloadBackup, pickRestore } from './backu
 import { stateScores, cnsDelta } from './muscle-logic.js';
 import { P, F, G, Movement, sideView, levelled, analyze, fmt, standSnapshot, sideSnapshot, features } from './analysis.js';
 import { track, vasSave, vasLog, vasStats, vasDelta, channel, screenView, deviceInfo } from './track.js';
-import { bugSheet, rateCard, bindRate, installCard, bindInstall, installNow, canInstall, feedbackSheet, shareApp, appLink, mountBugTab, mountBetaBar, exitSurvey, testSurvey } from './grow.js';
+import { bugSheet, rateCard, bindRate, installCard, bindInstall, installNow, clientInstallCard, bindClientInstall, platform, canInstall, feedbackSheet, shareApp, appLink, mountBugTab, mountBetaBar, exitSurvey, testSurvey } from './grow.js';
 import { proHome, motionViewer, consumerPoses, canSwitchMode } from './pro.js';
 import { seal } from './core.js';
 import { calibReport, reportCSV, caseLines, RES_NAMES, learnWeights } from './calibreport.js';
@@ -1787,11 +1787,13 @@ async function reportView(code) {
   if (!r) { go(`<div class="scr pad fade" style="justify-content:center;gap:14px"><h1>Отчет не открылся</h1><p class="sub">Ссылка устарела (отчет хранится 90 дней) или скопирована не целиком. Попросите специалиста прислать ее снова.</p><button class="btn" id="tst">Пройти свой тест движения</button></div>`); $('#tst').onclick = () => { history.replaceState(null, '', location.pathname); onboarding(); }; return; }
   const str = (v, n) => esc(String(v || '').slice(0, n)); saveReport(code, r); ackHw(myReports().find(x => x.code === String(code).slice(0, 80))); const exIds = (Array.isArray(r.ex) ? r.ex : []).filter(id => ex(id));
   go(`<div class="fade" style="padding-bottom:32px"><div class="pad row" style="padding-top:12px"><span style="flex:1"></span><button class="pill" id="rcab">Мой прогресс</button></div><div class="pad" style="padding-top:4px"><div class="eyebrow">Биомеханический паспорт</div><h1 style="margin-top:6px">${str(r.name, 80)}</h1><p class="sub" style="font-size:14px">${str(r.date, 40)}${r.author ? ' · ' + str(r.author, 80) : ''}</p></div>
+    <div class="pad" style="margin-top:12px">${clientInstallCard()}</div>
     <div class="pad" style="margin-top:12px"><img src="${r.img}" alt="Отчет" style="width:100%;display:block;border-radius:16px"></div>
     <div class="pad" style="margin-top:14px;display:flex;flex-direction:column;gap:8px">${exIds.length ? `<button class="btn" id="rex">${ic('play', 's')}Начать упражнения · ${totalMin(exIds.map(ex))} мин</button>` : ''}<a class="btn${exIds.length ? ' line' : ''}" id="rdl" href="${r.img}" download="bodypassport-report.jpg" style="text-decoration:none">${ic('download', 's')}Сохранить картинку</a>
     <p class="sub" style="font-size:12px;text-align:center">Отчет сохранен в вашем кабинете на этом телефоне. Он зашифрован, ключ есть только в ссылке.</p></div></div>`);
   history.replaceState(null, '', location.pathname);
   $('#rcab').onclick = clientHome; if ($('#rex')) $('#rex').onclick = () => workout(exIds);
+  bindClientInstall(location.origin + '/#rep=' + code, () => { const c = document.getElementById('cinstc'); if (c) c.remove(); });
 }
 
 // домашка живет по одной ссылке: специалист обновил упражнения, кабинет подтягивает новую версию сам
@@ -1849,6 +1851,7 @@ export function clientHome() {
   go(`<div class="scr fade" style="padding-bottom:110px"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><span style="flex:1"></span><button class="round" id="cset" aria-label="Настройки">${ic('settings')}</button></div>
    <div class="pad" style="padding-top:4px">${PROFILE() && PROFILE().name ? `<div class="eyebrow">${esc(PROFILE().name)}</div>` : ''}<h1 style="margin-top:6px">Мой прогресс</h1></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s3)">
+    ${clientInstallCard()}
     ${spec || next ? card('Мой специалист', `${spec ? `<div class="row" style="gap:12px"><span class="avatar">${esc(spec.slice(0, 1).toUpperCase())}</span><div style="flex:1;min-width:0"><b style="font-size:17px">${esc(spec)}</b>${rep && rep.contact ? `<div class="sub" style="font-size:14px;user-select:text">${esc(rep.contact)}</div>` : ''}</div></div>` : ''}
       ${next ? `<div class="row" style="gap:10px;font-size:15px">${ic('calendar', 's')}<span style="flex:1">Повторный тест</span><b>${fmtD(next)}</b></div>` : ''}
       ${rep && rep.focus.length ? `<div style="font-size:15px;line-height:1.45"><div class="sub" style="font-size:13px;margin-bottom:4px">Над чем работаем</div>${rep.focus.map(x => `<div>• ${esc(x)}</div>`).join('')}</div>` : ''}
@@ -1862,7 +1865,7 @@ export function clientHome() {
       ${all.length ? `<div class="group">${all.slice().reverse().slice(0, 8).map(t => `<button class="row-link ctest" data-d="${t.date}"><span style="flex:1;text-align:left"><b style="font-weight:600">${fmtD(t.date)} · ${testLabel(t)}</b><small class="sub" style="display:block;font-size:13px">${zonesOf(t) ? zonesOf(t) + ' ' + plural3(zonesOf(t), 'зона требует', 'зоны требуют', 'зон требуют') + ' внимания' : 'без выраженных перекосов'}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>` : '<p class="sub">Тестов пока нет.</p>'}
       ${all.length === 1 ? '<p class="sub" style="font-size:14px">Пройдите тест еще раз через 3–4 недели, и здесь появится сравнение.</p>' : ''}`)}
     ${reps.length ? card('Отчеты специалиста', `<div class="group">${reps.slice().reverse().map(r => `<button class="row-link crep" data-c="${esc(r.code)}">${ic('file-text', 's')}<span style="flex:1;text-align:left">${esc(r.date || fmtD(r.at))}<small class="sub" style="display:block;font-size:13px">${esc(r.author)}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>`) : ''}
-   </div>${installCard()}<div class="dock"><button class="btn${exIds.length ? ' line' : ''}" id="ctest">${ic('rotate-ccw', 's')}Пройти тест${all.length ? ' снова' : ''}</button>${all.length ? clientNav('cab') : ''}</div></div>`);
+   </div><div class="dock"><button class="btn${exIds.length ? ' line' : ''}" id="ctest">${ic('rotate-ccw', 's')}Пройти тест${all.length ? ' снова' : ''}</button>${all.length ? clientNav('cab') : ''}</div></div>`);
   $('#back').onclick = () => (all.length ? map() : onboarding()); $('#cset').onclick = settings;
   if ($('#cgo')) $('#cgo').onclick = () => workout(exIds);
   if ($('#cask')) $('#cask').onclick = () => askSheet(rep);
@@ -1870,7 +1873,7 @@ export function clientHome() {
   app.querySelectorAll('.cex').forEach(b => b.onclick = () => workout([b.dataset.id]));
   app.querySelectorAll('.ctest').forEach(b => b.onclick = () => { SHOW_T = +b.dataset.d; map(); });
   app.querySelectorAll('.crep').forEach(b => b.onclick = () => reportView(b.dataset.c));
-  $('#ctest').onclick = () => { SHOW_T = null; again(); }; bindInstall(); bindClientNav();
+  $('#ctest').onclick = () => { SHOW_T = null; again(); }; bindClientInstall(location.origin + (rep ? '/#rep=' + rep.code : '/'), clientHome); bindClientNav();
   if (delta && $('#bah')) { bindBa('bah', all[0], last);
     // период сравнения: после последнего комплекса (прошлый тест), неделя, месяц, все время
     app.querySelectorAll('.bap button').forEach(b => b.onclick = () => { const base = periodBase(all, b.dataset.p); if (!base) return;
@@ -2274,5 +2277,18 @@ startPassive(); // фоновый сбор касаний и ритма набо
   // Иначе гость, открывший соглашение и обновивший страницу, попадал в кабинет специалиста.
   if (localStorage.getItem('bp_mode') === 'pro' && !proLink && !(meSync() && meSync().role === 'specialist')) localStorage.setItem('bp_mode', 'client');
   if (!SHARED && localStorage.getItem('bp_mode') === 'pro') return openPro();
-  SHARED ? map() : myReports().length ? clientHome() : tests().length ? map() : onboarding();
+  SHARED ? map() : myReports().length ? clientHome() : tests().length ? map() : platform() === 'installed' ? pasteLink() : onboarding();
 })();
+// установленное приложение открылось пустым (на iPhone у приложения своя память, отдельная от Safari): вставить ссылку от специалиста
+function pasteLink() {
+  track('paste_link_view', {}, false);
+  go(`<div class="scr pad fade" style="justify-content:center;gap:14px"><img src="icons/bp7-192.png" alt="" width="64" height="64" style="border-radius:16px">
+    <h1>Вставьте ссылку от специалиста</h1><p class="sub" style="line-height:1.45">На iPhone приложение не видит то, что было открыто в Safari. Вставьте ссылку, которую прислал специалист: откроются отчёт, домашка и ваш кабинет.</p>
+    <button class="btn" id="plp">Вставить ссылку</button><input id="pli" class="field" placeholder="или вставьте сюда вручную" style="height:48px" aria-label="Ссылка от специалиста">
+    <p class="sub" id="plerr" style="font-size:13px;color:var(--over-t)" hidden>Это не ссылка BodyPassport с отчётом. Попросите специалиста прислать её снова.</p>
+    <button class="btn line" id="plt" style="margin-top:8px">Пройти тест самому</button><button class="link" id="pls" style="font-size:14px">Я специалист</button></div>`);
+  const open = t => { const m = String(t || '').match(/#rep=([A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43})/); if (!m) { $('#plerr').hidden = false; return; } track('paste_link_ok', {}, false); reportView(m[1]); };
+  $('#plp').onclick = async () => { try { open(await navigator.clipboard.readText()); } catch (e) { $('#pli').focus(); } };
+  $('#pli').oninput = e => { if (e.target.value.includes('#rep=')) open(e.target.value); };
+  $('#plt').onclick = onboarding; $('#pls').onclick = () => { localStorage.setItem('bp_mode', 'pro'); openPro(); };
+}
