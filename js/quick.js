@@ -1,7 +1,7 @@
 // «Быстрый тест» (ТЗ v4): клиент → согласие → 4 фото → точки с правкой → замер → отчет.
 // Фото, точки, выводы и имя клиента остаются на телефоне специалиста (IndexedDB кабинета), на сервер не уходят.
 import { _pro, proHome, clientCard, homeworkLink, pullResults } from './pro.js';
-import { go, esc, ic, toast, spots, topOf, plan, asClient } from './app.js';
+import { go, esc, ic, toast, spots, topOf, asClient } from './app.js';
 import { C, cam, startCamera, stopCamera, detectStill, initPose, startMotion, phone, cameraBlocked, openInBrowserSheet, posedFigure, body3D } from './core.js';
 import { poseOf } from './pose-figure.js';
 import { VIEWS as REQ, ALL_VIEWS as VIEWS, EDIT_POINTS, POINT_NAMES, quickMetrics, viewMetrics, observations, frameIssue } from './quick-metrics.js';
@@ -9,6 +9,7 @@ import { P, analyze } from './analysis.js';
 import { track } from './track.js';
 import { matte } from './ds.js';
 import qrcode from './qr.js';
+import { releaseFor } from './biomechanics-engine.js';
 
 const $ = s => document.querySelector(s);
 const CONSENT_VER = '2026-10-v4-draft';
@@ -267,7 +268,26 @@ export function zonesOf(q) {
   catch (e) { return []; } }
 const zSpots = zones => zones.map(z => ({ ...z, key: z.key || z.id + ':' + z.side, tone: z.k === 'WEAK' ? -.75 : .75, back: (C.muscles[z.id] || {}).view === 'back' }));
 // ---------- домашнее задание: по умолчанию из карточек подтвержденных зон, специалист правит список ----------
-const autoEx = a => { const z = (a.quick || {}).zones || []; return z.length ? plan(zSpots(z)).filter(id => C.exercises[id]).slice(0, 8) : []; };
+// Подбор по парам мышц: у каждой зоны свое упражнение и упражнение для ее антагониста.
+// Зажата или перегружена: расслабить ее и укрепить антагониста (грудные → ромбовидные).
+// Слабая: укрепить ее и расслабить того, кто ее перегружает (ягодицы → сгибатели бедра), затем в движении.
+// Круги: сначала главное для каждой зоны, потом пары, потом движение; одна мышца с двух сторон идет парой упражнений.
+export function chainEx(zones, max = 8) {
+  const ex = id => C.exercises[id], out = [], why = {}, groups = new Map(), ORD = { SHORT: 0, WEAK: 1, HYPER: 2 };
+  for (const z of zones || []) { const k = z.id + ':' + z.k; if (!groups.has(k)) groups.set(k, { id: z.id, k: z.k, sides: new Set() }); groups.get(k).sides.add(z.side === 'RIGHT' ? 'right' : 'left'); }
+  const nm = id => ((C.muscles[id] || {}).name || id).toLowerCase(), rounds = [[], [], []];
+  for (const g of [...groups.values()].sort((a, b) => ORD[a.k] - ORD[b.k])) { const m = C.muscles[g.id]; if (!m) continue;
+    const p = m.plan || {}, ant = m.antagonist && C.muscles[m.antagonist];
+    if (g.k === 'WEAK') { rounds[0].push([g, [...(p.isolate || []), ...(m.activate || [])], `${nm(g.id)}: укрепить`]);
+      const subs = (p.subs || []).filter(x => C.muscles[x]).slice(0, 1).map(nm); rounds[1].push([g, p.release || [], subs.length ? `${subs.join(', ')}: расслабить, работает вместо «${nm(g.id)}»` : `${nm(g.id)}: снять перегруз`]); rounds[2].push([g, p.integrate || [], `${nm(g.id)}: в движении`]); }
+    else { rounds[0].push([g, releaseFor(m, g.k, ex), `${nm(g.id)}: расслабить`]);
+      rounds[1].push([g, ant ? [...((ant.plan && ant.plan.isolate) || []), ...(ant.activate || [])] : m.activate || [], ant ? `${nm(m.antagonist)}: укрепить, пара к «${nm(g.id)}»` : `${nm(g.id)}: укрепить`]); } }
+  for (const r of rounds) for (const [g, list, reason] of r) for (const x of list) {
+    const ids = [...g.sides].map(sd => x.replace('{s}', sd)).filter((id, i, l) => ex(id) && l.indexOf(id) === i); if (!ids.length) continue;
+    const add = ids.filter(id => !out.includes(id)); if (add.length && out.length + add.length <= max) { out.push(...add); add.forEach(id => { why[id] = reason; }); } break; }
+  return { ids: out, why };
+}
+const autoEx = a => chainEx((a.quick || {}).zones || []).ids;
 export const hwEx = a => (a.plan && Array.isArray(a.plan.ex) && a.plan.ex.length ? a.plan.ex : autoEx(a)).filter(id => C.exercises[id]).slice(0, 8);
 const exLabel = id => C.exercises[id].title.split(' (')[0] + (id.endsWith('_right') ? ', правая' : id.endsWith('_left') ? ', левая' : '');
 // левая и правая версии одного упражнения в отчете одной строкой
@@ -277,7 +297,7 @@ const DAYMS = 864e5;
 /** Блок в карточке клиента: что задано, дошло ли до клиента, как он занимается. */
 let pulledAt = 0;
 async function hwBlock(host, aid) {
-  const a = await row('assessments', aid), c = await row('clients', a.clientId), ids = hwEx(a), hw = c.hw || null;
+  const a = await row('assessments', aid), c = await row('clients', a.clientId), ids = hwEx(a), hw = c.hw || null, why = chainEx((a.quick || {}).zones || []).why;
   const since = hw ? hw.at : Date.now() - 14 * DAYMS, log = ((c.progress && c.progress.vas) || []).filter(r => r.t >= since - DAYMS);
   const days = new Set(log.filter(r => (r.n || 0) > 0).map(r => new Date(r.t).toDateString())).size, pp = log.filter(r => r.pre != null && r.post != null);
   const avg = k => (pp.reduce((x, r) => x + r[k], 0) / pp.length).toFixed(1).replace('.', ',');
@@ -290,9 +310,9 @@ async function hwBlock(host, aid) {
     : `<span class="mark OK"></span> Клиент открыл ${when(hw.seen)}${fresh ? ', видит последнюю версию' : '. Новая версия появится у него, когда он откроет приложение'}.`;
   host.innerHTML = `<div class="eyebrow">Домашнее задание</div>
     <div class="card" style="display:flex;flex-direction:column;gap:10px">
-      ${ids.length ? exRows(ids).map((e, n) => `<div class="row" style="font-size:15px;gap:10px;align-items:baseline"><b class="mono" style="color:var(--sub);width:18px">${n + 1}</b><span style="flex:1">${esc(e.title.split(' (')[0])}</span><span class="sub" style="font-size:12px">${esc(e.dose || '')}</span></div>`).join('') : '<p class="sub" style="font-size:14px">Пока пусто: отметьте зоны или выберите упражнения сами.</p>'}
+      ${ids.length ? exRows(ids).map((e, n) => `<div class="row" style="font-size:15px;gap:10px;align-items:baseline"><b class="mono" style="color:var(--sub);width:18px">${n + 1}</b><span style="flex:1;min-width:0">${esc(e.title.split(' (')[0])}<small class="sub" style="display:block;font-size:12px;line-height:1.35">${esc([e.dose, why[e.id]].filter(Boolean).join(' · '))}</small></span></div>`).join('') : '<p class="sub" style="font-size:14px">Пока пусто: отметьте зоны или выберите упражнения сами.</p>'}
       ${c.nocard ? '<p class="sub" style="font-size:12px">Чтобы передать домашку, заведите карточку клиента.</p>' : `<p class="sub" style="font-size:13px;line-height:1.45">${status}${diff ? '<br><b style="color:var(--short-t)">Вы изменили список: нажмите «Обновить у клиента».</b>' : ''}${hw && hw.seen ? `<br>Занимался ${days} ${plural(days)} из ${Math.max(1, Math.ceil((Date.now() - hw.at) / DAYMS))}${pp.length ? ` · боль до ${avg('pre')}, после ${avg('post')}` : ''}` : ''}</p>`}
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn line" id="hwed">${ic('pencil', 's')}Изменить</button>${c.nocard ? '' : `<button class="btn" id="hwgo" ${ids.length ? '' : 'disabled'}>${ic(diff ? 'rotate-ccw' : 'share', 's')}${!hw ? 'Передать клиенту' : diff ? 'Обновить у клиента' : 'Передать ещё раз'}</button>`}</div>
+      <div style="display:flex;flex-direction:column;gap:8px">${c.nocard ? '' : `<button class="btn" id="hwgo" ${ids.length ? '' : 'disabled'}>${ic(diff ? 'rotate-ccw' : 'share', 's')}${!hw ? 'Передать клиенту' : diff ? 'Обновить у клиента' : 'Передать ещё раз'}</button>`}<button class="btn line" id="hwed">${ic('pencil', 's')}Изменить список</button></div>
     </div>`;
   host.querySelector('#hwed').onclick = () => hwPicker(a, () => hwBlock(host, aid));
   const go = host.querySelector('#hwgo'); if (go) go.onclick = async () => { if (hw && !diff) return handSheet(c, hwUrl(hw), hw.seen ? 'again' : 'new');
