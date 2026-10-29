@@ -1,6 +1,7 @@
 // Отчет клиенту по веб-ссылке, только просмотр. Картинку отчета шифрует телефон специалиста,
 // ключ живет во фрагменте ссылки (#...), который браузер не отправляет на сервер: сервер хранит только шифр.
 // Создать может вошедший специалист (лимит в сутки), открыть может любой, у кого есть ссылка. Хранится 90 дней.
+// Домашка клиенту живет по одной ссылке: автор перезаписывает шифр по тому же id (?id=), ключ у клиента прежний.
 import crypto from 'node:crypto';
 import { put, get, list } from './_store.js';
 import { currentUser } from './_session.js';
@@ -18,7 +19,8 @@ export default async function handler(req, res) {
       const id = String(req.query.id || ''); if (!ID.test(id)) return res.status(400).json({ error: 'bad id' });
       const r = await get(`share/${id}.json`, { access: 'private', useCache: false }).catch(() => null);
       if (!r || !r.stream) return res.status(404).json({ error: 'ссылка устарела или удалена' });
-      return res.status(200).json(JSON.parse(await readAll(r.stream)));
+      const { v, z, iv, ct } = JSON.parse(await readAll(r.stream));
+      return res.status(200).json({ v, z, iv, ct });
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'method' });
     const origin = req.headers.origin; let oh = null; try { oh = origin ? new URL(origin).host : null; } catch (e) { oh = '?'; }
@@ -32,8 +34,13 @@ export default async function handler(req, res) {
     const day = new Date().toISOString().slice(0, 10);
     const { blobs } = await list({ prefix: `sharecount/${tag}/${day}/`, limit: PER_DAY });
     if (blobs.length >= PER_DAY) return res.status(429).json({ error: 'на сегодня создано слишком много ссылок' });
-    const id = crypto.randomBytes(16).toString('base64url');
-    await put(`share/${id}.json`, JSON.stringify({ v: 1, z: !!env.z, iv: env.iv, ct: env.ct }), { access: 'private', contentType: 'application/json', addRandomSuffix: false });
+    let id = String(req.query.id || '');
+    if (id) { if (!ID.test(id)) return res.status(400).json({ error: 'bad id' });
+      const old = await get(`share/${id}.json`, { access: 'private', useCache: false }).catch(() => null);
+      let o = null; if (old && old.stream) { try { o = JSON.parse(await readAll(old.stream)).o; } catch (e) {} }
+      if (o !== tag) return res.status(404).json({ error: 'ссылка устарела или удалена' }); }
+    else id = crypto.randomBytes(16).toString('base64url');
+    await put(`share/${id}.json`, JSON.stringify({ v: 1, z: !!env.z, iv: env.iv, ct: env.ct, o: tag }), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true });
     await put(`sharecount/${tag}/${day}/${id}`, '1', { access: 'private', contentType: 'text/plain', addRandomSuffix: false });
     return res.status(200).json({ id, days: SHARE_KEEP_DAYS });
   } catch (e) { console.error('share', e); return res.status(500).json({ error: 'ошибка сервера' }); }

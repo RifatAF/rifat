@@ -1418,6 +1418,18 @@ async function reportLink(cv, info) {
   const j = await r.json().catch(() => ({})); if (!r.ok || !j.id) throw new Error(j.error || r.status);
   return location.origin + '/#rep=' + j.id + '.' + k;
 }
+/** Домашка клиенту: одна ссылка на клиента. Обновление перезаписывает шифр по той же ссылке, у клиента она обновится сама.
+ *  В ссылке ящик клиента: отметки занятий и боль до и после возвращаются в карточку тем же зашифрованным каналом. */
+export async function homeworkLink(c, cv, info) {
+  const box = await freshBox(c.invite); if (box !== c.invite) c.invite = box;
+  let hw = c.hw && /^[A-Za-z0-9_-]{43}$/.test(c.hw.key || '') ? { ...c.hw } : { key: await seal.key() }, r;
+  for (;;) { const body = await seal.encrypt(hw.key, { img: cv.toDataURL('image/jpeg', .82), ...info, box: { i: box.id, k: box.key }, upd: Date.now() });
+    r = await fetch('/api/share' + (hw.id ? '?id=' + hw.id : ''), { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body });
+    if (r.status === 404 && hw.id) { hw = { key: await seal.key() }; continue; } break; } // ссылка истекла (90 дней): новая
+  const j = await r.json().catch(() => ({})); if (!r.ok || !j.id) throw new Error(j.error || r.status);
+  const fresh = !hw.id; c.hw = { ...hw, id: j.id, at: Date.now(), ex: info.ex.slice() }; await put('clients', c);
+  return { url: location.origin + '/#rep=' + j.id + '.' + hw.key, fresh };
+}
 
 
 
