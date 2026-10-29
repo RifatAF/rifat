@@ -154,6 +154,14 @@ test('share: отчет по ссылке создает только специ
   const g = await call(share, { query: { id: r.j.id } }); assert.equal(g.code, 200); assert.equal(g.j.ct, 'b');
   assert.equal((await call(share, { query: { id: 'x'.repeat(22) } })).code, 404);
   assert.equal((await call(share, { query: { id: '../users/t_1' } })).code, 400);
+  assert.equal(g.j.o, undefined, 'метка автора не отдается');
+  // домашка: автор обновляет шифр по той же ссылке, чужой специалист не может
+  user('t_402', 'specialist'); const env2 = JSON.stringify({ v: 1, iv: 'a', ct: 'c' });
+  const up = await call(share, { method: 'POST', query: { id: r.j.id }, body: env2, headers: { cookie: cookie('t_400') } }); assert.equal(up.code, 200); assert.equal(up.j.id, r.j.id);
+  assert.equal((await call(share, { query: { id: r.j.id } })).j.ct, 'c');
+  assert.equal((await call(share, { method: 'POST', query: { id: r.j.id }, body: env, headers: { cookie: cookie('t_402') } })).code, 404, 'чужой');
+  assert.equal((await call(share, { method: 'POST', query: { id: 'y'.repeat(22) }, body: env, headers: { cookie: cookie('t_400') } })).code, 404, 'нет такой');
+  assert.equal((await call(share, { query: { id: r.j.id } })).j.ct, 'c');
 });
 test('VAS: дельта, комплаенс и средние', async () => {
   const v = await import(new URL('../js/vas.js', import.meta.url).href);

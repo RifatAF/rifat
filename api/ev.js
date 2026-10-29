@@ -13,11 +13,11 @@ const NAMES = new Set(['app_open', 'plan_minutes', 'onb_done', 'login_ok', 'safe
   'page_view', 'signup', 'first_test', 'first_report', 'retest_14d', 'install_click', 'profile_done', 'beta_skip_test', 'calib_sent',
   'pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'db_empty', 'db_other', 'backup_done', 'restore_done',
   'gate_hit', 'compare_open', 'retest_done', 'report_shared', 'bug_sent', 'rage', 'slow',
-  'pro_click', 'vas_done', 'report_link', 'progress_sent',
+  'pro_click', 'vas_done', 'report_link', 'progress_sent', 'hw_sent', 'hw_seen', 'hw_ask',
   'paywall_view', 'limit_hit', 'trial_end', 'trial_end_view', 'balance_pay', 'pay_redirect', 'screen', 'back', 'device', 'main_recognize', 'workout_pain_block', 'update_offer', 'session_start', 'session_done', 'retest_after', 'ba_period', 'scroll', 'qback', 'retest_pair', 'menu', 'try_click']);
 const KEYS = new Set(['m', 'f', 'l', 'n', 'c', 'r', 'd', 's', 'q']); // ошибка, файл, строка, число, категория, источник, секунды, оценка, качество
 // события, у которых в сводке видна разбивка по категории (c) и медиана чисел (d, n, q)
-const DETAIL = new Set(['try_click', 'menu', 'qback', 'pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'gate_hit', 'rage', 'slow', 'result_fail', 'test_done', 'assess_done', 'vas_done', 'report_link', 'paywall_view', 'limit_hit', 'trial_end', 'pro_click', 'fb_sent', 'main_recognize', 'workout_pain_block']);
+const DETAIL = new Set(['hw_sent', 'try_click', 'menu', 'qback', 'pose_init', 'pose_fail', 'cam_err', 'setup', 'retake', 'step_skip', 'cam_q', 'storage', 'gate_hit', 'rage', 'slow', 'result_fail', 'test_done', 'assess_done', 'vas_done', 'report_link', 'paywall_view', 'limit_hit', 'trial_end', 'pro_click', 'fb_sent', 'main_recognize', 'workout_pain_block']);
 const MAX = 8 * 1024;
 // аккаунты вне статистики (noStats в _session.js): при записи проверяем вошедшего, в сводке и при очистке ищем по псевдониму
 const skipUid = new Map();

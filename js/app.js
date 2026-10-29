@@ -1757,7 +1757,8 @@ export function progressChart(log) {
 }
 // клиенту по ссылке специалиста: сводка занятий уходит специалисту тем же зашифрованным каналом, не чаще раза в 12 часов
 async function sendProgress(log) {
-  const inv = INV(); if (!inv || !localStorage.getItem('bp_share_' + inv.i)) return;
+  // ящик приглашения на тест, иначе ящик из ссылки с домашкой (специалист видит, как идут занятия)
+  const i0 = INV(), hb = (myReports().filter(r => r.box).at(-1) || {}).box, inv = i0 && localStorage.getItem('bp_share_' + i0.i) ? i0 : hb ? { i: hb.i, k: hb.k } : null; if (!inv) return;
   const last = +(localStorage.getItem('bp_prog_at') || 0); if (Date.now() - last < 12 * 3600e3) return;
   const pr = PROFILE();
   try { const body = await seal.encrypt(inv.k, { type: 'progress', token: inv.join ? pr && pr.token : undefined, vas: log.slice(-60) });
@@ -1793,15 +1794,26 @@ async function reportView(code) {
   $('#rcab').onclick = clientHome; if ($('#rex')) $('#rex').onclick = () => workout(exIds);
 }
 
+// домашка живет по одной ссылке: специалист обновил упражнения, кабинет подтягивает новую версию сам
+async function refreshHomework() {
+  const rec = myReports().filter(r => r.upd).at(-1); if (!rec) return false; const [id, k] = rec.code.split('.');
+  try { const res = await fetch('/api/share?id=' + id, { cache: 'no-store' }); if (!res.ok) return false;
+    const r = await seal.decrypt(k, await res.text()); if (!(+r.upd > rec.upd)) return false; saveReport(rec.code, r); track('hw_seen', {}, false); return true; } catch (e) { return false; }
+}
+// контакт специалиста из отчета: Telegram, WhatsApp по номеру или ссылка; иначе только текст
+const contactHref = t => { t = String(t || '').trim(); const tg = t.match(/(?:t\.me\/|^@)([A-Za-z0-9_]{4,32})/); if (tg) return 'https://t.me/' + tg[1];
+  const d = t.replace(/[^\d+]/g, ''); if (/^\+?\d{10,15}$/.test(d)) return 'https://wa.me/' + d.replace(/^\+/, '').replace(/^8(?=\d{10}$)/, '7'); return /^https:\/\//.test(t) ? t : ''; };
 // ---------- кабинет клиента: мои изменения, занятия и работа специалиста ----------
 // Все хранится на этом телефоне: тесты, дневник занятий и отчеты, которые прислал специалист.
 const REPS_KEY = 'bp_reports';
 const myReports = () => { try { const l = JSON.parse(localStorage.getItem(REPS_KEY) || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; } };
 function saveReport(code, r) {
   const s = (v, n) => String(v || '').slice(0, n), rec = { code: s(code, 80), name: s(r.name, 80), date: s(r.date, 40), author: s(r.author, 80), contact: s(r.contact, 120), at: +r.at || Date.now(),
-    ex: (Array.isArray(r.ex) ? r.ex : []).filter(id => typeof id === 'string' && ex(id)).slice(0, 8), next: +r.next || 0, note: s(r.note, 600), focus: (Array.isArray(r.focus) ? r.focus : []).map(x => s(x, 120)).slice(0, 3), saved: Date.now() };
+    ex: (Array.isArray(r.ex) ? r.ex : []).filter(id => typeof id === 'string' && ex(id)).slice(0, 8), next: +r.next || 0, note: s(r.note, 600), focus: (Array.isArray(r.focus) ? r.focus : []).map(x => s(x, 120)).slice(0, 3), saved: Date.now(),
+    upd: +r.upd || 0, ...(r.box && /^[A-Za-z0-9_-]{16,64}$/.test(r.box.i || '') && /^[A-Za-z0-9_-]{43}$/.test(r.box.k || '') ? { box: { i: r.box.i, k: r.box.k } } : {}) };
   try { localStorage.setItem(REPS_KEY, JSON.stringify([...myReports().filter(x => x.code !== rec.code), rec].sort((a, b) => a.at - b.at).slice(-30))); } catch (e) {}
 }
+let hwAt = 0;
 export function clientHome() {
   track('client_home'); const all = tests(), last = all.at(-1), reps = myReports(), rep = reps.at(-1), inv = INV();
   const fmtD = t => new Date(t).toLocaleDateString('ru', { day: 'numeric', month: 'long' });
@@ -1822,7 +1834,8 @@ export function clientHome() {
       ${rep && rep.focus.length ? `<div style="font-size:15px;line-height:1.45"><div class="sub" style="font-size:13px;margin-bottom:4px">Над чем работаем</div>${rep.focus.map(x => `<div>• ${esc(x)}</div>`).join('')}</div>` : ''}
       ${rep && rep.note ? `<p style="font-size:15px;line-height:1.45;background:var(--surface-2);border-radius:12px;padding:10px 12px">${esc(rep.note)}</p>` : ''}`) : ''}
     ${exIds.length ? card(assigned ? 'Упражнения от специалиста' : 'Упражнения по вашему тесту', `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${exIds.slice(0, 6).map(id => `<button class="cex" data-id="${id}" style="border:0;background:var(--surface-2);border-radius:14px;padding:4px 4px 8px;text-align:center;cursor:pointer;font:inherit;color:inherit">${exFigure(id)}<span style="display:block;font-size:12px;line-height:1.25;margin-top:2px">${esc(exLabel(ex(id)))}</span></button>`).join('')}</div>
-      <button class="btn" id="cgo">${ic('play', 's')}Начать комплекс · ${totalMin(exIds.map(ex))} мин</button>`) : ''}
+      <button class="btn" id="cgo">${ic('play', 's')}Начать комплекс · ${totalMin(exIds.map(ex))} мин</button>
+      ${assigned ? `<p class="sub" style="font-size:13px;line-height:1.45">Упражнения подобрал ваш специалист. Больно или сомневаетесь, можно ли вам упражнение, хотите добавить своё: не угадывайте, спросите его. Отметки занятий и боль до и после уходят только ему, зашифрованными.</p>${contactHref(rep.contact) ? `<a class="btn line" id="cask" href="${esc(contactHref(rep.contact))}" target="_blank" rel="noopener" style="text-decoration:none">${ic('message-square', 's')}Спросить специалиста</a>` : ''}` : ''}`) : ''}
     ${card('Занятия за 4 недели', `${heatmap4w(doneMinutes(JSON.parse(localStorage.getItem(K('bp_done')) || '[]')))}
       <div class="row" style="font-size:15px;gap:16px;flex-wrap:wrap"><span><b class="num">${st.activeDays || 0}</b> <span class="sub">дн. из 30</span></span>${st.avgPre != null && st.avgPost != null ? `<span><span class="sub">боль</span> <b class="num">${(+st.avgPre).toFixed(1)} → ${(+st.avgPost).toFixed(1)}</b></span>` : ''}</div>`)}
     ${card('Мои изменения', `${delta ? `${baPeriods(all)}<div id="bahw">${baBlock('bah')}</div><div style="display:flex;flex-direction:column;gap:8px"><div class="sub" style="font-size:13px">Первый тест → последний</div>${delta}</div>` : ''}
@@ -1832,6 +1845,8 @@ export function clientHome() {
    </div>${installCard()}<div class="dock"><button class="btn${exIds.length ? ' line' : ''}" id="ctest">${ic('rotate-ccw', 's')}Пройти тест${all.length ? ' снова' : ''}</button>${all.length ? clientNav('cab') : ''}</div></div>`);
   $('#back').onclick = () => (all.length ? map() : onboarding()); $('#cset').onclick = settings;
   if ($('#cgo')) $('#cgo').onclick = () => workout(exIds);
+  if ($('#cask')) $('#cask').onclick = () => track('hw_ask', {}, false);
+  if (Date.now() - hwAt > 10 * 60e3) { hwAt = Date.now(); refreshHomework().then(ch => { if (ch && $('#cgo')) { toast('Специалист обновил домашнее задание'); clientHome(); } }); }
   app.querySelectorAll('.cex').forEach(b => b.onclick = () => workout([b.dataset.id]));
   app.querySelectorAll('.ctest').forEach(b => b.onclick = () => { SHOW_T = +b.dataset.d; map(); });
   app.querySelectorAll('.crep').forEach(b => b.onclick = () => reportView(b.dataset.c));
@@ -2239,5 +2254,5 @@ startPassive(); // фоновый сбор касаний и ритма набо
   // Иначе гость, открывший соглашение и обновивший страницу, попадал в кабинет специалиста.
   if (localStorage.getItem('bp_mode') === 'pro' && !proLink && !(meSync() && meSync().role === 'specialist')) localStorage.setItem('bp_mode', 'client');
   if (!SHARED && localStorage.getItem('bp_mode') === 'pro') return openPro();
-  SHARED || tests().length ? map() : onboarding();
+  SHARED ? map() : myReports().length ? clientHome() : tests().length ? map() : onboarding();
 })();

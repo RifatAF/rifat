@@ -1,6 +1,6 @@
 // «Быстрый тест» (ТЗ v4): клиент → согласие → 4 фото → точки с правкой → замер → отчет.
 // Фото, точки, выводы и имя клиента остаются на телефоне специалиста (IndexedDB кабинета), на сервер не уходят.
-import { _pro, proHome, clientCard } from './pro.js';
+import { _pro, proHome, clientCard, homeworkLink } from './pro.js';
 import { go, esc, ic, toast, spots, topOf, plan, asClient } from './app.js';
 import { C, cam, startCamera, stopCamera, detectStill, initPose, startMotion, phone, cameraBlocked, openInBrowserSheet, posedFigure, body3D } from './core.js';
 import { poseOf } from './pose-figure.js';
@@ -265,6 +265,59 @@ export function zonesOf(q) {
     return out.map(s => ({ id: s.id, side: s.side, k: s.k, key: s.key })); }
   catch (e) { return []; } }
 const zSpots = zones => zones.map(z => ({ ...z, key: z.key || z.id + ':' + z.side, tone: z.k === 'WEAK' ? -.75 : .75, back: (C.muscles[z.id] || {}).view === 'back' }));
+// ---------- домашнее задание: по умолчанию из карточек подтвержденных зон, специалист правит список ----------
+const autoEx = a => { const z = (a.quick || {}).zones || []; return z.length ? plan(zSpots(z)).filter(id => C.exercises[id]).slice(0, 8) : []; };
+export const hwEx = a => (a.plan && Array.isArray(a.plan.ex) && a.plan.ex.length ? a.plan.ex : autoEx(a)).filter(id => C.exercises[id]).slice(0, 8);
+const exLabel = id => C.exercises[id].title.split(' (')[0] + (id.endsWith('_right') ? ', правая' : id.endsWith('_left') ? ', левая' : '');
+// левая и правая версии одного упражнения в отчете одной строкой
+const exRows = ids => ids.map(id => C.exercises[id]).filter((e, i, l) => l.findIndex(x => x.title.split(' (')[0] === e.title.split(' (')[0]) === i);
+const sameSet = (x, y) => x.length === y.length && x.every(id => y.includes(id));
+const DAYMS = 864e5;
+/** Блок в карточке клиента: что задано, дошло ли до клиента, как он занимается. */
+async function hwBlock(host, aid) {
+  const a = await row('assessments', aid), c = await row('clients', a.clientId), ids = hwEx(a), hw = c.hw || null;
+  const since = hw ? hw.at : Date.now() - 14 * DAYMS, log = ((c.progress && c.progress.vas) || []).filter(r => r.t >= since - DAYMS);
+  const days = new Set(log.filter(r => (r.n || 0) > 0).map(r => new Date(r.t).toDateString())).size, pp = log.filter(r => r.pre != null && r.post != null);
+  const avg = k => (pp.reduce((x, r) => x + r[k], 0) / pp.length).toFixed(1).replace('.', ',');
+  const diff = hw && !sameSet(ids, hw.ex || []);
+  host.innerHTML = `<div class="eyebrow">Домашнее задание</div>
+    <div class="card" style="display:flex;flex-direction:column;gap:10px">
+      ${ids.length ? exRows(ids).map((e, n) => `<div class="row" style="font-size:15px;gap:10px;align-items:baseline"><b class="mono" style="color:var(--sub);width:18px">${n + 1}</b><span style="flex:1">${esc(e.title.split(' (')[0])}</span><span class="sub" style="font-size:12px">${esc(e.dose || '')}</span></div>`).join('') : '<p class="sub" style="font-size:14px">Пока пусто: отметьте зоны или выберите упражнения сами.</p>'}
+      ${c.nocard ? '<p class="sub" style="font-size:12px">Чтобы отправить домашку, заведите карточку клиента.</p>' : `<p class="sub" style="font-size:13px">${hw ? `У клиента с ${_pro.fmtDate(hw.at)}${diff ? ' · <b style="color:var(--short-t)">изменения ещё не у клиента</b>' : ''}` : 'Ещё не отправлена.'}${hw ? `<br>Занимался ${days} ${days % 10 === 1 && days % 100 !== 11 ? 'день' : days % 10 >= 2 && days % 10 <= 4 && (days % 100 < 10 || days % 100 >= 20) ? 'дня' : 'дней'} из ${Math.max(1, Math.ceil((Date.now() - hw.at) / DAYMS))}${pp.length ? ` · боль до ${avg('pre')}, после ${avg('post')}` : ''}` : ''}</p>`}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn line" id="hwed">${ic('pencil', 's')}Изменить</button>${c.nocard ? '' : `<button class="btn" id="hwgo" ${ids.length ? '' : 'disabled'}>${ic(hw ? 'rotate-ccw' : 'share', 's')}${hw ? 'Обновить' : 'Отправить'}</button>`}</div>
+      ${hw && !c.nocard ? '<button class="link" id="hwre" style="font-size:13px;align-self:flex-start">Отправить ссылку ещё раз</button>' : ''}
+    </div>`;
+  host.querySelector('#hwed').onclick = () => hwPicker(a, () => hwBlock(host, aid));
+  const go = host.querySelector('#hwgo'); if (go) go.onclick = async () => { go.disabled = true; go.textContent = 'Отправляю…'; await sendHw(aid); hwBlock(host, aid); };
+  const re = host.querySelector('#hwre'); if (re) re.onclick = () => shareHw(c, location.origin + '/#rep=' + hw.id + '.' + hw.key);
+}
+function hwPicker(a, done) {
+  const sel = new Set(hwEx(a)), d = document.createElement('div'); d.className = 'sheet';
+  const list = Object.values(C.exercises).sort((x, y) => (sel.has(y.id) - sel.has(x.id)) || x.title.localeCompare(y.title));
+  d.innerHTML = `<div style="max-height:86dvh;display:flex;flex-direction:column"><h2 style="font-size:20px">Домашнее задание</h2><p class="sub" style="font-size:13px;margin-top:4px">До 8 упражнений. Клиент увидит шаги, дозировку, что почувствует и чего избегать.</p>
+    <input id="hwq" class="field" type="search" placeholder="Найти упражнение" style="margin-top:10px;height:44px" aria-label="Поиск упражнения">
+    <div id="hwl" style="overflow:auto;margin-top:8px;flex:1">${list.map(e => `<label class="row" data-q="${esc([e.title, e.goal, e.category].filter(Boolean).join(' ').toLowerCase())}" style="padding:8px 0;font-size:15px;gap:10px"><input type="checkbox" data-e="${e.id}" ${sel.has(e.id) ? 'checked' : ''} style="width:20px;height:20px;accent-color:var(--ink)"><span style="flex:1">${esc(exLabel(e.id))}</span><span class="sub" style="font-size:12px">${esc(e.dose || '')}</span></label>`).join('')}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><button class="btn line" id="hwauto">По замеру</button><button class="btn" id="hwok">Готово</button></div></div>`;
+  document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
+  d.querySelector('#hwq').oninput = e => { const q = e.target.value.trim().toLowerCase(); d.querySelectorAll('[data-q]').forEach(l => { l.hidden = !!q && !l.dataset.q.includes(q); }); };
+  d.querySelectorAll('[data-e]').forEach(b => b.onchange = () => { if (b.checked && sel.size >= 8) { b.checked = false; return toast('Не больше 8 упражнений'); } b.checked ? sel.add(b.dataset.e) : sel.delete(b.dataset.e); });
+  const save = async ex => { a.plan = { text: '', ...(a.plan || {}), ex }; await _pro.put('assessments', a); d.remove(); done(); };
+  d.querySelector('#hwauto').onclick = () => save([]); d.querySelector('#hwok').onclick = () => save([...sel]);
+}
+/** Отчет и домашка одной ссылкой. Первый раз ссылку отправляет специалист, дальше содержимое меняется по ней само. */
+async function sendHw(aid) {
+  const a = await row('assessments', aid), c = await row('clients', a.clientId), ph = (await row('poses', aid)) || {};
+  try { const cv = await renderReport(a, c, ph.photos || {}), author = (await _pro.meta('profile')) || _pro.author(), contact = (await _pro.meta('contact')) || '';
+    const info = { name: c.name, date: _pro.fmtDate(a.date), author, contact, at: a.date, ex: hwEx(a), next: +a.nextDate || 0, note: String((a.plan && a.plan.text) || '').slice(0, 600),
+      focus: taskGroups((a.quick || {}).zones).map(g => `${g.t}: ${g.list.join(', ')}`).slice(0, 3) };
+    const { url, fresh } = await homeworkLink(c, cv, info); track('hw_sent', { c: fresh ? 'new' : 'update', n: info.ex.length }, false);
+    if (fresh) await shareHw(c, url); else toast('Готово: у клиента домашка обновится сама по прежней ссылке');
+  } catch (e) { toast('Не удалось отправить: ' + e.message); }
+}
+async function shareHw(c, url) {
+  const text = `${c.name.split(' ')[0]}, здравствуйте! Ваш замер и домашнее задание по ссылке. Сохраните её или установите приложение: когда я поменяю упражнения, они обновятся сами.`;
+  if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url).catch(() => {}); toast('Ссылка скопирована'); }
+}
 // клиенту: одна короткая фраза на показатель, без чисел (числа у специалиста и в «Измерено»)
 const PLAIN = { headForward: ['Голова выдвинута вперед', 'Голова отведена назад'], headTilt: ['Голова наклонена к правому плечу', 'Голова наклонена к левому плечу'],
   shoulderTilt: ['Правое плечо ниже левого', 'Левое плечо ниже правого'], pelvicTilt: ['Таз: правая сторона ниже', 'Таз: левая сторона ниже'], trunkLateral: ['Корпус смещен вправо', 'Корпус смещен влево'],
@@ -464,9 +517,11 @@ export async function quickCard(host, aid, prevId) {
     ${prevId ? '' : '<p class="sub" style="font-size:12px;margin-top:-8px">«Было → стало» откроется после повторного теста этого клиента.</p>'}
     ${es.ok ? `<button class="btn line" id="qcedit">${ic('pencil', 's')}Поправить точки · до ${new Date(es.until).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</button>` : ''}
     <p class="sub" style="font-size:12px;margin-top:-8px">${es.ok ? 'Через 2 часа после сохранения или после следующего теста точки закроются, чтобы замер нельзя было подогнать.' : esc(es.why)}${editNote(a) ? ' · ' + esc(editNote(a)) : ''}</p>
+    <div id="qhw" style="display:flex;flex-direction:column;gap:8px"></div>
     <div id="qcp" style="display:flex;flex-direction:column;gap:16px"></div>
     ${a.note ? `<div><div class="eyebrow">Ваш вывод · ГИПОТЕЗА</div><div class="card" style="font-size:15px;line-height:1.45;white-space:pre-line">${esc(a.note)}</div></div>` : ''}</div>`;
-  panel(host.querySelector('#qcp'), st, { photos: ((await row('poses', aid)) || {}).photos || {}, onChange: async s => { a.quick = { ...a.quick, zones: s.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), confirmed: true }; await _pro.put('assessments', a); } });
+  panel(host.querySelector('#qcp'), st, { photos: ((await row('poses', aid)) || {}).photos || {}, onChange: async s => { a.quick = { ...a.quick, zones: s.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), confirmed: true }; await _pro.put('assessments', a); hwBlock(host.querySelector('#qhw'), aid); } });
+  hwBlock(host.querySelector('#qhw'), aid);
   host.querySelector('#qcrep').onclick = () => report(aid);
   if (host.querySelector('#qcedit')) host.querySelector('#qcedit').onclick = () => editSaved(aid);
   host.querySelector('#qcshow').onclick = () => showClient(st, c && !c.nocard ? c.name : '');
@@ -555,7 +610,7 @@ export async function quickResult(aid) { return report(aid); }
 async function report(aid) {
   const a = await row('assessments', aid), c = await row('clients', a.clientId), ph = (await row('poses', aid)) || {};
   const cv = await renderReport(a, c, ph.photos || {});
-  shareSheet(cv, `bodypassport-${(c.nocard ? 'zamer' : c.name).replace(/[^\p{L}\p{N}]+/gu, '-')}-${new Date(a.date).toISOString().slice(0, 10)}`, c, 'quick');
+  shareSheet(cv, `bodypassport-${(c.nocard ? 'zamer' : c.name).replace(/[^\p{L}\p{N}]+/gu, '-')}-${new Date(a.date).toISOString().slice(0, 10)}`, c, 'quick', undefined, aid);
 }
 /** Отчет «До и после» двух быстрых тестов: фото рядом, что изменилось больше погрешности, над чем работаем дальше. */
 async function reportCompare(prevId, curId) {
@@ -564,11 +619,12 @@ async function reportCompare(prevId, curId) {
   const cv = await renderCompare(A, B, c, pa, pb);
   shareSheet(cv, `bodypassport-do-posle-${(c.nocard ? 'zamer' : c.name).replace(/[^\p{L}\p{N}]+/gu, '-')}-${new Date(B.date).toISOString().slice(0, 10)}`, c, 'compare', 'Отчет: до и после');
 }
-function shareSheet(cv, base, c, kind, title = 'Отчет клиенту') {
+function shareSheet(cv, base, c, kind, title = 'Отчет клиенту', aid = null) {
   const d = document.createElement('div'); d.className = 'sheet';
   d.innerHTML = `<div><h2 style="font-size:20px">${title}</h2><p class="sub" style="font-size:13px;margin-top:4px">Так его увидит клиент.</p>
     <div style="margin-top:12px;max-height:50dvh;overflow:auto;border-radius:16px;border:1px solid var(--line)"><img src="${cv.toDataURL('image/jpeg', .8)}" alt="Отчет" style="width:100%;display:block"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn" id="qpdf">${ic('file-text', 's')}PDF</button><button class="btn line" id="qpng">${ic('image', 's')}Картинка</button></div>
+    ${aid && !c.nocard ? `<button class="btn" id="qhwl" style="margin-top:8px">${ic('mail', 's')}${c.hw ? 'Обновить отчёт и домашку у клиента' : 'Ссылкой: отчёт и домашка'}</button>` : ''}
     <button class="btn ghost" id="qcard" style="margin-top:8px;border:0">${kind === 'compare' ? 'Закрыть' : c.nocard ? 'В кабинет' : 'К карточке клиента'}</button></div>`;
   document.body.appendChild(d);
   const close = () => { d.remove(); if (kind !== 'compare') c.nocard ? proHome() : clientCard(c.id); };
@@ -581,6 +637,7 @@ function shareSheet(cv, base, c, kind, title = 'Отчет клиенту') {
     try { const { canvasToPdf } = await import('./pdf.js'); await send(await canvasToPdf(cv, 'BodyPassport'), base + '.pdf', 'application/pdf', 'pdf'); } catch (e) { toast('Не удалось собрать PDF: ' + e.message); }
     b.disabled = false; b.innerHTML = `${ic('file-text', 's')}PDF`; };
   d.querySelector('#qpng').onclick = async () => send(await new Promise(r => cv.toBlob(r, 'image/png')), base + '.png', 'image/png', 'png');
+  if (d.querySelector('#qhwl')) d.querySelector('#qhwl').onclick = async () => { const b = d.querySelector('#qhwl'); b.disabled = true; b.textContent = 'Отправляю…'; await sendHw(aid); close(); };
 }
 
 const loadImg = src => new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; });
@@ -640,8 +697,8 @@ export async function renderReport(a, c, photos) {
       y = wrap(g, gr.list.join(', '), PAD + tw, y, W - PAD * 2 - tw, 36) - 36; }
     if (a.note) { y += 14; g.fillStyle = INK; g.font = `400 25px ${F}`; for (const para of a.note.split('\n')) y = wrap(g, para, PAD, y + 30, W - PAD * 2, 34); } }
   // рекомендации: упражнения из существующих карточек зон и текст специалиста
-  const exIds = zones.length ? plan(zSpots(zones).map(z => ({ ...z, k: z.k }))) : [], exs = exIds.map(id => C.exercises[id]).filter((e, i, a) => e && a.findIndex(x => x && x.title.split(' (')[0] === e.title.split(' (')[0]) === i).slice(0, 4); // левая и правая версии одного упражнения: одна строка
-  if (exs.length || (a.plan && a.plan.text)) { y += 60; head('Рекомендации специалиста', '', INK); y += 10; g.fillStyle = INK; g.font = `400 25px ${F}`;
+  const exs = exRows(hwEx(a)).slice(0, 6);
+  if (exs.length || (a.plan && a.plan.text)) { y += 60; head('Домашнее задание', '', INK); y += 10; g.fillStyle = INK; g.font = `400 25px ${F}`;
     exs.forEach((e, n) => { y = wrap(g, `${n + 1}. ${e.title.split(' (')[0]}${e.dose ? ': ' + e.dose : ''}`, PAD, y + 30, W - PAD * 2, 34) - 4; });
     if (a.plan && a.plan.text) for (const para of a.plan.text.split('\n')) y = wrap(g, para, PAD, y + 30, W - PAD * 2, 34); }
   y += 50; breaks.push(y - 20); g.fillStyle = SUB; g.font = `400 21px ${F}`;
