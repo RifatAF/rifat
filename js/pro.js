@@ -1423,11 +1423,12 @@ async function reportLink(cv, info) {
 export async function homeworkLink(c, cv, info) {
   const box = await freshBox(c.invite); if (box !== c.invite) c.invite = box;
   let hw = c.hw && /^[A-Za-z0-9_-]{43}$/.test(c.hw.key || '') ? { ...c.hw } : { key: await seal.key() }, r;
-  for (;;) { const body = await seal.encrypt(hw.key, { img: cv.toDataURL('image/jpeg', .82), ...info, box: { i: box.id, k: box.key }, upd: Date.now() });
+  const upd = Date.now();
+  for (;;) { const body = await seal.encrypt(hw.key, { img: cv.toDataURL('image/jpeg', .82), ...info, box: { i: box.id, k: box.key }, upd });
     r = await fetch('/api/share' + (hw.id ? '?id=' + hw.id : ''), { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body });
     if (r.status === 404 && hw.id) { hw = { key: await seal.key() }; continue; } break; } // ссылка истекла (90 дней): новая
   const j = await r.json().catch(() => ({})); if (!r.ok || !j.id) throw new Error(j.error || r.status);
-  const fresh = !hw.id; c.hw = { ...hw, id: j.id, at: Date.now(), ex: info.ex.slice() }; await put('clients', c);
+  const fresh = !hw.id; c.hw = { ...hw, id: j.id, at: fresh ? upd : hw.at || upd, upd, ex: info.ex.slice(), ...(fresh ? { seen: 0, seenUpd: 0 } : {}) }; await put('clients', c);
   return { url: location.origin + '/#rep=' + j.id + '.' + hw.key, fresh };
 }
 
@@ -1630,6 +1631,8 @@ export async function pullResults() {
   for (const c of clients) for (const item of boxes(c.invite).flatMap(id => data[id] || [])) {
     let r; try { r = await seal.decrypt(c.invite.key, item.data); } catch (e) { done(item.p); continue; } // не расшифровывается этим ключом: мусор, иначе он занимает лимит ссылки
     if (r && r.type === 'progress') { await saveProgress(c, r.vas); done(item.p); continue; }
+    // клиент открыл ссылку с домашкой или подтянул новую версию: подтверждение доставки
+    if (r && r.type === 'seen') { if (c.hw && Number.isFinite(+r.upd)) { c.hw.seen = Date.now(); c.hw.seenUpd = Math.max(+r.upd, c.hw.seenUpd || 0); await put('clients', c); } done(item.p); continue; }
     if (r && r.type === 'cns') { await saveCns(c, r.items); done(item.p); continue; }
     if (r && r.type === 'join') { const p0 = r.profile && typeof r.profile === 'object' ? r.profile : {};
       c.selfReport = { complaints: str(p0.complaints, 600), activity: str(p0.activity, 120), dob: /^\d{4}-\d{2}-\d{2}$/.test(p0.dob) ? p0.dob : '', sex: ['M', 'F'].includes(p0.sex) ? p0.sex : '', height: /^\d{2,3}$/.test(p0.height) ? p0.height : '', name: [str(p0.name, 40), str(p0.surname, 60)].filter(Boolean).join(' ') };
