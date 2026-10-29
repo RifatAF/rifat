@@ -378,6 +378,7 @@ export function plainObs(by, max = 3) { const best = {};
 export function taskGroups(zones) { const g = new Map();
   for (const z of zones || []) { if (!g.has(z.k)) g.set(z.k, new Map()); const m = g.get(z.k), nm = ((C.muscles[z.id] || {}).zone || zoneName(z)).toLowerCase(); if (!m.has(nm)) m.set(nm, new Set()); m.get(nm).add(z.side); }
   return [...g].map(([k, m]) => ({ k, t: TASK[k], list: [...m].map(([nm, s]) => s.size > 1 ? nm : `${nm} ${sideRu([...s][0])}`.trim()) })); }
+const REPORT_GAIN = 2; // усиление фигуры в отчете клиенту по умолчанию
 const gainPlate = g => g > 1 ? `<div style="font-size:13px;font-weight:700;color:#B45309;background:#FEF3C7;border-radius:10px;padding:6px 10px;margin-top:8px">Показано с увеличением ×${String(g).replace('.', ',')}, не реальный масштаб</div>` : '';
 // ---------- замеры на фото: линии, отвес и подписи отклонений прямо у суставов (паспорт, было → стало) ----------
 const MONO = "'JetBrains Mono', ui-monospace, monospace", SANS = "Inter, -apple-system, system-ui, sans-serif";
@@ -505,12 +506,12 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
 }
 function results() {
   const q = Q.metrics || quickMetrics(Q.views, heightCm()); Q.metrics = q; Q.obs = observations(q.by);
-  if (!Q.zones) Q.zones = zonesOf(q); if (!Q.gain) Q.gain = 1;
+  if (!Q.zones) Q.zones = zonesOf(q); if (!Q.gain) Q.gain = 1; if (Q.gainPdf == null) Q.gainPdf = true;
   go(`<div class="scr fade" style="padding-bottom:150px"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>${esc(Q.client.nocard ? 'Замер' : Q.client.name)}</b></div></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:16px;margin-top:8px"><div id="qpanel" style="display:flex;flex-direction:column;gap:16px"></div>
     <div><div class="eyebrow">Ваш вывод · ГИПОТЕЗА</div><textarea id="qcon" class="field" rows="3" maxlength="1200" placeholder="Необязательно. В отчете будет с пометкой «гипотеза специалиста»" style="height:auto;padding:12px 16px">${esc(Q.note || '')}</textarea></div>
     <div><div class="eyebrow">Рекомендации</div><textarea id="qrec" class="field" rows="2" maxlength="1200" placeholder="Необязательно: упражнения из карточек зон добавятся сами" style="height:auto;padding:12px 16px">${esc(Q.rec || '')}</textarea></div>
-    <label class="row" id="qgl" style="gap:10px;font-size:14px"><input type="checkbox" id="qgpdf"${Q.gainPdf ? ' checked' : ''} style="width:20px;height:20px"> В отчет с увеличением (с той же пометкой)</label>
+    <label class="row" id="qgl" style="gap:10px;font-size:14px"><input type="checkbox" id="qgpdf"${Q.gainPdf ? ' checked' : ''} style="width:20px;height:20px"> В отчёте фигура с усилением перекосов, ×${String(Q.gain > 1 ? Q.gain : REPORT_GAIN).replace('.', ',')} (с пометкой «усилено»)</label>
    </div>
    <div class="dock"><button class="btn line" id="qshow">${ic('maximize', 's')}Показать клиенту</button><button class="btn" id="qsave" style="margin-top:8px">${ic('file-text', 's')}${Q.editId ? 'Сохранить правку' : 'Сохранить и отчет'}</button></div></div>`);
   const st = { by: q.by, zones: Q.zones, gain: Q.gain, h: heightCm() || 170 };
@@ -608,7 +609,7 @@ async function save() {
   if (Q.editId) return saveEdit();
   const c = Q.client; if (!(await row('clients', c.id))) await _pro.put('clients', { ...c }); else if (Q.consent && !Q.consent.reused) await _pro.put('clients', { ...(await row('clients', c.id)), consent: Q.consent });
   const id = _pro.uid(), q = Q.metrics, prev = (await _pro.all('assessments')).filter(a => a.clientId === c.id).sort((a, b) => b.date - a.date)[0];
-  const a = { id, clientId: c.id, date: Q.date, template: 'quick', templateName: 'Быстрый тест', quick: { by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), confirmed: true, gain: Q.gainPdf ? Q.gain : 1, h: heightCm() || 170, views: VIEWS.filter(v => Q.views[v.id]).map(v => v.id), edited: VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id) },
+  const a = { id, clientId: c.id, date: Q.date, template: 'quick', templateName: 'Быстрый тест', quick: { by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), confirmed: true, gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf, h: heightCm() || 170, views: VIEWS.filter(v => Q.views[v.id]).map(v => v.id), edited: VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id) },
     snapshot: q.snapshot, side: q.side, consent: Q.consent, note: Q.note, plan: { ex: [], text: Q.rec }, protocol: [], moves: {}, quality: {}, limits: {}, setup: {}, pain: {}, hyp: {}, check: {}, draft: false, prevId: prev ? prev.id : null, savedAt: Date.now() };
   await _pro.put('assessments', a);
   await _pro.put('poses', { assessmentId: id, photos: Object.fromEntries(VIEWS.filter(v => Q.views[v.id]).map(v => { const x = Q.views[v.id]; return [v.id, { photo: x.photo, w: x.w, h: x.h, pts: x.pts, auto: x.auto || null, roll: x.roll }]; })) });
@@ -633,7 +634,7 @@ async function editSaved(aid) {
   const a = await row('assessments', aid), c = await row('clients', a.clientId), ps = await row('poses', aid), es = await editState(a);
   if (!es.ok) return toast(es.why); if (!ps || !ps.photos) return toast('Фото этого теста нет на телефоне');
   const qz = a.quick || {};
-  Q = { client: c, date: a.date, editId: aid, until: es.until, consent: a.consent, zones: (qz.zones || []).map(z => ({ ...z })), gain: qz.gain || 1, gainPdf: (qz.gain || 1) > 1, note: a.note || '', rec: (a.plan && a.plan.text) || '',
+  Q = { client: c, date: a.date, editId: aid, until: es.until, consent: a.consent, zones: (qz.zones || []).map(z => ({ ...z })), gain: qz.gain || 1, gainPdf: !qz.gainOff, note: a.note || '', rec: (a.plan && a.plan.text) || '',
     views: Object.fromEntries(Object.entries(ps.photos).map(([k, x]) => [k, { ...x, pts: x.pts && x.pts.map(p => ({ ...p })), ok: true, edited: false }])) };
   editor(0);
 }
@@ -641,7 +642,7 @@ async function saveEdit() {
   const a = await row('assessments', Q.editId), ps = await row('poses', Q.editId), es = await editState(a), cid = Q.client.id;
   if (!es.ok) { toast(es.why + '. Правка не сохранена'); Q = null; clientCard(cid); return null; }
   const q = Q.metrics, views = VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id);
-  a.quick = { ...a.quick, by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), gain: Q.gainPdf ? Q.gain : 1,
+  a.quick = { ...a.quick, by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf,
     edited: [...new Set([...(a.quick.edited || []), ...views])], edits: views.length ? [...(a.quick.edits || []), { at: Date.now(), views }] : a.quick.edits || [] };
   Object.assign(a, { snapshot: q.snapshot, side: q.side, note: Q.note, plan: { ...(a.plan || {}), text: Q.rec } });
   for (const v of views) ps.photos[v].pts = Q.views[v].pts;
@@ -721,14 +722,16 @@ export async function renderReport(a, c, photos) {
   y += ch + 70;
   const head = (t, tag, col) => { breaks.push(y - 40); g.fillStyle = INK; g.font = `800 32px ${F}`; g.fillText(t, PAD, y); if (tag) { const tw = g.measureText(t).width; g.font = `700 16px ${F}`; const w2 = g.measureText(tag).width + 18;
     g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.roundRect(PAD + tw + 16, y - 24, w2, 30, 8); g.stroke(); g.fillStyle = col; g.fillText(tag, PAD + tw + 25, y - 3); } y += 22; };
-  // фигура в позе клиента с подтвержденными зонами в цветах задач (клиентская палитра); усиление только если специалист включил
-  const qz = a.quick || {}, zones = qz.zones || [], gain = qz.gain || 1;
+  // фигура в позе клиента с подтвержденными зонами в цветах задач (клиентская палитра).
+  // Перекосы по умолчанию усилены ×2, чтобы клиент их увидел; специалист может выключить. Числа в отчете всегда реальные
+  const qz = a.quick || {}, zones = qz.zones || [], gain = qz.gainOff ? 1 : qz.gain > 1 ? qz.gain : REPORT_GAIN;
   const figs = []; for (const view of ['front', 'right']) { const im = await asClient(() => posedFigure(zSpots(zones), poseOf({ by: qz.by, h: qz.h || 170 }, gain), view, 400, 880)); if (im) figs.push(im); }
   if (figs.length) { y += 30; head('Положение тела', '', INK); y += 16; const fw = 300, fh = 660, gap = 60, x0 = (W - fw * figs.length - gap * (figs.length - 1)) / 2;
     figs.forEach((im, n) => { const x = x0 + n * (fw + gap); g.strokeStyle = '#F59E0B'; g.lineWidth = 2; g.setLineDash([8, 7]); g.beginPath(); g.moveTo(x + fw / 2, y); g.lineTo(x + fw / 2, y + fh); g.stroke(); g.setLineDash([]); g.drawImage(im, x, y, fw, fh);
-      g.fillStyle = SUB; g.font = `600 20px ${F}`; g.textAlign = 'center'; g.fillText(n ? 'Справа' : 'Спереди', x + fw / 2, y + fh + 28); g.textAlign = 'left'; });
+      g.fillStyle = SUB; g.font = `600 20px ${F}`; g.textAlign = 'center'; g.fillText(n ? 'Справа' : 'Спереди', x + fw / 2, y + fh + 28); g.textAlign = 'left';
+      if (gain > 1) { const t = `Усилено ×${String(gain).replace('.', ',')}`; g.font = `700 19px ${F}`; const tw = g.measureText(t).width + 24; g.fillStyle = '#FEF3C7'; g.beginPath(); g.roundRect(x + fw - tw, y, tw, 34, 10); g.fill(); g.fillStyle = '#B45309'; g.fillText(t, x + fw - tw + 12, y + 23); } });
     y += fh + 56; g.fillStyle = SUB; g.font = `400 20px ${F}`; y = wrap(g, 'Положение на типовой фигуре по фото, а не тело клиента. Цветом отмечены зоны для работы, пунктир: вертикаль.', PAD, y, W - PAD * 2, 28);
-    if (gain > 1) { g.fillStyle = '#B45309'; g.font = `700 22px ${F}`; y = wrap(g, `Показано с увеличением ×${String(gain).replace('.', ',')}, не реальный масштаб. Числа ниже реальные.`, PAD, y + 4, W - PAD * 2, 30); }
+    if (gain > 1) { g.fillStyle = '#B45309'; g.font = `700 22px ${F}`; y = wrap(g, `Перекосы на фигуре усилены в ${String(gain).replace('.', ',')} раза, чтобы их было хорошо видно. Это не реальный масштаб: реальные значения в цифрах ниже.`, PAD, y + 4, W - PAD * 2, 30); }
     y += 40; }
   // коротко: 2–3 понятные фразы без чисел, как на экране «Показать клиенту»
   const plain = plainObs(qz.by); if (plain.length) { head('Коротко', '', INK); g.fillStyle = INK; g.font = `600 27px ${F}`; for (const t of plain) { y += 42; g.fillText('• ' + t, PAD, y); } y += 60; }
