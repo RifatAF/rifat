@@ -281,7 +281,9 @@ export function chainEx(zones, max = 8) {
     if (g.k === 'WEAK') { rounds[0].push([g, [...(p.isolate || []), ...(m.activate || [])], `${nm(g.id)}: укрепить`]);
       const subs = (p.subs || []).filter(x => C.muscles[x]).slice(0, 1).map(nm); rounds[1].push([g, p.release || [], subs.length ? `${subs.join(', ')}: расслабить, работает вместо «${nm(g.id)}»` : `${nm(g.id)}: снять перегруз`]); rounds[2].push([g, p.integrate || [], `${nm(g.id)}: в движении`]); }
     else { rounds[0].push([g, releaseFor(m, g.k, ex), `${nm(g.id)}: расслабить`]);
-      rounds[1].push([g, ant ? [...((ant.plan && ant.plan.isolate) || []), ...(ant.activate || [])] : m.activate || [], ant ? `${nm(m.antagonist)}: укрепить, пара к «${nm(g.id)}»` : `${nm(g.id)}: укрепить`]); } }
+      // зажатую без антагониста в базе не укрепляем; перегруженную можно мягко
+      if (ant) rounds[1].push([g, [...((ant.plan && ant.plan.isolate) || []), ...(ant.activate || [])], `${nm(m.antagonist)}: укрепить, пара к «${nm(g.id)}»`]);
+      else if (g.k === 'HYPER') rounds[1].push([g, m.activate || [], `${nm(g.id)}: мягко укрепить`]); } }
   for (const r of rounds) for (const [g, list, reason] of r) for (const x of list) {
     const ids = [...g.sides].map(sd => x.replace('{s}', sd)).filter((id, i, l) => ex(id) && l.indexOf(id) === i); if (!ids.length) continue;
     const add = ids.filter(id => !out.includes(id)); if (add.length && out.length + add.length <= max) { out.push(...add); add.forEach(id => { why[id] = reason; }); } break; }
@@ -311,8 +313,8 @@ async function hwBlock(host, aid) {
   host.innerHTML = `<div class="eyebrow">Домашнее задание</div>
     <div class="card" style="display:flex;flex-direction:column;gap:10px">
       ${ids.length ? exRows(ids).map((e, n) => `<div class="row" style="font-size:15px;gap:10px;align-items:baseline"><b class="mono" style="color:var(--sub);width:18px">${n + 1}</b><span style="flex:1;min-width:0">${esc(e.title.split(' (')[0])}<small class="sub" style="display:block;font-size:12px;line-height:1.35">${esc([e.dose, why[e.id]].filter(Boolean).join(' · '))}</small></span></div>`).join('') : '<p class="sub" style="font-size:14px">Пока пусто: отметьте зоны или выберите упражнения сами.</p>'}
-      ${c.nocard ? '<p class="sub" style="font-size:12px">Чтобы передать домашку, заведите карточку клиента.</p>' : `<p class="sub" style="font-size:13px;line-height:1.45">${status}${diff ? '<br><b style="color:var(--short-t)">Вы изменили список: нажмите «Обновить у клиента».</b>' : ''}${hw && hw.seen ? `<br>Занимался ${days} ${plural(days)} из ${Math.max(1, Math.ceil((Date.now() - hw.at) / DAYMS))}${pp.length ? ` · боль до ${avg('pre')}, после ${avg('post')}` : ''}` : ''}</p>`}
-      <div style="display:flex;flex-direction:column;gap:8px">${c.nocard ? '' : `<button class="btn" id="hwgo" ${ids.length ? '' : 'disabled'}>${ic(diff ? 'rotate-ccw' : 'share', 's')}${!hw ? 'Передать клиенту' : diff ? 'Обновить у клиента' : 'Передать ещё раз'}</button>`}<button class="btn line" id="hwed">${ic('pencil', 's')}Изменить список</button></div>
+      ${c.demo ? '<p class="sub" style="font-size:12px">Это пример. Настоящему клиенту домашка передается ссылкой или QR-кодом.</p>' : c.nocard ? '<p class="sub" style="font-size:12px">Чтобы передать домашку, заведите карточку клиента.</p>' : `<p class="sub" style="font-size:13px;line-height:1.45">${status}${diff ? '<br><b style="color:var(--short-t)">Вы изменили список: нажмите «Обновить у клиента».</b>' : ''}${hw && hw.seen ? `<br>Занимался ${days} ${plural(days)} из ${Math.max(1, Math.ceil((Date.now() - hw.at) / DAYMS))}${pp.length ? ` · боль до ${avg('pre')}, после ${avg('post')}` : ''}` : ''}</p>`}
+      <div style="display:flex;flex-direction:column;gap:8px">${c.nocard || c.demo ? '' : `<button class="btn" id="hwgo" ${ids.length ? '' : 'disabled'}>${ic(diff ? 'rotate-ccw' : 'share', 's')}${!hw ? 'Передать клиенту' : diff ? 'Обновить у клиента' : 'Передать ещё раз'}</button>`}<button class="btn line" id="hwed">${ic('pencil', 's')}Изменить список</button></div>
     </div>`;
   host.querySelector('#hwed').onclick = () => hwPicker(a, () => hwBlock(host, aid));
   const go = host.querySelector('#hwgo'); if (go) go.onclick = async () => { if (hw && !diff) return handSheet(c, hwUrl(hw), hw.seen ? 'again' : 'new');
@@ -671,7 +673,7 @@ function shareSheet(cv, base, c, kind, title = 'Отчет клиенту', aid 
   d.innerHTML = `<div><h2 style="font-size:20px">${title}</h2><p class="sub" style="font-size:13px;margin-top:4px">Так его увидит клиент.</p>
     <div style="margin-top:12px;max-height:50dvh;overflow:auto;border-radius:16px;border:1px solid var(--line)"><img src="${cv.toDataURL('image/jpeg', .8)}" alt="Отчет" style="width:100%;display:block"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn" id="qpdf">${ic('file-text', 's')}PDF</button><button class="btn line" id="qpng">${ic('image', 's')}Картинка</button></div>
-    ${aid && !c.nocard ? `<button class="btn" id="qhwl" style="margin-top:8px">${ic('mail', 's')}${c.hw ? 'Обновить отчет и домашку у клиента' : 'Ссылкой: отчет и домашка'}</button>` : ''}
+    ${aid && !c.nocard && !c.demo ? `<button class="btn" id="qhwl" style="margin-top:8px">${ic('mail', 's')}${c.hw ? 'Обновить отчет и домашку у клиента' : 'Ссылкой: отчет и домашка'}</button>` : ''}
     <button class="btn ghost" id="qcard" style="margin-top:8px;border:0">${kind === 'compare' ? 'Закрыть' : c.nocard ? 'В кабинет' : 'К карточке клиента'}</button></div>`;
   document.body.appendChild(d);
   const close = () => { d.remove(); if (kind !== 'compare') c.nocard ? proHome() : clientCard(c.id); };
