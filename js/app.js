@@ -1556,19 +1556,19 @@ export function muscle(key) {
 // ---------- 7. тренировка ----------
 // шкала боли 0–10: один ползунок в шторке. Возвращает число или null (пропустили)
 // cancel: окно можно закрыть без ответа (вернет undefined), например чтобы не начинать тренировку
-function vasSheet(title, init = 0, skip = 'Пропустить', cancel = false) {
+function vasSheet(title, init = 0, skip = 'Пропустить', cancel = false, ok = 'Готово') {
   return new Promise(res => { const d = document.createElement('div'); d.className = 'sheet';
     d.innerHTML = `<div><h2 style="font-size:21px">${title}</h2><p class="sub" style="font-size:14px;margin-top:6px">${PAIN_SCALE}</p>
       <div class="row" style="gap:12px;margin-top:16px"><input type="range" id="vs" class="range" min="0" max="10" value="${init}" style="flex:1" aria-label="${title}"><b id="vsv" class="num" style="font-size:32px;width:44px;text-align:right">${init}</b></div><div id="vsw" style="font-size:15px;font-weight:600;margin-top:4px">${painWord(init)}</div>
       <div class="row" style="justify-content:space-between;font-size:12px;color:var(--sub)"><span>нет боли</span><span>сильнейшая</span></div>
-      <button class="btn" id="vok" style="margin-top:16px">Готово</button><button class="btn ghost" id="vno" style="margin-top:8px;border:0">${skip}</button></div>`;
+      <button class="btn" id="vok" style="margin-top:16px">${ok}</button><button class="btn ghost" id="vno" style="margin-top:8px;border:0">${skip}</button></div>`;
     document.body.appendChild(d); const r = d.querySelector('#vs'); r.oninput = () => { d.querySelector('#vsv').textContent = r.value; d.querySelector('#vsw').textContent = painWord(r.value); };
     d.querySelector('#vok').onclick = () => { d.remove(); res(+r.value); }; d.querySelector('#vno').onclick = () => { d.remove(); res(null); };
     d.addEventListener('bp-close', () => res(cancel ? undefined : null)); if (cancel) d.querySelector('#vno').insertAdjacentHTML('afterend', '<button class="btn ghost" id="vcx" style="margin-top:4px;border:0;color:var(--sub)">Отмена</button>'), d.querySelector('#vcx').onclick = () => { d.remove(); res(undefined); }; });
 }
 export async function workout(ids, reasons = {}) {
   try { localStorage.removeItem('bp_hw_new'); } catch (e) {}
-  const pre = await vasSheet('Оцените уровень боли или дискомфорта прямо сейчас (0–10)', 0, 'Пропустить и начать', true);
+  const pre = await vasSheet('Оцените уровень боли или дискомфорта прямо сейчас (0–10)', 0, 'Пропустить и начать', true, 'Начать занятие');
   if (pre === undefined) return; // закрыли окно: остаемся на экране, тренировка не начинается
   // при сильной боли комплекс сам не запускаем: объясняем и даем безопасный шаг (аудит, п. 16)
   if (pre >= 7) { track('workout_pain_block', { v: pre }, false);
@@ -1687,7 +1687,7 @@ const planText = e => { const p = coachPlan(e); return [p.sets > 1 ? `${p.sets} 
 function mark(e) { const d = JSON.parse(localStorage.getItem(K('bp_done')) || '[]'); d.push({ id: e.id, t: Date.now() }); localStorage.setItem(K('bp_done'), JSON.stringify(d.slice(-500))); backupSoon(10000); }
 function streak() { const days = new Set(JSON.parse(localStorage.getItem(K('bp_done')) || '[]').map(x => new Date(x.t).toDateString())); let n = 0; const d = new Date(); if (!days.has(d.toDateString())) d.setDate(d.getDate() - 1); while (days.has(d.toDateString())) { n++; d.setDate(d.getDate() - 1); } return n; }
 async function done(list, pre = null, n = list.length) { camOff(); keepAwake(false); voice.keep = false; setTimeout(() => { if (!cam.running) voice.release(); }, 6000); const s = Math.max(1, streak());
-  const post = await vasSheet('Оцените уровень боли после упражнений (0–10)', pre ?? 0);
+  const post = await vasSheet('Оцените уровень боли после упражнений (0–10)', pre ?? 0, 'Пропустить', false, 'Сохранить');
   const rec = { t: Date.now(), pre: pre ?? undefined, post: post ?? undefined, n, all: list.length }; const log = vasSave(rec, K('bp_vas'));
   const dl = vasDelta(pre, post); track('vas_done', { n, d: dl ?? undefined }, false);
   const w = vasStats(log, 7); sendProgress(log);
