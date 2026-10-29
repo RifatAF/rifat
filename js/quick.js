@@ -1,6 +1,6 @@
 // «Быстрый тест» (ТЗ v4): клиент → согласие → 4 фото → точки с правкой → замер → отчет.
 // Фото, точки, выводы и имя клиента остаются на телефоне специалиста (IndexedDB кабинета), на сервер не уходят.
-import { _pro, proHome, clientCard, homeworkLink } from './pro.js';
+import { _pro, proHome, clientCard, homeworkLink, pullResults } from './pro.js';
 import { go, esc, ic, toast, spots, topOf, plan, asClient } from './app.js';
 import { C, cam, startCamera, stopCamera, detectStill, initPose, startMotion, phone, cameraBlocked, openInBrowserSheet, posedFigure, body3D } from './core.js';
 import { poseOf } from './pose-figure.js';
@@ -8,6 +8,7 @@ import { VIEWS as REQ, ALL_VIEWS as VIEWS, EDIT_POINTS, POINT_NAMES, quickMetric
 import { P, analyze } from './analysis.js';
 import { track } from './track.js';
 import { matte } from './ds.js';
+import qrcode from './qr.js';
 
 const $ = s => document.querySelector(s);
 const CONSENT_VER = '2026-10-v4-draft';
@@ -274,23 +275,32 @@ const exRows = ids => ids.map(id => C.exercises[id]).filter((e, i, l) => l.findI
 const sameSet = (x, y) => x.length === y.length && x.every(id => y.includes(id));
 const DAYMS = 864e5;
 /** Блок в карточке клиента: что задано, дошло ли до клиента, как он занимается. */
+let pulledAt = 0;
 async function hwBlock(host, aid) {
   const a = await row('assessments', aid), c = await row('clients', a.clientId), ids = hwEx(a), hw = c.hw || null;
   const since = hw ? hw.at : Date.now() - 14 * DAYMS, log = ((c.progress && c.progress.vas) || []).filter(r => r.t >= since - DAYMS);
   const days = new Set(log.filter(r => (r.n || 0) > 0).map(r => new Date(r.t).toDateString())).size, pp = log.filter(r => r.pre != null && r.post != null);
   const avg = k => (pp.reduce((x, r) => x + r[k], 0) / pp.length).toFixed(1).replace('.', ',');
-  const diff = hw && !sameSet(ids, hw.ex || []);
+  const diff = hw && !sameSet(ids, hw.ex || []), fresh = hw && hw.seen && (hw.seenUpd || 0) >= (hw.upd || 0);
+  const when = t => `${_pro.fmtDate(t)}, ${new Date(t).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}`;
+  const plural = n => n % 10 === 1 && n % 100 !== 11 ? 'день' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'дня' : 'дней';
+  // статус говорит только то, что известно: ссылку создали, клиент открыл, версия у него актуальная
+  const status = !hw ? 'Ещё не передана клиенту.'
+    : !hw.seen ? `<span class="mark WEAK"></span> Ссылка готова, клиент ещё не открывал. Передайте её: QR при встрече или в мессенджер.`
+    : `<span class="mark OK"></span> Клиент открыл ${when(hw.seen)}${fresh ? ', видит последнюю версию' : '. Новая версия появится у него, когда он откроет приложение'}.`;
   host.innerHTML = `<div class="eyebrow">Домашнее задание</div>
     <div class="card" style="display:flex;flex-direction:column;gap:10px">
       ${ids.length ? exRows(ids).map((e, n) => `<div class="row" style="font-size:15px;gap:10px;align-items:baseline"><b class="mono" style="color:var(--sub);width:18px">${n + 1}</b><span style="flex:1">${esc(e.title.split(' (')[0])}</span><span class="sub" style="font-size:12px">${esc(e.dose || '')}</span></div>`).join('') : '<p class="sub" style="font-size:14px">Пока пусто: отметьте зоны или выберите упражнения сами.</p>'}
-      ${c.nocard ? '<p class="sub" style="font-size:12px">Чтобы отправить домашку, заведите карточку клиента.</p>' : `<p class="sub" style="font-size:13px">${hw ? `У клиента с ${_pro.fmtDate(hw.at)}${diff ? ' · <b style="color:var(--short-t)">изменения ещё не у клиента</b>' : ''}` : 'Ещё не отправлена.'}${hw ? `<br>Занимался ${days} ${days % 10 === 1 && days % 100 !== 11 ? 'день' : days % 10 >= 2 && days % 10 <= 4 && (days % 100 < 10 || days % 100 >= 20) ? 'дня' : 'дней'} из ${Math.max(1, Math.ceil((Date.now() - hw.at) / DAYMS))}${pp.length ? ` · боль до ${avg('pre')}, после ${avg('post')}` : ''}` : ''}</p>`}
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn line" id="hwed">${ic('pencil', 's')}Изменить</button>${c.nocard ? '' : `<button class="btn" id="hwgo" ${ids.length ? '' : 'disabled'}>${ic(hw ? 'rotate-ccw' : 'share', 's')}${hw ? 'Обновить' : 'Отправить'}</button>`}</div>
-      ${hw && !c.nocard ? '<button class="link" id="hwre" style="font-size:13px;align-self:flex-start">Отправить ссылку ещё раз</button>' : ''}
+      ${c.nocard ? '<p class="sub" style="font-size:12px">Чтобы передать домашку, заведите карточку клиента.</p>' : `<p class="sub" style="font-size:13px;line-height:1.45">${status}${diff ? '<br><b style="color:var(--short-t)">Вы изменили список: нажмите «Обновить у клиента».</b>' : ''}${hw && hw.seen ? `<br>Занимался ${days} ${plural(days)} из ${Math.max(1, Math.ceil((Date.now() - hw.at) / DAYMS))}${pp.length ? ` · боль до ${avg('pre')}, после ${avg('post')}` : ''}` : ''}</p>`}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn line" id="hwed">${ic('pencil', 's')}Изменить</button>${c.nocard ? '' : `<button class="btn" id="hwgo" ${ids.length ? '' : 'disabled'}>${ic(diff ? 'rotate-ccw' : 'share', 's')}${!hw ? 'Передать клиенту' : diff ? 'Обновить у клиента' : 'Передать ещё раз'}</button>`}</div>
     </div>`;
   host.querySelector('#hwed').onclick = () => hwPicker(a, () => hwBlock(host, aid));
-  const go = host.querySelector('#hwgo'); if (go) go.onclick = async () => { go.disabled = true; go.textContent = 'Отправляю…'; await sendHw(aid); hwBlock(host, aid); };
-  const re = host.querySelector('#hwre'); if (re) re.onclick = () => shareHw(c, location.origin + '/#rep=' + hw.id + '.' + hw.key);
+  const go = host.querySelector('#hwgo'); if (go) go.onclick = async () => { if (hw && !diff) return handSheet(c, hwUrl(hw), hw.seen ? 'again' : 'new');
+    go.disabled = true; go.textContent = 'Готовлю ссылку…'; await sendHw(aid); hwBlock(host, aid); };
+  // ждем подтверждение «открыл»: забираем ящики не чаще раза в 30 секунд, пока карточка открыта
+  if (hw && !fresh && Date.now() - pulledAt > 30e3) { pulledAt = Date.now(); pullResults().then(() => row('clients', c.id)).then(c2 => { if (c2 && c2.hw && (c2.hw.seen !== hw.seen || c2.hw.seenUpd !== hw.seenUpd) && host.isConnected) hwBlock(host, aid); }).catch(() => {}); }
 }
+const hwUrl = hw => location.origin + '/#rep=' + hw.id + '.' + hw.key;
 function hwPicker(a, done) {
   const sel = new Set(hwEx(a)), d = document.createElement('div'); d.className = 'sheet';
   const list = Object.values(C.exercises).sort((x, y) => (sel.has(y.id) - sel.has(x.id)) || x.title.localeCompare(y.title));
@@ -311,12 +321,28 @@ async function sendHw(aid) {
     const info = { name: c.name, date: _pro.fmtDate(a.date), author, contact, at: a.date, ex: hwEx(a), next: +a.nextDate || 0, note: String((a.plan && a.plan.text) || '').slice(0, 600),
       focus: taskGroups((a.quick || {}).zones).map(g => `${g.t}: ${g.list.join(', ')}`).slice(0, 3) };
     const { url, fresh } = await homeworkLink(c, cv, info); track('hw_sent', { c: fresh ? 'new' : 'update', n: info.ex.length }, false);
-    if (fresh) await shareHw(c, url); else toast('Готово: у клиента домашка обновится сама по прежней ссылке');
+    handSheet(c, url, fresh ? 'new' : 'update');
   } catch (e) { toast('Не удалось отправить: ' + e.message); }
 }
-async function shareHw(c, url) {
-  const text = `${c.name.split(' ')[0]}, здравствуйте! Ваш замер и домашнее задание по ссылке. Сохраните её или установите приложение: когда я поменяю упражнения, они обновятся сами.`;
-  if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url).catch(() => {}); toast('Ссылка скопирована'); }
+/** Как отдать ссылку клиенту: QR при встрече, Telegram, WhatsApp, другое приложение, копия. Почта и телефон клиента не нужны. */
+function handSheet(c, url, mode = 'new') {
+  const first = c.name.split(' ')[0], text = mode === 'update' ? `${first}, я обновил ваше домашнее задание. Откройте приложение BodyPassport или ссылку:` : `${first}, здравствуйте! Ваш замер и домашнее задание. Откройте ссылку и нажмите «Установить»: когда я поменяю упражнения, они обновятся сами.`;
+  const q = qrcode(0, 'M'); q.addData(url, 'Byte'); q.make();
+  const d = document.createElement('div'); d.className = 'sheet';
+  const ch = (id, icon, t) => `<button class="btn line" id="${id}">${ic(icon, 's')}${t}</button>`;
+  d.innerHTML = `<div><h2 style="font-size:20px">${mode === 'update' ? 'Сообщить клиенту' : 'Передать клиенту'}</h2>
+    <p class="sub" style="font-size:13px;margin-top:4px">${mode === 'update' ? 'Новая версия сохранена. Клиент увидит её по прежней ссылке, когда откроет приложение. Можно написать ему, чтобы открыл сейчас.' : 'Клиент рядом: пусть наведёт камеру телефона на код. Иначе отправьте в мессенджер.'}</p>
+    ${mode === 'update' ? '' : `<div style="background:#fff;border-radius:20px;padding:14px;margin:14px auto 0;width:min(240px,70vw)">${q.createSvgTag({ cellSize: 6, margin: 0, scalable: true })}</div>`}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px">${ch('hwtg', 'message-square', 'Telegram')}${ch('hwwa', 'message-square', 'WhatsApp')}${navigator.share ? ch('hwsh', 'share', 'Другое') : ''}${ch('hwcp', 'download', 'Копировать')}</div>
+    <p class="sub" style="font-size:12px;margin-top:10px">${mode === 'update' ? 'Когда клиент откроет, в карточке появится «видит последнюю версию».' : 'Когда клиент откроет ссылку, в карточке появится «Клиент открыл».'}</p>
+    <button class="btn ghost" id="hwx" style="margin-top:6px;border:0">Готово</button></div>`;
+  document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'hwx') d.remove(); };
+  const used = via => track('hw_sent', { c: 'via_' + via }, false), enc = encodeURIComponent;
+  d.querySelector('#hwtg').onclick = () => { used('tg'); open(`https://t.me/share/url?url=${enc(url)}&text=${enc(text)}`, '_blank', 'noopener'); };
+  d.querySelector('#hwwa').onclick = () => { used('wa'); open(`https://wa.me/?text=${enc(text + ' ' + url)}`, '_blank', 'noopener'); };
+  if (d.querySelector('#hwsh')) d.querySelector('#hwsh').onclick = () => { used('share'); navigator.share({ text, url }).catch(() => {}); };
+  d.querySelector('#hwcp').onclick = async () => { used('copy'); try { await navigator.clipboard.writeText(text + ' ' + url); toast('Скопировано: вставьте в переписку с клиентом'); } catch (e) { prompt('Скопируйте ссылку', url); } };
+  if (mode !== 'update') track('hw_sent', { c: 'qr_shown' }, false);
 }
 // клиенту: одна короткая фраза на показатель, без чисел (числа у специалиста и в «Измерено»)
 const PLAIN = { headForward: ['Голова выдвинута вперед', 'Голова отведена назад'], headTilt: ['Голова наклонена к правому плечу', 'Голова наклонена к левому плечу'],

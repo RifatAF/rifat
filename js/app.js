@@ -1785,7 +1785,7 @@ async function reportView(code) {
     const res = await fetch('/api/share?id=' + id, { cache: 'no-store' }); if (!res.ok) throw new Error(res.status);
     r = await seal.decrypt(k, await res.text()); if (typeof r.img !== 'string' || !r.img.startsWith('data:image/jpeg;base64,')) throw new Error('bad'); } catch (e) { r = null; }
   if (!r) { go(`<div class="scr pad fade" style="justify-content:center;gap:14px"><h1>Отчет не открылся</h1><p class="sub">Ссылка устарела (отчет хранится 90 дней) или скопирована не целиком. Попросите специалиста прислать ее снова.</p><button class="btn" id="tst">Пройти свой тест движения</button></div>`); $('#tst').onclick = () => { history.replaceState(null, '', location.pathname); onboarding(); }; return; }
-  const str = (v, n) => esc(String(v || '').slice(0, n)); saveReport(code, r); const exIds = (Array.isArray(r.ex) ? r.ex : []).filter(id => ex(id));
+  const str = (v, n) => esc(String(v || '').slice(0, n)); saveReport(code, r); ackHw(myReports().find(x => x.code === String(code).slice(0, 80))); const exIds = (Array.isArray(r.ex) ? r.ex : []).filter(id => ex(id));
   go(`<div class="fade" style="padding-bottom:32px"><div class="pad row" style="padding-top:12px"><span style="flex:1"></span><button class="pill" id="rcab">Мой прогресс</button></div><div class="pad" style="padding-top:4px"><div class="eyebrow">Биомеханический паспорт</div><h1 style="margin-top:6px">${str(r.name, 80)}</h1><p class="sub" style="font-size:14px">${str(r.date, 40)}${r.author ? ' · ' + str(r.author, 80) : ''}</p></div>
     <div class="pad" style="margin-top:12px"><img src="${r.img}" alt="Отчет" style="width:100%;display:block;border-radius:16px"></div>
     <div class="pad" style="margin-top:14px;display:flex;flex-direction:column;gap:8px">${exIds.length ? `<button class="btn" id="rex">${ic('play', 's')}Начать упражнения · ${totalMin(exIds.map(ex))} мин</button>` : ''}<a class="btn${exIds.length ? ' line' : ''}" id="rdl" href="${r.img}" download="bodypassport-report.jpg" style="text-decoration:none">${ic('download', 's')}Сохранить картинку</a>
@@ -1798,8 +1798,13 @@ async function reportView(code) {
 async function refreshHomework() {
   const rec = myReports().filter(r => r.upd).at(-1); if (!rec) return false; const [id, k] = rec.code.split('.');
   try { const res = await fetch('/api/share?id=' + id, { cache: 'no-store' }); if (!res.ok) return false;
-    const r = await seal.decrypt(k, await res.text()); if (!(+r.upd > rec.upd)) return false; saveReport(rec.code, r); track('hw_seen', {}, false); return true; } catch (e) { return false; }
+    const r = await seal.decrypt(k, await res.text()); if (!(+r.upd > rec.upd)) { ackHw(rec); return false; }
+    saveReport(rec.code, r); ackHw(myReports().find(x => x.code === rec.code)); track('hw_seen', {}, false); return true; } catch (e) { return false; }
 }
+// специалист видит в карточке «клиент открыл»: короткое зашифрованное подтверждение в ящик из ссылки, один раз на версию
+async function ackHw(rec) { const b = rec && rec.box, u = rec && +rec.upd; if (!b || !u || localStorage.getItem('bp_hw_ack') === String(u)) return;
+  try { const body = await seal.encrypt(b.k, { type: 'seen', upd: u }); const res = await fetch('/api/relay?id=' + b.i, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body });
+    if (res.ok) localStorage.setItem('bp_hw_ack', String(u)); } catch (e) {} }
 // контакт специалиста из отчета: Telegram, WhatsApp по номеру или ссылка; иначе только текст
 const contactHref = t => { t = String(t || '').trim(); const tg = t.match(/(?:t\.me\/|^@)([A-Za-z0-9_]{4,32})/); if (tg) return 'https://t.me/' + tg[1];
   const d = t.replace(/[^\d+]/g, ''); if (/^\+?\d{10,15}$/.test(d)) return 'https://wa.me/' + d.replace(/^\+/, '').replace(/^8(?=\d{10}$)/, '7'); return /^https:\/\//.test(t) ? t : ''; };
