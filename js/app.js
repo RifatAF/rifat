@@ -114,7 +114,7 @@ export function verdict(top, findings, plain = false) {
 const VERB_WHY = { WEAK: 'Упражнения, чтобы зона активнее включалась в движение.', SHORT: 'Раскатка и мягкая растяжка, чтобы движение стало свободнее.', HYPER: 'Спокойные удержания без растяжки, чтобы снять нагрузку.' };
 export function verdictCard(top, findings, empty = 'Явных перекосов не видно', skip = [], plain = false) {
   const v = verdict(top, findings, plain);
-  if (!v.length) return `<div class="card empty">${ic('check')}<b>${empty}</b><span class="sub">Движение симметричное. Повтори тест через месяц.</span></div>`;
+  if (!v.length) return `<div class="card empty">${ic('check')}<b>${empty}</b><span class="sub">Движение симметричное. Повторите тест через месяц.</span></div>`;
   // камера мерит угол, а мышца выведена из него: метка «замер» стоит у факта, мышца подписана как вероятная причина (аудит, п. 2)
   return `<div class="card" style="padding:4px var(--s4)"><p class="sub" style="font-size:13px;padding-top:12px">${plain ? 'На что направить тренировку. Подобрано по тому, что увидела камера.' : 'Мышцы ниже: вероятная причина того, что измерила камера. Проверит специалист руками.'}</p>${v.map((x, i) => {
     const s0 = top.find(s => s.k === x.k && !s.ambiguous), f = s0 && findings.find(f => f.muscles.some(m => m.id === s0.id && (m.side === s0.side || m.side === 'BOTH')));
@@ -397,7 +397,7 @@ export async function prep() {
     ${device.inApp ? `<div class="card row" style="align-items:flex-start">${ic('info')}<span style="font-size:14px;line-height:1.4">Камера может не работать внутри соцсети. Меню «⋯» → «Открыть в браузере».</span></div>` : ''}
    </div>
    <div class="dock"><button class="btn" id="start">${ic('play', 's')}Начать тест</button>${skipBtn()}</div></div>`);
-  $('#back').onclick = () => tests().length ? map() : onboarding();
+  $('#back').onclick = () => map();
   $('#chg').onclick = () => prepSheet(); $('#cant').onclick = () => prepSheet(true);
   if ($('#skipTest')) $('#skipTest').onclick = () => { track('beta_skip_test'); saveTest(fakeResult(consumerProtocol())); analysisScreen(); };
   if (reopen) prepSheet(false, true);
@@ -903,10 +903,10 @@ function cameraHelp() {
   const url = location.origin + location.pathname + '?ref=' + encodeURIComponent(REF);
   go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button></div>
     <div class="empty" style="flex:1;justify-content:center">${ic('lock')}<h1>Камера не запустилась</h1>
-    <p class="sub">${device.inApp || device.tg ? 'Встроенный браузер этого приложения не дает доступ к камере. Открой тест в Chrome или Safari.' : 'Разреши доступ к камере: значок замка или «Аа» в адресной строке → Камера → Разрешить. Потом нажми «Попробовать снова».'}</p></div>
+    <p class="sub">${device.inApp || device.tg ? 'Встроенный браузер этого приложения не дает доступ к камере. Откройте тест в Chrome или Safari.' : 'Разрешите доступ к камере: значок замка или «Аа» в адресной строке → Камера → Разрешить. Потом нажмите «Попробовать снова».'}</p></div>
     <div class="dock">${device.tg ? '<button class="btn" id="ob">Открыть в браузере</button>' : `<button class="btn" id="cp">Скопировать ссылку</button>`}<button class="btn line" id="rt">Попробовать снова</button></div></div>`);
   if ($('#ob')) $('#ob').onclick = () => window.Telegram.WebApp.openLink(url, { try_instant_view: false });
-  if ($('#cp')) $('#cp').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(url); toast('Ссылка скопирована. Вставь её в Chrome или Safari'); };
+  if ($('#cp')) $('#cp').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(url); toast('Ссылка скопирована. Вставьте её в Chrome или Safari'); };
   $('#rt').onclick = prep; $('#back').onclick = prep;
 }
 
@@ -1252,7 +1252,8 @@ function bindTaskCards(top, a, all) {
 }
 export function map() {
   setBodySex(SHARED ? 'M' : (PROFILE() || {}).sex); setSession(MODES.SELF);
-  const cur = currentAnalysis(); if (!cur) return onboarding(); track('map_view');
+  // своих тестов нет: клиент по ссылке специалиста живет в кабинете, а не на стартовом экране теста
+  const cur = currentAnalysis(); if (!cur) return myReports().length ? clientHome() : onboarding(); track('map_view');
   const { t, a } = cur; const all = applyMain(spots(a), cleanMain(t.main)); const top = t.main ? fromMain(all, cleanMain(t.main)) : mainOf(all);
   const reveal = REVEAL; REVEAL = false; if (reveal && top[0]) BACK = top[0].back;
   if (SEL && !all.some(s => s.key === SEL)) SEL = null;
@@ -1351,7 +1352,7 @@ export function clientNav(on) {
 }
 function bindClientNav() {
   app.querySelectorAll('[data-nav]').forEach(b => { if (b.getAttribute('aria-current')) return; const k = b.dataset.nav;
-    b.onclick = k === 'home' ? () => { SHOW_T = null; tests().length ? map() : onboarding(); } : k === 'cab' ? () => { SHOW_T = null; clientHome(); } : k === 'set' ? settings : shareResult; });
+    b.onclick = k === 'home' ? () => { SHOW_T = null; map(); } : k === 'cab' ? () => { SHOW_T = null; clientHome(); } : k === 'set' ? settings : shareResult; });
 }
 // выбор длительности комплекса перед стартом
 function durationSheet(top, pl, why) {
@@ -1494,7 +1495,7 @@ async function resultImage() {
   const v = verdict(top, a.findings), pl = plan(top);
   return passportImage({ eyebrow: 'КАРТА ТЕЛА', name: 'Моя карта тела', date: new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' }), sp: all,
     sections: [{ h: 'Что делаем', rows: v.map(x => ({ k: x.k, text: `${x.verb} ${x.what}` })) }, { h: 'Комплекс', rows: pl.slice(0, 4).map(id => ({ text: '• ' + exLabel(ex(id)) })) }],
-    footer: { name: 'Пройди свой тест', contact: location.host } });
+    footer: { name: 'Пройдите свой тест', contact: location.host } });
 }
 
 function share() { const url = appLink();
@@ -1517,11 +1518,11 @@ export function muscle(key) {
   const why = TONE_WHY_CLIENT[s.k] || '';
   let stages;
   if (s.k === 'WEAK' && m.plan) { const subs = (m.plan.subs || []).map(x => C.muscles[x]).filter(Boolean); const rel = ids(m.plan.release), iso = ids(m.plan.isolate).filter(x => !rel.includes(x));
-    stages = [['Сначала расслабь соседние зоны', subs.length ? `Сначала ${subs.map(x => x.zone.toLowerCase()).join(' и ')}: так следующие упражнения пойдут легче.` : '', (subs.find(x => x.massage) || {}).massage, rel],
-      ['Включи ее отдельно', 'Легкая нагрузка, чтобы зона активнее включалась.', null, iso], ['Закрепи в движении', 'Та же работа в обычном движении.', null, ids(m.plan.integrate).filter(x => !rel.includes(x) && !iso.includes(x))]];
-  } else if (s.k === 'WEAK') stages = [['Включи ее', '', null, ids(m.activate)]];
+    stages = [['Сначала расслабьте соседние зоны', subs.length ? `Сначала ${subs.map(x => x.zone.toLowerCase()).join(' и ')}: так следующие упражнения пойдут легче.` : '', (subs.find(x => x.massage) || {}).massage, rel],
+      ['Включите ее отдельно', 'Легкая нагрузка, чтобы зона активнее включалась.', null, iso], ['Закрепите в движении', 'Та же работа в обычном движении.', null, ids(m.plan.integrate).filter(x => !rel.includes(x) && !iso.includes(x))]];
+  } else if (s.k === 'WEAK') stages = [['Включите ее', '', null, ids(m.activate)]];
   else { const rel = ids(releaseFor(m, s.k, ex)), ant = m.antagonist && C.muscles[m.antagonist]; const give = [...(ant ? ids((ant.plan && ant.plan.isolate) || []).concat(ids(ant.activate)) : []), ...ids(m.activate)].filter(x => !rel.includes(x));
-    stages = [s.k === 'HYPER' ? ['Сними нагрузку мягко', '⛔ Растягивать и раскатывать эту зону не нужно. Только мягкие удержания.', null, rel] : ['Расслабь мышцу', '', massageAllowed(s.k) ? m.massage : null, rel], [ant ? 'Включи ' + ant.zone.toLowerCase() : 'Дай работу соседям', 'Часть работы возьмут на себя соседние мышцы.', null, [...new Set(give)].slice(0, 1)]]; }
+    stages = [s.k === 'HYPER' ? ['Снимите нагрузку мягко', '⛔ Растягивать и раскатывать эту зону не нужно. Только мягкие удержания.', null, rel] : ['Расслабьте мышцу', '', massageAllowed(s.k) ? m.massage : null, rel], [ant ? 'Включите ' + ant.zone.toLowerCase() : 'Дайте работу соседям', 'Часть работы возьмут на себя соседние мышцы.', null, [...new Set(give)].slice(0, 1)]]; }
   // причина по закону Шеррингтона, Майерса или Шарман: сначала работаем с мышцей-источником
   const cm = s.cause && C.muscles[s.cause.id];
   if (cm && s.cause.law !== 'sahr') stages.unshift([`Сначала расслабь ${lc(cm.zone || cm.name)} ${sideWord(s.cause.side)}`, 'Начните с нее: так следующие упражнения пойдут легче.', massageAllowed('SHORT') ? cm.massage : null, ids(releaseFor(cm, 'SHORT', ex))]);
@@ -1539,7 +1540,7 @@ export function muscle(key) {
     <details class="acc"><summary style="font-weight:600;font-size:15px">Почему так</summary>
       ${finds.map(f => `<div style="margin-top:10px"><div class="row" style="gap:6px;align-items:flex-start"><span class="src" style="margin-top:2px">ЗАМЕР</span><b style="font-size:15px;flex:1">${f.observed}</b></div><div style="font-size:13px;color:var(--sub);margin-top:2px">${f.rule.basis || ''}${f.rule.weak ? ' · слабый признак' : ''}</div></div>`).join('')
         || `<div class="row" style="gap:6px;align-items:flex-start;margin-top:10px"><span class="src hyp" style="margin-top:2px">ЦЕПЬ</span><p style="font-size:15px;line-height:1.4;flex:1">${s.byChain ? `Напрямую не измерено. Предположение по цепи «${s.byChain}».` : s.cause || s.derived ? 'Напрямую не измерено. Подобрано по связи с соседними зонами.' : 'Признак из теста.'}</p></div>`}
-      ${s.derived || finds.every(f => f.rule.weak) ? '<p style="font-size:13px;color:var(--short-t);margin-top:10px">Уверенность низкая. Проверь самопроверкой ниже или на консультации.</p>' : ''}</details>
+      ${s.derived || finds.every(f => f.rule.weak) ? '<p style="font-size:13px;color:var(--short-t);margin-top:10px">Уверенность низкая. Проверьте самопроверкой ниже или на консультации.</p>' : ''}</details>
     ${m.selfTest ? `<details class="acc"><summary style="font-weight:600;font-size:15px">Проверить себя за минуту</summary><p style="font-size:15px;line-height:1.45">${m.selfTest}</p></details>` : ''}
     ${m.benefit ? `<div class="card row" style="align-items:flex-start"><span class="mark OK" style="margin-top:4px"></span><div><b>Что изменится</b><p style="font-size:15px;margin-top:4px;line-height:1.4">${m.benefit}</p></div></div>` : ''}
     ${stages.map((st, i) => `<div class="row" style="margin-top:8px"><span class="step-n" style="font-size:14px">${String(i + 1).padStart(2, '0')}</span><b style="font-size:18px">${st[0]}</b></div>
@@ -1573,7 +1574,7 @@ export async function workout(ids, reasons = {}) {
   if (pre >= 7) { track('workout_pain_block', { v: pre }, false);
     go(`<div class="scr fade"><div class="empty" style="flex:1;justify-content:center">${ic('info')}<h1>Сегодня без комплекса</h1>
       <p class="sub">Боль ${pre} из 10 слишком сильная для упражнений. Отдохните и покажитесь врачу или специалисту, если боль не проходит или нарастает.</p></div>
-      <div class="dock"><button class="btn" id="pbk">Понятно</button></div></div>`); $('#pbk').onclick = () => (tests().length ? map() : clientHome()); return; }
+      <div class="dock"><button class="btn" id="pbk">Понятно</button></div></div>`); $('#pbk').onclick = () => map(); return; }
   const list = ids.map(ex).filter(Boolean); let i = 0, closed = false, doneN = 0; voice.unlock(); voice.keep = true; keepAwake(true);
   const finish = () => done(list, pre, doneN);
   const run = async () => {
@@ -1692,7 +1693,7 @@ async function done(list, pre = null, n = list.length) { camOff(); keepAwake(fal
   const w = vasStats(log, 7); sendProgress(log);
   go(`<div class="scr fade"><div class="empty" style="flex:1;justify-content:center"><span class="${dl > 0 ? 'pop' : ''}" style="width:88px;height:88px;border-radius:50%;background:var(--ok-s);color:var(--ok-t);display:flex;align-items:center;justify-content:center">${ic('check')}</span>
    <h1>${n < list.length ? `Сделано ${n} из ${list.length}` : 'Комплекс выполнен'}</h1>
-   ${dl > 0 ? `<p class="vasgood" style="font-size:18px;font-weight:600;color:var(--ok-t)">Отличный результат! Уровень боли снижен на ${dl} ${dl === 1 ? 'балл' : dl < 5 ? 'балла' : 'баллов'}</p>` : dl < 0 ? '<p class="sub">Боль после занятия выше. Уменьшите амплитуду, а если повторится, покажите это специалисту.</p>' : (!tests().length && myReports().length ? '' : '<p class="sub">Делай так 2 недели и повтори тест. Сравним карты.</p>')}</div>
+   ${dl > 0 ? `<p class="vasgood" style="font-size:18px;font-weight:600;color:var(--ok-t)">Отличный результат! Уровень боли снижен на ${dl} ${dl === 1 ? 'балл' : dl < 5 ? 'балла' : 'баллов'}</p>` : dl < 0 ? '<p class="sub">Боль после занятия выше. Уменьшите амплитуду, а если повторится, покажите это специалисту.</p>' : (!tests().length && myReports().length ? '' : '<p class="sub">Занимайтесь так 2 недели и повторите тест. Сравним карты.</p>')}</div>
    <div class="pad kpi"><div><b>${n}</b><span>упражнения</span></div><div><b>${w.compliance}%</b><span>дней из 7</span></div><div><b>${s}</b><span>дн. подряд</span></div></div>
    ${progressChart(log)}
    ${!tests().length && myReports().length ? '<p class="sub pad" style="text-align:center;font-size:14px;margin-top:-8px">Отметка ушла специалисту. Завтра продолжим.</p>' : ''}
@@ -1800,21 +1801,21 @@ function clientWelcome(r, code) {
   go(`<div class="scr fade"><div class="pad" style="padding-top:28px;display:flex;flex-direction:column;gap:18px;flex:1">
     <span class="avatar" style="width:64px;height:64px;font-size:26px">${esc(String(r.author || 'B').slice(0, 1).toUpperCase())}</span>
     <div><h1>${nameFirst(r.name) ? esc(nameFirst(r.name)) + ', здравствуйте!' : 'Здравствуйте!'}</h1><p class="sub" style="font-size:16px;margin-top:8px;line-height:1.45">Ваш специалист ${who}. Для вас готово:</p></div>
-    ${item('file-text', 'Отчёт по замеру', 'Что видно в положении тела и над чем будете работать')}
+    ${item('file-text', 'Отчет по замеру', 'Что видно в положении тела и над чем будете работать')}
     ${exIds.length ? item('play', `Домашнее задание · ${totalMin(exIds.map(ex))} мин`, `${exRowsN(exIds)} упр. Голос тренера ведёт по каждому, ничего запоминать не нужно`) : ''}
     ${item('message-square', 'Связь со специалистом', 'Если что-то непонятно или больно, напишите прямо из приложения')}
-    <p class="sub" style="font-size:13px">Займёт пару минут: сначала отчёт, потом покажем, что делать дальше.</p></div>
-    <div class="dock"><button class="btn" id="wgo">Посмотреть отчёт</button></div></div>`);
+    <p class="sub" style="font-size:13px">Займёт пару минут: сначала отчет, потом покажем, что делать дальше.</p></div>
+    <div class="dock"><button class="btn" id="wgo">Посмотреть отчет</button></div></div>`);
   $('#wgo').onclick = () => reportScreen(r, code);
 }
 const exRowsN = ids => new Set(ids.map(id => (ex(id).title || '').split(' (')[0])).size;
 function reportScreen(r, code) {
   lsSet('bp_rep_seen', '1'); const str = (v, n) => esc(String(v || '').slice(0, n)), exIds = (Array.isArray(r.ex) ? r.ex : []).filter(id => ex(id));
-  go(`<div class="scr fade" style="padding-bottom:150px"><div class="top-bar"><button class="round" id="rback" aria-label="В кабинет">${ic('chevron-left')}</button><div class="t"><b>Ваш отчёт</b></div></div>
+  go(`<div class="scr fade" style="padding-bottom:150px"><div class="top-bar"><button class="round" id="rback" aria-label="В кабинет">${ic('chevron-left')}</button><div class="t"><b>Ваш отчет</b></div></div>
     <div class="pad" style="padding-top:4px"><h1 style="font-size:24px">${str(r.name, 80)}</h1><p class="sub" style="font-size:14px">${str(r.date, 40)}${r.author ? ' · ' + str(r.author, 80) : ''}</p></div>
     <div class="pad" style="margin-top:12px"><img src="${r.img}" alt="Отчет" style="width:100%;display:block;border-radius:16px"></div>
     <div class="pad" style="margin-top:12px"><a class="btn line" href="${r.img}" download="bodypassport-report.jpg" style="text-decoration:none">${ic('download', 's')}Сохранить картинку</a>
-    <p class="sub" style="font-size:12px;text-align:center;margin-top:8px">Отчёт сохранён в вашем кабинете на этом телефоне.</p></div>
+    <p class="sub" style="font-size:12px;text-align:center;margin-top:8px">Отчет сохранён в вашем кабинете на этом телефоне.</p></div>
     <div class="dock"><button class="btn" id="rnext">${exIds.length ? 'Дальше: домашнее задание' : 'Дальше: мой кабинет'}${ic('arrow-right', 's')}</button></div></div>`);
   $('#rback').onclick = clientHome; $('#rnext').onclick = clientHome;
 }
@@ -1873,7 +1874,7 @@ export function clientHome() {
       return `<div class="row" style="font-size:15px"><span style="flex:1">${n}</span><span class="num" style="color:var(--sub)">${Math.abs(a).toFixed(1)}°</span><span style="margin:0 8px;color:var(--faint)">→</span><b class="num" style="color:${better ? 'var(--ok-t)' : worse ? 'var(--over-t)' : 'var(--text)'}">${Math.abs(b).toFixed(1)}°</b></div>`; }).join('') : '';
   // путь клиента по ссылке: три первых шага с прогрессом, потом каждый день одна карточка «Сегодня»
   const installed = !canInstall() || lsGet('bp_inst') === 'done', instLater = !!lsGet('bp_inst_later'), didWork = vl.some(r => (r.n || 0) > 0) || JSON.parse(localStorage.getItem(K('bp_done')) || '[]').length > 0;
-  const steps = rep ? [{ id: 'rep', t: 'Посмотреть отчёт', sub: 'Что видно и над чем работаем', done: !!lsGet('bp_rep_seen'), btn: 'Открыть отчёт' },
+  const steps = rep ? [{ id: 'rep', t: 'Посмотреть отчет', sub: 'Что видно и над чем работаем', done: !!lsGet('bp_rep_seen'), btn: 'Открыть отчет' },
     { id: 'inst', t: 'Установить приложение', sub: instLater && !installed ? 'Пропущено. Без иконки домашку легко потерять' : 'Иконка на экране: домашка под рукой и обновится сама', done: installed, skip: instLater, btn: 'Установить' },
     { id: 'work', t: 'Первое занятие', sub: exIds.length ? `${totalMin(exIds.map(ex))} мин, голос ведёт по каждому упражнению` : 'Упражнения появятся, когда их назначит специалист', done: didWork, btn: 'Начать', off: !exIds.length }] : [];
   const cur = steps.find(x => !x.done && !x.skip) || steps.find(x => !x.done), nDone = steps.filter(x => x.done).length, showSteps = steps.length && !(steps[0].done && steps[2].done && (installed || instLater));
@@ -1942,7 +1943,7 @@ export function settings() {
   d.addEventListener('click', e => { const b = e.target.closest && e.target.closest('button[id],summary,a[href]'); if (b) track('menu', { c: b.id || (b.tagName === 'SUMMARY' ? 'more' : b.getAttribute('href')) }, false); }, true);
   d.querySelector('#fbk').onclick = () => { d.remove(); bugSheet(); };
   d.querySelector('#shapp').onclick = () => shareApp();
-  d.querySelector('#bkf').onclick = () => downloadBackup(); d.querySelector('#rsf').onclick = () => pickRestore(n => { if (n) { d.remove(); tests().length ? map() : onboarding(); } });
+  d.querySelector('#bkf').onclick = () => downloadBackup(); d.querySelector('#rsf').onclick = () => pickRestore(n => { if (n) { d.remove(); map(); } });
   if (d.querySelector('#sinst')) d.querySelector('#sinst').onclick = () => { d.remove(); installNow(); };
   d.querySelector('#vm').onclick = e => { voice.muted = !voice.muted; localStorage.setItem('bp_mute', voice.muted ? '1' : '0'); e.target.textContent = voice.muted ? 'Выкл' : 'Вкл'; };
   // одно удаление вместо двух: вошел — стираем аккаунт на сервере и данные на телефоне, не вошел — только телефон
@@ -1955,7 +1956,7 @@ export function settings() {
 }
 async function accountBlock(el, close) {
   const u = await getMe(true); if (!el.isConnected) return;
-  if (!u) { if ((await providers()).length) { el.innerHTML = '<button class="btn line" id="login" style="margin-top:12px">Войти</button>'; el.querySelector('#login').onclick = () => { close(); const home = () => (tests().length ? map() : onboarding()); ensureLogin('client', home).then(ok => ok && home()); }; } return; }
+  if (!u) { if ((await providers()).length) { el.innerHTML = '<button class="btn line" id="login" style="margin-top:12px">Войти</button>'; el.querySelector('#login').onclick = () => { close(); const home = () => (map()); ensureLogin('client', home).then(ok => ok && home()); }; } return; }
   el.innerHTML = `<div class="group" style="margin-top:var(--s3)"><div class="row" style="min-height:64px"><span class="avatar">${esc((u.name || '?').slice(0, 1).toUpperCase())}</span><div style="flex:1;font-size:14px;line-height:1.35"><b>${esc(u.name)}</b><div style="color:var(--sub);font-size:12px">${u.provider === 'google' ? 'Google' : u.provider === 'email' ? esc(u.email || 'Почта') : 'Telegram'}</div></div><button class="pill" id="lo">Выйти</button></div>
     ${u.admin ? `<button class="row-link" id="adm">${ic('settings', 's')}<span>Администрирование</span>${ic('chevron-right', 's chev')}</button>` : ''}
     </div>`;
@@ -2104,7 +2105,7 @@ const planWhy = x => { const dt = t => new Date(t).toLocaleDateString('ru');
   if (x.role !== 'specialist') return 'клиент, тариф не нужен';
   return 'Free' + (x.trialEndedBy ? ': пробный закончился после повторного теста' : x.trialUntil ? `: пробный закончился ${dt(x.trialUntil)}` : ': пробный не начат, зайдет в кабинет и начнется'); };
 export async function adminScreen(back) {
-  back = back || (localStorage.getItem('bp_mode') === 'pro' ? () => proHome() : () => (tests().length ? map() : onboarding()));
+  back = back || (localStorage.getItem('bp_mode') === 'pro' ? () => proHome() : () => (map()));
   const beta = configSync().beta !== false, noev = localStorage.getItem('bp_noev') === '1';
   go(`<div class="scr fade"><div class="pad row" style="padding-top:8px"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><b style="font-size:18px">Администрирование</b></div>
     <div class="pad" style="display:flex;flex-direction:column;gap:12px;padding-bottom:32px">
@@ -2326,9 +2327,9 @@ startPassive(); // фоновый сбор касаний и ритма набо
 function pasteLink() {
   track('paste_link_view', {}, false);
   go(`<div class="scr pad fade" style="justify-content:center;gap:14px"><img src="icons/bp7-192.png" alt="" width="64" height="64" style="border-radius:16px">
-    <h1>Вставьте ссылку от специалиста</h1><p class="sub" style="line-height:1.45">На iPhone приложение не видит то, что было открыто в Safari. Вставьте ссылку, которую прислал специалист: откроются отчёт, домашка и ваш кабинет.</p>
+    <h1>Вставьте ссылку от специалиста</h1><p class="sub" style="line-height:1.45">На iPhone приложение не видит то, что было открыто в Safari. Вставьте ссылку, которую прислал специалист: откроются отчет, домашка и ваш кабинет.</p>
     <button class="btn" id="plp">Вставить ссылку</button><input id="pli" class="field" placeholder="или вставьте сюда вручную" style="height:48px" aria-label="Ссылка от специалиста">
-    <p class="sub" id="plerr" style="font-size:13px;color:var(--over-t)" hidden>Это не ссылка BodyPassport с отчётом. Попросите специалиста прислать её снова.</p>
+    <p class="sub" id="plerr" style="font-size:13px;color:var(--over-t)" hidden>Это не ссылка BodyPassport с отчетом. Попросите специалиста прислать её снова.</p>
     <button class="btn line" id="plt" style="margin-top:8px">Пройти тест самому</button><button class="link" id="pls" style="font-size:14px">Я специалист</button></div>`);
   const open = t => { const m = String(t || '').match(/#rep=([A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43})/); if (!m) { $('#plerr').hidden = false; return; } track('paste_link_ok', {}, false); reportView(m[1]); };
   $('#plp').onclick = async () => { try { open(await navigator.clipboard.readText()); } catch (e) { $('#pli').focus(); } };

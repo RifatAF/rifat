@@ -157,7 +157,10 @@ const MORE_ICO = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentC
 const DOTS_ICO = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-5px"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>';
 /** Пошаговая установка под телефон и браузер. link: ссылка, с которой человек должен открыть приложение в другом браузере или после установки на iPhone
  *  (у Safari и установленного приложения на iPhone раздельная память, у встроенных браузеров Telegram и WhatsApp тоже). */
-export function installGuide({ link = location.href, client = false } = {}) {
+// ссылка, с которой клиент вернется в свой кабинет в другом браузере или в установленном приложении на iPhone
+const repLink = () => { try { const r = JSON.parse(localStorage.getItem('bp_reports') || '[]').at(-1); return r && r.code ? location.origin + '/#rep=' + r.code : ''; } catch (e) { return ''; } };
+export function installGuide({ link, client } = {}) {
+  if (!link) link = repLink() || location.origin; if (client == null) client = !!repLink();
   const pf = platform(); track('install_guide', { c: pf }, false);
   const step = (n, t) => `<div class="row" style="gap:12px;align-items:center;margin-top:12px;font-size:15px;line-height:1.4"><b style="flex:none;width:30px;height:30px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center">${n}</b><span>${t}</span></div>`;
   const copy = `<button class="btn line" id="igc" style="margin-top:14px">Скопировать ссылку</button>`;
@@ -215,7 +218,7 @@ export function installSheet(onBackup) {
 /** Строка «Установить приложение» с одной кнопкой. */
 export function installCard() {
   if (!canInstall() || LS.get('bp_inst') === 'done') return '';
-  return `<div class="pad" style="margin-top:16px"><div class="card row" id="inst" style="gap:12px;padding:12px 14px"><img src="icons/bp5-192.png" alt="" width="40" height="40" style="border-radius:10px;flex:none"><b style="flex:1;font-size:15px">Приложение на телефон</b><button class="pill" id="insty" style="background:var(--brand);color:#fff">Установить</button></div></div>`;
+  return `<div class="pad" style="margin-top:16px"><div class="card row" id="inst" style="gap:12px;padding:12px 14px"><img src="icons/bp7-192.png" alt="" width="40" height="40" style="border-radius:10px;flex:none"><b style="flex:1;font-size:15px">Приложение на телефон</b><button class="pill" id="insty" style="background:var(--brand);color:#fff">Установить</button></div></div>`;
 }
 export function bindInstall() {
   const box = document.getElementById('inst'); if (!box) return; track('install_shown');

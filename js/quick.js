@@ -13,7 +13,7 @@ import { releaseFor } from './biomechanics-engine.js';
 
 const $ = s => document.querySelector(s);
 const CONSENT_VER = '2026-10-v4-draft';
-const LEGAL = 'Отчёт не является медицинским заключением и не заменяет консультацию врача.';
+const LEGAL = 'Отчет не является медицинским заключением и не заменяет консультацию врача.';
 const MAX_SIDE = 1600;
 let Q = null;
 // get кабинета для отсутствующей записи возвращает сам запрос IndexedDB, а не undefined
@@ -511,7 +511,7 @@ function results() {
    <div class="pad" style="display:flex;flex-direction:column;gap:16px;margin-top:8px"><div id="qpanel" style="display:flex;flex-direction:column;gap:16px"></div>
     <div><div class="eyebrow">Ваш вывод · ГИПОТЕЗА</div><textarea id="qcon" class="field" rows="3" maxlength="1200" placeholder="Необязательно. В отчете будет с пометкой «гипотеза специалиста»" style="height:auto;padding:12px 16px">${esc(Q.note || '')}</textarea></div>
     <div><div class="eyebrow">Рекомендации</div><textarea id="qrec" class="field" rows="2" maxlength="1200" placeholder="Необязательно: упражнения из карточек зон добавятся сами" style="height:auto;padding:12px 16px">${esc(Q.rec || '')}</textarea></div>
-    <label class="row" id="qgl" style="gap:10px;font-size:14px"><input type="checkbox" id="qgpdf"${Q.gainPdf ? ' checked' : ''} style="width:20px;height:20px"> В отчёте фигура с усилением перекосов, ×${String(Q.gain > 1 ? Q.gain : REPORT_GAIN).replace('.', ',')} (с пометкой «усилено»)</label>
+    <label class="row" id="qgl" style="gap:10px;font-size:14px"><input type="checkbox" id="qgpdf"${Q.gainPdf ? ' checked' : ''} style="width:20px;height:20px"> В отчете фигура с усилением перекосов, ×${String(Q.gain > 1 ? Q.gain : REPORT_GAIN).replace('.', ',')} (с пометкой «усилено»)</label>
    </div>
    <div class="dock"><button class="btn line" id="qshow">${ic('maximize', 's')}Показать клиенту</button><button class="btn" id="qsave" style="margin-top:8px">${ic('file-text', 's')}${Q.editId ? 'Сохранить правку' : 'Сохранить и отчет'}</button></div></div>`);
   const st = { by: q.by, zones: Q.zones, gain: Q.gain, h: heightCm() || 170 };
@@ -671,7 +671,7 @@ function shareSheet(cv, base, c, kind, title = 'Отчет клиенту', aid 
   d.innerHTML = `<div><h2 style="font-size:20px">${title}</h2><p class="sub" style="font-size:13px;margin-top:4px">Так его увидит клиент.</p>
     <div style="margin-top:12px;max-height:50dvh;overflow:auto;border-radius:16px;border:1px solid var(--line)"><img src="${cv.toDataURL('image/jpeg', .8)}" alt="Отчет" style="width:100%;display:block"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn" id="qpdf">${ic('file-text', 's')}PDF</button><button class="btn line" id="qpng">${ic('image', 's')}Картинка</button></div>
-    ${aid && !c.nocard ? `<button class="btn" id="qhwl" style="margin-top:8px">${ic('mail', 's')}${c.hw ? 'Обновить отчёт и домашку у клиента' : 'Ссылкой: отчёт и домашка'}</button>` : ''}
+    ${aid && !c.nocard ? `<button class="btn" id="qhwl" style="margin-top:8px">${ic('mail', 's')}${c.hw ? 'Обновить отчет и домашку у клиента' : 'Ссылкой: отчет и домашка'}</button>` : ''}
     <button class="btn ghost" id="qcard" style="margin-top:8px;border:0">${kind === 'compare' ? 'Закрыть' : c.nocard ? 'В кабинет' : 'К карточке клиента'}</button></div>`;
   document.body.appendChild(d);
   const close = () => { d.remove(); if (kind !== 'compare') c.nocard ? proHome() : clientCard(c.id); };
