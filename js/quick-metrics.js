@@ -63,6 +63,8 @@ export function viewMetrics(id, pts, w, h, roll = 0, heightCm = 0) {
 }
 
 /** Все виды сразу и сводка в форматах теста по видео (snapshot спереди, side как среднее двух боков) для правил зон. */
+// версия расчета замеров и зон: поднимать при изменении формул или правил, сохраненные тесты пересчитаются по своим точкам
+export const ALGO = 2;
 export function quickMetrics(views, heightCm = 0) {
   const by = {}; for (const v of ALL_VIEWS) { const x = views[v.id]; by[v.id] = x && x.pts ? viewMetrics(v.id, x.pts, x.w, x.h, x.roll || 0, heightCm) : null; }
   return summaryOf(by, heightCm);

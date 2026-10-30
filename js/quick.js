@@ -4,7 +4,7 @@ import { _pro, proHome, clientCard, homeworkLink, pullResults } from './pro.js';
 import { go, esc, ic, toast, spots, topOf, asClient } from './app.js';
 import { C, cam, startCamera, stopCamera, detectStill, initPose, startMotion, phone, cameraBlocked, openInBrowserSheet, posedFigure, body3D } from './core.js';
 import { poseOf } from './pose-figure.js';
-import { VIEWS as REQ, ALL_VIEWS as VIEWS, EDIT_POINTS, POINT_NAMES, quickMetrics, summaryOf, viewMetrics, observations, frameIssue } from './quick-metrics.js';
+import { VIEWS as REQ, ALL_VIEWS as VIEWS, EDIT_POINTS, POINT_NAMES, quickMetrics, summaryOf, ALGO, viewMetrics, observations, frameIssue } from './quick-metrics.js';
 import { P, analyze } from './analysis.js';
 import { track } from './track.js';
 import { matte } from './ds.js';
@@ -291,6 +291,24 @@ export function zonesOf(q) {
       else if (v.st < -6) VAR.forEach(([id, st]) => addM(id, sd, st)); }
     return [...lat, ...out].map(s => ({ id: s.id, side: s.side, k: s.k, key: s.key })); }
   catch (e) { return []; } }
+const sameZones = (x, y) => { const k = l => (l || []).map(z => z.id + ':' + z.side + ':' + z.k).sort().join(); return k(x) === k(y); };
+/** Пересчет сохраненного теста по его точкам после обновления формул (ALGO): замеры, «что видно», фигура и отчет.
+ *  Зоны: не правленные специалистом заменяются новой подсказкой; правленные остаются; у старых тестов (до учета правок)
+ *  новые подсказки добавляются к имеющимся один раз. */
+export async function refreshQuick(a) {
+  if (!a || a.template !== 'quick' || !a.quick || a.quick.algo === ALGO || !C.bodymap) return false;
+  const ph = ((await row('poses', a.id)) || {}).photos || {}, views = {};
+  for (const v of VIEWS) if (ph[v.id] && ph[v.id].pts) views[v.id] = ph[v.id];
+  if (!Object.keys(views).length) { a.quick = { ...a.quick, algo: ALGO }; await _pro.put('assessments', a); return false; }
+  const q = quickMetrics(views, a.quick.hSet ? a.quick.h : 0), auto = zonesOf(q), cur = a.quick.zones || [];
+  let zones = cur, zEdit = a.quick.zEdit;
+  if (zEdit === false || !cur.length) { zones = auto; zEdit = false; }
+  else if (zEdit == null) { const have = new Set(cur.map(z => z.id + ':' + z.side)); zones = [...cur, ...auto.filter(z => !have.has(z.id + ':' + z.side))]; zEdit = true; }
+  a.quick = { ...a.quick, by: q.by, obs: observations(q.by), zones: zones.map(({ id, side, k, key }) => ({ id, side, k, key })), zEdit, algo: ALGO };
+  a.snapshot = q.snapshot; a.side = q.side; await _pro.put('assessments', a); return true;
+}
+/** Фоном при открытии кабинета: все быстрые тесты старой версии расчета. */
+export async function refreshAll() { let n = 0; for (const a of await _pro.all('assessments')) if (a.template === 'quick' && a.quick && a.quick.algo !== ALGO) { try { if (await refreshQuick(a)) n++; } catch (e) {} } return n; }
 const zSpots = zones => zones.map(z => ({ ...z, key: z.key || z.id + ':' + z.side, tone: z.k === 'WEAK' ? -.75 : .75, back: (C.muscles[z.id] || {}).view === 'back' }));
 // ---------- домашнее задание: по умолчанию из карточек подтвержденных зон, специалист правит список ----------
 // Подбор по парам мышц: у каждой зоны свое упражнение и упражнение для ее антагониста.
@@ -594,6 +612,7 @@ function showClient(st, name) {
 }
 /** Карточка клиента: тот же блок, что после быстрого теста. Правка зон сохраняется в оценку. */
 export async function quickCard(host, aid, prevId) {
+  await refreshQuick(await row('assessments', aid));
   const a = await row('assessments', aid), c = await row('clients', a.clientId), qz = a.quick || {};
   const st = { by: qz.by || {}, zones: (qz.zones || []).map(z => ({ ...z })), gain: 1, h: qz.h || 170 }, es = await editState(a);
   // действия под рукой: отчет, показать клиенту, было → стало (до повторного теста кнопка видна, но неактивна)
@@ -606,7 +625,7 @@ export async function quickCard(host, aid, prevId) {
     <div id="qhw" style="display:flex;flex-direction:column;gap:8px"></div>
     <div id="qcp" style="display:flex;flex-direction:column;gap:16px"></div>
     ${a.note ? `<div><div class="eyebrow">Ваш вывод · ГИПОТЕЗА</div><div class="card" style="font-size:15px;line-height:1.45;white-space:pre-line">${esc(a.note)}</div></div>` : ''}</div>`;
-  panel(host.querySelector('#qcp'), st, { photos: ((await row('poses', aid)) || {}).photos || {}, onChange: async s => { a.quick = { ...a.quick, zones: s.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), confirmed: true }; await _pro.put('assessments', a); hwBlock(host.querySelector('#qhw'), aid); } });
+  panel(host.querySelector('#qcp'), st, { photos: ((await row('poses', aid)) || {}).photos || {}, onChange: async s => { a.quick = { ...a.quick, zones: s.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), confirmed: true, zEdit: !sameZones(s.zones, zonesOf(summaryOf(st.by, qz.hSet ? qz.h : 0))) }; await _pro.put('assessments', a); hwBlock(host.querySelector('#qhw'), aid); } });
   hwBlock(host.querySelector('#qhw'), aid);
   host.querySelector('#qcrep').onclick = () => report(aid);
   if (host.querySelector('#qcedit')) host.querySelector('#qcedit').onclick = () => editSaved(aid);
@@ -649,7 +668,7 @@ async function save() {
   const c = Q.client, old = await row('clients', c.id);
   if (!old) await _pro.put('clients', { ...c }); else if ((Q.consent && !Q.consent.reused) || c.height !== old.height || c.weight !== old.weight) await _pro.put('clients', { ...old, ...(Q.consent && !Q.consent.reused ? { consent: Q.consent } : {}), height: c.height || old.height || '', weight: c.weight || old.weight || '' });
   const id = _pro.uid(), q = Q.metrics, prev = (await _pro.all('assessments')).filter(a => a.clientId === c.id).sort((a, b) => b.date - a.date)[0];
-  const a = { id, clientId: c.id, date: Q.date, template: 'quick', templateName: 'Быстрый тест', quick: { by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), confirmed: true, gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf, h: heightCm() || 170, hSet: !!heightCm(), kg: +c.weight || null, views: VIEWS.filter(v => Q.views[v.id]).map(v => v.id), edited: VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id) },
+  const a = { id, clientId: c.id, date: Q.date, template: 'quick', templateName: 'Быстрый тест', quick: { by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), confirmed: true, algo: ALGO, zEdit: !sameZones(Q.zones, zonesOf(q)), gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf, h: heightCm() || 170, hSet: !!heightCm(), kg: +c.weight || null, views: VIEWS.filter(v => Q.views[v.id]).map(v => v.id), edited: VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id) },
     snapshot: q.snapshot, side: q.side, consent: Q.consent, note: Q.note, plan: { ex: [], text: Q.rec }, protocol: [], moves: {}, quality: {}, limits: {}, setup: {}, pain: {}, hyp: {}, check: {}, draft: false, prevId: prev ? prev.id : null, savedAt: Date.now() };
   await _pro.put('assessments', a);
   await _pro.put('poses', { assessmentId: id, photos: Object.fromEntries(VIEWS.filter(v => Q.views[v.id]).map(v => { const x = Q.views[v.id]; return [v.id, { photo: x.photo, w: x.w, h: x.h, pts: x.pts, auto: x.auto || null, roll: x.roll }]; })) });
