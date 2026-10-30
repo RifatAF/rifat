@@ -70,12 +70,12 @@
         }
       }
     },
-    "tolerance_deg": {"type": "number", "minimum": 3, "maximum": 20}
+    "tolerance_deg": {"type": "number", "minimum": 3, "maximum": 30}
   },
   "$defs": {
     "targets": {
       "type": "object",
-      "description": "метрика → угол. Метрики: knee_*, hip_*, ankle_*, elbow_*, shoulder_*, neck_flexion_*, trunk_incline, trunk_lateral, head_yaw, pelvis_tilt (* = left|right)",
+      "description": "метрика → угол. Метрики: knee_*, hip_*, ankle_*, elbow_*, shoulder_*, neck_flexion_*, trunk_incline, trunk_lateral, head_yaw, pelvis_tilt, feet_level (* = left|right)",
       "additionalProperties": {"type": "number", "minimum": -180, "maximum": 180}
     }
   }

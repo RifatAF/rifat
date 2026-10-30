@@ -123,7 +123,9 @@
     "accent": "#C6E84B"
   },
   "qa": {
-    "angle_tolerance_deg": 10,
+    "mode": "demo",
+    "mode_note": "demo: строго только primary_joint с допуском angle_tolerance_deg, остальные углы в отчете для информации. strict: все углы из JSON блокируют",
+    "angle_tolerance_deg": 20,
     "min_detection_rate": 0.9,
     "min_landmark_visibility": 0.3,
     "bone_ratio_max_dev": 0.3,

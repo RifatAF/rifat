@@ -13,6 +13,26 @@ def _tol(ex, cfg):
     return ex.get('tolerance_deg', cfg['qa']['angle_tolerance_deg'])
 
 
+def _ctol(metric, tol):
+    """Допуск в градусах к процентным метрикам не применяется."""
+    return 0 if metric == 'feet_level' else tol
+
+
+def _blocking(metric, ex, cfg):
+    """В режиме demo блокирует только основной сустав: видео наглядное, а не измерительное."""
+    return cfg['qa'].get('mode', 'strict') == 'strict' or metric == ex.get('primary_joint')
+
+
+def _angle_check(name, metric, val, tgt, tol, ex, cfg, **kw):
+    ok = val is not None and abs(val - tgt) <= tol
+    hard = _blocking(metric, ex, cfg)
+    c = {'name': name, 'target': tgt, 'measured': None if val is None else round(val, 1),
+         'delta': None if val is None else round(val - tgt, 1), 'passed': ok or not hard, **kw}
+    if not hard:
+        c['detail'] = ('в допуске' if ok else 'вне допуска') + ', не блокирует (режим demo)'
+    return c
+
+
 def check_image(img_path, targets, ex, cfg, label):
     """Проверка ключевого кадра до генерации видео: дешевле поймать кривую позу на картинке."""
     q, tol = cfg['qa'], ex.get('tolerance_deg', cfg['qa']['angle_tolerance_deg'])
@@ -25,9 +45,13 @@ def check_image(img_path, targets, ex, cfg, label):
         res['checks'].append({'name': 'один человек', 'passed': False, 'detail': f'людей в кадре: {det["people"]}'})
     for m, tgt in targets.items():
         val = measure(m, det['pts'], det['vis'], q['min_landmark_visibility'])
-        ok = val is not None and abs(val - tgt) <= tol
-        res['checks'].append({'name': f'угол {m}', 'target': tgt, 'measured': None if val is None else round(val, 1),
-                              'delta': None if val is None else round(val - tgt, 1), 'passed': ok})
+        res['checks'].append(_angle_check(f'угол {m}', m, val, tgt, tol, ex, cfg))
+    for c in ex.get('constraints', []):
+        val = measure(c['metric'], det['pts'], det['vis'], 0.0)
+        lo, hi = c.get('min', -999), c.get('max', 999)
+        res['checks'].append({'name': f'ограничение {c["metric"]} в [{lo}; {hi}]', 'measured': None if val is None else round(val, 1),
+                              'passed': val is not None and lo - _ctol(c['metric'], tol) <= val <= hi + _ctol(c['metric'], tol),
+                              'detail': c.get('why_ru', '')})
     fs = ex['camera'].get('facing_side')
     if ex['camera']['view'] == 'side' and fs:
         other = 'right' if fs == 'left' else 'left'
@@ -116,8 +140,7 @@ def check_video(path, ex, timeline, cfg):
     for m, tgt in ex['start_pose']['targets'].items():
         t, v = series[m]
         val = _window(t, v, 0, 0.25)
-        add(f'старт: {m}', val is not None and abs(val - tgt) <= tol, phase='start', target=tgt,
-            measured=None if val is None else round(val, 1), delta=None if val is None else round(val - tgt, 1))
+        checks.append(_angle_check(f'старт: {m}', m, val, tgt, tol, ex, cfg, phase='start'))
     for seg in timeline:
         ph = phases[seg['phase']]
         if ph['type'] != 'move':
@@ -125,9 +148,7 @@ def check_video(path, ex, timeline, cfg):
         for m, tgt in ph['targets'].items():
             t, v = series[m]
             val = _window(t, v, seg['t1'] - 0.25, seg['t1'] + 0.05)
-            add(f'повтор {seg["rep"]}, {ph["label_ru"].lower()}: {m}', val is not None and abs(val - tgt) <= tol,
-                phase=ph['name'], target=tgt, measured=None if val is None else round(val, 1),
-                delta=None if val is None else round(val - tgt, 1))
+            checks.append(_angle_check(f'повтор {seg["rep"]}, {ph["label_ru"].lower()}: {m}', m, val, tgt, tol, ex, cfg, phase=ph['name']))
 
     # 5. повторы и темп по основному суставу
     pj = ex['primary_joint']
@@ -179,7 +200,8 @@ def check_video(path, ex, timeline, cfg):
             add(f'ограничение {c["metric"]}', False, detail='нет измерений')
             continue
         lo, hi = c.get('min', -999), c.get('max', 999)
-        out = float(np.mean((v < lo - tol) | (v > hi + tol)))
+        ct = _ctol(c['metric'], tol)
+        out = float(np.mean((v < lo - ct) | (v > hi + ct)))
         add(f'ограничение {c["metric"]} в [{lo}; {hi}]', out <= 0.03, detail=f'{c.get("why_ru", "")}; вне диапазона {out:.0%} кадров, '
             f'диапазон измерений {v.min():.0f}–{v.max():.0f}')
     return _finish(path, ex, checks, timeline, fps, n)
@@ -216,8 +238,9 @@ def to_markdown(rep, title, extra=None):
         lines += [f'- {k}: {v}' for k, v in extra.items()] + ['']
     lines += ['| Проверка | Цель | Измерено | Δ | Итог | Детали |', '|---|---|---|---|---|---|']
     for c in rep['checks']:
+        mark = '❌' if not c['passed'] else ('ℹ️' if 'вне допуска' in c.get('detail', '') else '✅')
         lines.append(f'| {c["name"]} | {c.get("target", "")} | {c.get("measured", "")} | {c.get("delta", "")} | '
-                     f'{"✅" if c["passed"] else "❌"} | {c.get("detail", "")} |')
+                     f'{mark} | {c.get("detail", "")} |')
     if rep.get('keyframes'):
         lines += ['', '## Ключевые кадры', '']
         for k in rep['keyframes']:

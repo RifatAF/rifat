@@ -72,7 +72,15 @@ def _pelvis_tilt(P):
     return math.degrees(math.atan2(v[1], abs(v[0]) + 1e-9))
 
 
+def _feet_level(P):
+    """Разница высоты лодыжек в % от расстояния плечо–лодыжка: ~0, когда обе стопы на полу."""
+    sh, al, ar = (P[0] + P[1]) / 2, P[2], P[3]
+    h = abs(((al + ar) / 2)[1] - sh[1])
+    return None if h < 1e-6 else float(abs(al[1] - ar[1]) / h * 100)
+
+
 UNSIDED = {
+    'feet_level': (['sh_l', 'sh_r', 'an_l', 'an_r'], _feet_level),
     'trunk_incline': (['sh_l', 'sh_r', 'hip_l', 'hip_r'], _trunk_incline),
     'trunk_lateral': (['sh_l', 'sh_r', 'hip_l', 'hip_r'], _trunk_lateral),
     'head_yaw': (['nose', 'ear_l', 'ear_r'], _head_yaw),
