@@ -475,6 +475,22 @@ async function drawMeasure(cv, x, view, ms, compact = false) {
   return true;
 }
 const HYPCLS = { WEAK: 'g', HYPER: 'm', SHORT: 'a' };
+/** «Что делать» по зонам: проверить руками (тест из базы мышц), руками на сеансе (зажатые и перегруженные), упражнения по шагам.
+ *  Упражнения те же, что уйдут в домашку (chainEx): сначала снять зажим, потом укрепить слабое и пару, потом в движении. */
+function planBlock(zones) {
+  if (!zones.length) return '';
+  const mus = [...new Map(zones.map(z => [z.id, z])).values()].filter(z => C.muscles[z.id]), sides = id => { const s = new Set(zones.filter(z => z.id === id).map(z => z.side)); return s.size > 1 ? '' : sideRu([...s][0]); };
+  const row = (t, sub) => `<li style="margin-top:8px"><b style="font-weight:600">${t}</b>${sub ? `<div class="sub" style="font-size:13px;line-height:1.4;margin-top:2px">${sub}</div>` : ''}</li>`;
+  const checks = mus.filter(z => C.muscles[z.id].proTest).slice(0, 4).map(z => row(`${esc(zoneName(z))} ${sides(z.id)}`.trim(), esc(C.muscles[z.id].proTest)));
+  const hands = mus.filter(z => z.k !== 'WEAK' && C.muscles[z.id].massage).slice(0, 4).map(z => row(`${`${esc(zoneName(z))} ${sides(z.id)}`.trim()}: ${z.k === 'SHORT' ? 'расслабить' : 'снять перегруз'}`, esc(C.muscles[z.id].massage)));
+  const { ids, why } = chainEx(zones), step = r => /в движении/.test(r) ? 2 : /укрепить/.test(r) ? 1 : 0, ST = ['Снять зажим', 'Укрепить', 'Закрепить в движении'], by = [[], [], []];
+  for (const e of exRows(ids)) by[step(why[e.id] || '')].push(row(`${esc(e.title.split(' (')[0])}${e.dose ? ` <span class="sub" style="font-weight:400">· ${esc(e.dose)}</span>` : ''}`, esc(why[e.id] || '')));
+  const sec = (n, t, items) => items.length ? `<div style="margin-top:14px"><div class="row" style="gap:8px"><span class="mono" style="width:24px;height:24px;border-radius:12px;background:var(--surface-2,#2C2C2E);display:inline-flex;align-items:center;justify-content:center;font-size:13px;flex:none">${n}</span><b style="font-size:16px">${t}</b></div><ul style="margin:0;padding-left:32px">${items.join('')}</ul></div>` : '';
+  return `<div class="card" style="padding:14px 16px"><div class="eyebrow">Что делать</div>
+    <p class="sub" style="font-size:13px;line-height:1.4;margin-top:6px">Зоны выше: предположение по фото. Порядок: проверить руками, поработать на сеансе, дать упражнения. Не подтвердилось руками: уберите зону крестиком, план пересоберется.</p>
+    ${[['Проверить руками', checks], ['На сеансе', hands], ...ST.map((t, i) => [t, by[i]])].filter(x => x[1].length).map(([t, l], i) => sec(i + 1, t, l)).join('')}
+    ${ids.length ? '<p class="sub" style="font-size:12px;margin-top:12px">Эти упражнения уйдут клиенту домашкой после сохранения, список можно поменять.</p>' : ''}</div>`;
+}
 /** Карточки «Гипотеза специалиста» по задачам: «Укрепить: …», «Расслабить: …» (как увидит клиент). */
 const hypCards = zones => taskGroups(zones).map(g => `<div><b>Гипотеза специалиста</b><span class="mt-tag ${HYPCLS[g.k]}">${g.t}</span><ul>${g.list.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>`).join('');
 /** Что видно: показатели вне погрешности, самые заметные первыми; значение и погрешность моноширинным. */
@@ -492,6 +508,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
       <div class="seg" id="qview" style="margin-top:10px">${VIEWS.filter(v => !v.opt || (photos[v.id] && photos[v.id].pts)).map((v, i) => `<button data-vw="${v.id}" class="${i ? '' : 'on'}" style="padding:0 6px">${v.short || v.name}</button>`).join('')}</div>
       <div id="qgr"><div class="row" style="gap:10px;margin-top:10px"><span class="sub" style="font-size:13px;flex:none">Усилить</span><div class="seg" id="qgain" style="flex:1">${GAINS.map(g => `<button data-g="${g}" class="${g === st.gain ? 'on' : ''}" style="padding:0 6px">×${String(g).replace('.', ',')}</button>`).join('')}</div></div><div id="qplate">${gainPlate(st.gain)}</div></div>
       <div class="sub" id="qcap" style="font-size:12px;text-align:center;margin-top:8px">Положение на типовой фигуре, а не тело клиента. Цветом отмечены зоны</div></div>
+    <div id="qplan"></div>
     <div class="mt-hyp" id="qhyp"></div>
     <div><div class="eyebrow">Зоны · предположение по замеру, проверьте</div><div id="qzl"></div>
       <button class="btn line" id="qadd" style="margin-top:10px">${ic('plus', 's')}Добавить зону</button>
@@ -500,7 +517,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
     <details class="acc"><summary style="font-weight:600;font-size:15px">Все замеры: <span class="mono">${n}</span>, вне погрешности <span class="mono">${out}</span></summary><div style="display:flex;flex-direction:column;gap:12px;margin-top:10px">${VIEWS.filter(v => st.by[v.id]).map(v => `<div><div class="eyebrow">${v.name}</div>${metricRows(st.by[v.id])}</div>`).join('')}</div></details>
     <p class="mt-cal">Поправка на крен телефона учтена · погрешности замера в методике</p>`;
   const $h = s => host.querySelector(s);
-  const hyp = () => { $h('#qhyp').innerHTML = hypCards(st.zones); $h('#qhyp').style.display = st.zones.length ? '' : 'none'; };
+  const hyp = () => { $h('#qhyp').innerHTML = hypCards(st.zones); $h('#qhyp').style.display = st.zones.length ? '' : 'none'; $h('#qplan').innerHTML = planBlock(st.zones); };
   const changed = () => { if (v3) v3.update(zSpots(st.zones)); zl(); hyp(); onChange(st); };
   const zl = () => { $h('#qzl').innerHTML = st.zones.length ? `<div class="group">${st.zones.map((z, i) => `<div class="row" style="gap:10px;min-height:52px;padding:8px 12px"><span style="flex:1;font-size:15px;line-height:1.3">${esc(zoneName(z))} <span class="sub">${sideRu(z.side)}</span></span>
       <button class="pill" data-zs="${i}" style="color:${ZCOL[z.k]};border-color:${ZCOL[z.k]};font-weight:600">${ZST[z.k]}</button><button class="round" data-zx="${i}" aria-label="Убрать зону" style="width:36px;height:36px">${ic('x', 's')}</button></div>`).join('')}</div>` : '<div class="card sub" style="font-size:14px">По замеру выраженных зон нет</div>';
