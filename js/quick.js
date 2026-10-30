@@ -475,21 +475,14 @@ async function drawMeasure(cv, x, view, ms, compact = false) {
   return true;
 }
 const HYPCLS = { WEAK: 'g', HYPER: 'm', SHORT: 'a' };
-/** «Что делать» по зонам: проверить руками (тест из базы мышц), руками на сеансе (зажатые и перегруженные), упражнения по шагам.
- *  Упражнения те же, что уйдут в домашку (chainEx): сначала снять зажим, потом укрепить слабое и пару, потом в движении. */
+/** «Что делать»: строка на зону, коротко для специалиста: задача, мышца, цепочка упражнений. Тест руками и техника по касанию. */
 function planBlock(zones) {
-  if (!zones.length) return '';
-  const mus = [...new Map(zones.map(z => [z.id, z])).values()].filter(z => C.muscles[z.id]), sides = id => { const s = new Set(zones.filter(z => z.id === id).map(z => z.side)); return s.size > 1 ? '' : sideRu([...s][0]); };
-  const row = (t, sub) => `<li style="margin-top:8px"><b style="font-weight:600">${t}</b>${sub ? `<div class="sub" style="font-size:13px;line-height:1.4;margin-top:2px">${sub}</div>` : ''}</li>`;
-  const checks = mus.filter(z => C.muscles[z.id].proTest).slice(0, 4).map(z => row(`${esc(zoneName(z))} ${sides(z.id)}`.trim(), esc(C.muscles[z.id].proTest)));
-  const hands = mus.filter(z => z.k !== 'WEAK' && C.muscles[z.id].massage).slice(0, 4).map(z => row(`${`${esc(zoneName(z))} ${sides(z.id)}`.trim()}: ${z.k === 'SHORT' ? 'расслабить' : 'снять перегруз'}`, esc(C.muscles[z.id].massage)));
-  const { ids, why } = chainEx(zones), step = r => /в движении/.test(r) ? 2 : /укрепить/.test(r) ? 1 : 0, ST = ['Снять зажим', 'Укрепить', 'Закрепить в движении'], by = [[], [], []];
-  for (const e of exRows(ids)) by[step(why[e.id] || '')].push(row(`${esc(e.title.split(' (')[0])}${e.dose ? ` <span class="sub" style="font-weight:400">· ${esc(e.dose)}</span>` : ''}`, esc(why[e.id] || '')));
-  const sec = (n, t, items) => items.length ? `<div style="margin-top:14px"><div class="row" style="gap:8px"><span class="mono" style="width:24px;height:24px;border-radius:12px;background:var(--surface-2,#2C2C2E);display:inline-flex;align-items:center;justify-content:center;font-size:13px;flex:none">${n}</span><b style="font-size:16px">${t}</b></div><ul style="margin:0;padding-left:32px">${items.join('')}</ul></div>` : '';
-  return `<div class="card" style="padding:14px 16px"><div class="eyebrow">Что делать</div>
-    <p class="sub" style="font-size:13px;line-height:1.4;margin-top:6px">Зоны выше: предположение по фото. Порядок: проверить руками, поработать на сеансе, дать упражнения. Не подтвердилось руками: уберите зону крестиком, план пересоберется.</p>
-    ${[['Проверить руками', checks], ['На сеансе', hands], ...ST.map((t, i) => [t, by[i]])].filter(x => x[1].length).map(([t, l], i) => sec(i + 1, t, l)).join('')}
-    ${ids.length ? '<p class="sub" style="font-size:12px;margin-top:12px">Эти упражнения уйдут клиенту домашкой после сохранения, список можно поменять.</p>' : ''}</div>`;
+  const g = new Map(); for (const z of zones) { const k = z.id + ':' + z.k; if (!g.has(k)) g.set(k, []); g.get(k).push(z); }
+  const rows = [...g.values()].filter(l => C.muscles[l[0].id]).map(l => { const z = l[0], m = C.muscles[z.id], sd = l.length > 1 ? '' : ' ' + sideRu(z.side);
+    const ex = exRows(chainEx(l, 3).ids).map(e => esc(e.title.split(' (')[0])).join(' → '), more = [m.proTest && `<b>Проверка:</b> ${esc(m.proTest)}`, z.k !== 'WEAK' && m.massage && `<b>Руками:</b> ${esc(m.massage)}`].filter(Boolean);
+    return `<details style="padding:9px 0;border-top:1px solid var(--line-2)"><summary style="display:block;position:relative;padding-right:24px;list-style:none;cursor:pointer;font-size:15px;line-height:1.35"><span style="position:absolute;right:0;top:4px;color:var(--sub)">${ic('chevron-down', 's')}</span><span class="pill" style="font-size:12px;padding:2px 8px;margin-right:6px;color:${TCOL[z.k]};border-color:${TCOL[z.k]}">${TASK[z.k]}</span><b>${esc(zoneName(z))}${sd}</b>${ex ? `<div class="sub" style="font-size:13px;margin-top:3px">${ex}</div>` : ''}</summary>
+      ${more.length ? `<div class="sub" style="font-size:13px;line-height:1.4;margin-top:6px">${more.join('<br>')}</div>` : ''}</details>`; });
+  return rows.length ? `<div class="card" style="padding:12px 16px 4px"><div class="row"><b style="flex:1">Что делать</b><span class="sub" style="font-size:12px">касание: тест и техника</span></div>${rows.join('')}</div>` : '';
 }
 /** Карточки «Гипотеза специалиста» по задачам: «Укрепить: …», «Расслабить: …» (как увидит клиент). */
 const hypCards = zones => taskGroups(zones).map(g => `<div><b>Гипотеза специалиста</b><span class="mt-tag ${HYPCLS[g.k]}">${g.t}</span><ul>${g.list.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>`).join('');
