@@ -236,7 +236,7 @@ def finish_build(ctx_like, ex, cfg, reps, slow, timeline, build_dir, provider_na
     mp4, jpg = paths.OUT / f'{name}.mp4', paths.OUT / f'{name}.jpg'
     total = cfg['video']['intro_s'] + reps_s + slow_s + cfg['video']['outro_s']
     log(f'Сборка {paths.rel(mp4)}')
-    meta = post.assemble(reps, slow, ass, mp4, build_dir, cfg, total)
+    meta = post.assemble([reps, slow], ass, mp4, build_dir, cfg, total)
     key_seg = next(s for s in timeline if s['phase'] == ex['key_phase'])
     post.poster(mp4, jpg, cfg['video']['intro_s'] + key_seg['t1'] - 0.1)
     for c in tech_checks(meta, cfg):
@@ -289,6 +289,9 @@ def run(ex_id, provider_name=None, confirm_cost=False, new_version=False):
                       f'Нужно решение человека: поправить JSON или промты, затем ev.py reset-attempts {ex_id}.')
     if ex.get('mirror_of'):
         return run_mirror(ex, cfg)
+    if ex.get('mode') == 'footage':
+        from . import footage
+        return footage.run(ex, cfg, new_version)
 
     ctx = Ctx(ex, cfg, provider_name)
     if ctx.prov.paid and not cfg.get('allow_paid'):

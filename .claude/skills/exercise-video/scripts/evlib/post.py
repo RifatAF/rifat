@@ -145,14 +145,12 @@ def _ts(t):
     return f'{int(h)}:{int(m):02d}:{s:05.2f}'
 
 
-def captions(ex, timeline, reps_s, slow_s, cfg):
-    """Текст титров и ASS-файл. Возвращает (ass_text, все строки титров для проверки на запрещенные фразы)."""
-    v, cards = cfg['video'], load_json(paths.TEMPLATES / 'cards.json')
-    intro, outro = v['intro_s'], v['outro_s']
-    total = intro + reps_s + slow_s + outro
+def ass_head(cfg):
+    """Шапка ASS: стили титров в цветах бренда."""
+    v = cfg['video']
     fg, bg, acc = v['brand_fg'], v['brand_bg'], v['accent']
     font = v['font']
-    head = f"""[Script Info]
+    return f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {v['width']}
 PlayResY: {v['height']}
@@ -172,6 +170,14 @@ Style: Outro,{font},58,{_ass_color(fg)},{_ass_color(fg)},{_ass_color(bg)},{_ass_
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
+
+
+def captions(ex, timeline, reps_s, slow_s, cfg):
+    """Текст титров и ASS-файл. Возвращает (ass_text, все строки титров для проверки на запрещенные фразы)."""
+    v, cards = cfg['video'], load_json(paths.TEMPLATES / 'cards.json')
+    intro, outro = v['intro_s'], v['outro_s']
+    total = intro + reps_s + slow_s + outro
+    head = ass_head(cfg)
     ev, texts = [], []
 
     def add(t0, t1, style, text, raw=None):
@@ -214,20 +220,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     return head + '\n'.join(ev) + '\n', texts
 
 
-def assemble(reps, slow, ass_text, out_mp4, build_dir, cfg, total_s):
-    """Вступление (размытый первый кадр) + повторы + замедление + концовка (фон бренда), титры, финальное кодирование ≤ max_mb."""
+def assemble(parts, ass_text, out_mp4, build_dir, cfg, total_s):
+    """Вступление (размытый первый кадр) + части ролика + концовка (фон бренда), титры, финальное кодирование ≤ max_mb."""
     v = cfg['video']
     build_dir = Path(build_dir)
     intro = build_dir / 'intro.mp4'
     first = build_dir / 'first.png'
-    ff(['-i', reps, '-frames:v', '1', first], 'кадр вступления')
+    ff(['-i', parts[0], '-frames:v', '1', first], 'кадр вступления')
     ff(['-loop', '1', '-framerate', v['fps'], '-i', first, '-t', v['intro_s'],
         '-vf', f'boxblur=24:2,eq=brightness=-0.18,fps={v["fps"]},setsar=1,format=yuv420p', *INTER, intro], 'вступление')
     outro = build_dir / 'outro.mp4'
     ff(['-f', 'lavfi', '-i', f'color=c={v["brand_bg"].replace("#", "0x")}:s={v["width"]}x{v["height"]}:r={v["fps"]}',
         '-t', v['outro_s'], '-vf', 'setsar=1,format=yuv420p', *INTER, outro], 'концовка')
     joined = build_dir / 'joined.mp4'
-    concat([intro, reps, slow, outro], joined)
+    concat([intro, *parts, outro], joined)
     ass = build_dir / 'captions.ass'
     ass.write_text(ass_text, encoding='utf-8')
     limit = v['max_mb'] * 1024 * 1024

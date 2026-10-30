@@ -4,6 +4,7 @@
   ev.py setup                         окружение: .venv, зависимости, модель позы
   ev.py validate [id ...]             проверить exercises/*.json
   ev.py run <id> [--confirm-cost]     сгенерировать, собрать, проверить (одна команда)
+  ev.py import <id> <видео>           свое видео для режима footage (фон заменится)
   ev.py status [id]                   статусы из manifest.json
   ev.py approve <id> --version N --by ИМЯ    только человек
   ev.py reject  <id> --version N --by ИМЯ --reason ...
@@ -78,6 +79,13 @@ def cmd_validate(a):
 def cmd_run(a):
     from evlib import pipeline
     return pipeline.run(a.id, a.provider, a.confirm_cost, a.new_version)
+
+
+def cmd_import(a):
+    from evlib import footage, paths
+    dst = footage.import_source(a.id, a.file)
+    print(f'Исходник сохранен: {paths.rel(dst)}\nВ exercises/{a.id}.json → footage.file укажи: {paths.rel(dst)}')
+    return 0
 
 
 def cmd_status(a):
@@ -267,6 +275,7 @@ def main():
     s = sp.add_parser('validate'); s.add_argument('ids', nargs='*'); s.set_defaults(f=cmd_validate)
     s = sp.add_parser('run'); s.add_argument('id'); s.add_argument('--provider'); s.add_argument('--confirm-cost', action='store_true')
     s.add_argument('--new-version', action='store_true'); s.set_defaults(f=cmd_run)
+    s = sp.add_parser('import'); s.add_argument('id'); s.add_argument('file'); s.set_defaults(f=cmd_import)
     s = sp.add_parser('status'); s.add_argument('id', nargs='?'); s.set_defaults(f=cmd_status)
     for name, f in (('approve', cmd_approve), ('reject', cmd_reject)):
         s = sp.add_parser(name); s.add_argument('id'); s.add_argument('--version', type=int, required=True)

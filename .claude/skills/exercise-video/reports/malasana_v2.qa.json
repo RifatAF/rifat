@@ -1,0 +1,130 @@
+{
+  "exercise": "malasana",
+  "checked_at": "2026-10-30T06:55:06+0000",
+  "frames": 891,
+  "source_range_s": [
+    1.4,
+    29.6
+  ],
+  "passed": true,
+  "failed_count": 0,
+  "checks": [
+    {
+      "name": "поза найдена в кадрах",
+      "passed": true,
+      "detail": "100% из 891"
+    },
+    {
+      "name": "анатомия: длины костей",
+      "passed": true,
+      "detail": "кадров с выбросами 16.5%; не блокирует: живое видео, проверка нужна для ИИ-генерации"
+    },
+    {
+      "name": "в кадре один человек",
+      "passed": true,
+      "detail": "кадров с несколькими людьми: 0"
+    },
+    {
+      "name": "Локти упираются в колени (5.2–15.3 с): knee_left",
+      "target": 55,
+      "measured": 54.6,
+      "delta": -0.4,
+      "passed": true,
+      "phase": "hold"
+    },
+    {
+      "name": "Локти упираются в колени (5.2–15.3 с): knee_right",
+      "target": 56,
+      "measured": 54.9,
+      "delta": -1.1,
+      "passed": true,
+      "phase": "hold",
+      "detail": "в допуске, не блокирует (режим demo)"
+    },
+    {
+      "name": "Локти упираются в колени (5.2–15.3 с): hip_left",
+      "target": 62,
+      "measured": 62.9,
+      "delta": 0.9,
+      "passed": true,
+      "phase": "hold",
+      "detail": "в допуске, не блокирует (режим demo)"
+    },
+    {
+      "name": "Локти упираются в колени (5.2–15.3 с): hip_right",
+      "target": 68,
+      "measured": 70.7,
+      "delta": 2.7,
+      "passed": true,
+      "phase": "hold",
+      "detail": "в допуске, не блокирует (режим demo)"
+    },
+    {
+      "name": "Дышите спокойно (23–28.6 с): knee_left",
+      "target": 57,
+      "measured": 56.5,
+      "delta": -0.5,
+      "passed": true,
+      "phase": "hold2"
+    },
+    {
+      "name": "Дышите спокойно (23–28.6 с): knee_right",
+      "target": 59,
+      "measured": 60.4,
+      "delta": 1.4,
+      "passed": true,
+      "phase": "hold2",
+      "detail": "в допуске, не блокирует (режим demo)"
+    },
+    {
+      "name": "Дышите спокойно (23–28.6 с): hip_left",
+      "target": 64,
+      "measured": 65.0,
+      "delta": 1.0,
+      "passed": true,
+      "phase": "hold2",
+      "detail": "в допуске, не блокирует (режим demo)"
+    },
+    {
+      "name": "Дышите спокойно (23–28.6 с): hip_right",
+      "target": 69,
+      "measured": 74.3,
+      "delta": 5.3,
+      "passed": true,
+      "phase": "hold2",
+      "detail": "в допуске, не блокирует (режим demo)"
+    },
+    {
+      "name": "ограничение feet_level в [-999; 8] (удержание)",
+      "passed": true,
+      "detail": "обе стопы на полу; вне диапазона 0% кадров, измерено 0–4"
+    },
+    {
+      "name": "ограничение trunk_lateral в [-10; 10] (удержание)",
+      "passed": true,
+      "detail": "корпус не заваливается вбок; вне диапазона 0% кадров, измерено -1–5"
+    },
+    {
+      "name": "разрешение 1080x1920",
+      "passed": true,
+      "measured": "1080x1920"
+    },
+    {
+      "name": "30 fps",
+      "passed": true,
+      "measured": 30.0
+    },
+    {
+      "name": "H.264, yuv420p",
+      "passed": true,
+      "measured": "h264, yuv420p"
+    },
+    {
+      "name": "размер до 8 МБ",
+      "passed": true,
+      "measured": "4.65 МБ"
+    }
+  ],
+  "bad_phases": [],
+  "global_fail": false
+}

@@ -92,6 +92,8 @@ def validate(ex_id):
     if data['id'] != ex_id:
         errors.append(f'id в файле ({data["id"]}) не совпадает с именем файла ({ex_id})')
     ex = load(ex_id)
+    if ex.get('mode') == 'footage':
+        return _validate_footage(ex, errors, warns)
 
     names = [p['name'] for p in ex['phases']]
     if len(set(names)) != len(names):
@@ -183,3 +185,34 @@ def clip_plan(ex):
             plan.append((ph, cur, to))
             cur = to
     return plan
+
+
+def _validate_footage(ex, errors, warns):
+    """Живое видео: отрезки исходника вместо фаз генерации."""
+    segs = ex['footage']['segments']
+    last = 0.0
+    for sg in segs:
+        if sg['t1'] <= sg['t0']:
+            errors.append(f'отрезок {sg["name"]}: t1 должен быть больше t0')
+        if sg['t0'] < last - 1e-6:
+            errors.append(f'отрезок {sg["name"]}: отрезки должны идти по порядку без наложений')
+        last = sg['t1']
+        for m in list(sg.get('targets', {})):
+            if m not in METRICS:
+                errors.append(f'отрезок {sg["name"]}: неизвестная метрика {m}')
+    if not any(sg.get('targets') for sg in segs):
+        errors.append('нужен хотя бы один отрезок удержания с targets: по нему идет автопроверка позы')
+    if ex['primary_joint'] not in METRICS:
+        errors.append(f'неизвестная метрика primary_joint {ex["primary_joint"]}')
+    for c in ex.get('constraints', []):
+        if c['metric'] not in METRICS:
+            errors.append(f'неизвестная метрика {c["metric"]}')
+    texts = [ex['title_ru'], ex['dose_ru'], *ex['cues_ru'], *ex['mistakes_ru'],
+             *[sg['label_ru'] for sg in segs], *[sg.get('cue_ru', '') for sg in segs], *[c for sg in segs for c in sg.get('cues_ru', [])]]
+    for t, pat in find_banned([t for t in texts if t]):
+        errors.append(f'медицинское обещание в тексте «{t}» (правило {pat}). Только техника.')
+    for t in texts:
+        if t and len(t) > 64:
+            errors.append(f'слишком длинный титр (>64 знаков): «{t}»')
+    ex['tempo_ru'] = ex['dose_ru']
+    return ex, errors, warns

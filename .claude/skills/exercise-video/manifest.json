@@ -1,1 +1,180 @@
-{"schema": 1, "statuses": ["draft", "qa_passed", "approved", "rejected"], "exercises": {}}
+{
+  "schema": 1,
+  "statuses": [
+    "draft",
+    "qa_passed",
+    "approved",
+    "rejected"
+  ],
+  "exercises": {
+    "malasana": {
+      "attempts": 0,
+      "cost_usd": 0.0,
+      "cost_ok": false,
+      "provider": "footage",
+      "videos": {
+        "malasana_v1": {
+          "version": 1,
+          "created": "2026-10-30T06:45:42+0000",
+          "provider": "footage",
+          "file": "out/malasana_v1.mp4",
+          "preview": "out/malasana_v1.jpg",
+          "sha256": "98b4e49c9c28705794e89d36404c2b92273117231ddffb331f46e6c6312698ca",
+          "build": "work/malasana/footage/v1",
+          "qa": {
+            "passed": false,
+            "failed": 1,
+            "report": "reports/malasana_v1.qa.md"
+          },
+          "timeline": [
+            {
+              "seg": "enter",
+              "t0": 0.0,
+              "t1": 3.8,
+              "src": [
+                1.4,
+                5.2
+              ],
+              "speed": 1.0
+            },
+            {
+              "seg": "hold",
+              "t0": 3.8,
+              "t1": 13.9,
+              "src": [
+                5.2,
+                15.3
+              ],
+              "speed": 1.0
+            },
+            {
+              "seg": "rock",
+              "t0": 13.9,
+              "t1": 21.6,
+              "src": [
+                15.3,
+                23.0
+              ],
+              "speed": 1.0
+            },
+            {
+              "seg": "hold2",
+              "t0": 21.6,
+              "t1": 27.2,
+              "src": [
+                23.0,
+                28.6
+              ],
+              "speed": 1.0
+            },
+            {
+              "seg": "exit",
+              "t0": 27.2,
+              "t1": 29.2,
+              "src": [
+                28.6,
+                29.6
+              ],
+              "speed": 0.5
+            }
+          ],
+          "duration_s": 34.2,
+          "size_mb": 2.45,
+          "status": "draft",
+          "history": [
+            {
+              "at": "2026-10-30T06:45:42+0000",
+              "status": "draft",
+              "by": "ev.py",
+              "note": "собрано из живого видео"
+            }
+          ]
+        },
+        "malasana_v2": {
+          "version": 2,
+          "created": "2026-10-30T06:56:27+0000",
+          "provider": "footage",
+          "file": "out/malasana_v2.mp4",
+          "preview": "out/malasana_v2.jpg",
+          "sha256": "045e0faf5f82aeb093db23602639fe2e5d663bae0005adaa1ed0ea11bd98533e",
+          "build": "work/malasana/footage/v2",
+          "qa": {
+            "passed": true,
+            "failed": 0,
+            "report": "reports/malasana_v2.qa.md"
+          },
+          "timeline": [
+            {
+              "seg": "enter",
+              "t0": 0.0,
+              "t1": 3.8,
+              "src": [
+                1.4,
+                5.2
+              ],
+              "speed": 1.0
+            },
+            {
+              "seg": "hold",
+              "t0": 3.8,
+              "t1": 13.9,
+              "src": [
+                5.2,
+                15.3
+              ],
+              "speed": 1.0
+            },
+            {
+              "seg": "rock",
+              "t0": 13.9,
+              "t1": 21.6,
+              "src": [
+                15.3,
+                23.0
+              ],
+              "speed": 1.0
+            },
+            {
+              "seg": "hold2",
+              "t0": 21.6,
+              "t1": 27.2,
+              "src": [
+                23.0,
+                28.6
+              ],
+              "speed": 1.0
+            },
+            {
+              "seg": "exit",
+              "t0": 27.2,
+              "t1": 29.2,
+              "src": [
+                28.6,
+                29.6
+              ],
+              "speed": 0.5
+            }
+          ],
+          "duration_s": 34.2,
+          "size_mb": 4.65,
+          "status": "qa_passed",
+          "history": [
+            {
+              "at": "2026-10-30T06:56:27+0000",
+              "status": "draft",
+              "by": "ev.py",
+              "note": "собрано из живого видео"
+            },
+            {
+              "at": "2026-10-30T06:56:27+0000",
+              "status": "qa_passed",
+              "by": "autoqa",
+              "note": "все проверки пройдены"
+            }
+          ]
+        }
+      },
+      "log": []
+    }
+  }
+}
