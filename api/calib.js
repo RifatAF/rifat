@@ -1,7 +1,7 @@
 // Калибровка беты: специалист отправляет разбор одного человека (своя оценка, анкета, замеры, гипотезы приложения, запись движения).
 // Имени человека в данных нет: вместо него номер случая. Отправить может только вошедший специалист, список и файлы видит только администратор.
 import { put, list, get } from './_store.js';
-import { currentUser, isAdmin } from './_session.js';
+import { currentUser, isAdmin, APP, loadApp } from './_session.js';
 
 const MAX = 4 * 1024 * 1024;
 const clip = (v, n) => typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000b-\u001f<>]/g, '').trim().slice(0, n) : '';
@@ -35,6 +35,8 @@ export default async function handler(req, res) {
     }
     // пара тестов одного человека: до и после комплекса или контрольная (повтор без упражнений). Без имени и аккаунта:
     // только числа признаков и проценты мышц. Из пар считается разброс теста и порог заметного изменения
+    // калибровка выключена в «Администрировании»: пары и случаи не принимаем (данные не сохраняются)
+    if (req.method === 'POST' && req.query.a !== 'weights') { await loadApp(); if (!APP.calib) return res.status(204).end(); }
     if (req.query.a === 'pair' && req.method === 'POST') {
       const origin = req.headers.origin; let oh = null; try { oh = origin ? new URL(origin).host : null; } catch (e) { oh = '?'; }
       if (origin && oh !== req.headers.host) return res.status(403).json({ error: 'origin' });

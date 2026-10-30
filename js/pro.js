@@ -10,7 +10,7 @@ import { analyze, fmt, recompute } from './analysis.js';
 import { track, vasStats } from './track.js';
 import { painWord, PAIN_SCALE } from './vas.js';
 import { npsCard, bindNps, installCard, bindInstall, installNow, canInstall, feedbackSheet, referralSheet, myRef, bugSheet, DEV, proSurvey, proSurveyDue, installSheet } from './grow.js';
-import { meSync, logout, getMe } from './auth.js';
+import { meSync, logout, getMe, calibOn } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
 import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS, BAL_PRO } from './plans.js';
 import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast, preload3D, saveBlob , setBodySex, cameraBlocked, openInBrowserSheet } from './core.js';
@@ -333,7 +333,7 @@ export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC
     const it = (id, icon, t, sub) => `<button class="row-link" data-act="${id}">${ic(icon, 's')}<span style="flex:1;text-align:left"><b style="font-weight:600">${t}</b><br><small class="sub" style="font-size:13px">${sub}</small></span>${ic('chevron-right', 's chev')}</button>`;
     const acts = !fullMode() ? [['quick', 'camera', 'Быстрый тест', '4 фото клиента, точки и отчет'], ['rtq', 'rotate-ccw', 'Повторный тест', 'Быстрый тест того же клиента'], ['repq', 'file-text', 'Отчет клиенту', 'PDF, картинка или ссылка с домашкой'], ['cmpq', 'arrow-right-left', 'Было → стало', 'Сравнить два теста']] : [['quick', 'camera', 'Быстрый тест', '4 фото клиента, точки и отчет'], ['qs', 'play', ({ trainer: 'Скрининг клиента', manual: 'До сеанса', sport: 'Спортивный тест' })[sp] || 'Новая оценка', 'Клиент рядом, тест на этом телефоне'],
       ['join', 'mail', 'Тест по ссылке', 'Клиент пройдет тест дома'], ['rtq', 'rotate-ccw', 'Ретест', 'Повторный тест того же клиента'], ['repq', 'file-text', 'Отчет клиенту', 'PDF, картинка или ссылка'],
-      ['cmpq', 'arrow-right-left', 'Было → стало', 'Сравнить два теста'], ...(isBeta() && (meSync() || {}).admin ? [['calq', 'star', 'Калибровка (бета)', 'Вы знаете проблему человека, он проходит тест, данные уходят на настройку']] : [])];
+      ['cmpq', 'arrow-right-left', 'Было → стало', 'Сравнить два теста'], ...(isBeta() && calibOn() && (meSync() || {}).admin ? [['calq', 'star', 'Калибровка (бета)', 'Вы знаете проблему человека, он проходит тест, данные уходят на настройку']] : [])];
     // чаще используемое наверху: список подстраивается под специалиста
     d.innerHTML = `<div><h2>Что сделать?</h2><div class="group" style="margin-top:var(--s3)">${byUse('act', acts, x => x[0]).map(x => it(...x)).join('')}</div></div>`;
     document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
@@ -424,7 +424,7 @@ async function proMenu() {
       ${r('msp', 'settings', 'Специализация: ' + esc(((SPECIALTIES.find(x => x[0] === localStorage.getItem('bp_sp')) || ['', 'не выбрана'])[1]).split(',')[0]))}
       ${r('mref', 'user-plus', isBeta() ? 'Пригласить коллегу' : 'Пригласить коллегу: 20% его оплат вам')}${isBeta() ? '' : r('mbal', 'download', 'Баланс: ' + ((u && u.balance) || 0).toLocaleString('ru') + ' ₽')}</div>
     ${he}${h('Данные')}<div class="group">
-      <div class="row-link" style="cursor:default">${ic('cpu', 's')}<span>Улучшать точность анонимно<br><small class="sub" style="font-size:12px">ваши проверки руками без имен клиентов</small></span><button class="pill" id="macal">${localStorage.getItem('bp_autocal') === '1' ? 'Вкл' : 'Выкл'}</button></div>
+      ${calibOn() ? '' : '<!--'}<div class="row-link" style="cursor:default">${ic('cpu', 's')}<span>Улучшать точность анонимно<br><small class="sub" style="font-size:12px">ваши проверки руками без имен клиентов</small></span><button class="pill" id="macal">${localStorage.getItem('bp_autocal') === '1' ? 'Вкл' : 'Выкл'}</button></div>${calibOn() ? '' : '-->'}
       ${r('mb', 'download', 'Сохранить копию с паролем')}
       <label class="row-link">${ic('upload', 's')}<span>Восстановить из копии</span>${ic('chevron-right', 's chev')}<input type="file" id="mr" accept=".json,.bpbackup,application/json" style="display:none"></label>
       ${hasSnap ? r('mund', 'rotate-ccw', 'Отменить последнее восстановление') : ''}</div>
@@ -436,7 +436,7 @@ async function proMenu() {
       <a class="row-link" href="/privacy" target="_blank">${ic('shield-check', 's')}<span>Конфиденциальность</span>${ic('chevron-right', 's chev')}</a></div>
     ${he}${h('Аккаунт')}<div class="group">
       ${u && u.admin ? r('mst', 'settings', 'Администрирование') : ''}
-      ${u && u.admin ? r('mcal2', 'download', 'Калибровка: сохранить файл себе') : ''}
+      ${u && u.admin && calibOn() ? r('mcal2', 'download', 'Калибровка: сохранить файл себе') : ''}
       ${canSwitchMode() ? r('mc', 'rotate-ccw', 'Перейти в режим клиента') : ''}
       ${u ? `<button class="row-link" id="mo">${ic('log-out', 's')}<span>Выйти: ${esc(u.name)}</span></button>` : ''}</div>${he}
     <details style="margin-top:var(--s4)"><summary class="sub" style="font-size:13px;cursor:pointer">Опасная зона</summary><div class="group" style="margin-top:var(--s2)"><button class="row-link" id="mwipe" style="color:var(--over-t)">${ic('x', 's')}<span>Удалить кабинет и всех клиентов</span></button></div></details>
@@ -462,7 +462,7 @@ async function proMenu() {
   if (d.querySelector('#mo')) d.querySelector('#mo').onclick = async () => { d.remove(); const out = async () => { await logout(); localStorage.removeItem('bp_mode'); onboarding(); }; if (isBeta() && proSurveyDue()) proSurvey('logout', out); else out(); };
   d.querySelector('#mx').onclick = () => d.remove();
   d.querySelector('#mcal').onclick = () => { d.remove(); calendarScreen(); };
-  d.querySelector('#macal').onclick = e => { const on = localStorage.getItem('bp_autocal') !== '1'; localStorage.setItem('bp_autocal', on ? '1' : '0'); e.target.textContent = on ? 'Вкл' : 'Выкл'; if (on) { autoCalAt = 0; syncAutoCalib().catch(() => {}); } };
+  if (d.querySelector('#macal')) d.querySelector('#macal').onclick = e => { const on = localStorage.getItem('bp_autocal') !== '1'; localStorage.setItem('bp_autocal', on ? '1' : '0'); e.target.textContent = on ? 'Вкл' : 'Выкл'; if (on) { autoCalAt = 0; syncAutoCalib().catch(() => {}); } };
   d.querySelector('#mntf').onclick = e => { const on = localStorage.getItem('bp_ntf') === '0'; localStorage.setItem('bp_ntf', on ? '1' : '0'); e.target.textContent = on ? 'Вкл' : 'Выкл'; syncReminders().catch(() => {}); };
 }
 
@@ -539,7 +539,7 @@ export async function clientCard(id) {
     ${c.complaints ? `<p style="font-size:15px;line-height:1.4;margin-top:8px"><span class="sub">Жалобы:</span> ${esc(c.complaints)}</p>` : ''}
     ${last && last.clientNote ? `<p style="font-size:15px;line-height:1.4;margin-top:8px;background:var(--surface-2);border-radius:12px;padding:10px 12px"><span class="sub">Комментарий клиента:</span> ${esc(last.clientNote)}</p>` : ''}
     ${last && last.pain && Object.values(last.pain).some(v => v > 0) ? `<p style="font-size:15px;line-height:1.4;margin-top:8px"><span class="sub">Боль:</span> ${Object.entries(last.pain).filter(([, v]) => v > 0).map(([k, v]) => `${({ neck: 'шея', shoulder: 'плечо', upper_back: 'грудной отдел', low_back: 'поясница', hip: 'таз, бедро', knee: 'колено', foot: 'стопа' })[k] || k} ${v}/10`).join(', ')}</p>` : ''}</div>
-   ${c.calib ? `<div class="pad" style="margin-top:12px"><div class="card" style="border:1.5px dashed var(--accent)"><div class="eyebrow" style="color:var(--short-t)">Калибровка · ваша оценка</div>
+   ${c.calib && calibOn() ? `<div class="pad" style="margin-top:12px"><div class="card" style="border:1.5px dashed var(--accent)"><div class="eyebrow" style="color:var(--short-t)">Калибровка · ваша оценка</div>
      ${c.calib.labels.length ? `<div class="row" style="flex-wrap:wrap;gap:6px;margin-top:8px">${c.calib.labels.map(l => `<span class="pill" style="font-size:13px">${esc((C.muscles[l.id] || { name: l.id }).name)} · ${l.side === 'LEFT' ? 'Л' : l.side === 'RIGHT' ? 'П' : 'обе'} · ${({ HYPER: 'перегружена', SHORT: 'укорочена', WEAK: 'слабая' })[l.k]}</span>`).join('')}</div>` : ''}
      ${c.calib.note ? `<p style="font-size:14px;line-height:1.4;margin-top:8px">${esc(c.calib.note)}</p>` : ''}
      <button class="pill" id="caledit" style="margin-top:8px">Изменить оценку</button>
@@ -1560,7 +1560,7 @@ function verdictsOf(a) { const out = new Map(), raw = (() => { try { return spot
 /** Фоновая калибровка (бета): проверки специалиста в разборах уходят без имени, как только изменились. Раз в 10 минут, при открытии главной. */
 let autoCalAt = 0;
 // работает и после беты: каждый специалист, не выключивший «Улучшать точность», пополняет общую базу; веса пересчитываются раз в сутки (api/_autolearn.js)
-async function syncAutoCalib() { if (!meSync() || localStorage.getItem('bp_autocal') !== '1' || Date.now() - autoCalAt < 10 * 60e3) return; autoCalAt = Date.now();
+async function syncAutoCalib() { if (!meSync() || !calibOn() || localStorage.getItem('bp_autocal') !== '1' || Date.now() - autoCalAt < 10 * 60e3) return; autoCalAt = Date.now();
   const as = (await all('assessments').catch(() => [])).filter(a => !a.demo);
   for (const a of as) { const v = verdictsOf(a); if (!v.length) continue; const h = JSON.stringify(v); if (a.autoCal === h) continue;
     const c = await get('clients', a.clientId).catch(() => null); if (!c || c.demo) continue;

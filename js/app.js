@@ -10,7 +10,7 @@ import { seal } from './core.js';
 import { calibReport, reportCSV, caseLines, RES_NAMES, learnWeights } from './calibreport.js';
 import { RULE_NAMES } from './evidence.js';
 import { applyRuleWeights } from './core.js';
-import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, mailLinkLogin, logout, deleteAccount, betaUsers, providers, config, setAppMode } from './auth.js';
+import { configSync, ensureLogin, linkConsent, linkConsentOk, safetyOk, safetyScreen, getMe, meSync, tgWebLogin, mailLinkLogin, logout, deleteAccount, betaUsers, providers, config, setAppMode, setCalibMode, calibOn } from './auth.js';
 import { exFigure, hasFigure } from './exfig.js';
 import { testDemo } from './testdemo.js';
 import { coachPlan, coachSec, cuesOf, PH, REST_NEXT, REST_SIDE, exName } from './coach.js';
@@ -1316,7 +1316,7 @@ export function map() {
   if ($('#mainl')) $('#mainl').onclick = () => mainSheet(top, a, pl.length ? () => durationSheet(top, pl, why) : null);
   bindClientNav(); if ($('#set')) $('#set').onclick = settings; $('#more').onclick = () => moreSheet(cur, top, !!pl.length); $('#lrs').onclick = () => moreSheet(cur, top, !!pl.length, 'lr'); if ($('#rec')) $('#rec').onclick = async () => { const p = await consumerPoses.get(); motionViewer(p, t.setup, map, 'Тест ' + new Date(t.date).toLocaleDateString('ru', { day: 'numeric', month: 'long' })); }; if ($('#cab')) $('#cab').onclick = () => { SHOW_T = null; clientHome(); }; if ($('#toLast')) $('#toLast').onclick = () => { SHOW_T = null; map(); };
   // бета и калибровка: сразу после свежего теста короткая анкета «как прошло, что мешало» (один раз на тест)
-  if (!SHARED && reveal && Date.now() - t.date < 30 * 60e3 && (isBetaMode() || (INV() || {}).cal)) setTimeout(() => { if (document.getElementById('heat') || document.getElementById('vis')) testSurvey(String(t.date), { cal: !!(INV() || {}).cal, steps: (t.protocol || []).length }); }, 30000);
+  if (!SHARED && reveal && Date.now() - t.date < 30 * 60e3 && (isBetaMode() || ((INV() || {}).cal && calibOn()))) setTimeout(() => { if (document.getElementById('heat') || document.getElementById('vis')) testSurvey(String(t.date), { cal: !!(INV() || {}).cal && calibOn(), steps: (t.protocol || []).length }); }, 30000);
 }
 // одна человеческая фраза итога сверху: главное наблюдение движения, без диагноза (спецификация UXUI, раздел 5)
 // простые слова по правилу: что это, как ощущается, почему, что даст комплекс (data/plain.json)
@@ -1713,6 +1713,7 @@ function sendPair(was, now, workout) { if (was.beta || now.beta) return; try {
   const mOf = t => Object.fromEntries(baSpots(t).filter(x => x.k !== 'OK').map(x => [x.key, pct(x)]));
   const q = t => { const v = Object.values(t.quality || {}).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0; };
   const ex = workout ? JSON.parse(localStorage.getItem(K('bp_done')) || '[]').filter(x => x.t > was.date && x.t < now.date).length : 0;
+  if (!calibOn()) return;
   fetch('/api/calib?a=pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
     body: JSON.stringify({ workout, gap: Math.round((now.date - was.date) / 1000), ex, f1: fOf(was), f2: fOf(now), m1: mOf(was), m2: mOf(now), q1: q(was), q2: q(now) }) }).catch(() => {});
   track('retest_pair', { c: workout ? 'workout' : 'control' }, false); } catch (e) {} }
@@ -2116,6 +2117,7 @@ export async function adminScreen(back) {
      <div class="card"><b>Режим сеанса</b><p class="sub" style="font-size:13px;margin-top:4px">Кнопка «Сеанс» в кабинете специалиста: жалобы, короткий тест, правка руками, повтор и «было → стало». Видно только вам.</p>
       <label class="row" style="margin-top:10px;gap:10px"><input type="checkbox" class="check" id="sesm" ${localStorage.getItem('bp_session_mode') === '1' ? 'checked' : ''}><span style="flex:1;font-size:15px">Включить режим сеанса</span></label>
       <label class="row" style="margin-top:6px;gap:10px"><input type="checkbox" class="check" id="sesc" ${localStorage.getItem('bp_session_ctl') === '1' ? 'checked' : ''}><span style="flex:1;font-size:15px">Контрольный повтор сразу после первого теста</span></label></div>
+     <label class="card row" style="align-items:flex-start"><input type="checkbox" class="check" id="calm" ${calibOn() ? 'checked' : ''}><div style="flex:1"><b style="font-size:15px">Калибровка</b><div class="sub" style="font-size:13px">Выключена: клиентам и специалистам не показываются анкеты и вопросы калибровки, сервер не принимает пары тестов и случаи.</div></div></label>
      <label class="card row" style="align-items:flex-start"><input type="checkbox" class="check" id="noev" ${noev ? 'checked' : ''}><div style="flex:1"><b style="font-size:15px">Не учитывать мои действия</b><div class="sub" style="font-size:13px">На этом устройстве ваши тесты и клики не попадают в статистику</div></div></label>
      <div class="group">
       <button class="row-link" id="ausers">${ic('user-plus', 's')}<span>Участники</span>${ic('chevron-right', 's chev')}</button>
@@ -2131,6 +2133,7 @@ export async function adminScreen(back) {
   $('#back').onclick = back;
   const mode = async v => { try { await setAppMode(v); await getMe(true); toast(v ? 'Включена бета' : 'Включен полный режим'); adminScreen(back); } catch (e) { toast('Не получилось: ' + e.message); } };
   $('#mb').onclick = () => { if (!beta) mode(true); }; $('#mf').onclick = () => { if (beta) mode(false); };
+  $('#calm').onchange = async e => { try { await setCalibMode(e.target.checked); toast(e.target.checked ? 'Калибровка включена' : 'Калибровка выключена'); } catch (er) { e.target.checked = !e.target.checked; toast('Не получилось: ' + er.message); } };
   $('#noev').onchange = e => { localStorage.setItem('bp_noev', e.target.checked ? '1' : '0'); };
   $('#dsm').onchange = e => import('./ds.js').then(m => m.setDS(e.target.checked ? 'matte' : 'v3'));
   $('#fullm').onchange = e => { localStorage.setItem('bp_full', e.target.checked ? '1' : '0'); toast(e.target.checked ? 'Полная версия включена' : 'Основа: быстрый тест'); };

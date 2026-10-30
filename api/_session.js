@@ -63,13 +63,14 @@ export const newTerms = u => !!u && (u.created || 0) >= TERMS2_FROM;
 // за каждого приглашенного коллегу, который открыл кабинет специалиста, +3 слота навсегда
 export const maxClientSlots = u => (newTerms(u) ? NEW_SLOTS : BASE_SLOTS) + REF_SLOTS * Math.max(0, (u && u.invitedPro) || 0);
 // режим приложения переключает администратор: бета (у всех специалистов PRO, оплаты нет) или полный (Free и PRO)
-export const APP = { beta: true, at: 0 };
+// calib: калибровка (сбор пар тестов и случаев для обучения весов). Выключена, пока администратор не включит
+export const APP = { beta: true, calib: false, at: 0 };
 export async function loadApp(force) {
   if (!force && Date.now() - APP.at < 30e3) return APP;
-  try { const r = await get('config/app.json', { access: 'private', useCache: false }); if (r && r.stream) { const j = JSON.parse(await readStream(r.stream)); APP.beta = j.beta !== false; } } catch (e) {}
+  try { const r = await get('config/app.json', { access: 'private', useCache: false }); if (r && r.stream) { const j = JSON.parse(await readStream(r.stream)); APP.beta = j.beta !== false; APP.calib = j.calib === true; } } catch (e) {}
   APP.at = Date.now(); return APP;
 }
-export async function saveApp(beta) { APP.beta = !!beta; APP.at = Date.now(); await put('config/app.json', JSON.stringify({ beta: APP.beta, t: Date.now() }), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true }); return APP; }
+export async function saveApp(beta, calib = APP.calib) { APP.beta = !!beta; APP.calib = !!calib; APP.at = Date.now(); await put('config/app.json', JSON.stringify({ beta: APP.beta, calib: APP.calib, t: Date.now() }), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true }); return APP; }
 // пробный PRO: 30 дней или до первого ретеста клиента, что раньше; у новых 30 дней или до 4-го клиента (только в полном режиме)
 export const TRIAL_DAYS = 30, PRO_PRICE = 725, // месяц PRO с баланса в рублях, ≈ $9
    REF_SHARE = 0.2, REF_MONTHS = 24;

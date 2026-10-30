@@ -4,7 +4,7 @@
 import { C, voice, startMotion, initPose, drawSilhouette, ic, toast, saveBlob } from './core.js';
 import { analyze } from './analysis.js';
 import { track } from './track.js';
-import { meSync } from './auth.js';
+import { meSync, calibOn } from './auth.js';
 import { go, esc, runProtocol, UNITS, sortUnits, secs, baBlock, bindBa, spots, topOf, plan, ex } from './app.js';
 import { exName } from './coach.js';
 import { COMPLAINTS, pickUnits, compare, observations, fmtVal, SESSION_FEATURES, VERDICT_TEXT, CLASS_TEXT } from './session-protocol.js';
@@ -22,7 +22,7 @@ const camHint = r => r.setup ? { bodyFrac: r.setup.bodyFrac, roll: r.setup.roll,
 const featOf = t => Object.fromEntries(Object.entries(analyze(t, C).f || {}).filter(([k, v]) => SESSION_FEATURES[k] && Number.isFinite(v)));
 const qOf = t => { const v = Object.values(t.quality || {}).filter(Number.isFinite); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : 0; };
 // пара в калибровку: только числа признаков, без видео, имени и мышечных процентов. Демо-результат без камеры не отправляем
-function sendPair(a, b, control) { if (localStorage.getItem('bp_session_share') !== '1' || a.beta || b.beta) return; try {
+function sendPair(a, b, control) { if (!calibOn() || localStorage.getItem('bp_session_share') !== '1' || a.beta || b.beta) return; try {
   const gap = Math.round((b.date - a.date) / 1000);
   fetch('/api/calib?a=pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
     body: JSON.stringify({ workout: !control, session: true, control, gap, gapMin: Math.round(gap / 60), ex: 0, f1: featOf(a), f2: featOf(b), m1: {}, m2: {}, q1: qOf(a), q2: qOf(b) }) }).catch(() => {});
@@ -39,11 +39,11 @@ export function sessionStart(back) {
       <div class="pad" style="display:flex;flex-direction:column;gap:var(--s3);padding-bottom:var(--s4)">
       <b>Что беспокоит</b><div class="row" style="flex-wrap:wrap;gap:8px">${COMPLAINTS.map(([k, n]) => `<button class="pill${pick.has(k) ? ' on' : ''}" data-c="${k}" style="min-height:44px">${n}</button>`).join('')}</div>
       <div class="card"><b style="font-size:15px">Тест: ${units.length} ${units.length === 1 ? 'шаг' : 'шага'}, около ${sec} с</b><div class="sub" style="font-size:14px;margin-top:4px">${units.map(u => esc((UNITS[u] || [[u]])[0][0])).join(' · ')}</div></div>
-      <label class="card row" style="align-items:flex-start"><input type="checkbox" class="check" id="shr" ${localStorage.getItem('bp_session_share') === '1' ? 'checked' : ''}><div style="flex:1"><b style="font-size:15px">Клиент согласен помочь калибровке</b><div class="sub" style="font-size:13px">Уйдут только числа замеров до и после, без видео и имени</div></div></label>
+      ${calibOn() ? '' : '<!--'}<label class="card row" style="align-items:flex-start"><input type="checkbox" class="check" id="shr" ${localStorage.getItem('bp_session_share') === '1' ? 'checked' : ''}><div style="flex:1"><b style="font-size:15px">Клиент согласен помочь калибровке</b><div class="sub" style="font-size:13px">Уйдут только числа замеров до и после, без видео и имени</div></div></label>${calibOn() ? '' : '-->'}
       </div><div class="dock"><button class="btn" id="go">Начать тест</button></div></div>`);
     $('#back').onclick = back;
     document.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { const k = b.dataset.c; pick.has(k) ? pick.delete(k) : pick.add(k); draw(); });
-    $('#shr').onchange = e => localStorage.setItem('bp_session_share', e.target.checked ? '1' : '0');
+    if ($('#shr')) $('#shr').onchange = e => localStorage.setItem('bp_session_share', e.target.checked ? '1' : '0');
     $('#go').onclick = async () => { localStorage.setItem('bp_session_last', JSON.stringify([...pick])); if (!await startCam($('#go'))) return draw();
       track('session_start', { n: units.length }, false);
       const r = await runProtocol(units, { session: true, specialist: true, repeat: true, onCancel: () => sessionStart(back) }); if (!r) return;
