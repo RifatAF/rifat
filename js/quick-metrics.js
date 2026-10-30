@@ -65,6 +65,10 @@ export function viewMetrics(id, pts, w, h, roll = 0, heightCm = 0) {
 /** Все виды сразу и сводка в форматах теста по видео (snapshot спереди, side как среднее двух боков) для правил зон. */
 export function quickMetrics(views, heightCm = 0) {
   const by = {}; for (const v of ALL_VIEWS) { const x = views[v.id]; by[v.id] = x && x.pts ? viewMetrics(v.id, x.pts, x.w, x.h, x.roll || 0, heightCm) : null; }
+  return summaryOf(by, heightCm);
+}
+/** Сводка для правил зон из уже посчитанных показателей видов (пересчет зон сохраненного теста). */
+export function summaryOf(by, heightCm = 0) {
   const val = (id, key) => { const m = by[id] && by[id].find(x => x.key === key); return m ? m.v : NaN; };
   const avg = (...a) => { const v = a.filter(Number.isFinite); return v.length ? r1(v.reduce((s, x) => s + x, 0) / v.length) : NaN; };
   // перекосы спереди и сзади: среднее двух снимков (сзади раньше не учитывалось); точки размечены анатомически, знак у видов общий
