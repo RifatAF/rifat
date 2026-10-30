@@ -27,20 +27,27 @@ export async function quickTest(clientId = null) {
   const recent = clients.sort((x, y) => (last(y.id) || y.created) - (last(x.id) || x.created)).slice(0, 6);
   Q = { client: clientId ? clients.find(c => c.id === clientId) || null : null, views: {}, date: Date.now() };
   if (Q.client) return consent();
+  const num = (v, lo, hi) => { const n = +String(v || '').replace(',', '.'); return n >= lo && n <= hi ? n : 0; };
+  // рост задает масштаб замеров в сантиметрах (без него 170 см), вес только для истории клиента; первый тест нового клиента проверяет пробный PRO
+  const next = c => { const h = num($('#qhgt').value, 100, 230), kg = num($('#qkg').value, 25, 300);
+    Q.client = { ...c, ...(h ? { height: String(Math.round(h)) } : {}), ...(kg ? { weight: String(Math.round(kg * 10) / 10) } : {}) }; _pro.trialGate(Q.client.id, consent); };
   go(`<div class="scr fade"><div class="top-bar"><button class="round" id="back" aria-label="Назад">${ic('chevron-left')}</button><div class="t"><b>Быстрый тест</b></div></div>
    <div class="pad" style="display:flex;flex-direction:column;gap:var(--s3);margin-top:var(--s2)">
     <p class="sub" style="font-size:15px;line-height:1.45">4 фото клиента в полный рост: спереди, справа, сзади, слева. Точки приложение поставит само.</p>
     <input id="nm" class="field" placeholder="Имя или метка клиента" autocomplete="off" aria-label="Имя или метка клиента">
+    <div class="row" style="gap:10px"><input id="qhgt" class="field" type="text" inputmode="numeric" maxlength="3" placeholder="Рост, см" aria-label="Рост, см" style="flex:1;min-width:0"><input id="qkg" class="field" type="text" inputmode="decimal" maxlength="5" placeholder="Вес, кг" aria-label="Вес, кг" style="flex:1;min-width:0"></div>
+    <p class="sub" style="font-size:12px;margin-top:-6px">Рост нужен для замеров в сантиметрах, без него считаем 170 см. Вес по желанию, для истории клиента.</p>
     ${recent.length ? `<div class="row" style="flex-wrap:wrap;gap:8px">${recent.map(c => `<button class="pill" data-c="${c.id}">${esc(c.name)}</button>`).join('')}</div>` : ''}
     <button class="btn" id="qnext">Дальше</button>
     <button class="btn ghost" id="qnocard" style="border:0">Без карточки</button>
    </div></div>`);
   $('#back').onclick = () => proHome();
-  document.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { Q.client = clients.find(c => c.id === b.dataset.c); consent(); });
+  let pick = null;
+  document.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { pick = clients.find(c => c.id === b.dataset.c); $('#nm').value = pick.name; $('#qhgt').value = pick.height || ''; $('#qkg').value = pick.weight || '';
+    if (pick.height) return next(pick); document.querySelectorAll('[data-c]').forEach(x => x.classList.toggle('on', x === b)); $('#qhgt').focus(); });
   $('#qnext').onclick = async () => { const n = $('#nm').value.trim(); if (!n) { $('#nm').focus(); $('#nm').placeholder = 'Введите имя или метку'; return; }
-    Q.client = clients.find(c => c.name.toLowerCase() === n.toLowerCase()) || { id: _pro.uid(), created: Date.now(), name: n.slice(0, 60), first: n.slice(0, 60), last: '', quick: true };
-    consent(); };
-  $('#qnocard').onclick = () => { const d = new Date(); Q.client = { id: _pro.uid(), created: Date.now(), name: 'Без карточки · ' + d.toLocaleDateString('ru', { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }), first: 'Клиент', last: '', nocard: true, quick: true }; consent(); };
+    next(clients.find(c => c.name.toLowerCase() === n.toLowerCase()) || { id: _pro.uid(), created: Date.now(), name: n.slice(0, 60), first: n.slice(0, 60), last: '', quick: true }); };
+  $('#qnocard').onclick = () => { const d = new Date(); next({ id: _pro.uid(), created: Date.now(), name: 'Без карточки · ' + d.toLocaleDateString('ru', { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }), first: 'Клиент', last: '', nocard: true, quick: true }); };
 }
 
 // ---------- 2. согласие клиента (ТЗ v4, п. 6; текст утверждает юрист) ----------
@@ -255,16 +262,25 @@ const GAINS = [1, 1.5, 2, 3], VIEWS3 = [['front', 'Спереди'], ['right', '
 /** Подсказки зон по существующим правилам проекта (bodymap, веса источников) для 4 фото.
  *  Пороги правил подобраны для теста по видео; на фото признак учитывается с 60% порога, но не меньше погрешности замера.
  *  Наклон головы вперед почти всегда выше порога и раньше забирал все места шеей: теперь из одного отдела тела
- *  (шея, плечевой пояс, корпус, таз, ноги) не больше 4 зон, всего до 10. Самые выраженные идут первыми. */
+ *  (шея, плечевой пояс, корпус, таз, ноги) не больше 3 мышц, всего до 8 мышц (с двух сторон считается одной). Самые выраженные идут первыми. */
 const RELAX = .6, FERR = { pelvic_tilt: 1.5, shoulder_tilt: 1.5, head_tilt: 2, trunk_lateral: 1.5, head_forward: 4, knee_hyper: 3, shoulder_shift: .015, hip_shift: .015 };
 const relax = (t, e) => t == null ? t : Math.sign(t) * Math.max(Math.abs(t) * RELAX, e);
 const REGION = y => y < .23 ? 0 : y < .38 ? 1 : y < .52 ? 2 : y < .63 ? 3 : 4;
 export function zonesOf(q) {
   try { const rules = C.bodymap.rules.map(r => FERR[r.feature] == null ? r : { ...r, absGreater: relax(r.absGreater, FERR[r.feature]), greater: relax(r.greater, FERR[r.feature]), less: relax(r.less, FERR[r.feature]) });
     const a = analyze({ snapshot: q.snapshot, side: q.side, moves: q.moves || {}, protocol: [] }, { ...C, bodymap: { ...C.bodymap, rules } });
-    const seen = new Set(), per = [0, 0, 0, 0, 0], out = [];
-    for (const s of topOf(spots(a))) { const k = s.id + ':' + s.side, r = REGION(s.y); if (seen.has(k) || per[r] >= 4) continue; seen.add(k); per[r]++; out.push(s); if (out.length >= 10) break; }
-    return out.map(s => ({ id: s.id, side: s.side, k: s.k, key: s.key })); }
+    // мышца с двух сторон занимает одно место: иначе симметричная шея от наклона головы вперед вытесняла перекос таза и корпуса
+    // (квадратная поясницы, косые). Одностороннее (перекос) идет раньше двустороннего при равной выраженности
+    const seen = new Set(), mus = new Set(), per = [0, 0, 0, 0, 0], out = [], sp = topOf(spots(a)), two = id => sp.filter(x => x.id === id).length > 1;
+    for (const s of sp.map((x, i) => [x, i + (two(x.id) ? 2 : 0)]).sort((x, y) => x[1] - y[1]).map(x => x[0])) { const k = s.id + ':' + s.side, r = REGION(s.y);
+      if (seen.has(k)) continue; if (!mus.has(s.id)) { if (per[r] >= 3 || mus.size >= 8) continue; mus.add(s.id); per[r]++; } seen.add(k); out.push(s); }
+    // перекос виден на фото, значит его главные мышцы в списке всегда: у слабых правил (корпус вбок) вес мал, и косые с квадратной не набирали порог
+    const sn = q.snapshot || {}, f = { pelvic_tilt: sn.pelvicTilt, trunk_lateral: sn.trunkLateral, shoulder_tilt: sn.shoulderTilt, head_tilt: sn.headTilt }, lat = [];
+    for (const r of rules) { const v = f[r.feature]; if (r.source !== 'camera' || r.absGreater == null || r.sideFrom !== r.feature || !Number.isFinite(v) || Math.abs(v) <= Math.abs(r.absGreater)) continue;
+      const sg = Math.sign(v) * (r.sideNegate ? -1 : 1), side = sg > 0 ? 'RIGHT' : 'LEFT', opp = side === 'RIGHT' ? 'LEFT' : 'RIGHT';
+      for (const m of r.muscles) { if (m.w < .4 || m.side === 'both' || !C.muscles[m.id]) continue; const sd = m.side === 'opposite' ? opp : side, key = m.id + ':' + sd;
+        if (!seen.has(key)) { seen.add(key); lat.push({ id: m.id, side: sd, k: m.state === 'OVERLOAD' ? 'HYPER' : m.state, key }); } } }
+    return [...lat, ...out].map(s => ({ id: s.id, side: s.side, k: s.k, key: s.key })); }
   catch (e) { return []; } }
 const zSpots = zones => zones.map(z => ({ ...z, key: z.key || z.id + ':' + z.side, tone: z.k === 'WEAK' ? -.75 : .75, back: (C.muscles[z.id] || {}).view === 'back' }));
 // ---------- домашнее задание: по умолчанию из карточек подтвержденных зон, специалист правит список ----------
@@ -339,6 +355,7 @@ function hwPicker(a, done) {
 /** Отчет и домашка одной ссылкой. Первый раз ссылку отправляет специалист, дальше содержимое меняется по ней само. */
 async function sendHw(aid) {
   const a = await row('assessments', aid), c = await row('clients', a.clientId), ph = (await row('poses', aid)) || {};
+  if (!(await _pro.canTrack(c))) return; // домашка по ссылке = ведение клиента
   try { const cv = await renderReport(a, c, ph.photos || {}), author = (await _pro.meta('profile')) || _pro.author(), contact = (await _pro.meta('contact')) || '';
     const info = { name: c.name, date: _pro.fmtDate(a.date), author, contact, at: a.date, ex: hwEx(a), next: +a.nextDate || 0, note: String((a.plan && a.plan.text) || '').slice(0, 600),
       focus: taskGroups((a.quick || {}).zones).map(g => `${g.t}: ${g.list.join(', ')}`).slice(0, 3) };
@@ -609,13 +626,15 @@ export async function quickCompare(prevId, curId) {
 }
 async function save() {
   if (Q.editId) return saveEdit();
-  const c = Q.client; if (!(await row('clients', c.id))) await _pro.put('clients', { ...c }); else if (Q.consent && !Q.consent.reused) await _pro.put('clients', { ...(await row('clients', c.id)), consent: Q.consent });
+  const c = Q.client, old = await row('clients', c.id);
+  if (!old) await _pro.put('clients', { ...c }); else if ((Q.consent && !Q.consent.reused) || c.height !== old.height || c.weight !== old.weight) await _pro.put('clients', { ...old, ...(Q.consent && !Q.consent.reused ? { consent: Q.consent } : {}), height: c.height || old.height || '', weight: c.weight || old.weight || '' });
   const id = _pro.uid(), q = Q.metrics, prev = (await _pro.all('assessments')).filter(a => a.clientId === c.id).sort((a, b) => b.date - a.date)[0];
-  const a = { id, clientId: c.id, date: Q.date, template: 'quick', templateName: 'Быстрый тест', quick: { by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), confirmed: true, gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf, h: heightCm() || 170, views: VIEWS.filter(v => Q.views[v.id]).map(v => v.id), edited: VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id) },
+  const a = { id, clientId: c.id, date: Q.date, template: 'quick', templateName: 'Быстрый тест', quick: { by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), confirmed: true, gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf, h: heightCm() || 170, hSet: !!heightCm(), kg: +c.weight || null, views: VIEWS.filter(v => Q.views[v.id]).map(v => v.id), edited: VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id) },
     snapshot: q.snapshot, side: q.side, consent: Q.consent, note: Q.note, plan: { ex: [], text: Q.rec }, protocol: [], moves: {}, quality: {}, limits: {}, setup: {}, pain: {}, hyp: {}, check: {}, draft: false, prevId: prev ? prev.id : null, savedAt: Date.now() };
   await _pro.put('assessments', a);
   await _pro.put('poses', { assessmentId: id, photos: Object.fromEntries(VIEWS.filter(v => Q.views[v.id]).map(v => { const x = Q.views[v.id]; return [v.id, { photo: x.photo, w: x.w, h: x.h, pts: x.pts, auto: x.auto || null, roll: x.roll }]; })) });
   track('assess_done', { n: a.quick.views.length, c: 'quick' }, false);
+  if (prev) track('retest_done', { n: Math.round((Q.date - prev.date) / 864e5) }, false);
   if (prev && Q.date - prev.date <= 14 * 864e5) track('retest_14d', null, false);
   return id;
 }

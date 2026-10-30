@@ -4,9 +4,9 @@ import { meSync, configSync } from './auth.js';
 export const isBeta = () => configSync().beta !== false;
 import { track } from './track.js';
 
-// v2.0: Старт = 5 слотов клиентов навсегда, +3 слота за каждого приглашенного коллегу; Про = безлимит и свой бренд в отчетах.
-// Числа совпадают с api/_session.js (BASE_SLOTS, REF_SLOTS): сервер считает, приложение показывает
-export const BASE_SLOTS = 5, REF_SLOTS = 3, START_CLIENTS = BASE_SLOTS;
+// v2.0: Старт = слоты ведения навсегда (5 у зарегистрированных до 31.10.2026, 3 у новых), +3 за каждого приглашенного коллегу; Про = безлимит и свой бренд.
+// Числа совпадают с api/_session.js (NEW_SLOTS, REF_SLOTS): сервер считает слоты каждого, приложение показывает
+export const BASE_SLOTS = 3, REF_SLOTS = 3, START_CLIENTS = BASE_SLOTS;
 // цена в lava.top в долларах, рублями платят по курсу; баланс за коллег в рублях (месяц PRO = BAL_PRO ₽, ≈ $9)
 export const PRO_PRICE = '$9 в месяц', PRO_YEAR = '$90 в год', BAL_PRO = 725;
 // ссылка на годовой продукт lava.top: пусто, пока основатель его не создал (тогда кнопки «Год» нет)
@@ -59,7 +59,7 @@ export function checkClientSlotAvailable(activeClientsCount) {
 }
 // ссылка-приглашение коллеге и готовый текст
 export const refLink = () => { const u = meSync(); return location.origin + '/?src=pro' + (u && u.refCode ? '&ref=' + u.refCode : ''); };
-export const refText = () => 'Делаю в BodyPassport замер осанки по 4 фото и отчет клиенту со своим именем. Пять клиентов бесплатно, попробуй: ' + refLink();
+export const refText = () => 'Делаю в BodyPassport замер осанки по 4 фото и отчет клиенту со своим именем. Первые 3 клиента с PRO бесплатно, попробуй: ' + refLink();
 /** Приглашение коллеге: шторка с готовым текстом, «Отправить» (меню телефона) и «Скопировать» с явным подтверждением. */
 export function copyRefText() {
   track('ref_share', { c: 'slots' }, false); const text = refText();
@@ -83,7 +83,7 @@ function toastMsg(m) { const t = document.createElement('div'); t.className = 't
 export function slotSheet(s = slots()) {
   const d = document.createElement('div'); d.className = 'sheet';
   d.innerHTML = `<div><h2>Вы ведете ${s.used} из ${s.max} клиентов</h2>
-    <p class="sub" style="margin-top:8px">На Free можно вести ${s.max} клиентов одновременно: повторные тесты, ссылки на ретест и тест из дома за последние 30 дней. Первые тесты новых клиентов без лимита.</p>
+    <p class="sub" style="margin-top:8px">На Free можно вести ${s.max} клиентов одновременно: повторные тесты, домашка по ссылке, ссылки на ретест и тест из дома за последние 30 дней. Первые тесты новых клиентов без лимита.</p>
     <button class="btn" id="slpro" style="margin-top:var(--s5)">PRO: ведение без лимита · $9 в месяц</button>
     <button class="btn line" id="slref" style="margin-top:var(--s2)">Пригласить коллегу: 20% его оплат вам на баланс</button>
     <button class="btn ghost" id="slx" style="margin-top:var(--s2)">Не сейчас</button></div>`;

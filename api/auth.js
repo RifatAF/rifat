@@ -1,6 +1,6 @@
 // Быстрый вход: Google (Google Identity Services), Telegram (виджет на сайте или Mini App внутри Telegram) и код на почту (подходит всем, в том числе iPhone без Google).
 import crypto from 'node:crypto';
-import { setSession, clearSession, sessionUid, loadUser, saveUser, deleteUser, allUsers, publicUser, noStats, isAdmin, effectivePlan, CONSENT_VERSION, maxClientSlots, ensureRefIndex, loadApp, saveApp, APP, creditReferral, startTrialIfNeeded, trialActive, PRO_PRICE } from './_session.js';
+import { setSession, clearSession, sessionUid, loadUser, saveUser, deleteUser, allUsers, publicUser, noStats, isAdmin, effectivePlan, CONSENT_VERSION, maxClientSlots, ensureRefIndex, loadApp, saveApp, APP, creditReferral, startTrialIfNeeded, trialActive, newTerms, PRO_PRICE } from './_session.js';
 const CLOUD_BACKUP = process.env.CLOUD_BACKUP === '1';
 
 const GOOGLE_ID = process.env.GOOGLE_CLIENT_ID || '';
@@ -151,8 +151,9 @@ export default async function handler(req, res) {
       u.payEmail = e; await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
     // переключатель режима: бета или полный (только администратор)
     if (a === 'appmode') { if (!isAdmin(u)) return res.status(403).json({ error: 'forbidden' }); await saveApp(b.beta !== false); return res.status(200).json({ beta: APP.beta }); }
-    // первый ретест клиента завершает пробный PRO (момент, когда специалист увидел «до/после»)
-    if (a === 'trialend') { if (trialActive(u)) { u.trialEndedBy = 'retest'; u.trialEndedAt = Date.now(); await saveUser(u); } return res.status(200).json({ user: publicUser(u) }); }
+    // пробный PRO завершает первый ретест (прежние условия) или 4-й клиент (новые условия, newTerms)
+    if (a === 'trialend') { const by = newTerms(u) ? 'clients' : 'retest';
+      if (trialActive(u) && (b.by || 'retest') === by) { u.trialEndedBy = by; u.trialEndedAt = Date.now(); await saveUser(u); } return res.status(200).json({ user: publicUser(u) }); }
     if (a === 'trialseen') { u.trialEndSeen = true; await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
     // баланс за коллег тратится только на свой PRO: PRO_PRICE ₽ (≈ $9) = 31 день
     if (a === 'paybalance') { if ((u.balance || 0) < PRO_PRICE) return res.status(400).json({ error: 'на балансе меньше ' + PRO_PRICE + ' ₽' });
@@ -165,7 +166,7 @@ export default async function handler(req, res) {
       await deleteUser(u.id); clearSession(res); return res.status(200).json({ ok: true }); }
     if (a === 'users') { if (!isAdmin(u)) return res.status(403).json({ error: 'forbidden' });
       const all = (await allUsers()).sort((x, y) => (y.created || 0) - (x.created || 0));
-      return res.status(200).json({ users: all.map(x => ({ id: x.id, noStats: noStats(x), plan: effectivePlan(x).plan, paidUntil: x.planUntil || 0, paidEver: !!x.paidEver, trialUntil: x.trialUntil || 0, trialEndedBy: x.trialEndedBy || null, beta: APP.beta, name: x.name, provider: x.provider, email: x.email || null, username: x.username || null, role: x.role, specialty: x.specialty || null, created: x.created, lastLogin: x.lastLogin, ref: x.ref, invited: x.invited || 0, invitedPro: x.invitedPro || 0, slots: maxClientSlots(x) })) }); }
+      return res.status(200).json({ users: all.map(x => ({ id: x.id, noStats: noStats(x), plan: effectivePlan(x).plan, paidUntil: x.planUntil || 0, paidEver: !!x.paidEver, trialUntil: x.trialUntil || 0, trialEndedBy: x.trialEndedBy || null, newTerms: newTerms(x), beta: APP.beta, name: x.name, provider: x.provider, email: x.email || null, username: x.username || null, role: x.role, specialty: x.specialty || null, created: x.created, lastLogin: x.lastLogin, ref: x.ref, invited: x.invited || 0, invitedPro: x.invitedPro || 0, slots: maxClientSlots(x) })) }); }
     return res.status(404).json({ error: 'action' });
   } catch (e) { console.error('auth', e); return res.status(500).json({ error: 'ошибка сервера' }); }
 }

@@ -164,7 +164,7 @@ export function landing(o) {
       <h1 class="mx-in">Осанка в цифрах для&nbsp;вас.<br><span>В&nbsp;3D для&nbsp;клиента.</span></h1>
       <p class="mx-sub mx-in">По четырём фото приложение измерит наклоны и смещения головы, плеч и таза и покажет их на 3D‑фигуре в позе клиента. Ваша оценка объективна, клиент видит, за что платит.</p>
       <div class="mx-btns mx-in">${cta('lpgo')}<a class="mx-link" href="#mxtry">Попробовать на примере ${ic('chevron-right', 's')}</a></div>
-      <p class="mx-note mx-in">Пять клиентов бесплатно навсегда. Работает в браузере телефона.</p></div>
+      <p class="mx-note mx-in">Первые 3 клиента с PRO бесплатно. Работает в браузере телефона.</p></div>
       <div class="mx-stage mx-in"><div class="mx-glow"></div>
         <img class="mx-fig" src="img/lp/hero-figure-v5.webp" alt="3D-фигура в позе клиента" width="343" height="1000">
         <div class="mx-phone mx-p1"><div class="mx-scr"><video id="lpv" autoplay muted loop playsinline preload="metadata" poster="img/lp/demo-poster-v5.webp" aria-label="Как проходит быстрый тест: 4 фото, точки, 3D-фигура, отчет"><source src="img/lp/demo-v5.mp4" type="video/mp4"></video></div></div>

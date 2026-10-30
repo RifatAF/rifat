@@ -55,10 +55,13 @@ export function noStats(u) {
   const list = NO_STATS.concat(String(process.env.STATS_EXCLUDE || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean));
   return !!u && [u.id, u.email, u.payEmail, u.username && '@' + u.username].some(x => x && list.includes(String(x).toLowerCase()));
 }
-// тариф: Про только оплаченный, пока не истек. Бесплатного периода больше нет (v2.0): Старт = 5 слотов клиентов навсегда
-export const BASE_SLOTS = 5, REF_SLOTS = 3;
+// тариф: Про только оплаченный, пока не истек. Free = слоты ведения клиентов навсегда
+// условия с 31.10.2026 (решение Рифата 30.10): новым специалистам 3 слота и пробный PRO на первых 3 клиентов;
+// у зарегистрированных раньше все как было: 5 слотов и пробный 30 дней или до первого ретеста
+export const BASE_SLOTS = 5, NEW_SLOTS = 3, REF_SLOTS = 3, TRIAL_CLIENTS = 3, TERMS2_FROM = Date.parse('2026-10-30T21:00:00Z');
+export const newTerms = u => !!u && (u.created || 0) >= TERMS2_FROM;
 // за каждого приглашенного коллегу, который открыл кабинет специалиста, +3 слота навсегда
-export const maxClientSlots = u => BASE_SLOTS + REF_SLOTS * Math.max(0, (u && u.invitedPro) || 0);
+export const maxClientSlots = u => (newTerms(u) ? NEW_SLOTS : BASE_SLOTS) + REF_SLOTS * Math.max(0, (u && u.invitedPro) || 0);
 // режим приложения переключает администратор: бета (у всех специалистов PRO, оплаты нет) или полный (Free и PRO)
 export const APP = { beta: true, at: 0 };
 export async function loadApp(force) {
@@ -67,7 +70,7 @@ export async function loadApp(force) {
   APP.at = Date.now(); return APP;
 }
 export async function saveApp(beta) { APP.beta = !!beta; APP.at = Date.now(); await put('config/app.json', JSON.stringify({ beta: APP.beta, t: Date.now() }), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true }); return APP; }
-// пробный PRO: 30 дней или до первого ретеста клиента, что раньше (только в полном режиме)
+// пробный PRO: 30 дней или до первого ретеста клиента, что раньше; у новых 30 дней или до 4-го клиента (только в полном режиме)
 export const TRIAL_DAYS = 30, PRO_PRICE = 725, // месяц PRO с баланса в рублях, ≈ $9
    REF_SHARE = 0.2, REF_MONTHS = 24;
 export const trialActive = u => !!u && u.trialUntil > Date.now() && !u.trialEndedBy;
@@ -111,7 +114,7 @@ export const CONSENT_VERSION = '2026-10-v3';
 export const publicUser = u => { if (!u) return u; const p = effectivePlan(u);
   return { id: u.id, provider: u.provider, name: u.name, givenName: u.givenName || null, familyName: u.familyName || null, email: u.email || null, photo: u.photo || null, role: u.role || null, specialty: u.specialty || null, admin: isAdmin(u), noStats: noStats(u), plan: p.plan, planUntil: p.until, planBeta: p.beta, consentOk: u.consentVersion === CONSENT_VERSION,
     refCode: u.refCode || null, invited: u.invited || 0, invitedPro: u.invitedPro || 0, invitedColleagues: u.invitedPro || 0, maxClientSlots: maxClientSlots(u), isPro: p.plan !== 'start', planBeta: p.beta, payEmail: u.payEmail || null,
-    trial: !!p.trial, trialUntil: u.trialUntil || null, trialEndedBy: u.trialEndedBy || null, trialEndSeen: !!u.trialEndSeen, paidEver: !!u.paidEver,
+    trial: !!p.trial, trialClients: newTerms(u) ? TRIAL_CLIENTS : null, trialUntil: u.trialUntil || null, trialEndedBy: u.trialEndedBy || null, trialEndSeen: !!u.trialEndSeen, paidEver: !!u.paidEver,
     balance: u.balance || 0, balanceLog: (u.balanceLog || []).slice(-20) }; };
 
 export async function currentUser(req) { const uid = sessionUid(req); return uid ? loadUser(uid) : null; }

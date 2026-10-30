@@ -57,8 +57,8 @@ async function stats(days) {
     for (const b of docs) {
       if (bad.has(b.s)) { out.excluded++; continue; }
       try {
-        if (b.u) { const W0 = Date.parse('2026-01-05'), wk = day(W0 + Math.floor((Date.parse(d) - W0) / (7 * 864e5)) * 7 * 864e5); ((out.users[b.u] ||= { r: b.r, days: new Set(), assess: 0, reports: 0, retests: 0, bugs: 0 }).days.add(d));
-          const U = out.users[b.u]; if (b.r === 'pro') U.r = 'pro'; for (const x of b.ev) { if (x.e === 'assess_done') U.assess++; if (x.e === 'report_sent' || x.e === 'report_shared') U.reports++; if (x.e === 'retest_done') U.retests++; if (x.e === 'bug_sent') U.bugs++; }
+        if (b.u) { const W0 = Date.parse('2026-01-05'), wk = day(W0 + Math.floor((Date.parse(d) - W0) / (7 * 864e5)) * 7 * 864e5); ((out.users[b.u] ||= { r: b.r, days: new Set(), wk: new Set(), assess: 0, reports: 0, retests: 0, hw: 0, bugs: 0 }).days.add(d));
+          const U = out.users[b.u]; U.wk.add(wk); if (b.r === 'pro') U.r = 'pro'; for (const x of b.ev) { if (x.e === 'assess_done') U.assess++; if (x.e === 'report_sent' || x.e === 'report_shared') U.reports++; if (x.e === 'retest_done') U.retests++; if (x.e === 'hw_sent') U.hw++; if (x.e === 'bug_sent') U.bugs++; }
           ((out.weeks[wk] ||= new Set()).add(b.u)); }
         for (const x of b.ev) { const k = b.r + ':' + x.e; (sess[k] ||= new Set()).add(b.s);
           if (DETAIL.has(x.e) && x.p) { if (x.p.c != null) { const D = (out.detail[x.e] ||= {}); const c = String(x.p.c).slice(0, 40); D[c] = (D[c] || 0) + 1; }
@@ -83,7 +83,13 @@ async function stats(days) {
   }
   const pct = (a, q) => a[Math.min(a.length - 1, Math.floor(a.length * q))];
   out.medians = Object.fromEntries(Object.entries(nums).map(([k, a]) => { a.sort((x, y) => x - y); return [k, { p50: pct(a, .5), p90: pct(a, .9), n: a.length }]; }));
-  out.users = Object.entries(out.users).map(([id, U]) => ({ id, r: U.r, days: U.days.size, assess: U.assess, reports: U.reports, retests: U.retests, bugs: U.bugs })).sort((a, b) => b.days - a.days).slice(0, 200);
+  // пользуются ли: люди (аккаунты специалистов), а не вкладки. Шаги: работали → тест → отправили клиенту → вернулись → ведут клиента
+  const P = Object.values(out.users).filter(U => U.r === 'pro'), last7 = new Set(out.days.slice(-7));
+  out.people = { pros: P.length, tested: P.filter(U => U.assess).length, sent: P.filter(U => U.reports || U.hw).length, back: P.filter(U => U.days.size >= 2).length,
+    weeks2: P.filter(U => U.wk.size >= 2).length, lead: P.filter(U => U.retests || U.hw >= 2).length, active7: P.filter(U => [...U.days].some(x => last7.has(x))).length };
+  try { const from = Date.now() - days * 864e5, sp = (await allUsers()).filter(u => u.role === 'specialist' && !noStats(u));
+    Object.assign(out.people, { signups: sp.filter(u => (u.created || 0) >= from).length, total: sp.length, payingNow: sp.filter(u => ['pro', 'studio'].includes(u.plan) && (u.planUntil || 0) > Date.now()).length, paidEver: sp.filter(u => u.paidEver).length }); } catch (e) {}
+  out.users = Object.entries(out.users).map(([id, U]) => ({ id, r: U.r, days: U.days.size, weeks: U.wk.size, assess: U.assess, reports: U.reports, retests: U.retests, hw: U.hw, bugs: U.bugs })).sort((a, b) => b.days - a.days).slice(0, 200);
   out.devices = Object.fromEntries(Object.entries(out.devices).map(([k, D]) => { const f = D.fps.sort((x, y) => x - y); delete D.fps; return [k, { ...D, fps: f.length ? Math.round(pct(f, .5)) : null }]; }));
   out.screens = Object.fromEntries(Object.entries(scr).map(([k, S]) => { S.sec.sort((x, y) => x - y); return [k, { n: S.n, p50: S.sec.length ? Math.round(pct(S.sec, .5)) : null, p90: S.sec.length ? Math.round(pct(S.sec, .9)) : null, taps: S.n ? Math.round(S.taps / S.n * 10) / 10 : 0, miss: S.n ? Math.round(S.miss / S.n * 10) / 10 : 0, back: S.back, qback: S.qback || 0,
     depth: S.depth && S.depth.length ? Math.round(pct(S.depth.sort((x, y) => x - y), .5)) : null, skim: S.scrolled ? Math.round(S.skim / S.scrolled * 100) : null }]; }));
