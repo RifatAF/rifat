@@ -38,7 +38,7 @@ export function viewMetrics(id, pts, w, h, roll = 0, heightCm = 0) {
     add('headTilt', 'Наклон головы', F.headTilt(p), 'к правому плечу', 'к левому плечу');
     add('shoulderTilt', 'Линия плеч', F.shoulderTilt(p), 'правое ниже', 'левое ниже');
     add('pelvicTilt', 'Линия таза', F.pelvicTilt(p), 'правая сторона ниже', 'левая сторона ниже');
-    if (id === 'front') add('trunkLateral', 'Смещение корпуса', F.trunkLateral(p), 'вправо', 'влево');
+    add('trunkLateral', 'Смещение корпуса', F.trunkLateral(p), 'вправо', 'влево');
     // ось ноги в стойке: колено внутрь (Х) или наружу (О) от линии бедро–лодыжка; та же формула, что в приседе теста по видео
     add('kneeR', 'Правое колено', F.fppa(p, true), 'внутрь', 'наружу');
     add('kneeL', 'Левое колено', F.fppa(p, false), 'внутрь', 'наружу');
@@ -67,7 +67,9 @@ export function quickMetrics(views, heightCm = 0) {
   const by = {}; for (const v of ALL_VIEWS) { const x = views[v.id]; by[v.id] = x && x.pts ? viewMetrics(v.id, x.pts, x.w, x.h, x.roll || 0, heightCm) : null; }
   const val = (id, key) => { const m = by[id] && by[id].find(x => x.key === key); return m ? m.v : NaN; };
   const avg = (...a) => { const v = a.filter(Number.isFinite); return v.length ? r1(v.reduce((s, x) => s + x, 0) / v.length) : NaN; };
-  const snapshot = by.front ? { headTilt: val('front', 'headTilt'), shoulderTilt: val('front', 'shoulderTilt'), pelvicTilt: val('front', 'pelvicTilt'), trunkLateral: val('front', 'trunkLateral') } : null;
+  // перекосы спереди и сзади: среднее двух снимков (сзади раньше не учитывалось); точки размечены анатомически, знак у видов общий
+  const fb = k => avg(val('front', k), val('back', k));
+  const snapshot = by.front || by.back ? { headTilt: fb('headTilt'), shoulderTilt: fb('shoulderTilt'), pelvicTilt: fb('pelvicTilt'), trunkLateral: fb('trunkLateral') } : null;
   const frac = k => heightCm ? avg(val('right', k), val('left', k)) / heightCm : avg(val('right', k), val('left', k)) / 100;
   const side = by.right || by.left ? { headForwardDeg: avg(val('right', 'headForward'), val('left', 'headForward')), shoulderShift: frac('shoulderShift'), hipShift: frac('hipShift'), kneeHyperDeg: avg(val('right', 'kneeHyper'), val('left', 'kneeHyper')) } : null;
   // полуприсед идет в правила зон как присед спереди теста по видео (колено внутрь), если снимок есть

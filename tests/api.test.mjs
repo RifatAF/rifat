@@ -241,7 +241,7 @@ test('напоминания: расписание от специалиста, 
   const off = await call(remind, { method: 'POST', body: { on: false }, headers: { cookie: cookie('t_700') } }); assert.equal(off.j.on, false); assert.ok(!store.has('remind/t_700.json'));
 });
 
-test('пробный PRO: 30 дней с первого входа в полном режиме, кончается первым ретестом, не повторяется', async () => {
+test('пробный PRO: 30 дней с первого входа в полном режиме, кончается первым ретестом (у новых 4-м клиентом), не повторяется', async () => {
   SESS.APP.beta = false;
   store.set('users/t_800.json', { body: JSON.stringify({ id: 't_800', role: 'specialist', consentVersion: '2026-10-v3' }), uploadedAt: '' });
   let me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_800') } });
@@ -251,6 +251,16 @@ test('пробный PRO: 30 дней с первого входа в полно
   me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_800') } }); assert.equal(me.j.user.trial, false, 'второй раз не стартует');
   await call(auth, { method: 'POST', query: { a: 'trialseen' }, headers: { cookie: cookie('t_800') } });
   me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_800') } }); assert.equal(me.j.user.trialEndSeen, true);
+  // новые условия (зарегистрированы с 31.10.2026): 3 слота, пробный кончается на 4-м клиенте, ретест его не трогает
+  const T2 = SESS.TERMS2_FROM + 1;
+  store.set('users/t_802.json', { body: JSON.stringify({ id: 't_802', role: 'specialist', consentVersion: '2026-10-v3', created: T2 }), uploadedAt: '' });
+  me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_802') } });
+  assert.equal(me.j.user.trial, true); assert.equal(me.j.user.trialClients, 3); assert.equal(me.j.user.maxClientSlots, 3);
+  me = await call(auth, { method: 'POST', query: { a: 'trialend' }, headers: { cookie: cookie('t_802') } }); assert.equal(me.j.user.trial, true, 'ретест не завершает пробный у новых');
+  me = await call(auth, { method: 'POST', query: { a: 'trialend' }, body: { by: 'clients' }, headers: { cookie: cookie('t_802') } });
+  assert.equal(me.j.user.isPro, false); assert.equal(me.j.user.trialEndedBy, 'clients');
+  me = await call(auth, { method: 'POST', query: { a: 'trialend' }, body: { by: 'clients' }, headers: { cookie: cookie('t_800') } }); assert.equal(me.j.user.trialEndedBy, 'retest', 'у прежних клиенты не завершают');
+  assert.equal(SESS.maxClientSlots({ created: T2, invitedPro: 1 }), 6); assert.equal(SESS.maxClientSlots({ created: SESS.TERMS2_FROM - 1 }), 5);
   // в бете пробный не стартует
   SESS.APP.beta = true; store.set('users/t_801.json', { body: JSON.stringify({ id: 't_801', role: 'specialist', consentVersion: '2026-10-v3' }), uploadedAt: '' });
   me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_801') } }); assert.equal(me.j.user.trialUntil, null); SESS.APP.beta = false;

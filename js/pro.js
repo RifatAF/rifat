@@ -18,13 +18,13 @@ import { baBlock, bindBa } from './app.js';
 import { asClient, cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, mainOf, TONE_HELP, applyMain, fromMain, muscleInfo, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen, TIP_ACT } from './app.js';
 
 // активные клиенты занимают слоты; пример и закрытые (пришли сверх лимита) не считаются
-// ведение = ретест, ссылка на ретест или занятия дома за 30 дней. Первые тесты новых клиентов лимит не трогают
+// ведение = ретест, ссылка на ретест, домашка по ссылке или занятия дома за 30 дней. Первые тесты новых клиентов лимит не трогают
 async function trackedIds() { const since = Date.now() - 30 * DAY, [cs, as] = await Promise.all([all('clients'), all('assessments')]), ids = new Set();
   for (const a of as) if (a.prevId && a.date > since) ids.add(a.clientId);
-  for (const c of cs) if (!c.demo && ((c.retestSent || 0) > since || (c.progress && c.progress.at > since))) ids.add(c.id);
+  for (const c of cs) if (!c.demo && ((c.retestSent || 0) > since || (c.progress && c.progress.at > since) || (c.hw && Math.max(c.hw.at || 0, c.hw.upd || 0) > since))) ids.add(c.id);
   for (const c of cs) if (c.demo) ids.delete(c.id); return ids; }
 /** Можно ли вести этого клиента: он уже в ведении или есть свободное место. Нет: шторка «ведение без лимита». */
-async function canTrack(c) { if (isPro()) return true; const ids = await trackedIds(); if (ids.has(c.id)) return true; return checkClientSlotAvailable(ids.size); }
+export async function canTrack(c) { if (isPro()) return true; const ids = await trackedIds(); if (ids.has(c.id)) return true; return checkClientSlotAvailable(ids.size); }
 const $ = s => document.querySelector(s);
 /** Полная версия (тест по видео, тест из дома, сеанс) включается в «Администрировании»; без нее основа кабинета: быстрый тест по 4 фото. */
 export const fullMode = () => localStorage.getItem('bp_full') === '1';
@@ -248,11 +248,11 @@ function dictate(textarea, btn) {
 function slotWidget(s) {
   if (isBeta()) return '';
   const u = meSync();
-  if (u && u.trial) return `<div class="pad" style="margin-top:var(--s3)"><div class="card row" id="slots" style="padding:10px 14px;font-size:14px;background:var(--ok-s)"><span style="flex:1"><b>Пробный PRO</b> до ${new Date(u.trialUntil).toLocaleDateString('ru', { day: 'numeric', month: 'long' })} или до первого повторного теста</span></div></div>`;
+  if (u && u.trial) return `<div class="pad" style="margin-top:var(--s3)"><div class="card row" id="slots" style="padding:10px 14px;font-size:14px;background:var(--ok-s)"><span style="flex:1"><b>Пробный PRO</b> ${u.trialClients ? `на первых ${u.trialClients} клиентов, до ` : 'до '}${new Date(u.trialUntil).toLocaleDateString('ru', { day: 'numeric', month: 'long' })}${u.trialClients ? '' : ' или до первого повторного теста'}</span></div></div>`;
   if (s.pro) return `<div class="pad" style="margin-top:var(--s3)"><div class="card row" id="slots" style="padding:10px 14px;font-size:14px"><span style="flex:1"><b>PRO</b> · ведение без лимита</span></div></div>`;
   const full = s.used >= s.max, pct = Math.min(100, Math.round(s.used / Math.max(1, s.max) * 100));
   return `<div class="pad" style="margin-top:var(--s3)"><div class="card" id="slots" style="padding:12px 14px">
-    <div class="row" style="font-size:14px;gap:8px"><span style="flex:1">Ведете <b>${s.used} из ${s.max}</b> клиентов<br><span class="sub" style="font-size:12px">ретесты и ссылки за 30 дней</span></span><button class="pill gopro" id="slget" style="background:var(--brand);color:#fff">Без лимита</button></div>
+    <div class="row" style="font-size:14px;gap:8px"><span style="flex:1">Ведете <b>${s.used} из ${s.max}</b> клиентов<br><span class="sub" style="font-size:12px">ретесты, домашка и ссылки за 30 дней</span></span><button class="pill gopro" id="slget" style="background:var(--brand);color:#fff">Без лимита</button></div>
     <div style="height:6px;border-radius:3px;background:var(--surface);margin-top:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${full ? 'var(--over)' : 'var(--ink)'}"></div></div>
     ${full ? '<div style="font-size:13px;margin-top:8px">Новых клиентов тестируйте свободно. Ретест еще одного клиента откроется в PRO или когда закончится 30 дней ведения у кого-то из текущих.</div>' : ''}</div></div>`;
 }
@@ -341,7 +341,7 @@ export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC
   // инструменты в одно касание: клиент один — сразу действие, иначе выбор из последних
   const lastTwo = id => asses.filter(a => a.clientId === id).sort((x, y) => x.date - y.date).slice(-2);
   const tool = (title, ok, act) => () => { const cs = sorted.filter(c => ok(lastTwo(c.id))); if (!cs.length) return toast('Пока нет подходящих клиентов'); if (cs.length === 1) return act(cs[0], lastTwo(cs[0].id)); pickClient(title, cs, c => act(c, lastTwo(c.id))); };
-  $('#rtq').onclick = tool('Ретест', l => l.length >= 1, async (c, l) => { if (!fullMode() || l.at(-1).template === 'quick') return quickJs().then(m => m.quickTest(c.id)); if (await canTrack(c)) newAssessment(c.id, l.at(-1).id); });
+  $('#rtq').onclick = tool('Ретест', l => l.length >= 1, async (c, l) => { if (!fullMode() || l.at(-1).template === 'quick') { if (await canTrack(c)) quickJs().then(m => m.quickTest(c.id)); return; } if (await canTrack(c)) newAssessment(c.id, l.at(-1).id); });
   $('#repq').onclick = tool('Отчет клиенту', l => l.length >= 1, (c, l) => report(l.at(-1).id));
   // «Было → стало»: всегда сначала выбор клиента; у кого один тест, тот виден с подсказкой. Пара: два последних быстрых теста, иначе два последних любых
   const pair = id => { const all = asses.filter(a => a.clientId === id).sort((x, y) => x.date - y.date), q = all.filter(a => a.template === 'quick'); return (q.length >= 2 ? q : all).slice(-2); };
@@ -475,7 +475,8 @@ async function clientForm(id, thenAssess) {
    <div class="pad" style="display:flex;flex-direction:column;gap:12px;padding-bottom:24px">
     <div class="row" style="gap:10px"><div style="flex:1">${inp('first', 'Имя *', c.first ?? (c.name || '').split(' ')[0])}</div><div style="flex:1">${inp('last', 'Фамилия', c.last ?? (c.name || '').split(' ').slice(1).join(' '))}</div></div>
     <div class="row" style="gap:10px"><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Дата рождения</div>${inp('dob', '', c.dob, 'date')}</div><div style="width:110px"><div class="sub" style="font-size:12px;margin-bottom:4px">Пол</div>${sel('sex', [['', '—'], ['M', 'Муж'], ['F', 'Жен']], c.sex)}</div></div>
-    <div class="row" style="gap:10px"><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Рост, см</div>${inp('height', '', c.height, 'number')}</div><div style="flex:1"><div class="sub" style="font-size:12px;margin-bottom:4px">Ведущая сторона</div>${sel('hand', [['R', 'Правша'], ['L', 'Левша']], c.hand)}</div></div>
+    <div class="row" style="gap:10px"><div style="flex:1;min-width:0"><div class="sub" style="font-size:12px;margin-bottom:4px">Рост, см</div>${inp('height', '', c.height, 'number')}</div><div style="flex:1;min-width:0"><div class="sub" style="font-size:12px;margin-bottom:4px">Вес, кг</div>${inp('weight', '', c.weight || '', 'number')}</div></div>
+    <div><div class="sub" style="font-size:12px;margin-bottom:4px">Ведущая сторона</div>${sel('hand', [['R', 'Правша'], ['L', 'Левша']], c.hand)}</div>
     ${inp('activity', 'Спорт или работа', c.activity)}${TIP_ACT}
     <textarea id="complaints" placeholder="Жалобы, травмы" rows="3" class="field" style="height:auto;padding:12px 16px">${esc(c.complaints)}</textarea>
     <textarea id="notes" placeholder="Заметки" rows="3" class="field" style="height:auto;padding:12px 16px">${esc(c.notes)}</textarea>
@@ -483,7 +484,7 @@ async function clientForm(id, thenAssess) {
    </div><div class="pad" style="padding-bottom:24px"><button class="btn" id="save">${thenAssess ? 'Сохранить и начать оценку' : 'Сохранить'}</button></div></div>`);
   $('#back').onclick = () => id ? clientCard(id) : proHome(); $('#dict').onclick = () => dictate($('#notes'), $('#dict'));
   $('#save').onclick = async () => { const v = n => $('#' + n).value.trim(); if (!v('first')) { $('#first').style.borderColor = 'var(--over)'; $('#first').focus(); return; }
-    Object.assign(c, { first: v('first'), last: v('last'), name: [v('first'), v('last')].filter(Boolean).join(' '), dob: v('dob'), sex: v('sex'), height: v('height'), leg: v('hand'), hand: v('hand'), activity: v('activity'), complaints: v('complaints'), notes: v('notes') });
+    Object.assign(c, { first: v('first'), last: v('last'), name: [v('first'), v('last')].filter(Boolean).join(' '), dob: v('dob'), sex: v('sex'), height: v('height'), weight: v('weight'), leg: v('hand'), hand: v('hand'), activity: v('activity'), complaints: v('complaints'), notes: v('notes') });
     await put('clients', c); thenAssess ? newAssessment(c.id) : clientCard(c.id); };
 }
 
@@ -576,7 +577,7 @@ export async function clientCard(id) {
   $('#back').onclick = () => proHome(); $('#edit').onclick = () => clientForm(id);
   document.querySelectorAll('.gopro-home').forEach(b => b.onclick = () => gate('home', c.name.split(' ')[0]));
   if (lastQ) quickJs().then(m => m.quickCard($('#qcard'), last.id, qs.length >= 2 ? qs.at(-2).id : null)).catch(e => toast('Не открылось: ' + e.message));
-  $('#nq').onclick = () => quickJs().then(m => m.quickTest(id));
+  $('#nq').onclick = async () => { if (last && !(await canTrack(c))) return; quickJs().then(m => m.quickTest(id)); };
   if (last && !lastQ) { const sp = proSpots(last); let v3 = null;
     const show = back => { if (v3) { v3.dispose(); v3 = null; } $('#cvis').style.height = ''; $('#cvis').innerHTML = '<canvas id="cheat" style="width:150px;display:block"></canvas>'; $('#cvis').style.width = '130px'; $('#cfind').style.display = ''; drawHeat($('#cheat'), onlyKeys(sp, mainKeys(last, sp)), back, null, cNum); ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === (back ? 'vb' : 'vf'))); };
     show(cNum.filter(l => (sp.find(x => x.key === l.key) || {}).back).length > cNum.length / 2); $('#vf').onclick = () => show(false); $('#vb').onclick = () => show(true);
@@ -653,24 +654,34 @@ async function syncReminders(force) {
 // первый ретест завершает пробный PRO: специалист увидел «до/после», дальше решение о покупке
 async function endTrialOnRetest() { const u = meSync(); if (!u || !u.trial) return;
   try { await fetch('/api/auth?a=trialend', { method: 'POST' }); await getMe(true); track('trial_end', { c: 'retest' }, false); } catch (e) {} }
-/** Экран конца пробного: что специалист успел за пробный, один раз. Ничего не удаляется. */
-async function trialEndScreen() {
+// новые условия: пробный PRO на первых TRIAL_CLIENTS клиентов; первый тест следующего клиента его завершает
+async function trialClientsLeft() { const u = meSync(); if (!u || !u.trial || !u.trialClients) return Infinity;
+  const [cs, as] = await Promise.all([all('clients'), all('assessments')]), real = new Set(cs.filter(c => !c.demo).map(c => c.id));
+  return u.trialClients - new Set(as.filter(a => real.has(a.clientId)).map(a => a.clientId)).size; }
+/** Перед первым тестом клиента: если пробные клиенты кончились, закрывает пробный и показывает итог; next продолжает тест. */
+export async function trialGate(clientId, next) {
+  if ((await all('assessments')).some(a => a.clientId === clientId) || (await trialClientsLeft()) > 0) return next();
+  try { await fetch('/api/auth?a=trialend', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ by: 'clients' }) }); await getMe(true); track('trial_end', { c: 'clients' }, false); } catch (e) { return next(); }
+  return trialEndScreen(next);
+}
+/** Экран конца пробного: что специалист успел за пробный, один раз. Ничего не удаляется. next: продолжить начатый тест. */
+async function trialEndScreen(next) {
   const u = meSync(); track('trial_end_view', { c: u.trialEndedBy || 'date' }, false);
   const [cs, as] = await Promise.all([all('clients'), all('assessments')]), since = u.trialUntil - 30 * DAY;
   const real = cs.filter(c => !c.demo), mine = as.filter(a => a.date > since && real.some(c => c.id === a.clientId)), retests = mine.filter(a => a.prevId);
   let better = 0, sum = 0; for (const a of retests) { const p = as.find(x => x.id === a.prevId); if (!p) continue; const mx = o => Math.max(0, ...Object.values(o || {}));
     const d = mx(p.pain) - mx(a.pain); if (d > 0) { better++; sum += d; } }
   const fixed = n => String(Math.round(n * 10) / 10).replace('.', ',');
-  go(`<div class="scr pad fade" style="justify-content:center;gap:14px"><div class="eyebrow">Пробный PRO закончился</div>
+  go(`<div class="scr pad fade" style="justify-content:center;gap:14px"><div class="eyebrow">Пробный PRO закончился${u.trialEndedBy === 'clients' ? `: ${u.trialClients || 3} клиента` : ''}</div>
     <h1>Вот что вы успели</h1>
     <div class="kpi"><div><b>${new Set(mine.map(a => a.clientId)).size}</b><span>клиентов</span></div><div><b>${retests.length}</b><span>повторных тестов</span></div><div><b style="color:var(--ok-t)">${better}</b><span>с меньшей болью</span></div></div>
     ${better ? `<p class="sub">У ${better} ${better === 1 ? 'клиента' : 'клиентов'} боль снизилась в среднем на ${fixed(sum / better)} балла. История и данные остаются у вас на любом тарифе.</p>` : '<p class="sub">История и данные остаются у вас на любом тарифе.</p>'}
     <button class="btn" id="tem">Оставить PRO · $9 в месяц</button>
-    <button class="btn ghost" id="tef">Остаться на Free</button>
-    <p class="sub" style="font-size:12px;text-align:center">На Free: тесты новых клиентов без лимита, ведение 5 клиентов, отчет с плашкой BodyPassport.</p></div>`);
+    <button class="btn ghost" id="tef">${next ? 'Продолжить тест на Free' : 'Остаться на Free'}</button>
+    <p class="sub" style="font-size:12px;text-align:center">На Free: первые тесты новых клиентов без лимита, ведение ${slots().max} клиентов (ретест и домашка), отчет с плашкой BodyPassport.</p></div>`);
   const seen = () => fetch('/api/auth?a=trialseen', { method: 'POST' }).then(() => getMe(true)).catch(() => {});
   $('#tem').onclick = async () => { await seen(); goPro('month'); };
-  $('#tef').onclick = async () => { await seen(); proHome(); };
+  $('#tef').onclick = async () => { await seen(); next ? next() : proHome(); };
 }
 /** Баланс за коллег: начисления и оплата своего PRO. Вывода в деньги нет. */
 async function balanceScreen() {
@@ -1193,7 +1204,7 @@ async function undoRestore() { const v = await snapLoad(); if (!v) return toast(
   indexedDB.deleteDatabase(snapName()); toast('Вернул как было'); proHome(); }
 
 // для автотестов
-export const _pro = { all, put, get, del, db, backup: () => backup(), meta: k => meta(k), uid: () => uid(), author: () => defaultAuthor(), fmtDate: t => fmtDate(t), unpack: (...a) => unpack(...a), normalize: (...a) => normalize(...a), phaseRep: (...a) => phaseRep(...a), clientCard: (...a) => clientCard(...a), calendarScreen: (...a) => calendarScreen(...a), result: (...a) => result(...a), compare: (...a) => compare(...a) };
+export const _pro = { all, put, get, del, db, canTrack: c => canTrack(c), trialGate: (id, next) => trialGate(id, next), backup: () => backup(), meta: k => meta(k), uid: () => uid(), author: () => defaultAuthor(), fmtDate: t => fmtDate(t), unpack: (...a) => unpack(...a), normalize: (...a) => normalize(...a), phaseRep: (...a) => phaseRep(...a), clientCard: (...a) => clientCard(...a), calendarScreen: (...a) => calendarScreen(...a), result: (...a) => result(...a), compare: (...a) => compare(...a) };
 
 // =================== Этап 2: «было → стало» и отчет клиенту ===================
 const BONES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28], [27, 31], [28, 32], [27, 29], [28, 30]];
