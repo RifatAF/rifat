@@ -4,7 +4,7 @@ import { _pro, proHome, clientCard, homeworkLink, pullResults } from './pro.js';
 import { go, esc, ic, toast, spots, topOf, asClient } from './app.js';
 import { C, cam, startCamera, stopCamera, detectStill, initPose, startMotion, phone, cameraBlocked, openInBrowserSheet, posedFigure, body3D } from './core.js';
 import { poseOf } from './pose-figure.js';
-import { VIEWS as REQ, ALL_VIEWS as VIEWS, EDIT_POINTS, POINT_NAMES, quickMetrics, viewMetrics, observations, frameIssue } from './quick-metrics.js';
+import { VIEWS as REQ, ALL_VIEWS as VIEWS, EDIT_POINTS, POINT_NAMES, quickMetrics, summaryOf, viewMetrics, observations, frameIssue } from './quick-metrics.js';
 import { P, analyze } from './analysis.js';
 import { track } from './track.js';
 import { matte } from './ds.js';
@@ -263,7 +263,7 @@ const GAINS = [1, 1.5, 2, 3], VIEWS3 = [['front', 'Спереди'], ['right', '
  *  Пороги правил подобраны для теста по видео; на фото признак учитывается с 60% порога, но не меньше погрешности замера.
  *  Наклон головы вперед почти всегда выше порога и раньше забирал все места шеей: теперь из одного отдела тела
  *  (шея, плечевой пояс, корпус, таз, ноги) не больше 3 мышц, всего до 8 мышц (с двух сторон считается одной). Самые выраженные идут первыми. */
-const RELAX = .6, FERR = { pelvic_tilt: 1.5, shoulder_tilt: 1.5, head_tilt: 2, trunk_lateral: 1.5, head_forward: 4, knee_hyper: 3, shoulder_shift: .015, hip_shift: .015 };
+const RELAX = .6, FERR = { valgus_max: 5, pelvic_tilt: 1.5, shoulder_tilt: 1.5, head_tilt: 2, trunk_lateral: 1.5, head_forward: 4, knee_hyper: 3, shoulder_shift: .015, hip_shift: .015 };
 const relax = (t, e) => t == null ? t : Math.sign(t) * Math.max(Math.abs(t) * RELAX, e);
 const REGION = y => y < .23 ? 0 : y < .38 ? 1 : y < .52 ? 2 : y < .63 ? 3 : 4;
 export function zonesOf(q) {
@@ -280,6 +280,15 @@ export function zonesOf(q) {
       const sg = Math.sign(v) * (r.sideNegate ? -1 : 1), side = sg > 0 ? 'RIGHT' : 'LEFT', opp = side === 'RIGHT' ? 'LEFT' : 'RIGHT';
       for (const m of r.muscles) { if (m.w < .4 || m.side === 'both' || !C.muscles[m.id]) continue; const sd = m.side === 'opposite' ? opp : side, key = m.id + ':' + sd;
         if (!seen.has(key)) { seen.add(key); lat.push({ id: m.id, side: sd, k: m.state === 'OVERLOAD' ? 'HYPER' : m.state, key }); } } }
+    // ноги: ось колена в стойке (спереди и сзади) и в полуприседе в правила не попадала, поэтому ноги не показывались.
+    // Колено внутрь: мышцы правила knee_valgus той же стороны; наружу: напряжены наружные, слабее приводящие
+    const kv = (k, sq) => { const B = q.by || {}, v = [(B.front || []), (B.back || [])].map(l => (l.find(m => m.key === k) || {}).v).filter(Number.isFinite), st = v.length ? v.reduce((x, y) => x + y, 0) / v.length : 0;
+      const sv = ((B.squat || []).find(m => m.key === sq) || {}).v; return { st, sq: Number.isFinite(sv) ? sv : 0 }; };
+    const valg = (rules.find(r => r.id === 'knee_valgus') || { muscles: [] }).muscles.filter(m => m.w >= .4), VAR = [['tfl', 'HYPER'], ['piriformis', 'SHORT'], ['adductors', 'WEAK']];
+    const addM = (id, sd, k) => { const key = id + ':' + sd; if (C.muscles[id] && !seen.has(key)) { seen.add(key); lat.push({ id, side: sd, k, key }); } };
+    for (const [k, sq, sd] of [['kneeR', 'squatKneeR', 'RIGHT'], ['kneeL', 'squatKneeL', 'LEFT']]) { const v = kv(k, sq);
+      if (v.st > 6 || v.sq > 6) valg.forEach(m => addM(m.id, sd, m.state === 'OVERLOAD' ? 'HYPER' : m.state));
+      else if (v.st < -6) VAR.forEach(([id, st]) => addM(id, sd, st)); }
     return [...lat, ...out].map(s => ({ id: s.id, side: s.side, k: s.k, key: s.key })); }
   catch (e) { return []; } }
 const zSpots = zones => zones.map(z => ({ ...z, key: z.key || z.id + ':' + z.side, tone: z.k === 'WEAK' ? -.75 : .75, back: (C.muscles[z.id] || {}).view === 'back' }));
@@ -504,7 +513,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
     <div id="qplan"></div>
     <div class="mt-hyp" id="qhyp"></div>
     <div><div class="eyebrow">Зоны · предположение по замеру, проверьте</div><div id="qzl"></div>
-      <button class="btn line" id="qadd" style="margin-top:10px">${ic('plus', 's')}Добавить зону</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><button class="btn line" id="qadd">${ic('plus', 's')}Добавить зону</button><button class="btn line" id="qauto">${ic('rotate-ccw', 's')}Заново по замеру</button></div>
       <p class="sub" style="font-size:12px;margin-top:6px">Касание по статусу меняет его, крестик убирает зону. Клиент увидит зоны как задачи: «Укрепить», «Расслабить».</p></div>
     <div><div class="eyebrow">Что видно</div>${out ? `<div class="group" style="padding:0">${obsRows(st.by)}</div>` : '<div class="card" style="font-size:15px">Все значения в пределах погрешности</div>'}</div>
     <details class="acc"><summary style="font-weight:600;font-size:15px">Все замеры: <span class="mono">${n}</span>, вне погрешности <span class="mono">${out}</span></summary><div style="display:flex;flex-direction:column;gap:12px;margin-top:10px">${VIEWS.filter(v => st.by[v.id]).map(v => `<div><div class="eyebrow">${v.name}</div>${metricRows(st.by[v.id])}</div>`).join('')}</div></details>
@@ -526,6 +535,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
     if (md === 'ph') photoView(); else if (v3) v3.look(view === 'squat' ? 'front' : view); };
   host.querySelectorAll('[data-md]').forEach(b => b.onclick = () => setMode(b.dataset.md));
   if ($h('#qpgrid')) $h('#qpgrid').onclick = () => { showGrid = !showGrid; localStorage.setItem('bp_q_grid', showGrid ? '1' : '0'); $h('#qpgrid').classList.toggle('on', showGrid); $h('#qpgrid').setAttribute('aria-pressed', showGrid); photoView(); };
+  $h('#qauto').onclick = () => { if (st.zones.length && !confirm('Заменить зоны подсказкой по замеру? Ваши правки зон пропадут.')) return; st.zones = zonesOf(summaryOf(st.by, st.h === 170 ? 0 : st.h)); changed(); toast('Зоны пересчитаны'); };
   $h('#qadd').onclick = () => addZone(zs => { const rest = st.zones.filter(x => !zs.some(z => x.id === z.id && x.side === z.side)); if (rest.length + zs.length > 12) return toast('Не больше 12 зон'); st.zones = [...rest, ...zs]; changed(); });
   host.querySelectorAll('[data-vw]').forEach(b => b.onclick = () => { view = b.dataset.vw; host.querySelectorAll('[data-vw]').forEach(x => x.classList.toggle('on', x === b)); if (mode === 'ph') photoView(); else if (v3) v3.look(view === 'squat' ? 'front' : view); });
   host.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { st.gain = +b.dataset.g; host.querySelectorAll('[data-g]').forEach(x => x.classList.toggle('on', x === b)); $h('#qplate').innerHTML = gainPlate(st.gain); if (v3) v3.pose(pose()); onChange(st); });
