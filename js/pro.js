@@ -275,6 +275,8 @@ export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC
   const sp = await meta('specialty'); if (!sp) return specialtyScreen(); localStorage.setItem('bp_sp', sp); orderTemplates(sp); getMe();
   { const u = meSync(); if (u && !isBeta() && u.trialUntil > 1 && !u.trial && !u.trialEndSeen && !u.paidEver && tariff().plan === 'start') return trialEndScreen(); }
   // новые результаты пришли, пока специалист уже ушел в карточку: не выдергиваем его на главный экран
+  // после обновления формул быстрые тесты пересчитываются по сохраненным точкам (фигура, зоны, отчет)
+  if (pulled === null) quickJs().then(m => m.refreshAll()).catch(() => {});
   if (pulled === null) pullResults().then(n => { if (n.length && document.getElementById('join') && document.getElementById('menu')) proHome(query, n); });
   prefetchPose(); const pst = await storageCheck(); syncReminders().catch(() => {});
   const [clients, asses] = await Promise.all([all('clients'), all('assessments')]);
