@@ -93,12 +93,13 @@ export function observations(by, max = 6) {
 /** Проверка кадра после съемки: тело целиком, нужный ракурс. Возвращает текст проблемы или ''. */
 export function frameIssue(id, pts, w, h) {
   if (!pts) return 'Человек не найден на фото. Переснимите: тело целиком, от макушки до стоп';
-  const vis = i => (pts[i].visibility ?? 1) > .5, sideView = id === 'right' || id === 'left'; if (id === 'squat') id = 'front';
+  // полуприсед: тело ниже ростом в кадре, поэтому допуск по расстоянию и краям шире
+  const vis = i => (pts[i].visibility ?? 1) > .5, sideView = id === 'right' || id === 'left', sq = id === 'squat'; if (sq) id = 'front';
   if (!(vis(P.L_ANKLE) || vis(P.R_ANKLE))) return 'Не видно стоп. Отойдите дальше или опустите телефон';
   if (!(vis(P.NOSE) || vis(P.L_EAR) || vis(P.R_EAR))) return 'Не видно головы. Отойдите дальше';
   const top = Math.min(pts[P.NOSE].y, pts[P.L_EAR].y, pts[P.R_EAR].y), bottom = Math.max(pts[P.L_ANKLE].y, pts[P.R_ANKLE].y), frac = (bottom - top) / h;
-  if (frac < .45) return 'Человек слишком далеко. Подойдите ближе, чтобы тело заняло почти весь кадр';
-  if (top < h * .02 || bottom > h * .99) return 'Тело у края кадра. Отойдите чуть дальше';
+  if (frac < (sq ? .25 : .45)) return 'Человек слишком далеко. Подойдите ближе, чтобы тело заняло почти весь кадр';
+  if (sq ? top < 0 || bottom > h : top < h * .02 || bottom > h * .99) return 'Тело у края кадра. Отойдите чуть дальше';
   const shW = Math.abs(pts[P.L_SHOULDER].x - pts[P.R_SHOULDER].x) / Math.max(1, bottom - top);
   if (sideView && shW > .15) return 'Нужен вид сбоку. Попросите клиента повернуться боком';
   if (!sideView && shW < .1) return 'Нужен вид ' + (id === 'front' ? 'спереди' : 'сзади') + '. Попросите клиента развернуться';
