@@ -1,0 +1,31 @@
+{
+  "id": "test_squat",
+  "app_id": null,
+  "test_only": true,
+  "title_ru": "Приседание (тест конвейера)",
+  "zone": "колено",
+  "side": "both",
+  "camera": {"view": "side", "facing_side": "left"},
+  "start_pose": {
+    "description_ru": "Стоя, стопы на ширине таза, руки вдоль тела, взгляд вперед.",
+    "prompt_en": "standing upright, feet hip-width apart, arms relaxed along the body, looking straight ahead",
+    "targets": {"knee_left": 175, "hip_left": 175}
+  },
+  "phases": [
+    {"name": "down", "label_ru": "Вниз", "type": "move", "duration_s": 3,
+     "motion_en": "slowly squats down: hips go back and down, knees bend over the toes, heels stay on the floor, back stays straight",
+     "end_pose_en": "bottom of a bodyweight squat: thighs about parallel to the floor, knees over the toes, heels on the floor, straight back leaning slightly forward, arms reaching forward at shoulder height",
+     "targets": {"knee_left": 95, "hip_left": 85}},
+    {"name": "hold_bottom", "label_ru": "Пауза", "type": "hold", "duration_s": 1},
+    {"name": "up", "label_ru": "Вверх", "type": "move", "duration_s": 2, "returns_to_start": true,
+     "motion_en": "slowly stands back up to the starting position, pushing through the whole foot",
+     "targets": {"knee_left": 175, "hip_left": 175}}
+  ],
+  "reps_in_video": 3,
+  "key_phase": "down",
+  "primary_joint": "knee_left",
+  "cues_ru": ["Таз назад, как будто садишься на стул", "Колени смотрят туда же, куда носки", "Пятки не отрываются от пола"],
+  "mistakes_ru": ["Колени заваливаются внутрь", "Поясница округляется внизу"],
+  "contraindications_ru": ["Острая боль в колене или пояснице", "Первые недели после операции на ногах без разрешения врача"],
+  "constraints": [{"metric": "trunk_incline", "min": 0, "max": 55, "why_ru": "корпус не заваливается вперед"}]
+}

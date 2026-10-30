@@ -1,0 +1,1 @@
+Edit this photo. Keep exactly the same person, face, hair, body, clothes, floor, background, lighting, camera position and framing. Change only the body pose. {view_clause} New pose: {pose}. Anatomically correct joints, natural alignment, exactly two arms and two legs, feet fully on the mat where the pose requires. No text, no watermark.

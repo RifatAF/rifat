@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Упражнение для exercise-video",
+  "description": "Единственный источник правды по упражнению. Углы в градусах, стороны анатомические (сторона человека, не экрана).",
+  "type": "object",
+  "oneOf": [
+    {"required": ["id", "title_ru", "zone", "side", "camera", "start_pose", "phases", "reps_in_video", "key_phase", "primary_joint", "cues_ru", "mistakes_ru", "contraindications_ru"]},
+    {"required": ["id", "mirror_of", "title_ru"]}
+  ],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[a-z0-9_]+$"},
+    "app_id": {"type": ["string", "null"], "description": "id в data/exercises.json, куда publish запишет видео"},
+    "mirror_of": {"type": ["string", "null"], "description": "id упражнения-источника: видео получается зеркалированием, без генерации"},
+    "test_only": {"type": "boolean", "description": "тестовое упражнение, publish его не трогает"},
+    "title_ru": {"type": "string", "minLength": 3, "maxLength": 60},
+    "zone": {"enum": ["шея", "плечо", "грудной отдел", "спина", "поясница", "таз", "бедро", "колено", "стопа"]},
+    "side": {"enum": ["left", "right", "both"], "description": "какая сторона тела работает"},
+    "camera": {
+      "type": "object",
+      "required": ["view", "facing_side"],
+      "properties": {
+        "view": {"enum": ["side", "front", "back"]},
+        "facing_side": {"enum": ["left", "right", null], "description": "для view=side: какая сторона тела обращена к камере"}
+      }
+    },
+    "start_pose": {
+      "type": "object",
+      "required": ["description_ru", "prompt_en", "targets"],
+      "properties": {
+        "description_ru": {"type": "string"},
+        "prompt_en": {"type": "string"},
+        "targets": {"$ref": "#/$defs/targets"}
+      }
+    },
+    "phases": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["name", "label_ru", "type", "duration_s"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^[a-z0-9_]+$"},
+          "label_ru": {"type": "string", "maxLength": 24},
+          "type": {"enum": ["move", "hold"]},
+          "duration_s": {"type": "number", "minimum": 0.5, "maximum": 10},
+          "motion_en": {"type": "string", "description": "только для move: что происходит в клипе"},
+          "end_pose_en": {"type": "string", "description": "только для move: поза в конце фазы"},
+          "returns_to_start": {"type": "boolean", "description": "move заканчивается стартовой позой: конечный кадр = стартовый ключевой кадр"},
+          "targets": {"$ref": "#/$defs/targets"}
+        }
+      }
+    },
+    "tempo_ru": {"type": "string", "description": "если не задан, строится из фаз"},
+    "reps_in_video": {"type": "integer", "minimum": 1, "maximum": 6},
+    "key_phase": {"type": "string", "description": "name фазы, которая показывается замедленно"},
+    "primary_joint": {"type": "string", "description": "метрика для подсчета повторов и темпа"},
+    "cues_ru": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "string", "maxLength": 64}},
+    "mistakes_ru": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "string", "maxLength": 64}},
+    "contraindications_ru": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "constraints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["metric"],
+        "properties": {
+          "metric": {"type": "string"},
+          "min": {"type": "number"},
+          "max": {"type": "number"},
+          "why_ru": {"type": "string"}
+        }
+      }
+    },
+    "tolerance_deg": {"type": "number", "minimum": 3, "maximum": 20}
+  },
+  "$defs": {
+    "targets": {
+      "type": "object",
+      "description": "метрика → угол. Метрики: knee_*, hip_*, ankle_*, elbow_*, shoulder_*, neck_flexion_*, trunk_incline, trunk_lateral, head_yaw, pelvis_tilt (* = left|right)",
+      "additionalProperties": {"type": "number", "minimum": -180, "maximum": 180}
+    }
+  }
+}

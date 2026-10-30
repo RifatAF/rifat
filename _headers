@@ -10,6 +10,8 @@
   Cache-Control: public, max-age=31536000, immutable
 /img/*
   Cache-Control: public, max-age=31536000, immutable
+/video/*
+  Cache-Control: public, max-age=31536000, immutable
 /data/body3d.bin
   Cache-Control: public, max-age=31536000, immutable
 /api/*

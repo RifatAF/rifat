@@ -1,0 +1,135 @@
+{
+  "provider": "hf_spaces",
+  "allow_paid": false,
+  "seed": 20261030,
+  "max_attempts_per_exercise": 3,
+  "budget_usd_per_exercise": 3.0,
+  "library_style": {
+    "person": "adult woman about 30 years old, average athletic build, dark hair tied in a low bun, calm neutral face",
+    "outfit": "plain fitted charcoal-grey long-sleeve top and plain fitted black leggings, barefoot, no logos, no text, no jewelry",
+    "floor": "light-grey matte exercise mat on a light wooden floor",
+    "background": "plain warm off-white studio wall (#F4F0E8), empty, no objects, no windows",
+    "light": "soft even diffused studio light from the front, no hard shadows, no color cast",
+    "camera": "static camera on a tripod at hip height, 35mm lens, whole body in frame with margin around it, vertical 9:16 frame, no camera movement, no zoom, no cuts"
+  },
+  "providers": {
+    "mock": {
+      "prices_usd": {
+        "image": 0,
+        "edit": 0,
+        "video_per_second": 0
+      }
+    },
+    "hf_spaces": {
+      "api_key_env": "HF_TOKEN",
+      "video_duration_s": 3,
+      "prices_usd": {
+        "image": 0,
+        "edit": 0,
+        "video_per_second": 0
+      },
+      "daily_limits": {
+        "image": 10,
+        "edit": 20,
+        "video": 12
+      },
+      "limits_note": "ZeroGPU: дневная квота GPU на аккаунт (без токена меньше). Лимиты выше: наш предохранитель, чтобы не сжечь квоту за раз.",
+      "image": {
+        "space": "black-forest-labs/FLUX.1-schnell",
+        "api_name": "/infer",
+        "map": {
+          "prompt": "prompt",
+          "seed": "seed"
+        },
+        "fixed": {
+          "randomize_seed": false,
+          "width": 768,
+          "height": 1344,
+          "num_inference_steps": 4
+        }
+      },
+      "edit": {
+        "space": "black-forest-labs/FLUX.1-Kontext-Dev",
+        "api_name": "/infer",
+        "map": {
+          "image": "input_image",
+          "prompt": "prompt",
+          "seed": "seed"
+        },
+        "fixed": {
+          "randomize_seed": false,
+          "guidance_scale": 2.5,
+          "steps": 28
+        }
+      },
+      "video": {
+        "space": "multimodalart/wan-2-2-first-last-frame",
+        "api_name": "/generate_video",
+        "map": {
+          "start_image": "start_image_pil",
+          "end_image": "end_image_pil",
+          "prompt": "prompt",
+          "negative": "negative_prompt",
+          "seed": "seed",
+          "duration": "duration_seconds"
+        },
+        "fixed": {
+          "randomize_seed": false,
+          "steps": 8
+        }
+      },
+      "checked": "2026-10-30: параметры сверены по /gradio_api/info каждого Space"
+    },
+    "inbox": {
+      "prices_usd": {
+        "image": 0,
+        "edit": 0,
+        "video_per_second": 0
+      },
+      "note": "файлы кладет Claude через коннектор или человек вручную. Бесплатно только в пределах бесплатных тарифов коннекторов: перед генерацией проверить остаток кредитов",
+      "daily_limits": {
+        "image": 10,
+        "edit": 20,
+        "video": 6
+      }
+    },
+    "fal": {
+      "api_key_env": "FAL_KEY",
+      "image_model": "fal-ai/nano-banana",
+      "edit_model": "fal-ai/nano-banana/edit",
+      "video_model": "fal-ai/kling-video/v2.6/pro/image-to-video",
+      "video_duration_s": 5,
+      "prices_usd": {
+        "image": 0.0398,
+        "edit": 0.0398,
+        "video_per_second": 0.07
+      },
+      "prices_checked": "2026-10-30, страницы моделей на fal.ai; перед запуском сверить",
+      "note": "ПЛАТНЫЙ. Работает только при allow_paid: true"
+    }
+  },
+  "video": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "max_mb": 8,
+    "slow_factor": 2.0,
+    "intro_s": 2.5,
+    "outro_s": 2.5,
+    "font": "Onest",
+    "brand_bg": "#F4F0E8",
+    "brand_fg": "#1E2533",
+    "accent": "#C6E84B"
+  },
+  "qa": {
+    "angle_tolerance_deg": 10,
+    "min_detection_rate": 0.9,
+    "min_landmark_visibility": 0.3,
+    "bone_ratio_max_dev": 0.3,
+    "max_anomaly_frame_share": 0.05,
+    "max_jump_body_share": 0.15,
+    "cycle_tolerance_share": 0.15,
+    "move_min_share": 0.5,
+    "move_max_share": 1.25
+  }
+}

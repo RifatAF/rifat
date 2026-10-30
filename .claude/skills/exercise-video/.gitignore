@@ -1,0 +1,6 @@
+work/
+out/
+.venv/
+models/
+__pycache__/
+manifest.json.lock

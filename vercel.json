@@ -28,7 +28,7 @@
    ]
   },
   {
-   "source": "/(models|voice|img)/(.*)",
+   "source": "/(models|voice|img|video)/(.*)",
    "headers": [
     {
      "key": "Cache-Control",

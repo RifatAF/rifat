@@ -1,0 +1,10 @@
+{
+  "ai_label": "Видео создано ИИ",
+  "intro_reps": "{reps} {reps_word} в ролике",
+  "intro_tempo": "Темп: {tempo}",
+  "rep_counter": "Повтор {i} из {n}",
+  "slow_title": "Медленно: {label}",
+  "mistake_prefix": "Избегайте: ",
+  "outro_lines": ["Двигайтесь без боли", "Дискомфорт: остановитесь", "Противопоказания в карточке"],
+  "brand": "BodyPassport"
+}

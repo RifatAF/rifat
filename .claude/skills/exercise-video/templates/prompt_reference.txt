@@ -1,0 +1,1 @@
+Photorealistic studio photo for an exercise instruction library. {person}. Wearing {outfit}. Standing on {floor}. Background: {background}. Lighting: {light}. Camera: {camera}. {view_clause} Pose: standing upright, relaxed, arms along the body. Anatomically correct body, natural proportions, exactly two arms and two legs, one person only. No text, no watermark, no logo.
