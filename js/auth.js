@@ -59,6 +59,9 @@ export async function setRole(role) { me = (await post('role', { role })).user; 
 export async function logout() { await post('logout').catch(() => {}); me = null; }
 export async function deleteAccount() { await post('delete'); me = null; }
 export async function betaUsers() { return (await post('users')).users; }
+// калибровка включается в «Администрировании»; выключена: ни анкет, ни отправки пар и случаев
+export const calibOn = () => configSync().calib === true;
+export async function setCalibMode(calib) { const j = await post('calibmode', { calib }); cfg = { ...(cfg || {}), calib: j.calib }; return j.calib; }
 export async function setAppMode(beta) { const j = await post('appmode', { beta }); cfg = { ...(cfg || {}), beta: j.beta }; return j.beta; }
 
 /** Пускает дальше, если человек вошел. Если вход на сайте еще не настроен или сервер недоступен, не блокирует. */

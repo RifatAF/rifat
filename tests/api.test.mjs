@@ -293,6 +293,9 @@ test('анкета беты при выходе: оценка, цель, тру�
 test('калибровка: отправляет только вошедший, без имени в пути, список и файлы только админу', async () => {
   const calib = (await import(R + 'calib.js')).default; user('t_1', 'specialist'); user('t_5', 'specialist');
   const body = JSON.stringify({ app: 'x.app', case: { caseId: 'abc', expert: { labels: [{ muscle: 'calf', side: 'LEFT', state: 'WEAK' }] }, assessments: [{ protocol: 'full' }] } });
+  SESS.APP.calib = false; SESS.APP.at = Date.now();
+  assert.equal((await call(calib, { method: 'POST', body, headers: { cookie: cookie('t_5') } })).code, 204, 'калибровка выключена: не принимаем');
+  SESS.APP.calib = true;
   assert.equal((await call(calib, { method: 'POST', body })).code, 401, 'без входа нельзя');
   assert.equal((await call(calib, { method: 'POST', body: '{"case":{}}', headers: { cookie: cookie('t_5') } })).code, 400, 'нужна оценка и тесты');
   assert.equal((await call(calib, { method: 'POST', body, headers: { cookie: cookie('t_5') } })).code, 200);
