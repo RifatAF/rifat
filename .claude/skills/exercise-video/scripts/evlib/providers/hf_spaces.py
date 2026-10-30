@@ -53,8 +53,10 @@ class Provider(Base):
         except Exception as e:
             msg = str(e)
             if QUOTA.search(msg):
-                raise Stop(14, f'Квота бесплатного Space исчерпана ({t["space"]}): {msg[:300]}\n'
-                               f'  Подожди сброса квоты (обычно сутки) или задай бесплатный HF_TOKEN. Деньги не тратятся.')
+                hint = ('квота аккаунта HF: подожди сброса (время в сообщении выше), готовое возьмется из кэша'
+                        if os.environ.get(self.pcfg.get('api_key_env', 'HF_TOKEN')) else
+                        'анонимная квота: задай бесплатный HF_TOKEN или подожди сброса')
+                raise Stop(14, f'Квота бесплатного Space исчерпана ({t["space"]}): {msg[:300]}\n  {hint}. Деньги не тратятся.')
             raise Stop(7, f'Space {t["space"]} ответил ошибкой: {msg[:500]}')
         first = res[0] if isinstance(res, (list, tuple)) else res
         if isinstance(first, dict):

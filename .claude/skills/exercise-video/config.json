@@ -33,7 +33,7 @@
         "edit": 20,
         "video": 12
       },
-      "limits_note": "ZeroGPU: дневная квота GPU на аккаунт (без токена меньше). Лимиты выше: наш предохранитель, чтобы не сжечь квоту за раз.",
+      "limits_note": "ZeroGPU: бесплатный аккаунт получает несколько минут GPU в сутки (2026-10-30: хватило на эталон и 3 правки позы), без токена меньше, PRO 25 мин. Реально: одно упражнение за 1-2 дня. daily_limits: наш предохранитель",
       "image": {
         "space": "black-forest-labs/FLUX.1-schnell",
         "api_name": "/infer",
@@ -60,7 +60,8 @@
           "randomize_seed": false,
           "guidance_scale": 2.5,
           "steps": 28
-        }
+        },
+        "alt": "Qwen/Qwen-Image-Edit (/infer: image, prompt, seed; fixed: true_guidance_scale 4, num_inference_steps 30, rewrite_prompt false): точнее меняет позу, но просит 240 с GPU, это почти вся бесплатная дневная квота"
       },
       "video": {
         "space": "multimodalart/wan-2-2-first-last-frame",
