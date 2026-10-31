@@ -576,7 +576,7 @@ async function drawMeasure(cv, x, view, ms, compact = false, nums = true) {
     const axp = pi.reduce((s, i) => s + X(i), 0) / pi.length; let ayp = pi.reduce((s, i) => s + Y(i), 0) / pi.length, isOut = out.has(k);
     const v = `${num(m.v)}${m.unit.trim() === '°' ? '°' : m.unit.includes('см') ? ' см' : '%'}`;
     // в пределах погрешности: короткая зеленая пилюля «Плечи 0,8°» без пояснения
-    if (!isOut && compact) return; // «было → стало»: два узких фото, только отклонения
+    if (m.suspect || (!isOut && compact)) return; // невозможное значение не подписываем зеленым «в пределах» // «было → стало»: два узких фото, только отклонения
     const tv = isOut ? v : `${name} ${v}`; g.font = `600 ${(isOut ? 15 : 13) * d}px ${MONO}`; const vw = g.measureText(tv).width + 20 * d;
     g.font = `500 ${12 * d}px ${SANS}`; const sub = m.dir.replace(' (переразгибание)', '').replace(' (согнуто)', '').replace(' сторона', '');
     // текст под значением переносится по словам, чтобы подпись помещалась в поле сбоку от тела
@@ -623,10 +623,8 @@ function planBlock(zones, open = new Set()) {
 /** «Проверьте замер»: значения вне физиологии (не учтены) и расхождение правого и левого бока больше двух погрешностей
  *  (снимок не строго в профиль или поворот головы). Такие места специалист смотрит до выводов. */
 const checkCard = by => { const f = v => String(Math.abs(v)).replace('.', ','), rows = [];
-  for (const v of VIEWS) for (const m of by[v.id] || []) if (m.suspect) rows.push(/^squatKnee/.test(m.key)
-    // глубокий присед или колени наружу: спереди в угол попадает сгибание колена, а не его ось; точки при этом верные
-    ? `${esc(m.name)}: <span class="mono">${f(m.v)}°</span>. Это не ось: присед глубже половины или колени разведены наружу, и на фото спереди в угол попадает сгибание. Не учтено. Для оси: полуприсед, стопы и колени смотрят вперед`
-    : `${esc(m.name)}: <span class="mono">${f(m.v)}${m.unit.trim() === '°' ? '°' : ' ' + m.unit.trim()}</span> вне физиологии, не учтено. Проверьте точки или переснимите`);
+  for (const v of VIEWS) for (const m of by[v.id] || []) // колено в глубоком приседе: угол спереди — сгибание, а не ось; молча не учитываем, карточку не показываем
+  if (m.suspect && !/^squatKnee/.test(m.key)) rows.push(`${esc(m.name)}: <span class="mono">${f(m.v)}${m.unit.trim() === '°' ? '°' : ' ' + m.unit.trim()}</span> вне физиологии, не учтено. Проверьте точки или переснимите`);
   for (const k of ['headForward', 'shoulderShift', 'hipShift', 'kneeHyper']) { const r = (by.right || []).find(m => m.key === k), l = (by.left || []).find(m => m.key === k);
     if (r && l && !r.suspect && !l.suspect && Math.abs(r.v - l.v) > 2 * r.err) rows.push(`${esc(r.name)}: справа <span class="mono">${f(r.v)}</span>, слева <span class="mono">${f(l.v)}</span>${r.unit.trim() === '°' ? '°' : ' ' + r.unit.trim()}. Бока расходятся: снимок не строго в профиль или поворот. В расчете среднее`); }
   return rows.length ? `<div class="card" style="padding:12px 16px;border:1px solid var(--short-t,#FF9F0A)"><b style="font-size:15px">Проверьте замер</b>${rows.map(t => `<p class="sub" style="font-size:13px;line-height:1.4;margin-top:6px">${t}</p>`).join('')}</div>` : ''; };
