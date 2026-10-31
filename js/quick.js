@@ -343,10 +343,13 @@ const zSpots = zones => zones.map(z => ({ ...z, key: z.key || z.id + ':' + z.sid
 // Слабая: укрепить ее и расслабить того, кто ее перегружает (ягодицы → сгибатели бедра), затем в движении.
 // Круги: сначала главное для каждой зоны, потом пары, потом движение; одна мышца с двух сторон идет парой упражнений.
 export function chainEx(zones, max = 8) {
-  const ex = id => C.exercises[id], out = [], why = {}, groups = new Map(), ORD = { SHORT: 0, WEAK: 1, HYPER: 2 };
+  const ex = id => C.exercises[id], out = [], why = {}, rank = {}, groups = new Map(), ORD = { SHORT: 0, WEAK: 1, HYPER: 2 };
   for (const z of zones || []) { const k = z.id + ':' + z.k; if (!groups.has(k)) groups.set(k, { id: z.id, k: z.k, sides: new Set() }); groups.get(k).sides.add(z.side === 'RIGHT' ? 'right' : 'left'); }
   const nm = id => ((C.muscles[id] || {}).name || id).toLowerCase(), rounds = [[], [], []];
-  for (const g of [...groups.values()].sort((a, b) => ORD[a.k] - ORD[b.k])) { const m = C.muscles[g.id]; if (!m) continue;
+  // зажатые и слабые по очереди: в домашку попадают и расслабление, и активация, даже когда зон много (протокол базы коррекции)
+  const gs = [...groups.values()].sort((a, b) => ORD[a.k] - ORD[b.k]), sw = gs.filter(g => g.k !== 'WEAK'), wk = gs.filter(g => g.k === 'WEAK'), mixed = [];
+  for (let i = 0; i < Math.max(sw.length, wk.length); i++) { if (sw[i]) mixed.push(sw[i]); if (wk[i]) mixed.push(wk[i]); }
+  for (const g of mixed) { const m = C.muscles[g.id]; if (!m) continue;
     const p = m.plan || {}, ant = m.antagonist && C.muscles[m.antagonist];
     if (g.k === 'WEAK') { rounds[0].push([g, [...(p.isolate || []), ...(m.activate || [])], `${nm(g.id)}: укрепить`]);
       const subs = (p.subs || []).filter(x => C.muscles[x]).slice(0, 1).map(nm); rounds[1].push([g, p.release || [], subs.length ? `${subs.join(', ')}: расслабить, работает вместо «${nm(g.id)}»` : `${nm(g.id)}: снять перегруз`]); rounds[2].push([g, p.integrate || [], `${nm(g.id)}: в движении`]); }
@@ -356,8 +359,9 @@ export function chainEx(zones, max = 8) {
       else if (g.k === 'HYPER') rounds[1].push([g, m.activate || [], `${nm(g.id)}: мягко укрепить`]); } }
   for (const r of rounds) for (const [g, list, reason] of r) for (const x of list) {
     const ids = [...g.sides].map(sd => x.replace('{s}', sd)).filter((id, i, l) => ex(id) && l.indexOf(id) === i); if (!ids.length) continue;
-    const add = ids.filter(id => !out.includes(id)); if (add.length && out.length + add.length <= max) { out.push(...add); add.forEach(id => { why[id] = reason; }); } break; }
-  return { ids: out, why };
+    const add = ids.filter(id => !out.includes(id)); if (add.length && out.length + add.length <= max) { out.push(...add); add.forEach(id => { why[id] = reason; rank[id] = r === rounds[2] ? 2 : /расслабить|снять/.test(reason) ? 0 : 1; }); } break; }
+  // порядок занятия: сначала расслабить зажатые, затем активировать слабые, в конце движение
+  return { ids: out.map((id, i) => [id, i]).sort((x, y) => (rank[x[0]] - rank[y[0]]) || x[1] - y[1]).map(x => x[0]), why };
 }
 const autoEx = a => chainEx((a.quick || {}).zones || []).ids;
 export const hwEx = a => (a.plan && Array.isArray(a.plan.ex) && a.plan.ex.length ? a.plan.ex : autoEx(a)).filter(id => C.exercises[id]).slice(0, 8);
@@ -546,7 +550,7 @@ function planBlock(zones, open = new Set()) {
       <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">${Object.keys(ZST).map(k => `<button class="pill" data-pk="${k}" style="height:32px;font-size:12px;padding:0 10px;${k === z.k ? `color:${ZCOL[k]};border-color:${ZCOL[k]};font-weight:600` : 'opacity:.7'}">${ZST[k]}</button>`).join('')}<span style="flex:1"></span><button class="round" data-px aria-label="Убрать зону" style="width:32px;height:32px">${ic('x', 's')}</button></div></details>`; });
   return `<div class="card" style="padding:12px 16px 12px"><div class="row"><b style="flex:1">План</b><span class="sub" style="font-size:12px">${rows.length ? 'гипотеза, проверьте руками' : ''}</span></div>
     ${rows.join('') || '<div class="sub" style="font-size:14px;padding:8px 0">По замеру выраженных зон нет</div>'}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><button class="btn line" id="qadd" style="height:44px;font-size:15px">${ic('plus', 's')}Зона</button><button class="btn line" id="qauto" style="height:44px;font-size:15px">${ic('rotate-ccw', 's')}По замеру</button></div></div>`;
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px"><button class="btn line" id="qadd" style="height:44px;font-size:14px;padding:0 6px">${ic('plus', 's')}Зона</button><button class="btn line" id="qtpl" style="height:44px;font-size:14px;padding:0 6px">${ic('file-text', 's')}Шаблон</button><button class="btn line" id="qauto" style="height:44px;font-size:14px;padding:0 6px">${ic('rotate-ccw', 's')}Замер</button></div></div>`;
 }
 /** Что видно: показатели вне погрешности, самые заметные первыми; значение и погрешность моноширинным. */
 const obsRows = by => { const r = []; for (const v of VIEWS) for (const m of by[v.id] || []) if (m.dir !== 'в пределах погрешности') r.push({ v, m, sc: Math.abs(m.v) / m.err });
@@ -574,6 +578,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
       el.querySelectorAll('[data-pk]').forEach(b => b.onclick = () => { const k = b.dataset.pk; if (k === gk) return; st.zones.forEach(z => { if (mine(z)) z.k = k; }); opened.delete(key); opened.add(gid + ':' + k); changed(); });
       el.querySelector('[data-px]').onclick = () => { st.zones = st.zones.filter(z => !mine(z)); opened.delete(key); changed(); }; });
     $h('#qauto').onclick = () => { if (st.zones.length && !confirm('Заменить зоны подсказкой по замеру? Ваши правки зон пропадут.')) return; st.zones = zonesOf(summaryOf(st.by, st.h === 170 ? 0 : st.h)); changed(); toast('Зоны пересчитаны'); };
+    $h('#qtpl').onclick = () => patternSheet(zs => { const rest = st.zones.filter(x => !zs.some(z => x.id === z.id && x.side === z.side)); st.zones = [...rest, ...zs]; changed(); toast('Шаблон добавлен в план'); });
     $h('#qadd').onclick = () => addZone(zs => { const rest = st.zones.filter(x => !zs.some(z => x.id === z.id && x.side === z.side)); if (new Set([...rest, ...zs].map(z => z.id)).size > 20) return toast('Не больше 20 мышц'); st.zones = [...rest, ...zs]; changed(); }); };
   const changed = () => { if (v3) v3.update(zSpots(st.zones)); plan(); onChange(st); };
   plan();
@@ -610,6 +615,25 @@ function results() {
   $('#qshow').onclick = () => { keep(); showClient(st, Q.client.nocard ? '' : Q.client.name); };
   $('#back').onclick = () => { keep(); editor(3); };
   $('#qsave').onclick = async () => { keep(); const id = await save(); if (id) report(id); };
+}
+/** Шаблоны из базы коррекции специалиста (data/patterns.json): паттерн → зажатые и слабые мышцы. Только в кабинете. */
+let patterns = null;
+async function patternSheet(onAdd) {
+  try { patterns = patterns || (await (await fetch('data/patterns.json')).json()).patterns; } catch (e) { return toast('Шаблоны не загрузились, проверьте сеть'); }
+  const d = document.createElement('div'); d.className = 'sheet'; let side = 'RIGHT';
+  const nm = id => esc(((C.muscles[id] || {}).name || id).toLowerCase());
+  d.innerHTML = `<div style="max-height:86dvh;overflow:auto"><h2 style="font-size:20px">Шаблон</h2><p class="sub" style="font-size:13px;margin-top:4px">Из вашей базы коррекции. Добавит зоны в план, клиент увидит только задачи.</p>
+    <div class="group" style="margin-top:12px">${patterns.map((p, i) => `<button class="row-link" data-pt="${i}" style="text-align:left"><span style="flex:1"><b style="font-weight:600">${esc(p.name)}</b><br><small class="sub" style="font-size:12px">Расслабить: ${p.tight.map(nm).join(', ')}<br>Укрепить: ${p.weak.map(nm).join(', ')}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>
+    <div id="ptside" style="display:none;margin-top:12px"><b style="font-size:15px">Где зажато (доминирующая сторона)?</b><div class="seg" style="margin-top:8px"><button data-sd="RIGHT" class="on">Справа</button><button data-sd="LEFT">Слева</button></div><button class="btn" id="ptok" style="margin-top:10px">Добавить</button></div>
+    <button class="btn ghost" id="ptx" style="margin-top:8px;border:0">Отмена</button></div>`;
+  document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'ptx') d.remove(); };
+  const both = ['RIGHT', 'LEFT'], opp = s => s === 'RIGHT' ? 'LEFT' : 'RIGHT';
+  const apply = p => { const zs = []; const put = (id, k, sds) => { if (C.muscles[id]) for (const sd of sds) zs.push({ id, side: sd, k, key: id + ':' + sd }); };
+    p.tight.forEach(id => put(id, 'SHORT', p.lateral ? [side] : both)); p.weak.forEach(id => put(id, 'WEAK', p.lateral ? [opp(side)] : both));
+    track('pattern_add', { c: p.id }, false); d.remove(); onAdd(zs); };
+  d.querySelectorAll('[data-sd]').forEach(b => b.onclick = () => { side = b.dataset.sd; d.querySelectorAll('[data-sd]').forEach(x => x.classList.toggle('on', x === b)); });
+  d.querySelectorAll('[data-pt]').forEach(b => b.onclick = () => { const p = patterns[+b.dataset.pt]; if (!p.lateral) return apply(p);
+    d.querySelector('#ptside').style.display = ''; d.querySelector('#ptok').onclick = () => apply(p); d.querySelector('#ptside').scrollIntoView({ block: 'nearest' }); });
 }
 function addZone(onAdd) {
   const ids = Object.keys(C.muscles).filter(id => C.muscles[id].name).sort((a, b) => C.muscles[a].name.localeCompare(C.muscles[b].name, 'ru'));

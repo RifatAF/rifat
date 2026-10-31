@@ -1,0 +1,99 @@
+{
+ "version": "v1",
+ "source": "База биомеханической коррекции (Р. Айупов)",
+ "note": "Только для кабинета специалиста. Клиент видит задачи, без названия паттерна и связи с болью.",
+ "patterns": [
+  {
+   "id": "low_back",
+   "name": "Поясница: передний наклон таза",
+   "tight": [
+    "iliopsoas",
+    "rectus_fem",
+    "adductors"
+   ],
+   "weak": [
+    "glute_max",
+    "hamstrings",
+    "abdominals"
+   ]
+  },
+  {
+   "id": "sway",
+   "name": "Заваливание животом вперед (sway back)",
+   "tight": [
+    "hamstrings"
+   ],
+   "weak": [
+    "iliopsoas",
+    "transversus"
+   ]
+  },
+  {
+   "id": "pelvis_rot",
+   "name": "Скрученный таз",
+   "lateral": true,
+   "tight": [
+    "ql",
+    "obliques"
+   ],
+   "weak": [
+    "ql",
+    "obliques"
+   ]
+  },
+  {
+   "id": "neck",
+   "name": "Шея: голова вперед",
+   "tight": [
+    "pec_minor",
+    "pec_major",
+    "suboccipital",
+    "upper_trap"
+   ],
+   "weak": [
+    "rhomboid",
+    "lats",
+    "lower_trap",
+    "deep_neck_flex"
+   ]
+  },
+  {
+   "id": "shoulder",
+   "name": "Плечо: импинджмент, щелчки",
+   "tight": [
+    "pec_major",
+    "subscapularis",
+    "lats"
+   ],
+   "weak": [
+    "infraspinatus",
+    "serratus"
+   ]
+  },
+  {
+   "id": "knee",
+   "name": "Колено: нарушение трекинга",
+   "tight": [
+    "calf",
+    "tfl",
+    "vastus_lat"
+   ],
+   "weak": [
+    "vmo",
+    "adductors"
+   ]
+  },
+  {
+   "id": "flat_foot",
+   "name": "Плоскостопие: завал стопы внутрь",
+   "tight": [
+    "peroneus",
+    "calf"
+   ],
+   "weak": [
+    "tib_post",
+    "foot_intrinsic"
+   ]
+  }
+ ]
+}
