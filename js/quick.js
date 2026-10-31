@@ -177,7 +177,7 @@ function review(i, single) {
 const LINES = { front: [[P.L_EAR, P.R_EAR], [P.L_SHOULDER, P.R_SHOULDER], [P.L_HIP, P.R_HIP], [P.L_HIP, P.L_KNEE], [P.L_KNEE, P.L_ANKLE], [P.R_HIP, P.R_KNEE], [P.R_KNEE, P.R_ANKLE]],
   right: [[P.R_EAR, P.R_SHOULDER], [P.R_SHOULDER, P.R_HIP], [P.R_HIP, P.R_KNEE], [P.R_KNEE, P.R_ANKLE]], left: [[P.L_EAR, P.L_SHOULDER], [P.L_SHOULDER, P.L_HIP], [P.L_HIP, P.L_KNEE], [P.L_KNEE, P.L_ANKLE]] };
 LINES.back = LINES.front; LINES.squat = LINES.front.slice(1);
-let showGrid = localStorage.getItem('bp_q_grid') === '1', showPlumb = localStorage.getItem('bp_q_plumb') !== '0';
+let showGrid = localStorage.getItem('bp_q_grid') === '1', showNums = localStorage.getItem('bp_q_nums') !== '0', showPlumb = localStorage.getItem('bp_q_plumb') !== '0';
 function editor(i) {
   const v = VIEWS[i], x = Q.views[v.id];
   if (!x) { if (Q.editId) return; return shoot(i, true); }
@@ -342,7 +342,7 @@ const DAYMS = 864e5;
 /** Блок в карточке клиента: что задано, дошло ли до клиента, как он занимается. */
 let pulledAt = 0;
 async function hwBlock(host, aid) {
-  const a = await row('assessments', aid), c = await row('clients', a.clientId), ids = hwEx(a), hw = c.hw || null, why = chainEx((a.quick || {}).zones || []).why;
+  const a = await row('assessments', aid), c = await row('clients', a.clientId), ids = hwEx(a), hw = c.hw || null;
   const since = hw ? hw.at : Date.now() - 14 * DAYMS, log = ((c.progress && c.progress.vas) || []).filter(r => r.t >= since - DAYMS);
   const days = new Set(log.filter(r => (r.n || 0) > 0).map(r => new Date(r.t).toDateString())).size, pp = log.filter(r => r.pre != null && r.post != null);
   const avg = k => (pp.reduce((x, r) => x + r[k], 0) / pp.length).toFixed(1).replace('.', ',');
@@ -350,12 +350,12 @@ async function hwBlock(host, aid) {
   const when = t => `${_pro.fmtDate(t)}, ${new Date(t).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}`;
   const plural = n => n % 10 === 1 && n % 100 !== 11 ? 'день' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'дня' : 'дней';
   // статус говорит только то, что известно: ссылку создали, клиент открыл, версия у него актуальная
-  const status = !hw ? 'Ещё не передана клиенту.'
-    : !hw.seen ? `<span class="mark WEAK"></span> Ссылка готова, клиент ещё не открывал. Передайте её: QR при встрече или в мессенджер.`
+  const status = !hw ? 'Не передана клиенту'
+    : !hw.seen ? `<span class="mark WEAK"></span> Ссылка готова, клиент ещё не открывал`
     : `<span class="mark OK"></span> Клиент открыл ${when(hw.seen)}${fresh ? ', видит последнюю версию' : '. Новая версия появится у него, когда он откроет приложение'}.`;
   host.innerHTML = `<div class="eyebrow">Домашнее задание</div>
     <div class="card" style="display:flex;flex-direction:column;gap:10px">
-      ${ids.length ? exRows(ids).map((e, n) => `<div class="row" style="font-size:15px;gap:10px;align-items:baseline"><b class="mono" style="color:var(--sub);width:18px">${n + 1}</b><span style="flex:1;min-width:0">${esc(e.title.split(' (')[0])}<small class="sub" style="display:block;font-size:12px;line-height:1.35">${esc([e.dose, why[e.id]].filter(Boolean).join(' · '))}</small></span></div>`).join('') : '<p class="sub" style="font-size:14px">Пока пусто: отметьте зоны или выберите упражнения сами.</p>'}
+      ${ids.length ? exRows(ids).map((e, n) => `<div class="row" style="font-size:15px;gap:10px;align-items:baseline"><b class="mono" style="color:var(--sub);width:18px">${n + 1}</b><span style="flex:1;min-width:0">${esc(e.title.split(' (')[0])}<small class="sub" style="display:block;font-size:12px;line-height:1.35">${esc(e.dose || '')}</small></span></div>`).join('') : '<p class="sub" style="font-size:14px">Пока пусто: отметьте зоны или выберите упражнения сами.</p>'}
       ${c.demo ? '<p class="sub" style="font-size:12px">Это пример. Настоящему клиенту домашка передается ссылкой или QR-кодом.</p>' : c.nocard ? '<p class="sub" style="font-size:12px">Чтобы передать домашку, заведите карточку клиента.</p>' : `<p class="sub" style="font-size:13px;line-height:1.45">${status}${diff ? '<br><b style="color:var(--short-t)">Вы изменили список: нажмите «Обновить у клиента».</b>' : ''}${hw && hw.seen ? `<br>Занимался ${days} ${plural(days)} из ${Math.max(1, Math.ceil((Date.now() - hw.at) / DAYMS))}${pp.length ? ` · боль до ${avg('pre')}, после ${avg('post')}` : ''}` : ''}</p>`}
       <div style="display:flex;flex-direction:column;gap:8px">${c.nocard || c.demo ? '' : `<button class="btn" id="hwgo" ${ids.length ? '' : 'disabled'}>${ic(diff ? 'rotate-ccw' : 'share', 's')}${!hw ? 'Передать клиенту' : diff ? 'Обновить у клиента' : 'Передать ещё раз'}</button>`}<button class="btn line" id="hwed">${ic('pencil', 's')}Изменить список</button></div>
     </div>`;
@@ -436,7 +436,7 @@ const SIDE_PT = { right: { [P.L_EAR]: P.R_EAR, [P.L_SHOULDER]: P.R_SHOULDER, [P.
 const loadedImg = new Map();
 const imgOf = src => { if (!loadedImg.has(src)) loadedImg.set(src, new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; })); return loadedImg.get(src); };
 /** Фото вида с замерами. x: { photo, w, h, pts }, ms: показатели этого вида (quick-metrics). Холст 4:5, тело по центру. */
-async function drawMeasure(cv, x, view, ms, compact = false) {
+async function drawMeasure(cv, x, view, ms, compact = false, nums = true) {
   const im = x && x.photo ? await imgOf(x.photo) : null; if (!im || !cv.isConnected) return false;
   try { await Promise.all([document.fonts.load(`600 20px ${MONO}`), document.fonts.load(`500 20px ${SANS}`)]); } catch (e) {}
   // компактно (два фото рядом): холст крупнее при тех же размерах подписей, поэтому подписи относительно мельче
@@ -465,54 +465,62 @@ async function drawMeasure(cv, x, view, ms, compact = false) {
   hot.squat = { [P.L_HIP + ':' + P.R_HIP]: 'squatPelvis', [P.R_HIP + ':' + P.R_KNEE]: 'squatKneeR', [P.R_KNEE + ':' + P.R_ANKLE]: 'squatKneeR', [P.L_HIP + ':' + P.L_KNEE]: 'squatKneeL', [P.L_KNEE + ':' + P.L_ANKLE]: 'squatKneeL' };
   for (const [a, b] of LINES[view]) { const k = (hot[view] || {})[a + ':' + b], on = k && out.has(k);
     g.save(); g.shadowColor = on ? 'rgba(255,159,10,.7)' : 'rgba(14,165,233,.7)'; g.shadowBlur = 6 * d; g.strokeStyle = on ? AM : CY; g.lineWidth = 1.5 * d; g.beginPath(); g.moveTo(X(a), Y(a)); g.lineTo(X(b), Y(b)); g.stroke(); g.restore(); }
-  for (const i of ids) { g.beginPath(); g.arc(X(i), Y(i), 5.5 * d, 0, 7); g.fillStyle = 'rgba(14,165,233,.25)'; g.fill(); g.beginPath(); g.arc(X(i), Y(i), 3 * d, 0, 7); g.fillStyle = '#E0F2FE'; g.fill(); g.lineWidth = 1.5 * d; g.strokeStyle = CY; g.stroke(); }
+  const dots = () => { for (const i of ids) { g.beginPath(); g.arc(X(i), Y(i), 5.5 * d, 0, 7); g.fillStyle = 'rgba(14,165,233,.25)'; g.fill(); g.beginPath(); g.arc(X(i), Y(i), 3 * d, 0, 7); g.fillStyle = '#E0F2FE'; g.fill(); g.lineWidth = 1.5 * d; g.strokeStyle = CY; g.stroke(); } };
   // подписи: значение моноширинным в пилюле, под ней что это; по очереди слева и справа от тела
-  const placed = []; let side = 0;
+  const placed = [], ptsXY = ids.map(i => [X(i), Y(i)]); let side = 0;
+  // тело по ширине (точки плюс запас на руки): подписи стараемся класть в поля слева и справа от него
+  const bxs = ptsXY.map(q => q[0]), bpad = (Math.max(...bxs) - Math.min(...bxs)) * .3 + 10 * d, body = { l: Math.min(...bxs) - bpad, r: Math.max(...bxs) + bpad }, margin = { l: body.l, r: W - body.r };
   // голова: подписи не кладем на лицо, а ставим над головой (или под подбородком, если сверху мало места)
   const hp = [P.NOSE, P.L_EAR, P.R_EAR].filter(i => pts[i]), span = Math.max(...ids.map(Y)) - Math.min(...ids.map(Y));
   const hx = hp.reduce((a, i) => a + X(i), 0) / hp.length, hy = hp.reduce((a, i) => a + Y(i), 0) / hp.length;
   const head = { l: hx - span * .08, r: hx + span * .08, t: hy - span * .09, b: hy + span * .08 };
-  const offHead = (lx, ly, w, h) => { if (lx > head.r || lx + w < head.l || ly > head.b || ly + h < head.t) return ly;
-    return head.t - h - 6 * d >= 8 * d ? head.t - h - 6 * d : head.b + 6 * d; };
   const label = (k, m) => { const [pp, name] = ANCHOR[k] || []; if (!pp) return; const pi = pp.map(i => (SIDE_PT[view] || {})[i] ?? i);
     const axp = pi.reduce((s, i) => s + X(i), 0) / pi.length; let ayp = pi.reduce((s, i) => s + Y(i), 0) / pi.length, isOut = out.has(k);
     const v = `${num(m.v)}${m.unit.trim() === '°' ? '°' : m.unit.includes('см') ? ' см' : '%'}`;
-    // в пределах погрешности: тихая пилюля «Плечи · в пределах» с зеленой точкой, без цифр
-    // в пределах погрешности подписи нет: на фото только то, на что стоит посмотреть (меньше цифр, глаз не сбивается)
+    // в пределах погрешности подписи нет: на фото только то, на что стоит посмотреть
     if (!isOut) return;
-    if (!isOut) { g.font = `500 ${12 * d}px ${SANS}`; const t = `${name} · в пределах`, tw = g.measureText(t).width + 30 * d, lft = side++ % 2 === 0 ? axp > W / 2 : axp <= W / 2;
-      let tx = lft ? 12 * d : W - tw - 12 * d, ty = ayp - 12 * d; for (const p of placed) if (Math.abs(p.y - ty) < 40 * d && p.left === lft) ty = p.y + 42 * d; ty = Math.max(8 * d, Math.min(H - 30 * d, ty)); placed.push({ y: ty, left: lft });
-      g.strokeStyle = 'rgba(255,255,255,.28)'; g.lineWidth = 1 * d; g.beginPath(); g.moveTo(axp, ayp); g.lineTo(lft ? tx + tw : tx, ty + 12 * d); g.stroke();
-      g.fillStyle = 'rgba(28,28,30,.86)'; g.beginPath(); g.roundRect(tx, ty, tw, 24 * d, 12 * d); g.fill(); g.fillStyle = '#30D158'; g.beginPath(); g.arc(tx + 12 * d, ty + 12 * d, 3.5 * d, 0, 7); g.fill();
-      g.fillStyle = '#E5E5EA'; g.textBaseline = 'middle'; g.fillText(t, tx + 21 * d, ty + 12.5 * d); g.textBaseline = 'alphabetic'; return; }
     g.font = `600 ${15 * d}px ${MONO}`; const vw = g.measureText(v).width + 20 * d;
-    g.font = `500 ${12 * d}px ${SANS}`; const sub = isOut ? `${name}: ${m.dir.replace(' (переразгибание)', '').replace(' (согнуто)', '')}` : name, sw = g.measureText(sub).width + 18 * d;
+    g.font = `500 ${12 * d}px ${SANS}`; const sub = m.dir.replace(' (переразгибание)', '').replace(' (согнуто)', '').replace(' сторона', '');
+    // текст под значением переносится по словам, чтобы подпись помещалась в поле сбоку от тела
+    const room = Math.max(vw, 112 * d, Math.min(W * .42, Math.max(margin.l, margin.r) - 18 * d)), wrap = []; for (const w of sub.split(' ')) { const t = wrap.length ? wrap[wrap.length - 1] + ' ' + w : w;
+      if (wrap.length && g.measureText(t).width + 18 * d > room) wrap.push(w); else if (wrap.length) wrap[wrap.length - 1] = t; else wrap.push(w); }
+    const lines = [name, ...wrap];
+    const sw = Math.max(...lines.map(t => g.measureText(t).width)) + 18 * d, subH = (6 + lines.length * 16) * d;
     // колено: подпись со своей стороны, снаружи ноги
-    const bwid = Math.max(vw, sw), left = /nee[RL]$/.test(k) ? axp < W / 2 : side++ % 2 === 0 ? axp > W / 2 : axp <= W / 2; let lx = left ? 12 * d : W - bwid - 12 * d, ly = ayp - 20 * d;
-    for (const p of placed) if (Math.abs(p.y - ly) < (compact ? 30 : 50) * d && p.left === left) ly = p.y + (compact ? 32 : 52) * d; const ly0 = ly; ly = Math.max(8 * d, Math.min(H - 52 * d, offHead(lx, ly, bwid, (compact ? 28 : 53) * d))); placed.push({ y: ly, left });
+    const bwid = Math.max(vw, sw), want = /nee[RL]$/.test(k) ? axp < W / 2 : side++ % 2 === 0 ? axp > W / 2 : axp <= W / 2, hh = compact ? 28 * d : 31 * d + subH;
+    // место подписи: у края кадра, без наложения на точки, другие подписи и лицо; ближе к суставу по высоте
+    let best = null; for (const left of [want, !want]) { const lx = left ? 12 * d : W - bwid - 12 * d;
+      for (let st = -24; st <= 24; st++) { const ly = Math.max(8 * d, Math.min(H - hh - 4 * d, ayp - 20 * d + st * 7 * d)), r = { x: lx - 6 * d, y: ly - 6 * d, w: bwid + 12 * d, h: hh + 12 * d };
+        const hit = (x, y) => x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h;
+        const cost = ptsXY.filter(([x, y]) => hit(x, y)).length * 1000 + placed.filter(p => p.x < r.x + r.w && p.x + p.w > r.x && p.y < r.y + r.h && p.y + p.h > r.y).length * 800
+          + (lx < head.r && lx + bwid > head.l && ly < head.b && ly + hh > head.t ? 600 : 0) + Math.max(0, Math.min(r.x + r.w, body.r) - Math.max(r.x, body.l)) / d * 3 + Math.abs(ly - (ayp - 20 * d)) / d + (left === want ? 0 : 40);
+        if (!best || cost < best.cost) best = { cost, lx, ly, left }; } }
+    const { lx, ly, left } = best, ly0 = ayp - 20 * d; placed.push({ x: lx, y: ly, w: bwid, h: hh });
     // подпись ушла с лица: выноска от макушки или подбородка, а не через лицо
     if (ly !== ly0 && axp > head.l && axp < head.r && ayp > head.t && ayp < head.b) ayp = ly < head.t ? head.t : head.b;
     g.strokeStyle = isOut ? 'rgba(255,159,10,.75)' : 'rgba(255,255,255,.35)'; g.lineWidth = 1 * d; g.beginPath(); g.moveTo(axp, ayp); g.lineTo(left ? lx + bwid : lx, ly + 14 * d); g.stroke();
-    g.fillStyle = isOut ? 'rgba(58,36,6,.92)' : 'rgba(18,48,28,.9)'; g.beginPath(); g.roundRect(lx, ly, vw, 28 * d, 14 * d); g.fill();
+    g.fillStyle = isOut ? 'rgba(58,36,6,.84)' : 'rgba(18,48,28,.84)'; g.beginPath(); g.roundRect(lx, ly, vw, 28 * d, 14 * d); g.fill();
     g.strokeStyle = isOut ? 'rgba(255,159,10,.55)' : 'rgba(48,209,88,.45)'; g.stroke(); g.fillStyle = isOut ? AM : '#30D158'; g.font = `600 ${15 * d}px ${MONO}`; g.textBaseline = 'middle'; g.fillText(isOut ? v : 'в пределах', lx + 10 * d, ly + 14.5 * d);
-    if (isOut && !compact) { g.fillStyle = 'rgba(28,28,30,.88)'; g.beginPath(); g.roundRect(lx, ly + 31 * d, sw, 22 * d, 11 * d); g.fill(); g.fillStyle = '#E5E5EA'; g.font = `500 ${12 * d}px ${SANS}`; g.fillText(sub, lx + 9 * d, ly + 42.5 * d); }
+    if (!compact) { g.fillStyle = 'rgba(28,28,30,.8)'; g.beginPath(); g.roundRect(lx, ly + 31 * d, sw, subH, 11 * d); g.fill(); g.fillStyle = '#E5E5EA'; g.font = `500 ${12 * d}px ${SANS}`; lines.forEach((t, n) => g.fillText(t, lx + 9 * d, ly + (42.5 + n * 16) * d)); }
     g.textBaseline = 'alphabetic'; };
   // сначала вне погрешности (главное), потом остальные
-  for (const m of [...ms].sort((a, b) => (out.has(b.key) ? 1 : 0) - (out.has(a.key) ? 1 : 0))) label(m.key, m);
+  if (nums) for (const m of [...ms].sort((a, b) => (out.has(b.key) ? 1 : 0) - (out.has(a.key) ? 1 : 0))) label(m.key, m);
+  dots(); // точки поверх подписей: специалист всегда видит, куда они поставлены
   return true;
 }
-const HYPCLS = { WEAK: 'g', HYPER: 'm', SHORT: 'a' };
-/** «Что делать»: строка на зону, коротко для специалиста: задача, мышца, цепочка упражнений. Тест руками и техника по касанию. */
-function planBlock(zones) {
-  const g = new Map(); for (const z of zones) { const k = z.id + ':' + z.k; if (!g.has(k)) g.set(k, []); g.get(k).push(z); }
-  const rows = [...g.values()].filter(l => C.muscles[l[0].id]).map(l => { const z = l[0], m = C.muscles[z.id], sd = l.length > 1 ? '' : ' ' + sideRu(z.side);
-    const ex = exRows(chainEx(l, 3).ids).map(e => esc(e.title.split(' (')[0])).join(' → '), more = [m.proTest && `<b>Проверка:</b> ${esc(m.proTest)}`, z.k !== 'WEAK' && m.massage && `<b>Руками:</b> ${esc(m.massage)}`].filter(Boolean);
-    return `<details style="padding:9px 0;border-top:1px solid var(--line-2)"><summary style="display:block;position:relative;padding-right:24px;list-style:none;cursor:pointer;font-size:15px;line-height:1.35"><span style="position:absolute;right:0;top:4px;color:var(--sub)">${ic('chevron-down', 's')}</span><span class="pill" style="font-size:12px;padding:2px 8px;margin-right:6px;color:${TCOL[z.k]};border-color:${TCOL[z.k]}">${TASK[z.k]}</span><b>${esc(zoneName(z))}${sd}</b>${ex ? `<div class="sub" style="font-size:13px;margin-top:3px">${ex}</div>` : ''}</summary>
-      ${more.length ? `<div class="sub" style="font-size:13px;line-height:1.4;margin-top:6px">${more.join('<br>')}</div>` : ''}</details>`; });
-  return rows.length ? `<div class="card" style="padding:12px 16px 4px"><div class="row"><b style="flex:1">Что делать</b><span class="sub" style="font-size:12px">касание: тест и техника</span></div>${rows.join('')}</div>` : '';
+/** «План»: одна строка на мышцу и задачу (стороны вместе): задача, мышца, цепочка упражнений.
+ *  Касание раскрывает тест руками, технику, смену статуса и «Убрать». Заменяет прежние «Что делать», «Гипотезу» и список зон. */
+const zGroups = zones => { const g = new Map(); for (const z of zones) { const k = z.id + ':' + z.k; if (!g.has(k)) g.set(k, []); g.get(k).push(z); } return [...g]; };
+function planBlock(zones, open = new Set()) {
+  const rows = zGroups(zones).map(([key, l]) => { const z = l[0], m = C.muscles[z.id] || {}, sd = l.length > 1 ? '' : ' ' + sideRu(z.side);
+    const ex = m.name ? exRows(chainEx(l, 3).ids).map(e => esc(e.title.split(' (')[0])).join(' → ') : '', more = [m.proTest && `<b>Проверка:</b> ${esc(m.proTest)}`, z.k !== 'WEAK' && m.massage && `<b>Руками:</b> ${esc(m.massage)}`].filter(Boolean);
+    return `<details data-pg="${key}" style="padding:9px 0;border-top:1px solid var(--line-2)"${open.has(key) ? ' open' : ''}><summary style="display:block;position:relative;padding-right:24px;list-style:none;cursor:pointer;font-size:15px;line-height:1.35"><span style="position:absolute;right:0;top:4px;color:var(--sub)">${ic('chevron-down', 's')}</span><span class="pill" style="font-size:12px;padding:2px 8px;margin-right:6px;color:${TCOL[z.k]};border-color:${TCOL[z.k]}">${TASK[z.k]}</span><b>${esc(zoneName(z))}</b><span class="sub">${sd}</span>${ex ? `<div class="sub" style="font-size:13px;margin-top:3px">${ex}</div>` : ''}</summary>
+      ${more.length ? `<div class="sub" style="font-size:13px;line-height:1.4;margin-top:6px">${more.join('<br>')}</div>` : ''}
+      <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">${Object.keys(ZST).map(k => `<button class="pill" data-pk="${k}" style="height:32px;font-size:12px;padding:0 10px;${k === z.k ? `color:${ZCOL[k]};border-color:${ZCOL[k]};font-weight:600` : 'opacity:.7'}">${ZST[k]}</button>`).join('')}<span style="flex:1"></span><button class="round" data-px aria-label="Убрать зону" style="width:32px;height:32px">${ic('x', 's')}</button></div></details>`; });
+  return `<div class="card" style="padding:12px 16px 12px"><div class="row"><b style="flex:1">План</b><span class="sub" style="font-size:12px">${rows.length ? 'гипотеза, проверьте руками' : ''}</span></div>
+    ${rows.join('') || '<div class="sub" style="font-size:14px;padding:8px 0">По замеру выраженных зон нет</div>'}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><button class="btn line" id="qadd" style="height:44px;font-size:15px">${ic('plus', 's')}Зона</button><button class="btn line" id="qauto" style="height:44px;font-size:15px">${ic('rotate-ccw', 's')}По замеру</button></div></div>`;
 }
-/** Карточки «Гипотеза специалиста» по задачам: «Укрепить: …», «Расслабить: …» (как увидит клиент). */
-const hypCards = zones => taskGroups(zones).map(g => `<div><b>Гипотеза специалиста</b><span class="mt-tag ${HYPCLS[g.k]}">${g.t}</span><ul>${g.list.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>`).join('');
 /** Что видно: показатели вне погрешности, самые заметные первыми; значение и погрешность моноширинным. */
 const obsRows = by => { const r = []; for (const v of VIEWS) for (const m of by[v.id] || []) if (m.dir !== 'в пределах погрешности') r.push({ v, m, sc: Math.abs(m.v) / m.err });
   return r.sort((a, b) => b.sc - a.sc).slice(0, 4).map(({ v, m }) => `<div class="row" style="gap:10px;align-items:center;padding:12px 14px;min-height:56px"><span style="flex:1;font-size:15px;line-height:1.3">${m.name}<br><span class="sub" style="font-size:13px">${v.name} · ${m.dir}</span></span><span class="mt-val" style="font-size:15px;white-space:nowrap;color:#FF9F0A">${num(m.v)}${m.unit.trim() === '°' ? '°' : m.unit}</span></div>`).join(''); };
@@ -523,38 +531,36 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
   const hasPh = VIEWS.some(v => photos[v.id] && photos[v.id].pts); let v3 = null, mode = '3d', view = 'front';
   const pose = () => poseOf({ by: st.by, h: st.h || 170 }, st.gain);
   host.innerHTML = `<div class="card" id="qfcard" style="padding:12px">
-      ${hasPh ? `<div class="row" style="justify-content:space-between;gap:8px"><div class="seg" id="qmode" style="width:auto;flex:none"><button data-md="3d" class="on" style="padding:0 18px">3D</button><button data-md="ph" style="padding:0 18px">Фото</button></div><span style="flex:1"></span><button class="pill tog${showGrid ? ' on' : ''}" id="qpgrid" aria-pressed="${showGrid}" style="display:none;height:34px">Сетка</button><span class="mt-tag n" id="qmlbl">Типовая фигура</span></div>` : ''}
+      ${hasPh ? `<div class="row" style="justify-content:space-between;gap:8px"><div class="seg" id="qmode" style="width:auto;flex:none"><button data-md="3d" class="on" style="padding:0 18px">3D</button><button data-md="ph" style="padding:0 18px">Фото</button></div><span style="flex:1"></span><button class="pill tog${showNums ? ' on' : ''}" id="qpnum" aria-pressed="${showNums}" style="display:none;height:34px">Цифры</button><button class="pill tog${showGrid ? ' on' : ''}" id="qpgrid" aria-pressed="${showGrid}" style="display:none;height:34px">Сетка</button><span class="mt-tag n" id="qmlbl">Типовая фигура</span></div>` : ''}
       <div id="q3d" style="height:min(58vh,420px);margin-top:10px"></div><canvas id="qph" style="width:100%;display:none;margin-top:10px;border-radius:22px"></canvas>
       <div class="seg" id="qview" style="margin-top:10px">${VIEWS.filter(v => !v.opt || (photos[v.id] && photos[v.id].pts)).map((v, i) => `<button data-vw="${v.id}" class="${i ? '' : 'on'}" style="padding:0 6px">${v.short || v.name}</button>`).join('')}</div>
       <div id="qgr"><div class="row" style="gap:10px;margin-top:10px"><span class="sub" style="font-size:13px;flex:none">Усилить</span><div class="seg" id="qgain" style="flex:1">${GAINS.map(g => `<button data-g="${g}" class="${g === st.gain ? 'on' : ''}" style="padding:0 6px">×${String(g).replace('.', ',')}</button>`).join('')}</div></div><div id="qplate">${gainPlate(st.gain)}</div></div>
-      <div class="sub" id="qcap" style="font-size:12px;text-align:center;margin-top:8px">Положение на типовой фигуре, а не тело клиента. Цветом отмечены зоны</div></div>
-    <div id="qplan"></div>
-    <div class="mt-hyp" id="qhyp"></div>
-    <div><div class="eyebrow">Зоны · предположение по замеру, проверьте</div><div id="qzl"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><button class="btn line" id="qadd">${ic('plus', 's')}Добавить зону</button><button class="btn line" id="qauto">${ic('rotate-ccw', 's')}Заново по замеру</button></div>
-      <p class="sub" style="font-size:12px;margin-top:6px">Касание по статусу меняет его, крестик убирает зону. Клиент увидит зоны как задачи: «Укрепить», «Расслабить».</p></div>
-    <div><div class="eyebrow">Что видно</div>${out ? `<div class="group" style="padding:0">${obsRows(st.by)}</div>` : '<div class="card" style="font-size:15px">Все значения в пределах погрешности</div>'}</div>
-    <details class="acc"><summary style="font-weight:600;font-size:15px">Все замеры: <span class="mono">${n}</span>, вне погрешности <span class="mono">${out}</span></summary><div style="display:flex;flex-direction:column;gap:12px;margin-top:10px">${VIEWS.filter(v => st.by[v.id]).map(v => `<div><div class="eyebrow">${v.name}</div>${metricRows(st.by[v.id])}</div>`).join('')}</div></details>
+      <div class="sub" id="qcap" style="font-size:12px;text-align:center;margin-top:8px">Типовая фигура, цветом зоны</div></div>
+    <div id="qplan"></div><div class="qslot" style="display:contents"></div>
+    <details class="acc"><summary style="font-weight:600;font-size:15px"><span>Замеры · вне погрешности <span class="mono">${out}</span> из <span class="mono">${n}</span></span></summary><div style="display:flex;flex-direction:column;gap:12px;margin-top:10px">${out ? `<div><div class="eyebrow">Главное</div><div class="group" style="padding:0">${obsRows(st.by)}</div></div>` : ''}${VIEWS.filter(v => st.by[v.id]).map(v => `<div><div class="eyebrow">${v.name}</div>${metricRows(st.by[v.id])}</div>`).join('')}</div></details>
     <p class="mt-cal">Поправка на крен телефона учтена · погрешности замера в методике</p>`;
   const $h = s => host.querySelector(s);
-  const hyp = () => { $h('#qhyp').innerHTML = hypCards(st.zones); $h('#qhyp').style.display = st.zones.length ? '' : 'none'; $h('#qplan').innerHTML = planBlock(st.zones); };
-  const changed = () => { if (v3) v3.update(zSpots(st.zones)); zl(); hyp(); onChange(st); };
-  const zl = () => { $h('#qzl').innerHTML = st.zones.length ? `<div class="group">${st.zones.map((z, i) => `<div class="row" style="gap:10px;min-height:52px;padding:8px 12px"><span style="flex:1;font-size:15px;line-height:1.3">${esc(zoneName(z))} <span class="sub">${sideRu(z.side)}</span></span>
-      <button class="pill" data-zs="${i}" style="color:${ZCOL[z.k]};border-color:${ZCOL[z.k]};font-weight:600">${ZST[z.k]}</button><button class="round" data-zx="${i}" aria-label="Убрать зону" style="width:36px;height:36px">${ic('x', 's')}</button></div>`).join('')}</div>` : '<div class="card sub" style="font-size:14px">По замеру выраженных зон нет</div>';
-    host.querySelectorAll('[data-zs]').forEach(b => b.onclick = () => { const z = st.zones[+b.dataset.zs]; z.k = ZNEXT[z.k]; changed(); });
-    host.querySelectorAll('[data-zx]').forEach(b => b.onclick = () => { st.zones.splice(+b.dataset.zx, 1); changed(); }); };
-  zl(); hyp();
-  const photoView = () => drawMeasure($h('#qph'), photos[view], view, st.by[view] || []).then(ok => { if (!ok && $h('#qph')) { const c = $h('#qph').getContext('2d'); c.clearRect(0, 0, 1e4, 1e4); } });
+  const opened = new Set();
+  const plan = () => { $h('#qplan').innerHTML = planBlock(st.zones, opened);
+    host.querySelectorAll('[data-pg]').forEach(el => { const key = el.dataset.pg, [gid, gk] = key.split(':'), mine = z => z.id === gid && z.k === gk;
+      el.ontoggle = () => el.open ? opened.add(key) : opened.delete(key);
+      el.querySelectorAll('[data-pk]').forEach(b => b.onclick = () => { const k = b.dataset.pk; if (k === gk) return; st.zones.forEach(z => { if (mine(z)) z.k = k; }); opened.delete(key); opened.add(gid + ':' + k); changed(); });
+      el.querySelector('[data-px]').onclick = () => { st.zones = st.zones.filter(z => !mine(z)); opened.delete(key); changed(); }; });
+    $h('#qauto').onclick = () => { if (st.zones.length && !confirm('Заменить зоны подсказкой по замеру? Ваши правки зон пропадут.')) return; st.zones = zonesOf(summaryOf(st.by, st.h === 170 ? 0 : st.h)); changed(); toast('Зоны пересчитаны'); };
+    $h('#qadd').onclick = () => addZone(zs => { const rest = st.zones.filter(x => !zs.some(z => x.id === z.id && x.side === z.side)); if (rest.length + zs.length > 12) return toast('Не больше 12 зон'); st.zones = [...rest, ...zs]; changed(); }); };
+  const changed = () => { if (v3) v3.update(zSpots(st.zones)); plan(); onChange(st); };
+  plan();
+  const photoView = () => drawMeasure($h('#qph'), photos[view], view, st.by[view] || [], false, showNums).then(ok => { if (!ok && $h('#qph')) { const c = $h('#qph').getContext('2d'); c.clearRect(0, 0, 1e4, 1e4); } });
   const setMode = md => { mode = md; host.querySelectorAll('[data-md]').forEach(x => x.classList.toggle('on', x.dataset.md === md));
     $h('#q3d').style.display = md === '3d' ? '' : 'none'; $h('#qph').style.display = md === 'ph' ? 'block' : 'none'; $h('#qgr').style.display = md === '3d' ? '' : 'none';
     if ($h('#qmlbl')) $h('#qmlbl').textContent = md === '3d' ? 'Типовая фигура' : 'Фото клиента';
-    if ($h('#qpgrid')) $h('#qpgrid').style.display = md === 'ph' ? '' : 'none';
-    $h('#qcap').textContent = md === '3d' ? 'Положение на типовой фигуре, а не тело клиента. Цветом отмечены зоны' : 'Подписаны только отклонения больше погрешности. Линия: вертикаль от стоп';
+    for (const id of ['#qpgrid', '#qpnum']) if ($h(id)) $h(id).style.display = md === 'ph' ? '' : 'none';
+    $h('#qcap').textContent = md === '3d' ? 'Типовая фигура, цветом зоны' : 'Касание фото: убрать или показать цифры';
     if (md === 'ph') photoView(); else if (v3) v3.look(view === 'squat' ? 'front' : view); };
   host.querySelectorAll('[data-md]').forEach(b => b.onclick = () => setMode(b.dataset.md));
+  const nums = () => { showNums = !showNums; localStorage.setItem('bp_q_nums', showNums ? '1' : '0'); $h('#qpnum').classList.toggle('on', showNums); $h('#qpnum').setAttribute('aria-pressed', showNums); photoView(); };
+  if ($h('#qpnum')) { $h('#qpnum').onclick = nums; $h('#qph').onclick = nums; }
   if ($h('#qpgrid')) $h('#qpgrid').onclick = () => { showGrid = !showGrid; localStorage.setItem('bp_q_grid', showGrid ? '1' : '0'); $h('#qpgrid').classList.toggle('on', showGrid); $h('#qpgrid').setAttribute('aria-pressed', showGrid); photoView(); };
-  $h('#qauto').onclick = () => { if (st.zones.length && !confirm('Заменить зоны подсказкой по замеру? Ваши правки зон пропадут.')) return; st.zones = zonesOf(summaryOf(st.by, st.h === 170 ? 0 : st.h)); changed(); toast('Зоны пересчитаны'); };
-  $h('#qadd').onclick = () => addZone(zs => { const rest = st.zones.filter(x => !zs.some(z => x.id === z.id && x.side === z.side)); if (rest.length + zs.length > 12) return toast('Не больше 12 зон'); st.zones = [...rest, ...zs]; changed(); });
   host.querySelectorAll('[data-vw]').forEach(b => b.onclick = () => { view = b.dataset.vw; host.querySelectorAll('[data-vw]').forEach(x => x.classList.toggle('on', x === b)); if (mode === 'ph') photoView(); else if (v3) v3.look(view === 'squat' ? 'front' : view); });
   host.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { st.gain = +b.dataset.g; host.querySelectorAll('[data-g]').forEach(x => x.classList.toggle('on', x === b)); $h('#qplate').innerHTML = gainPlate(st.gain); if (v3) v3.pose(pose()); onChange(st); });
   // без WebGL2 3D-фигуры нет: остаются фото с замерами (если есть) или блок прячется
@@ -619,14 +625,13 @@ export async function quickCard(host, aid, prevId) {
   const tool = (id, icon, t, off) => `<button class="tool" id="${id}"${off ? ' disabled style="opacity:.45"' : ''}>${ic(icon)}<span>${t}</span></button>`;
   host.innerHTML = `<div class="pad" style="margin-top:12px;display:flex;flex-direction:column;gap:16px"><div class="row" style="gap:8px"><b style="flex:1;font-size:17px">Быстрый тест · ${_pro.fmtDate(a.date)}</b></div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${tool('qcrep', 'share', 'Отчет клиенту')}${tool('qcshow', 'maximize', 'Показать клиенту')}${tool('qccmp', 'arrow-right-left', 'Было → стало', !prevId)}</div>
-    ${prevId ? '' : '<p class="sub" style="font-size:12px;margin-top:-8px">«Было → стало» откроется после повторного теста этого клиента.</p>'}
     ${es.ok ? `<button class="btn line" id="qcedit">${ic('pencil', 's')}Поправить точки · до ${new Date(es.until).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</button>` : ''}
-    <p class="sub" style="font-size:12px;margin-top:-8px">${es.ok ? 'Через 2 часа после сохранения или после следующего теста точки закроются, чтобы замер нельзя было подогнать.' : esc(es.why)}${editNote(a) ? ' · ' + esc(editNote(a)) : ''}</p>
-    <div id="qhw" style="display:flex;flex-direction:column;gap:8px"></div>
+    ${editNote(a) ? `<p class="sub" style="font-size:12px;margin-top:-8px">${esc(editNote(a))}</p>` : ''}
     <div id="qcp" style="display:flex;flex-direction:column;gap:16px"></div>
     ${a.note ? `<div><div class="eyebrow">Ваш вывод · ГИПОТЕЗА</div><div class="card" style="font-size:15px;line-height:1.45;white-space:pre-line">${esc(a.note)}</div></div>` : ''}</div>`;
   panel(host.querySelector('#qcp'), st, { photos: ((await row('poses', aid)) || {}).photos || {}, onChange: async s => { a.quick = { ...a.quick, zones: s.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), confirmed: true, zEdit: !sameZones(s.zones, zonesOf(summaryOf(st.by, qz.hSet ? qz.h : 0))) }; await _pro.put('assessments', a); hwBlock(host.querySelector('#qhw'), aid); } });
-  hwBlock(host.querySelector('#qhw'), aid);
+  const hwh = document.createElement('div'); hwh.id = 'qhw'; hwh.style.cssText = 'display:flex;flex-direction:column;gap:8px'; host.querySelector('.qslot').appendChild(hwh);
+  hwBlock(hwh, aid);
   host.querySelector('#qcrep').onclick = () => report(aid);
   if (host.querySelector('#qcedit')) host.querySelector('#qcedit').onclick = () => editSaved(aid);
   host.querySelector('#qcshow').onclick = () => showClient(st, c && !c.nocard ? c.name : '');
