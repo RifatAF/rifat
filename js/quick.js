@@ -5,7 +5,7 @@ import { go, esc, ic, toast, spots, topOf, asClient } from './app.js';
 import { C, cam, startCamera, stopCamera, detectStill, initPose, startMotion, phone, cameraBlocked, openInBrowserSheet, posedFigure, body3D } from './core.js';
 import { poseOf } from './pose-figure.js';
 import { VIEWS as REQ, ALL_VIEWS as VIEWS, EDIT_POINTS, POINT_NAMES, quickMetrics, summaryOf, ALGO, viewMetrics, observations, frameIssue, ERR as QERR, isOut, LIMIT } from './quick-metrics.js';
-import { P, analyze } from './analysis.js';
+import { P, analyze, levelled } from './analysis.js';
 import { track } from './track.js';
 import { matte } from './ds.js';
 import qrcode from './qr.js';
@@ -149,7 +149,9 @@ function shoot(i, single = false) {
     cv.getContext('2d').drawImage(src, 0, 0, cv.width, cv.height);
     let pts = null; try { pts = await detectStill(cv); } catch (e) {}
     const issue = frameIssue(v.id, pts, cv.width, cv.height);
-    Q.views[v.id] = { photo: cv.toDataURL('image/jpeg', .85), w: cv.width, h: cv.height, pts, auto: pts ? pts.map(p => ({ ...p })) : null, roll, ok: false, issue };
+    // крена с датчика нет (фото из галереи, датчик не разрешен): выравниваем по линиям фона
+    let rollSrc = roll ? 'sensor' : null; if (!roll) { try { roll = estimateRoll(cv, cv.width, cv.height, pts); } catch (e) { roll = 0; } rollSrc = roll ? 'image' : 'none'; }
+    Q.views[v.id] = { photo: cv.toDataURL('image/jpeg', .85), w: cv.width, h: cv.height, pts, auto: pts ? pts.map(p => ({ ...p })) : null, roll, rollSrc, ok: false, issue };
     if (issue) return review(i, single);
     next(i, single);
   };
@@ -346,7 +348,11 @@ const sameZones = (x, y) => { const k = l => (l || []).map(z => z.id + ':' + z.s
  *  новые подсказки добавляются к имеющимся один раз. */
 export async function refreshQuick(a) {
   if (!a || a.template !== 'quick' || !a.quick || a.quick.algo === ALGO || !C.bodymap) return false;
-  const ph = ((await row('poses', a.id)) || {}).photos || {}, views = {};
+  const pose = await row('poses', a.id), ph = (pose || {}).photos || {}, views = {};
+  // старые снимки без крена: оценка по фону один раз, сохраняется в снимок (фото и замеры станут ровными)
+  let lv = false; for (const v of VIEWS) { const x = ph[v.id]; if (!x || !x.photo || x.roll || x.rollSrc) continue;
+    try { const im = await imgOf(x.photo); x.roll = im ? estimateRoll(im, x.w, x.h, x.pts) : 0; } catch (e) { x.roll = 0; } x.rollSrc = x.roll ? 'image' : 'none'; lv = true; }
+  if (lv) await _pro.put('poses', pose);
   for (const v of VIEWS) if (ph[v.id] && ph[v.id].pts) views[v.id] = ph[v.id];
   if (!Object.keys(views).length) { a.quick = { ...a.quick, algo: ALGO }; await _pro.put('assessments', a); return false; }
   const q = quickMetrics(views, a.quick.hSet ? a.quick.h : 0), auto = zonesOf(q), cur = a.quick.zones || [];
@@ -492,20 +498,55 @@ const ANCHOR = { headTilt: [[P.L_EAR, P.R_EAR], 'Голова'], shoulderTilt: [
 const SIDE_PT = { right: { [P.L_EAR]: P.R_EAR, [P.L_SHOULDER]: P.R_SHOULDER, [P.L_HIP]: P.R_HIP, [P.L_KNEE]: P.R_KNEE }, left: { [P.R_EAR]: P.L_EAR, [P.R_SHOULDER]: P.L_SHOULDER, [P.R_HIP]: P.L_HIP, [P.R_KNEE]: P.L_KNEE } };
 const loadedImg = new Map();
 const imgOf = src => { if (!loadedImg.has(src)) loadedImg.set(src, new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; })); return loadedImg.get(src); };
+/** Крен кадра по фону: стены, углы, двери и пол дают вертикали и горизонтали. Человек исключен (полоса по его точкам).
+ *  Возвращает поправку в градусах (как roll датчика: levelled(pts, w, h, roll) делает кадр ровным) или 0, если фон не дает уверенной оценки. */
+export function estimateRoll(src, w, h, pts) {
+  const k = Math.min(1, 640 / Math.max(w, h)), W = Math.max(8, Math.round(w * k)), H = Math.max(8, Math.round(h * k)), c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(src, 0, 0, W, H); const px = g.getImageData(0, 0, W, H).data, L = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) L[i] = px[i * 4] * .299 + px[i * 4 + 1] * .587 + px[i * 4 + 2] * .114;
+  let x0 = -1, x1 = -1; if (pts) { const xs = pts.filter(Boolean).map(p => p.x * k), a = Math.min(...xs), b = Math.max(...xs), pad = (b - a) * .35 + W * .04; x0 = a - pad; x1 = b + pad; }
+  // тензор структуры по окну 15×15: голосуют только четкие прямые края (высокая когерентность), шум и фактура отсеиваются
+  const N = W * H, XX = new Float32Array(N), YY = new Float32Array(N), XY = new Float32Array(N);
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) { const i = y * W + x;
+    const gx = L[i - W + 1] + 2 * L[i + 1] + L[i + W + 1] - L[i - W - 1] - 2 * L[i - 1] - L[i + W - 1], gy = L[i + W - 1] + 2 * L[i + W] + L[i + W + 1] - L[i - W - 1] - 2 * L[i - W] - L[i - W + 1];
+    XX[i] = gx * gx; YY[i] = gy * gy; XY[i] = gx * gy; }
+  const box = A => { const T = new Float32Array(N), O = new Float32Array(N), r = 7;
+    for (let y = 0; y < H; y++) { let s = 0; for (let x = -r; x < W + r; x++) { if (x + r < W) s += A[y * W + x + r]; if (x - r - 1 >= 0) s -= A[y * W + x - r - 1]; if (x >= 0 && x < W) T[y * W + x] = s; } }
+    for (let x = 0; x < W; x++) { let s = 0; for (let y = -r; y < H + r; y++) { if (y + r < H) s += T[(y + r) * W + x]; if (y - r - 1 >= 0) s -= T[(y - r - 1) * W + x]; if (y >= 0 && y < H) O[y * W + x] = s; } } return O; };
+  const SX = box(XX), SY = box(YY), SXY = box(XY), BIN = .25, R = 10, NB = Math.round(2 * R / BIN) + 1, hist = new Float32Array(NB);
+  const wrap = a => ((a + 90) % 180 + 180) % 180 - 90;
+  for (let y = 8; y < H - 8; y++) for (let x = 8; x < W - 8; x++) { if (x > x0 && x < x1) continue; const i = y * W + x, tr = SX[i] + SY[i]; if (tr < 225 * 1600) continue;
+    const coh = Math.hypot(SX[i] - SY[i], 2 * SXY[i]) / tr; if (coh < .85) continue;
+    const th = .5 * Math.atan2(2 * SXY[i], SX[i] - SY[i]) * 180 / Math.PI, tv = wrap(th), t2 = wrap(th + 90), wgt = Math.sqrt(tr) * coh;
+    // вертикали (углы стен, двери) надежнее горизонталей: линия пола искажена перспективой
+    if (Math.abs(tv) <= R) hist[Math.round((tv + R) / BIN)] += wgt; else if (Math.abs(t2) <= R) hist[Math.round((t2 + R) / BIN)] += wgt * .25; }
+  const tot = hist.reduce((a, b) => a + b, 0); if (tot < 2e5) return 0;
+  let best = 0, bi = 0; for (let i = 2; i < NB - 2; i++) { const s = hist[i - 2] + hist[i - 1] + hist[i] + hist[i + 1] + hist[i + 2]; if (s > best) { best = s; bi = i; } }
+  // второй пик дальше 2° почти такой же: фон противоречит сам себе (стул, перспектива), кадр не трогаем
+  let second = 0; for (let i = 2; i < NB - 2; i++) if (Math.abs(i - bi) * BIN > 2) second = Math.max(second, hist[i - 2] + hist[i - 1] + hist[i] + hist[i + 1] + hist[i + 2]);
+  let sw = 0, sa = 0; for (let i = Math.max(0, bi - 4); i <= Math.min(NB - 1, bi + 4); i++) { sw += hist[i]; sa += hist[i] * (i * BIN - R); }
+  const t = sw ? sa / sw : bi * BIN - R; // наклон линий фона; поправка обратная. Меньше 0,5°, неуверенный или спорный пик не трогаем
+  return best / tot < .15 || second > .6 * best || Math.abs(t) < .5 || Math.abs(t) > 8 ? 0 : Math.round(-t * 10) / 10;
+}
 /** Фото вида с замерами. x: { photo, w, h, pts }, ms: показатели этого вида (quick-metrics). Холст 4:5, тело по центру. */
 async function drawMeasure(cv, x, view, ms, compact = false, nums = true) {
   const im = x && x.photo ? await imgOf(x.photo) : null; if (!im || !cv.isConnected) return false;
   try { await Promise.all([document.fonts.load(`600 20px ${MONO}`), document.fonts.load(`500 20px ${SANS}`)]); } catch (e) {}
   // компактно (два фото рядом): холст крупнее при тех же размерах подписей, поэтому подписи относительно мельче
   const d = Math.min(2, devicePixelRatio || 1), W = Math.round(cv.clientWidth * d * (compact ? 1.7 : 1)) || 600, H = Math.round(W * 1.25); cv.width = W; cv.height = H;
-  const g = cv.getContext('2d'), pts = x.pts, ids = EDIT_POINTS[view];
+  // кадр выровнен по горизонту: фото и точки повернуты на крен телефона (датчик или оценка по фону), как и в расчете замеров
+  const deg = x.roll || 0, g = cv.getContext('2d'), pts = x.pts && deg ? levelled(x.pts, x.w, x.h, deg) : x.pts, ids = EDIT_POINTS[view];
   // кадр по телу: от макушки до стоп с запасом, пропорция холста
   let bx = 0, by = 0, bw = x.w, bh = x.h;
   if (pts) { const ys = ids.map(i => pts[i].y), xs = ids.map(i => pts[i].x), top = Math.min(...ys), bot = Math.max(...ys), span = bot - top;
     bh = Math.min(x.h, span * 1.5); bw = Math.min(x.w, bh * W / H); if (bw === x.w) bh = Math.min(x.h, bw * H / W);
     by = Math.max(0, Math.min(x.h - bh, top - Math.max(0, bh - span) * .7)); bx = Math.max(0, Math.min(x.w - bw, (Math.min(...xs) + Math.max(...xs)) / 2 - bw / 2)); }
   const sc = Math.min(W / bw, H / bh), ox = (W - bw * sc) / 2, oy = (H - bh * sc) / 2;
-  g.fillStyle = '#1C1C1E'; g.fillRect(0, 0, W, H); g.drawImage(im, bx, by, bw, bh, ox, oy, bw * sc, bh * sc);
+  g.fillStyle = '#1C1C1E'; g.fillRect(0, 0, W, H);
+  // углы после поворота закрыты размытой копией фото: тело целиком в кадре, пустых клиньев нет
+  if (deg) { g.save(); g.filter = 'blur(12px)'; g.drawImage(im, ox - bw * sc * .15, oy - bh * sc * .15, bw * sc * 1.3, bh * sc * 1.3); g.restore();
+    g.save(); g.beginPath(); g.rect(ox, oy, bw * sc, bh * sc); g.clip(); g.translate(ox - bx * sc, oy - by * sc); g.scale(sc, sc); g.translate(x.w / 2, x.h / 2); g.rotate(deg * Math.PI / 180); g.drawImage(im, -x.w / 2, -x.h / 2); g.restore(); }
+  else g.drawImage(im, bx, by, bw, bh, ox, oy, bw * sc, bh * sc);
   g.fillStyle = 'rgba(10,10,12,.22)'; g.fillRect(0, 0, W, H);
   // сетка как в правке точек (переключатель «Сетка» общий): тонкие квадратные клетки
   if (showGrid) { const cell = W / 8; g.beginPath(); for (let gx = cell; gx < W - 1; gx += cell) { g.moveTo(gx, 0); g.lineTo(gx, H); } for (let gy = cell; gy < H - 1; gy += cell) { g.moveTo(0, gy); g.lineTo(W, gy); }
@@ -616,7 +657,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
     $h('#qadd').onclick = () => addZone(zs => { const rest = st.zones.filter(x => !zs.some(z => x.id === z.id && x.side === z.side)); if (new Set([...rest, ...zs].map(z => z.id)).size > 20) return toast('Не больше 20 мышц'); st.zones = [...rest, ...zs]; changed(); }); };
   const changed = () => { if (v3) v3.update(zSpots(st.zones)); plan(); onChange(st); };
   plan();
-  const photoView = () => drawMeasure($h('#qph'), photos[view], view, st.by[view] || [], false, showNums).then(ok => { if (!ok && $h('#qph')) { const c = $h('#qph').getContext('2d'); c.clearRect(0, 0, 1e4, 1e4); } });
+  const photoView = () => (md => { const r = (photos[view] || {}).roll; if (mode === 'ph') $h('#qcap').textContent = (r ? `Кадр выровнен на ${String(Math.abs(r)).replace('.', ',')}°${(photos[view] || {}).rollSrc === 'image' ? ' по линиям фона' : ''} · ` : '') + 'касание фото: цифры'; })() || drawMeasure($h('#qph'), photos[view], view, st.by[view] || [], false, showNums).then(ok => { if (!ok && $h('#qph')) { const c = $h('#qph').getContext('2d'); c.clearRect(0, 0, 1e4, 1e4); } });
   const setMode = md => { mode = md; host.querySelectorAll('[data-md]').forEach(x => x.classList.toggle('on', x.dataset.md === md));
     $h('#q3d').style.display = md === '3d' ? '' : 'none'; $h('#qph').style.display = md === 'ph' ? 'block' : 'none'; $h('#qgr').style.display = md === '3d' ? '' : 'none';
     if ($h('#qmlbl')) $h('#qmlbl').textContent = md === '3d' ? 'Типовая фигура' : 'Фото клиента';
@@ -761,7 +802,7 @@ async function save() {
   const a = { id, clientId: c.id, date: Q.date, template: 'quick', templateName: 'Быстрый тест', quick: { by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key, c, p }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}), ...(p ? { p } : {}) })), confirmed: true, algo: ALGO, zEdit: !sameZones(Q.zones, zonesOf(q)), gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf, h: heightCm() || 170, hSet: !!heightCm(), kg: +c.weight || null, views: VIEWS.filter(v => Q.views[v.id]).map(v => v.id), edited: VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id) },
     snapshot: q.snapshot, side: q.side, consent: Q.consent, note: Q.note, plan: { ex: [], text: Q.rec }, protocol: [], moves: {}, quality: {}, limits: {}, setup: {}, pain: {}, hyp: {}, check: {}, draft: false, prevId: prev ? prev.id : null, savedAt: Date.now() };
   await _pro.put('assessments', a);
-  await _pro.put('poses', { assessmentId: id, photos: Object.fromEntries(VIEWS.filter(v => Q.views[v.id]).map(v => { const x = Q.views[v.id]; return [v.id, { photo: x.photo, w: x.w, h: x.h, pts: x.pts, auto: x.auto || null, roll: x.roll }]; })) });
+  await _pro.put('poses', { assessmentId: id, photos: Object.fromEntries(VIEWS.filter(v => Q.views[v.id]).map(v => { const x = Q.views[v.id]; return [v.id, { photo: x.photo, w: x.w, h: x.h, pts: x.pts, auto: x.auto || null, roll: x.roll, rollSrc: x.rollSrc || null }]; })) });
   track('assess_done', { n: a.quick.views.length, c: 'quick' }, false);
   if (prev) track('retest_done', { n: Math.round((Q.date - prev.date) / 864e5) }, false);
   if (prev && Q.date - prev.date <= 14 * 864e5) track('retest_14d', null, false);
