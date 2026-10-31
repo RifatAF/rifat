@@ -623,7 +623,10 @@ function planBlock(zones, open = new Set()) {
 /** «Проверьте замер»: значения вне физиологии (не учтены) и расхождение правого и левого бока больше двух погрешностей
  *  (снимок не строго в профиль или поворот головы). Такие места специалист смотрит до выводов. */
 const checkCard = by => { const f = v => String(Math.abs(v)).replace('.', ','), rows = [];
-  for (const v of VIEWS) for (const m of by[v.id] || []) if (m.suspect) rows.push(`${esc(m.name)}: <span class="mono">${f(m.v)}${m.unit.trim() === '°' ? '°' : ' ' + m.unit.trim()}</span> вне физиологии, не учтено. Проверьте точки или переснимите`);
+  for (const v of VIEWS) for (const m of by[v.id] || []) if (m.suspect) rows.push(/^squatKnee/.test(m.key)
+    // глубокий присед или колени наружу: спереди в угол попадает сгибание колена, а не его ось; точки при этом верные
+    ? `${esc(m.name)}: <span class="mono">${f(m.v)}°</span>. Это не ось: присед глубже половины или колени разведены наружу, и на фото спереди в угол попадает сгибание. Не учтено. Для оси: полуприсед, стопы и колени смотрят вперед`
+    : `${esc(m.name)}: <span class="mono">${f(m.v)}${m.unit.trim() === '°' ? '°' : ' ' + m.unit.trim()}</span> вне физиологии, не учтено. Проверьте точки или переснимите`);
   for (const k of ['headForward', 'shoulderShift', 'hipShift', 'kneeHyper']) { const r = (by.right || []).find(m => m.key === k), l = (by.left || []).find(m => m.key === k);
     if (r && l && !r.suspect && !l.suspect && Math.abs(r.v - l.v) > 2 * r.err) rows.push(`${esc(r.name)}: справа <span class="mono">${f(r.v)}</span>, слева <span class="mono">${f(l.v)}</span>${r.unit.trim() === '°' ? '°' : ' ' + r.unit.trim()}. Бока расходятся: снимок не строго в профиль или поворот. В расчете среднее`); }
   return rows.length ? `<div class="card" style="padding:12px 16px;border:1px solid var(--short-t,#FF9F0A)"><b style="font-size:15px">Проверьте замер</b>${rows.map(t => `<p class="sub" style="font-size:13px;line-height:1.4;margin-top:6px">${t}</p>`).join('')}</div>` : ''; };
@@ -657,7 +660,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
     $h('#qadd').onclick = () => addZone(zs => { const rest = st.zones.filter(x => !zs.some(z => x.id === z.id && x.side === z.side)); if (new Set([...rest, ...zs].map(z => z.id)).size > 20) return toast('Не больше 20 мышц'); st.zones = [...rest, ...zs]; changed(); }); };
   const changed = () => { if (v3) v3.update(zSpots(st.zones)); plan(); onChange(st); };
   plan();
-  const photoView = () => (md => { const r = (photos[view] || {}).roll; if (mode === 'ph') $h('#qcap').textContent = (r ? `Кадр выровнен на ${String(Math.abs(r)).replace('.', ',')}°${(photos[view] || {}).rollSrc === 'image' ? ' по линиям фона' : ''} · ` : '') + 'касание фото: цифры'; })() || drawMeasure($h('#qph'), photos[view], view, st.by[view] || [], false, showNums).then(ok => { if (!ok && $h('#qph')) { const c = $h('#qph').getContext('2d'); c.clearRect(0, 0, 1e4, 1e4); } });
+  const photoView = () => (md => { const r = (photos[view] || {}).roll; if (mode === 'ph') $h('#qcap').textContent = (r ? `Кадр выровнен на ${Math.abs(r).toFixed(2).replace('.', ',')}°${(photos[view] || {}).rollSrc === 'image' ? ' по линиям фона' : ''} · ` : '') + 'касание фото: цифры'; })() || drawMeasure($h('#qph'), photos[view], view, st.by[view] || [], false, showNums).then(ok => { if (!ok && $h('#qph')) { const c = $h('#qph').getContext('2d'); c.clearRect(0, 0, 1e4, 1e4); } });
   const setMode = md => { mode = md; host.querySelectorAll('[data-md]').forEach(x => x.classList.toggle('on', x.dataset.md === md));
     $h('#q3d').style.display = md === '3d' ? '' : 'none'; $h('#qph').style.display = md === 'ph' ? 'block' : 'none'; $h('#qgr').style.display = md === '3d' ? '' : 'none';
     if ($h('#qmlbl')) $h('#qmlbl').style.display = md === '3d' ? '' : 'none';
