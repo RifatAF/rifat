@@ -12,7 +12,7 @@ import { painWord, PAIN_SCALE } from './vas.js';
 import { npsCard, bindNps, installCard, bindInstall, installNow, canInstall, feedbackSheet, referralSheet, myRef, bugSheet, DEV, proSurvey, proSurveyDue, installSheet } from './grow.js';
 import { meSync, logout, getMe, calibOn } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
-import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS, BAL_PRO } from './plans.js';
+import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS, BAL_PRO, PRO_PRICE } from './plans.js';
 import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast, preload3D, saveBlob , setBodySex, cameraBlocked, openInBrowserSheet } from './core.js';
 import { baBlock, bindBa } from './app.js';
 import { asClient, cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, mainOf, TONE_HELP, applyMain, fromMain, muscleInfo, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen, TIP_ACT } from './app.js';
@@ -245,16 +245,21 @@ function dictate(textarea, btn) {
 
 // ---------- рабочий стол ----------
 // счетчик слотов в шапке кабинета: занято из доступных и кнопка «+3 слота» (готовый текст с реферальной ссылкой)
-function slotWidget(s) {
+function slotWidget(s, left = Infinity) {
   if (isBeta()) return '';
-  const u = meSync();
-  if (u && u.trial) return `<div class="pad" style="margin-top:var(--s3)"><div class="card row" id="slots" style="padding:10px 14px;font-size:14px;background:var(--ok-s)"><span style="flex:1"><b>Пробный PRO</b> ${u.trialClients ? `на первых ${u.trialClients} клиентов, до ` : 'до '}${new Date(u.trialUntil).toLocaleDateString('ru', { day: 'numeric', month: 'long' })}${u.trialClients ? '' : ' или до первого повторного теста'}</span></div></div>`;
+  const u = meSync(), buy = t => `<button class="btn gopro" id="slget" style="height:48px;margin-top:10px">${ic('star', 's')}${t}</button>`;
+  const bar = (n, max, red) => `<div style="height:6px;border-radius:3px;background:var(--surface);margin-top:8px;overflow:hidden"><div style="height:100%;width:${Math.min(100, Math.round(n / Math.max(1, max) * 100))}%;background:${red ? 'var(--over)' : 'var(--ink)'}"></div></div>`;
+  const until = t => new Date(t).toLocaleDateString('ru', { day: 'numeric', month: 'long' });
+  if (u && u.trial) { const n = u.trialClients ? Math.max(0, u.trialClients - left) : 0;
+    return `<div class="pad" style="margin-top:var(--s3)"><div class="card" id="slots" style="padding:12px 14px;background:var(--ok-s)">
+    <div class="row" style="font-size:14px;gap:8px"><span style="flex:1"><b>Пробный PRO</b> · ${u.trialClients ? `клиентов <b>${n} из ${u.trialClients}</b>` : `до ${until(u.trialUntil)}`}</span><span class="sub" style="font-size:12px">до ${until(u.trialUntil)}</span></div>
+    ${u.trialClients ? bar(n, u.trialClients, n >= u.trialClients) : ''}${buy(`Оставить PRO · ${PRO_PRICE}`)}</div></div>`; }
   if (s.pro) return `<div class="pad" style="margin-top:var(--s3)"><div class="card row" id="slots" style="padding:10px 14px;font-size:14px"><span style="flex:1"><b>PRO</b> · ведение без лимита</span></div></div>`;
-  const full = s.used >= s.max, pct = Math.min(100, Math.round(s.used / Math.max(1, s.max) * 100));
+  const full = s.used >= s.max;
   return `<div class="pad" style="margin-top:var(--s3)"><div class="card" id="slots" style="padding:12px 14px">
-    <div class="row" style="font-size:14px;gap:8px"><span style="flex:1">Ведете <b>${s.used} из ${s.max}</b> клиентов<br><span class="sub" style="font-size:12px">ретесты, домашка и ссылки за 30 дней</span></span><button class="pill gopro" id="slget" style="background:var(--brand);color:#fff">Без лимита</button></div>
-    <div style="height:6px;border-radius:3px;background:var(--surface);margin-top:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${full ? 'var(--over)' : 'var(--ink)'}"></div></div>
-    ${full ? '<div style="font-size:13px;margin-top:8px">Новых клиентов тестируйте свободно. Ретест еще одного клиента откроется в PRO или когда закончится 30 дней ведения у кого-то из текущих.</div>' : ''}</div></div>`;
+    <div class="row" style="font-size:14px;gap:8px"><span style="flex:1"><b>Free</b> · ведете <b>${s.used} из ${s.max}</b></span><span class="sub" style="font-size:12px">ретест и домашка</span></div>
+    ${bar(s.used, s.max, full)}${full ? '<div style="font-size:13px;margin-top:8px">Лимит ведения. Первые тесты новых клиентов без лимита.</div>' : ''}
+    ${buy(`PRO без лимита · ${PRO_PRICE}`)}</div></div>`;
 }
 export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC); syncAutoCalib().catch(() => {}); if (device.webgl2) preload3D(); // схемы в карточках и отчетах рисуются по 3D-модели
   track('pro_open');
@@ -303,7 +308,7 @@ export async function proHome(query = '', pulled = null) { setSession(MODES.SPEC
   go(`<div class="scr fade"><div style="padding-top:16px">
     <div class="pad row" style="align-items:flex-start">${myPhoto ? `<img src="${myPhoto}" alt="" width="44" height="44" style="border-radius:50%;object-fit:cover;flex:none;margin:2px 12px 0 0" id="mph">` : ''}<div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--sub)">${esc(name)}${spName ? ' · ' + esc(spName.toLowerCase()) : ''}</div><h1>${String(name).trim() && name !== 'Специалист' ? 'Здравствуйте, ' + esc(String(name).split(' ')[0]) : 'Здравствуйте!'}</h1><div style="font-size:14px;color:var(--sub);margin-top:2px">${today[0].toUpperCase() + today.slice(1)}</div></div></div>
     ${real.length ? `<div class="pad kpi" style="margin-top:var(--s4)"><div><b>${real.filter(c => { const a = last(c.id); return a && Date.now() - a.date < 60 * DAY; }).length}</b><span>активных</span></div><div><b>${review.length + consults.filter(x => new Date(x.v.t).toDateString() === new Date().toDateString()).length}</b><span>на сегодня</span></div><div><b>${real.length}</b><span>всего</span></div></div>` : ''}
-    ${slotWidget(slots((await trackedIds()).size))}
+    ${slotWidget(slots((await trackedIds()).size), await trialClientsLeft())}
     <div class="pad" style="margin-top:var(--s4)"><button class="btn" id="qquick" style="height:72px;font-size:19px;gap:12px;justify-content:flex-start;padding:0 20px">${ic('camera')}<span style="text-align:left;line-height:1.2">Быстрый тест<br><small style="font-size:13px;font-weight:500;opacity:.75">4 фото клиента, точки и отчет</small></span></button></div>
     ${fullMode() ? `<div class="pad" style="margin-top:var(--s3)"><details class="acc" id="qmore"${localStorage.getItem('bp_more_open') === '1' ? ' open' : ''}><summary style="font-weight:600;font-size:15px">Полная версия: тест по видео, тест из дома</summary><div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <button class="card" id="qa1" style="border:0;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:14px;display:flex;flex-direction:column;gap:6px">${ic('play')}<b style="font-size:16px;line-height:1.2">Тест по видео</b><span style="font-size:12px;color:var(--sub)">клиент рядом, движения на камеру</span></button>
@@ -417,7 +422,7 @@ async function proMenu() {
   const r = (id, icon, t) => `<button class="row-link" id="${id}">${ic(icon, 's')}<span>${t}</span>${ic('chevron-right', 's chev')}</button>`;
   const h = (t, open) => `<details class="acc" style="margin-top:var(--s3)"${open ? ' open' : ''}><summary style="font-weight:600;font-size:16px">${t}</summary><div style="margin-top:4px">`, he = '</div></details>', ntf = localStorage.getItem('bp_ntf') !== '0';
   d.innerHTML = `<div><h2>Меню</h2>
-    ${p.plan === 'start' && !isBeta() ? `<a class="row-link gopro" href="/pricing" style="margin-top:var(--s2)"><span style="color:var(--sub);font-size:14px">${planLine()}</span>${ic('chevron-right', 's chev')}</a>` : ''}
+    ${(p.plan === 'start' || (u && u.trial)) && !isBeta() ? `<a class="row-link gopro" href="/pricing" style="margin-top:var(--s2)">${ic('star', 's')}<span style="flex:1"><b>Купить PRO · ${PRO_PRICE}</b><br><small class="sub" style="font-size:13px">${u && u.trial ? 'Сейчас пробный PRO' : planLine()}</small></span>${ic('chevron-right', 's chev')}</a>` : ''}
     <div class="group" style="margin-top:var(--s2)">${r('mrate', 'star', 'Оставить оценку')}</div>
     ${h('Работа', true)}<div class="group">
       ${r('mcal', 'calendar', 'Календарь: ретесты и консультации')}
