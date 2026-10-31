@@ -4,7 +4,7 @@ import { _pro, proHome, clientCard, homeworkLink, pullResults } from './pro.js';
 import { go, esc, ic, toast, spots, topOf, asClient } from './app.js';
 import { C, cam, startCamera, stopCamera, detectStill, initPose, startMotion, phone, cameraBlocked, openInBrowserSheet, posedFigure, body3D } from './core.js';
 import { poseOf } from './pose-figure.js';
-import { VIEWS as REQ, ALL_VIEWS as VIEWS, EDIT_POINTS, POINT_NAMES, quickMetrics, summaryOf, ALGO, viewMetrics, observations, frameIssue } from './quick-metrics.js';
+import { VIEWS as REQ, ALL_VIEWS as VIEWS, EDIT_POINTS, POINT_NAMES, quickMetrics, summaryOf, ALGO, viewMetrics, observations, frameIssue, ERR as QERR } from './quick-metrics.js';
 import { P, analyze } from './analysis.js';
 import { track } from './track.js';
 import { matte } from './ds.js';
@@ -289,8 +289,35 @@ export function zonesOf(q) {
     for (const [k, sq, sd] of [['kneeR', 'squatKneeR', 'RIGHT'], ['kneeL', 'squatKneeL', 'LEFT']]) { const v = kv(k, sq);
       if (v.st > 6 || v.sq > 6) valg.forEach(m => addM(m.id, sd, m.state === 'OVERLOAD' ? 'HYPER' : m.state));
       else if (v.st < -6) VAR.forEach(([id, st]) => addM(id, sd, st)); }
-    return [...lat, ...out].map(s => ({ id: s.id, side: s.side, k: s.k, key: s.key })); }
+    const base = [...lat, ...out].map(s => ({ id: s.id, side: s.side, k: s.k, key: s.key }));
+    return [...base, ...chainZones(q, new Set(base.map(z => z.id + ':' + z.side)), new Set(base.map(z => z.id)))]; }
   catch (e) { return []; } }
+/** Зоны «по цепочке»: не видны на фото напрямую, но следуют из измеренного положения по механике стойки.
+ *  Отдельный лимит (до 5 мышц, ноги первыми), чтобы шея и плечи не вытесняли ноги. Помечены c:1, специалист проверяет руками.
+ *  Основания (docs/clinical/chain_rules.md):
+ *  - тело впереди лодыжек: икроножная и камбаловидная держат стойку, их активность растет с наклоном вперед (Fitzpatrick 1994, Loram 2005);
+ *  - колени согнуты в стойке: нагрузка на четырехглавую растет ~4 % веса тела на градус сгибания (Hsu, Perry 1993);
+ *  - таз впереди лодыжек, плечи позади таза (sway back по Kendall): задняя группа бедра укорочена, сгибатели бедра и наружная косая длинные;
+ *  - корпус впереди таза: разгибатели спины держат наклон, передняя цепь (сгибатели бедра, прямая бедра) укорочена;
+ *  - таз выше с одной стороны (Kendall): на высокой стороне бедро приведено (средняя и малая ягодичные длинные, приводящие короткие), на низкой напряжена напрягатель фасции. */
+export function chainZones(q, seenKeys = new Set(), have = new Set()) {
+  const B = q.by || {}, sv = k => { const v = ['right', 'left'].map(id => ((B[id] || []).find(m => m.key === k) || {}).v).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
+  const fv = k => { const v = ['front', 'back'].map(id => ((B[id] || []).find(m => m.key === k) || {}).v).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
+  const sh = sv('shoulderShift'), hp = sv('hipShift'), kn = sv('kneeHyper'), hf = sv('headForward'), pt = fv('pelvicTilt'), E = QERR, out = [];
+  const add = (id, k, sides = ['RIGHT', 'LEFT']) => { if (!C.muscles[id]) return; for (const sd of sides) { const key = id + ':' + sd; if (seenKeys.has(key)) continue; seenKeys.add(key); out.push({ id, side: sd, k, key, c: 1 }); } };
+  const fwd = (Number.isFinite(sh) ? sh : 0) + (Number.isFinite(hp) ? hp : 0); // плечо относительно лодыжки, см
+  // порядок = сила оснований: нагрузка на икры и бедро (измерения ЭМГ и сил), затем позы по Kendall
+  if (fwd > 2 * E.shoulderShift || (hf > 2 * E.headForward && sh > E.shoulderShift)) { add('soleus', 'SHORT'); add('calf', 'SHORT'); }
+  if (kn < -E.kneeHyper) add('rectus_fem', 'SHORT');
+  if (Math.abs(pt) > E.pelvicTilt) { const low = pt > 0 ? 'RIGHT' : 'LEFT', high = low === 'RIGHT' ? 'LEFT' : 'RIGHT'; add('glute_min', 'WEAK', [high]); add('adductors', 'SHORT', [high]); add('tfl', 'SHORT', [low]); }
+  if (kn < -E.kneeHyper) { add('iliopsoas', 'SHORT'); add('hamstrings', 'SHORT'); }
+  if (hp > E.hipShift && sh < 0) { add('hamstrings', 'SHORT'); add('transversus', 'WEAK'); }
+  if (sh > E.shoulderShift) { add('iliopsoas', 'SHORT'); add('rectus_fem', 'SHORT'); add('erector', 'HYPER'); add('multifidus', 'WEAK'); }
+  // до 7 мест; икроножная с камбаловидной и две мышцы бедра занимают по одному; мышцы из основного списка не дублируем
+  const slot = id => ({ soleus: 'calf' })[id] || id, mus = new Set(), ok = new Set();
+  for (const z of out) { if (have.has(z.id)) continue; if (!mus.has(slot(z.id)) && mus.size >= 7) continue; mus.add(slot(z.id)); ok.add(z.id); }
+  return out.filter(z => ok.has(z.id));
+}
 const sameZones = (x, y) => { const k = l => (l || []).map(z => z.id + ':' + z.side + ':' + z.k).sort().join(); return k(x) === k(y); };
 /** Пересчет сохраненного теста по его точкам после обновления формул (ALGO): замеры, «что видно», фигура и отчет.
  *  Зоны: не правленные специалистом заменяются новой подсказкой; правленные остаются; у старых тестов (до учета правок)
@@ -304,12 +331,12 @@ export async function refreshQuick(a) {
   let zones = cur, zEdit = a.quick.zEdit;
   if (zEdit === false || !cur.length) { zones = auto; zEdit = false; }
   else if (zEdit == null) { const have = new Set(cur.map(z => z.id + ':' + z.side)); zones = [...cur, ...auto.filter(z => !have.has(z.id + ':' + z.side))]; zEdit = true; }
-  a.quick = { ...a.quick, by: q.by, obs: observations(q.by), zones: zones.map(({ id, side, k, key }) => ({ id, side, k, key })), zEdit, algo: ALGO };
+  a.quick = { ...a.quick, by: q.by, obs: observations(q.by), zones: zones.map(({ id, side, k, key, c }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}) })), zEdit, algo: ALGO };
   a.snapshot = q.snapshot; a.side = q.side; await _pro.put('assessments', a); return true;
 }
 /** Фоном при открытии кабинета: все быстрые тесты старой версии расчета. */
 export async function refreshAll() { let n = 0; for (const a of await _pro.all('assessments')) if (a.template === 'quick' && a.quick && a.quick.algo !== ALGO) { try { if (await refreshQuick(a)) n++; } catch (e) {} } return n; }
-const zSpots = zones => zones.map(z => ({ ...z, key: z.key || z.id + ':' + z.side, tone: z.k === 'WEAK' ? -.75 : .75, back: (C.muscles[z.id] || {}).view === 'back' }));
+const zSpots = zones => zones.map(z => ({ ...z, key: z.key || z.id + ':' + z.side, tone: (z.k === 'WEAK' ? -1 : 1) * (z.c ? .45 : .75), back: (C.muscles[z.id] || {}).view === 'back' }));
 // ---------- домашнее задание: по умолчанию из карточек подтвержденных зон, специалист правит список ----------
 // Подбор по парам мышц: у каждой зоны свое упражнение и упражнение для ее антагониста.
 // Зажата или перегружена: расслабить ее и укрепить антагониста (грудные → ромбовидные).
@@ -514,7 +541,7 @@ const zGroups = zones => { const g = new Map(); for (const z of zones) { const k
 function planBlock(zones, open = new Set()) {
   const rows = zGroups(zones).map(([key, l]) => { const z = l[0], m = C.muscles[z.id] || {}, sd = l.length > 1 ? '' : ' ' + sideRu(z.side);
     const ex = m.name ? exRows(chainEx(l, 3).ids).map(e => esc(e.title.split(' (')[0])).join(' → ') : '', more = [m.proTest && `<b>Проверка:</b> ${esc(m.proTest)}`, z.k !== 'WEAK' && m.massage && `<b>Руками:</b> ${esc(m.massage)}`].filter(Boolean);
-    return `<details data-pg="${key}" style="padding:9px 0;border-top:1px solid var(--line-2)"${open.has(key) ? ' open' : ''}><summary style="display:block;position:relative;padding-right:24px;list-style:none;cursor:pointer;font-size:15px;line-height:1.35"><span style="position:absolute;right:0;top:4px;color:var(--sub)">${ic('chevron-down', 's')}</span><span class="pill" style="font-size:12px;padding:2px 8px;margin-right:6px;color:${TCOL[z.k]};border-color:${TCOL[z.k]}">${TASK[z.k]}</span><b>${esc(zoneName(z))}</b><span class="sub">${sd}</span>${ex ? `<div class="sub" style="font-size:13px;margin-top:3px">${ex}</div>` : ''}</summary>
+    return `<details data-pg="${key}" style="padding:9px 0;border-top:1px solid var(--line-2)"${open.has(key) ? ' open' : ''}><summary style="display:block;position:relative;padding-right:24px;list-style:none;cursor:pointer;font-size:15px;line-height:1.35"><span style="position:absolute;right:0;top:4px;color:var(--sub)">${ic('chevron-down', 's')}</span><span class="pill" style="font-size:12px;padding:2px 8px;margin-right:6px;color:${TCOL[z.k]};border-color:${TCOL[z.k]}">${TASK[z.k]}</span><b>${esc(zoneName(z))}</b><span class="sub">${sd}</span>${ex || l.every(x => x.c) ? `<div class="sub" style="font-size:13px;margin-top:3px">${l.every(x => x.c) ? '<span style="color:var(--ink);opacity:.8">по цепочке</span>' + (ex ? ' · ' : '') : ''}${ex}</div>` : ''}</summary>
       ${more.length ? `<div class="sub" style="font-size:13px;line-height:1.4;margin-top:6px">${more.join('<br>')}</div>` : ''}
       <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">${Object.keys(ZST).map(k => `<button class="pill" data-pk="${k}" style="height:32px;font-size:12px;padding:0 10px;${k === z.k ? `color:${ZCOL[k]};border-color:${ZCOL[k]};font-weight:600` : 'opacity:.7'}">${ZST[k]}</button>`).join('')}<span style="flex:1"></span><button class="round" data-px aria-label="Убрать зону" style="width:32px;height:32px">${ic('x', 's')}</button></div></details>`; });
   return `<div class="card" style="padding:12px 16px 12px"><div class="row"><b style="flex:1">План</b><span class="sub" style="font-size:12px">${rows.length ? 'гипотеза, проверьте руками' : ''}</span></div>
@@ -547,7 +574,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
       el.querySelectorAll('[data-pk]').forEach(b => b.onclick = () => { const k = b.dataset.pk; if (k === gk) return; st.zones.forEach(z => { if (mine(z)) z.k = k; }); opened.delete(key); opened.add(gid + ':' + k); changed(); });
       el.querySelector('[data-px]').onclick = () => { st.zones = st.zones.filter(z => !mine(z)); opened.delete(key); changed(); }; });
     $h('#qauto').onclick = () => { if (st.zones.length && !confirm('Заменить зоны подсказкой по замеру? Ваши правки зон пропадут.')) return; st.zones = zonesOf(summaryOf(st.by, st.h === 170 ? 0 : st.h)); changed(); toast('Зоны пересчитаны'); };
-    $h('#qadd').onclick = () => addZone(zs => { const rest = st.zones.filter(x => !zs.some(z => x.id === z.id && x.side === z.side)); if (rest.length + zs.length > 12) return toast('Не больше 12 зон'); st.zones = [...rest, ...zs]; changed(); }); };
+    $h('#qadd').onclick = () => addZone(zs => { const rest = st.zones.filter(x => !zs.some(z => x.id === z.id && x.side === z.side)); if (new Set([...rest, ...zs].map(z => z.id)).size > 20) return toast('Не больше 20 мышц'); st.zones = [...rest, ...zs]; changed(); }); };
   const changed = () => { if (v3) v3.update(zSpots(st.zones)); plan(); onChange(st); };
   plan();
   const photoView = () => drawMeasure($h('#qph'), photos[view], view, st.by[view] || [], false, showNums).then(ok => { if (!ok && $h('#qph')) { const c = $h('#qph').getContext('2d'); c.clearRect(0, 0, 1e4, 1e4); } });
@@ -629,7 +656,7 @@ export async function quickCard(host, aid, prevId) {
     ${editNote(a) ? `<p class="sub" style="font-size:12px;margin-top:-8px">${esc(editNote(a))}</p>` : ''}
     <div id="qcp" style="display:flex;flex-direction:column;gap:16px"></div>
     ${a.note ? `<div><div class="eyebrow">Ваш вывод · ГИПОТЕЗА</div><div class="card" style="font-size:15px;line-height:1.45;white-space:pre-line">${esc(a.note)}</div></div>` : ''}</div>`;
-  panel(host.querySelector('#qcp'), st, { photos: ((await row('poses', aid)) || {}).photos || {}, onChange: async s => { a.quick = { ...a.quick, zones: s.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), confirmed: true, zEdit: !sameZones(s.zones, zonesOf(summaryOf(st.by, qz.hSet ? qz.h : 0))) }; await _pro.put('assessments', a); hwBlock(host.querySelector('#qhw'), aid); } });
+  panel(host.querySelector('#qcp'), st, { photos: ((await row('poses', aid)) || {}).photos || {}, onChange: async s => { a.quick = { ...a.quick, zones: s.zones.map(({ id, side, k, key, c }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}) })), confirmed: true, zEdit: !sameZones(s.zones, zonesOf(summaryOf(st.by, qz.hSet ? qz.h : 0))) }; await _pro.put('assessments', a); hwBlock(host.querySelector('#qhw'), aid); } });
   const hwh = document.createElement('div'); hwh.id = 'qhw'; hwh.style.cssText = 'display:flex;flex-direction:column;gap:8px'; host.querySelector('.qslot').appendChild(hwh);
   hwBlock(hwh, aid);
   host.querySelector('#qcrep').onclick = () => report(aid);
@@ -673,7 +700,7 @@ async function save() {
   const c = Q.client, old = await row('clients', c.id);
   if (!old) await _pro.put('clients', { ...c }); else if ((Q.consent && !Q.consent.reused) || c.height !== old.height || c.weight !== old.weight) await _pro.put('clients', { ...old, ...(Q.consent && !Q.consent.reused ? { consent: Q.consent } : {}), height: c.height || old.height || '', weight: c.weight || old.weight || '' });
   const id = _pro.uid(), q = Q.metrics, prev = (await _pro.all('assessments')).filter(a => a.clientId === c.id).sort((a, b) => b.date - a.date)[0];
-  const a = { id, clientId: c.id, date: Q.date, template: 'quick', templateName: 'Быстрый тест', quick: { by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), confirmed: true, algo: ALGO, zEdit: !sameZones(Q.zones, zonesOf(q)), gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf, h: heightCm() || 170, hSet: !!heightCm(), kg: +c.weight || null, views: VIEWS.filter(v => Q.views[v.id]).map(v => v.id), edited: VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id) },
+  const a = { id, clientId: c.id, date: Q.date, template: 'quick', templateName: 'Быстрый тест', quick: { by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key, c }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}) })), confirmed: true, algo: ALGO, zEdit: !sameZones(Q.zones, zonesOf(q)), gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf, h: heightCm() || 170, hSet: !!heightCm(), kg: +c.weight || null, views: VIEWS.filter(v => Q.views[v.id]).map(v => v.id), edited: VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id) },
     snapshot: q.snapshot, side: q.side, consent: Q.consent, note: Q.note, plan: { ex: [], text: Q.rec }, protocol: [], moves: {}, quality: {}, limits: {}, setup: {}, pain: {}, hyp: {}, check: {}, draft: false, prevId: prev ? prev.id : null, savedAt: Date.now() };
   await _pro.put('assessments', a);
   await _pro.put('poses', { assessmentId: id, photos: Object.fromEntries(VIEWS.filter(v => Q.views[v.id]).map(v => { const x = Q.views[v.id]; return [v.id, { photo: x.photo, w: x.w, h: x.h, pts: x.pts, auto: x.auto || null, roll: x.roll }]; })) });
@@ -707,7 +734,7 @@ async function saveEdit() {
   const a = await row('assessments', Q.editId), ps = await row('poses', Q.editId), es = await editState(a), cid = Q.client.id;
   if (!es.ok) { toast(es.why + '. Правка не сохранена'); Q = null; clientCard(cid); return null; }
   const q = Q.metrics, views = VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id);
-  a.quick = { ...a.quick, by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key }) => ({ id, side, k, key })), gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf,
+  a.quick = { ...a.quick, by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key, c }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}) })), gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf,
     edited: [...new Set([...(a.quick.edited || []), ...views])], edits: views.length ? [...(a.quick.edits || []), { at: Date.now(), views }] : a.quick.edits || [] };
   Object.assign(a, { snapshot: q.snapshot, side: q.side, note: Q.note, plan: { ...(a.plan || {}), text: Q.rec } });
   for (const v of views) ps.photos[v].pts = Q.views[v].pts;
