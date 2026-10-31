@@ -24,6 +24,9 @@ export const POINT_NAMES = { [P.L_EAR]: 'левое ухо', [P.R_EAR]: 'пра�
 
 // Погрешность замера по одному фото: стартовые оценки (точность точки модели 1–2 % кадра плюс правка руками).
 // Уточняются по docs/clinical/noise_protocol.md, когда будут 10 пар повторов; меняются здесь, без правки формул.
+// предел правдоподобия по одному фото (°, см): больше — почти наверняка сбой точек. Колено в полуприседе: при сгибании бедро
+// укорачивается в кадре, и угол спереди завышается; реальные отклонения редко больше 25–30°
+export const LIMIT = { headTilt: 20, shoulderTilt: 15, pelvicTilt: 15, trunkLateral: 15, kneeR: 25, kneeL: 25, squatKneeR: 30, squatKneeL: 30, squatPelvis: 15, headForward: 50, kneeHyper: 25 };
 export const ERR = { headTilt: 2, shoulderTilt: 1.5, pelvicTilt: 1.5, trunkLateral: 1.5, headForward: 4, shoulderShift: 1.5, hipShift: 1.5, kneeHyper: 3, kneeR: 5, kneeL: 5, squatKneeR: 5, squatKneeL: 5, squatPelvis: 2 };
 
 const r1 = v => Math.round(v * 10) / 10;
@@ -59,19 +62,23 @@ export function viewMetrics(id, pts, w, h, roll = 0, heightCm = 0) {
     cm('hipShift', 'Таз относительно лодыжки', s.hipShift, 'впереди', 'позади');
     deg('kneeHyper', 'Колено относительно линии бедро–лодыжка', s.kneeHyperDeg, 'кзади (переразгибание)', 'кпереди (согнуто)');
   }
+  // значения вне физиологии: сбой точек (темная одежда, ракурс), а не тело. Не идут в зоны, фигуру и отчет, специалист видит «проверьте точки»
+  for (const m of out) if (Math.abs(m.v) > (LIMIT[m.key] ?? Infinity)) { m.suspect = true; m.dir = 'проверьте точки'; }
   return out;
 }
+/** Показатель вне погрешности и правдоподобный: идет в «Что видно», подписи на фото и зоны. */
+export const isOut = m => !!m && !m.suspect && m.dir !== 'в пределах погрешности';
 
 /** Все виды сразу и сводка в форматах теста по видео (snapshot спереди, side как среднее двух боков) для правил зон. */
 // версия расчета замеров и зон: поднимать при изменении формул или правил, сохраненные тесты пересчитаются по своим точкам
-export const ALGO = 5;
+export const ALGO = 6;
 export function quickMetrics(views, heightCm = 0) {
   const by = {}; for (const v of ALL_VIEWS) { const x = views[v.id]; by[v.id] = x && x.pts ? viewMetrics(v.id, x.pts, x.w, x.h, x.roll || 0, heightCm) : null; }
   return summaryOf(by, heightCm);
 }
 /** Сводка для правил зон из уже посчитанных показателей видов (пересчет зон сохраненного теста). */
 export function summaryOf(by, heightCm = 0) {
-  const val = (id, key) => { const m = by[id] && by[id].find(x => x.key === key); return m ? m.v : NaN; };
+  const val = (id, key) => { const m = by[id] && by[id].find(x => x.key === key); return m && !m.suspect ? m.v : NaN; };
   const avg = (...a) => { const v = a.filter(Number.isFinite); return v.length ? r1(v.reduce((s, x) => s + x, 0) / v.length) : NaN; };
   // перекосы спереди и сзади: среднее двух снимков (сзади раньше не учитывалось); точки размечены анатомически, знак у видов общий
   const fb = k => avg(val('front', k), val('back', k));
@@ -86,7 +93,7 @@ export function summaryOf(by, heightCm = 0) {
 /** «Что видно»: короткие фразы по показателям вне погрешности, самые заметные первыми. Без оценок и причин. */
 export function observations(by, max = 6) {
   const out = [];
-  for (const v of ALL_VIEWS) for (const m of by[v.id] || []) if (m.dir !== 'в пределах погрешности') out.push({ v, m, score: Math.abs(m.v) / m.err });
+  for (const v of ALL_VIEWS) for (const m of by[v.id] || []) if (isOut(m)) out.push({ v, m, score: Math.abs(m.v) / m.err });
   return out.sort((a, b) => b.score - a.score).slice(0, max).map(({ v, m }) => `${v.name}: ${m.name.toLowerCase()} ${m.dir}, ${String(Math.abs(m.v)).replace('.', ',')}${m.unit}`);
 }
 

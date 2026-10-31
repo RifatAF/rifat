@@ -4,7 +4,7 @@ import { _pro, proHome, clientCard, homeworkLink, pullResults } from './pro.js';
 import { go, esc, ic, toast, spots, topOf, asClient } from './app.js';
 import { C, cam, startCamera, stopCamera, detectStill, initPose, startMotion, phone, cameraBlocked, openInBrowserSheet, posedFigure, body3D } from './core.js';
 import { poseOf } from './pose-figure.js';
-import { VIEWS as REQ, ALL_VIEWS as VIEWS, EDIT_POINTS, POINT_NAMES, quickMetrics, summaryOf, ALGO, viewMetrics, observations, frameIssue, ERR as QERR } from './quick-metrics.js';
+import { VIEWS as REQ, ALL_VIEWS as VIEWS, EDIT_POINTS, POINT_NAMES, quickMetrics, summaryOf, ALGO, viewMetrics, observations, frameIssue, ERR as QERR, isOut, LIMIT } from './quick-metrics.js';
 import { P, analyze } from './analysis.js';
 import { track } from './track.js';
 import { matte } from './ds.js';
@@ -282,8 +282,8 @@ export function zonesOf(q) {
         if (!seen.has(key)) { seen.add(key); lat.push({ id: m.id, side: sd, k: m.state === 'OVERLOAD' ? 'HYPER' : m.state, key }); } } }
     // ноги: ось колена в стойке (спереди и сзади) и в полуприседе в правила не попадала, поэтому ноги не показывались.
     // Колено внутрь: мышцы правила knee_valgus той же стороны; наружу: напряжены наружные, слабее приводящие
-    const kv = (k, sq) => { const B = q.by || {}, v = [(B.front || []), (B.back || [])].map(l => (l.find(m => m.key === k) || {}).v).filter(Number.isFinite), st = v.length ? v.reduce((x, y) => x + y, 0) / v.length : 0;
-      const sv = ((B.squat || []).find(m => m.key === sq) || {}).v; return { st, sq: Number.isFinite(sv) ? sv : 0 }; };
+    const kv = (k, sq) => { const B = q.by || {}, ok = m => m && !m.suspect ? m.v : NaN, v = [(B.front || []), (B.back || [])].map(l => ok(l.find(m => m.key === k))).filter(Number.isFinite), st = v.length ? v.reduce((x, y) => x + y, 0) / v.length : 0;
+      const sv = ok((B.squat || []).find(m => m.key === sq)); return { st, sq: Number.isFinite(sv) ? sv : 0 }; };
     const valg = (rules.find(r => r.id === 'knee_valgus') || { muscles: [] }).muscles.filter(m => m.w >= .4), VAR = [['tfl', 'HYPER'], ['piriformis', 'SHORT'], ['adductors', 'WEAK']];
     const addM = (id, sd, k) => { const key = id + ':' + sd; if (C.muscles[id] && !seen.has(key)) { seen.add(key); lat.push({ id, side: sd, k, key }); } };
     for (const [k, sq, sd] of [['kneeR', 'squatKneeR', 'RIGHT'], ['kneeL', 'squatKneeL', 'LEFT']]) { const v = kv(k, sq);
@@ -292,13 +292,13 @@ export function zonesOf(q) {
     // база коррекции специалиста важнее общих правил: ее мышцы ставятся первыми, тот же мускул с той же стороны из правил не дублируется
     const pat = patternZones(q, kv), pk = new Set(pat.map(z => z.id + ':' + z.side));
     const base = [...pat, ...[...lat, ...out].filter(s => !pk.has(s.id + ':' + s.side)).map(s => ({ id: s.id, side: s.side, k: s.k, key: s.key }))];
-    return [...base, ...chainZones(q, new Set(base.map(z => z.id + ':' + z.side)), new Set(base.map(z => z.id)))]; }
+    return [...base, ...chainZones(q, new Set(base.map(z => z.id + ':' + z.side)), new Set(base.map(z => z.id)), base)]; }
   catch (e) { return []; } }
 /** Шаблоны базы коррекции (data/patterns.json), которые включаются сами по замеру: зажатые → «зажатая», слабые → «слабая».
  *  Поясница (наклон таза) и плечо (ротаторы) по 4 фото не измеряются: только вручную кнопкой «Шаблон». */
 export function patternZones(q, kv) {
   const P = Object.fromEntries((C.patterns || []).map(p => [p.id, p])), B = q.by || {}, out = [], seen = new Set(), E = QERR;
-  const avg = (views, k) => { const v = views.map(id => ((B[id] || []).find(m => m.key === k) || {}).v).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
+  const avg = (views, k) => { const v = views.map(id => ((B[id] || []).find(m => m.key === k && !m.suspect) || {}).v).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
   const put = (pid, tight, weak, c) => { const p = P[pid]; if (!p) return;
     for (const [ids, k, sides] of [[p.tight, 'SHORT', tight], [p.weak, 'WEAK', weak]]) for (const id of ids) for (const sd of sides) { const key = id + ':' + sd;
       if (!C.muscles[id] || seen.has(key)) continue; seen.add(key); out.push({ id, side: sd, k, key, p: pid, ...(c ? { c: 1 } : {}) }); } };
@@ -319,11 +319,14 @@ export function patternZones(q, kv) {
  *  - таз впереди лодыжек, плечи позади таза (sway back по Kendall): задняя группа бедра укорочена, сгибатели бедра и наружная косая длинные;
  *  - корпус впереди таза: разгибатели спины держат наклон, передняя цепь (сгибатели бедра, прямая бедра) укорочена;
  *  - таз выше с одной стороны (Kendall): на высокой стороне бедро приведено (средняя и малая ягодичные длинные, приводящие короткие), на низкой напряжена напрягатель фасции. */
-export function chainZones(q, seenKeys = new Set(), have = new Set()) {
-  const B = q.by || {}, sv = k => { const v = ['right', 'left'].map(id => ((B[id] || []).find(m => m.key === k) || {}).v).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
-  const fv = k => { const v = ['front', 'back'].map(id => ((B[id] || []).find(m => m.key === k) || {}).v).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
+export function chainZones(q, seenKeys = new Set(), have = new Set(), base = []) {
+  const B = q.by || {}, sv = k => { const v = ['right', 'left'].map(id => ((B[id] || []).find(m => m.key === k && !m.suspect) || {}).v).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
+  const fv = k => { const v = ['front', 'back'].map(id => ((B[id] || []).find(m => m.key === k && !m.suspect) || {}).v).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
   const sh = sv('shoulderShift'), hp = sv('hipShift'), kn = sv('kneeHyper'), hf = sv('headForward'), pt = fv('pelvicTilt'), E = QERR, out = [];
-  const add = (id, k, sides = ['RIGHT', 'LEFT']) => { if (!C.muscles[id]) return; for (const sd of sides) { const key = id + ':' + sd; if (seenKeys.has(key)) continue; seenKeys.add(key); out.push({ id, side: sd, k, key, c: 1 }); } };
+  // одна функция, противоположные задачи: сгибатели бедра не бывают одновременно «слабые» (sway back) и «зажатые» (колено согнуто)
+  const SYN = { iliopsoas: 'hipflex', rectus_fem: 'hipflex' }, pol = k => k === 'SHORT' ? 1 : k === 'WEAK' ? -1 : 0;
+  const clash = (id, k) => SYN[id] && [...base, ...out].some(z => SYN[z.id] === SYN[id] && pol(z.k) * pol(k) < 0);
+  const add = (id, k, sides = ['RIGHT', 'LEFT']) => { if (!C.muscles[id] || clash(id, k)) return; for (const sd of sides) { const key = id + ':' + sd; if (seenKeys.has(key)) continue; seenKeys.add(key); out.push({ id, side: sd, k, key, c: 1 }); } };
   const fwd = (Number.isFinite(sh) ? sh : 0) + (Number.isFinite(hp) ? hp : 0); // плечо относительно лодыжки, см
   // порядок = сила оснований: нагрузка на икры и бедро (измерения ЭМГ и сил), затем позы по Kendall
   if (fwd > 2 * E.shoulderShift || (hf > 2 * E.headForward && sh > E.shoulderShift)) { add('soleus', 'SHORT'); add('calf', 'SHORT'); }
@@ -376,7 +379,11 @@ export function chainEx(zones, max = 8) {
       // зажатую без антагониста в базе не укрепляем; перегруженную можно мягко
       if (ant) rounds[1].push([g, [...((ant.plan && ant.plan.isolate) || []), ...(ant.activate || [])], `${nm(m.antagonist)}: укрепить, пара к «${nm(g.id)}»`]);
       else if (g.k === 'HYPER') rounds[1].push([g, m.activate || [], `${nm(g.id)}: мягко укрепить`]); } }
+  // не растягиваем то, что в плане слабое или перерастянутое: выпад для сгибателей бедра при sway back, где они слабые (аудит 31.10.2026)
+  const long = new Set((zones || []).filter(z => z.k !== 'SHORT').map(z => z.id)), base = x => x.replace(/_(left|right|\{s\})$/, '');
+  const hits = x => Object.entries(C.muscles).some(([id, m]) => long.has(id) && (m.relax || []).some(r => base(r) === base(x)));
   for (const r of rounds) for (const [g, list, reason] of r) for (const x of list) {
+    if (/расслабить|снять/.test(reason) && hits(x)) continue;
     const ids = [...g.sides].map(sd => x.replace('{s}', sd)).filter((id, i, l) => ex(id) && l.indexOf(id) === i); if (!ids.length) continue;
     const add = ids.filter(id => !out.includes(id)); if (add.length && out.length + add.length <= max) { out.push(...add); add.forEach(id => { why[id] = reason; rank[id] = r === rounds[2] ? 2 : /расслабить|снять/.test(reason) ? 0 : 1; }); } break; }
   // порядок занятия: сначала расслабить зажатые, затем активировать слабые, в конце движение
@@ -468,7 +475,7 @@ const PLAIN = { headForward: ['Голова выдвинута вперед', '�
   squatKneeR: ['В полуприседе правое колено уходит внутрь', 'В полуприседе правое колено уходит наружу'], squatKneeL: ['В полуприседе левое колено уходит внутрь', 'В полуприседе левое колено уходит наружу'],
   squatPelvis: ['В полуприседе таз перекошен: правая сторона ниже', 'В полуприседе таз перекошен: левая сторона ниже'] };
 export function plainObs(by, max = 3) { const best = {};
-  for (const v of VIEWS) for (const m of (by || {})[v.id] || []) { if (m.dir === 'в пределах погрешности' || !PLAIN[m.key]) continue; const sc = Math.abs(m.v) / m.err; if (!best[m.key] || sc > best[m.key].sc) best[m.key] = { sc, t: PLAIN[m.key][m.v > 0 ? 0 : 1] }; }
+  for (const v of VIEWS) for (const m of (by || {})[v.id] || []) { if (!isOut(m) || !PLAIN[m.key]) continue; const sc = Math.abs(m.v) / m.err; if (!best[m.key] || sc > best[m.key].sc) best[m.key] = { sc, t: PLAIN[m.key][m.v > 0 ? 0 : 1] }; }
   return Object.values(best).sort((a, b) => b.sc - a.sc).slice(0, max).map(x => x.t); }
 /** Зоны языком задач, сгруппированные: «Укрепить: глубокие мышцы шеи, верх плеча справа». Одна зона с двух сторон пишется один раз. */
 export function taskGroups(zones) { const g = new Map();
@@ -505,7 +512,7 @@ async function drawMeasure(cv, x, view, ms, compact = false, nums = true) {
     g.strokeStyle = 'rgba(0,0,0,.22)'; g.lineWidth = 1.6 * d; g.stroke(); g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = .6 * d; g.stroke(); }
   if (!pts) return true;
   const X = i => ox + (pts[i].x - bx) * sc, Y = i => oy + (pts[i].y - by) * sc, CY = '#0EA5E9', AM = '#FF9F0A';
-  const out = new Set(ms.filter(m => m.dir !== 'в пределах погрешности').map(m => m.key));
+  const out = new Set(ms.filter(isOut).map(m => m.key));
   // отвес от середины стоп и горизонтали через плечи и таз
   const ax = view === 'right' ? X(P.R_ANKLE) : view === 'left' ? X(P.L_ANKLE) : (X(P.L_ANKLE) + X(P.R_ANKLE)) / 2;
   g.save(); g.shadowColor = 'rgba(14,165,233,.8)'; g.shadowBlur = 8 * d; g.strokeStyle = 'rgba(14,165,233,.9)'; g.lineWidth = 1 * d; g.beginPath(); g.moveTo(ax, 0); g.lineTo(ax, H); g.stroke(); g.restore();
@@ -572,13 +579,20 @@ function planBlock(zones, open = new Set()) {
     ${rows.join('') || '<div class="sub" style="font-size:14px;padding:8px 0">По замеру выраженных зон нет</div>'}
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px"><button class="btn line" id="qadd" style="height:44px;font-size:14px;padding:0 6px">${ic('plus', 's')}Зона</button><button class="btn line" id="qtpl" style="height:44px;font-size:14px;padding:0 6px">${ic('file-text', 's')}Шаблон</button><button class="btn line" id="qauto" style="height:44px;font-size:14px;padding:0 6px">${ic('rotate-ccw', 's')}Замер</button></div></div>`;
 }
+/** «Проверьте замер»: значения вне физиологии (не учтены) и расхождение правого и левого бока больше двух погрешностей
+ *  (снимок не строго в профиль или поворот головы). Такие места специалист смотрит до выводов. */
+const checkCard = by => { const f = v => String(Math.abs(v)).replace('.', ','), rows = [];
+  for (const v of VIEWS) for (const m of by[v.id] || []) if (m.suspect) rows.push(`${esc(m.name)}: <span class="mono">${f(m.v)}${m.unit.trim() === '°' ? '°' : ' ' + m.unit.trim()}</span> вне физиологии, не учтено. Проверьте точки или переснимите`);
+  for (const k of ['headForward', 'shoulderShift', 'hipShift', 'kneeHyper']) { const r = (by.right || []).find(m => m.key === k), l = (by.left || []).find(m => m.key === k);
+    if (r && l && !r.suspect && !l.suspect && Math.abs(r.v - l.v) > 2 * r.err) rows.push(`${esc(r.name)}: справа <span class="mono">${f(r.v)}</span>, слева <span class="mono">${f(l.v)}</span>${r.unit.trim() === '°' ? '°' : ' ' + r.unit.trim()}. Бока расходятся: снимок не строго в профиль или поворот. В расчете среднее`); }
+  return rows.length ? `<div class="card" style="padding:12px 16px;border:1px solid var(--short-t,#FF9F0A)"><b style="font-size:15px">Проверьте замер</b>${rows.map(t => `<p class="sub" style="font-size:13px;line-height:1.4;margin-top:6px">${t}</p>`).join('')}</div>` : ''; };
 /** Что видно: показатели вне погрешности, самые заметные первыми; значение и погрешность моноширинным. */
-const obsRows = by => { const r = []; for (const v of VIEWS) for (const m of by[v.id] || []) if (m.dir !== 'в пределах погрешности') r.push({ v, m, sc: Math.abs(m.v) / m.err });
+const obsRows = by => { const r = []; for (const v of VIEWS) for (const m of by[v.id] || []) if (isOut(m)) r.push({ v, m, sc: Math.abs(m.v) / m.err });
   return r.sort((a, b) => b.sc - a.sc).slice(0, 4).map(({ v, m }) => `<div class="row" style="gap:10px;align-items:center;padding:12px 14px;min-height:56px"><span style="flex:1;font-size:15px;line-height:1.3">${m.name}<br><span class="sub" style="font-size:13px">${v.name} · ${m.dir}</span></span><span class="mt-val" style="font-size:15px;white-space:nowrap;color:#FF9F0A">${num(m.v)}${m.unit.trim() === '°' ? '°' : m.unit}</span></div>`).join(''); };
 /** Блок результата (после теста и в карточке клиента): сцена «3D | Фото» с ракурсами, «Усилить», гипотезы по задачам,
  *  зоны со статусами, что видно, все замеры. st: { by, zones, gain, h }; photos: { front: { photo, w, h, pts }, … }. */
 function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} } = {}) {
-  const n = VIEWS.reduce((s, v) => s + (st.by[v.id] || []).length, 0), out = VIEWS.reduce((s, v) => s + (st.by[v.id] || []).filter(m => m.dir !== 'в пределах погрешности').length, 0);
+  const n = VIEWS.reduce((s, v) => s + (st.by[v.id] || []).length, 0), out = VIEWS.reduce((s, v) => s + (st.by[v.id] || []).filter(isOut).length, 0);
   const hasPh = VIEWS.some(v => photos[v.id] && photos[v.id].pts); let v3 = null, mode = '3d', view = 'front';
   const pose = () => poseOf({ by: st.by, h: st.h || 170 }, st.gain);
   host.innerHTML = `<div class="card" id="qfcard" style="padding:12px">
@@ -587,7 +601,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
       <div class="seg" id="qview" style="margin-top:10px">${VIEWS.filter(v => !v.opt || (photos[v.id] && photos[v.id].pts)).map((v, i) => `<button data-vw="${v.id}" class="${i ? '' : 'on'}" style="padding:0 6px">${v.short || v.name}</button>`).join('')}</div>
       <div id="qgr"><div class="row" style="gap:10px;margin-top:10px"><span class="sub" style="font-size:13px;flex:none">Усилить</span><div class="seg" id="qgain" style="flex:1">${GAINS.map(g => `<button data-g="${g}" class="${g === st.gain ? 'on' : ''}" style="padding:0 6px">×${String(g).replace('.', ',')}</button>`).join('')}</div></div><div id="qplate">${gainPlate(st.gain)}</div></div>
       <div class="sub" id="qcap" style="font-size:12px;text-align:center;margin-top:8px">Типовая фигура, цветом зоны</div></div>
-    <div id="qplan"></div><div class="qslot" style="display:contents"></div>
+    ${checkCard(st.by)}<div id="qplan"></div><div class="qslot" style="display:contents"></div>
     <details class="acc"><summary style="font-weight:600;font-size:15px"><span>Замеры · вне погрешности <span class="mono">${out}</span> из <span class="mono">${n}</span></span></summary><div style="display:flex;flex-direction:column;gap:12px;margin-top:10px">${out ? `<div><div class="eyebrow">Главное</div><div class="group" style="padding:0">${obsRows(st.by)}</div></div>` : ''}${VIEWS.filter(v => st.by[v.id]).map(v => `<div><div class="eyebrow">${v.name}</div>${metricRows(st.by[v.id])}</div>`).join('')}</div></details>
     <p class="mt-cal">Поправка на крен телефона учтена · погрешности замера в методике</p>`;
   const $h = s => host.querySelector(s);
@@ -873,7 +887,7 @@ export async function renderReport(a, c, photos) {
   const plain = plainObs(qz.by); if (plain.length) { head('Коротко', '', INK); g.fillStyle = INK; g.font = `600 27px ${F}`; for (const t of plain) { y += 42; g.fillText('• ' + t, PAD, y); } y += 60; }
   // измерено: только значения вне погрешности, остальные одной строкой (специалист видит все в приложении)
   head('Измерено', 'ЗАМЕР', INK); let inTol = 0;
-  for (const v of VIEWS) { const m = (qz.by || {})[v.id]; if (!m) continue; const outs = m.filter(r => r.dir !== 'в пределах погрешности'); inTol += m.length - outs.length; if (!outs.length) continue;
+  for (const v of VIEWS) { const m = (qz.by || {})[v.id]; if (!m) continue; const outs = m.filter(isOut); inTol += m.filter(r => r.dir === 'в пределах погрешности').length; if (!outs.length) continue;
     y += 44; g.fillStyle = SUB; g.font = `700 19px ${F}`; g.fillText(v.name.toUpperCase(), PAD, y);
     for (const r of outs) { y += 38; g.fillStyle = INK; g.font = `500 25px ${F}`; g.fillText(`${r.name}: ${r.dir}`, PAD, y); g.font = `600 24px ${M ? MN : F}`; g.textAlign = 'right'; g.fillText(`${num(r.v)}${r.unit.trim() === '°' ? '°' : r.unit}`, W - PAD, y); g.textAlign = 'left'; } }
   if (inTol) { y += 40; g.fillStyle = SUB; g.font = `400 21px ${F}`; g.fillText(`Еще ${inTol} ${inTol % 10 === 1 && inTol % 100 !== 11 ? 'значение' : [2, 3, 4].includes(inTol % 10) && ![12, 13, 14].includes(inTol % 100) ? 'значения' : 'значений'} в пределах погрешности`, PAD, y); }
