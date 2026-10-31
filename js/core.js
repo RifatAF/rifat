@@ -357,7 +357,7 @@ const baseRGB = () => darkUI() ? BASE_DARK : BASE_LIGHT;
 // отчет клиенту из кабинета специалиста: на время отрисовки цвета задач клиента, а не состояний (pro.js, report)
 let CLIENT_PAL = false; export const clientPalette = on => { CLIENT_PAL = !!on; };
 const specPal = () => darkUI() && !CLIENT_PAL;
-export function stateRGB(k, tone) { const P = specPal() ? STATE_RGB : ACT_RGB, c = P[k] || (tone < 0 ? P.WEAK : P.HYPER); const t = k === 'OK' ? 0 : Math.max(.55, Math.min(1, Math.abs(tone) * 1.3));
+export function stateRGB(k, tone, floor = .55) { const P = specPal() ? STATE_RGB : ACT_RGB, c = P[k] || (tone < 0 ? P.WEAK : P.HYPER); const t = k === 'OK' ? 0 : Math.max(floor, Math.min(1, Math.abs(tone) * 1.3));
   return baseRGB().map((b, i) => Math.round(b + (c[i] - b) * t)); }
 export function ramp(v) { const x = Math.max(-1, Math.min(1, v)); let i = RAMP.findLastIndex(r => r[0] <= x); i = Math.max(0, Math.min(RAMP.length - 2, i));
   const [a, ca] = RAMP[i], [b, cb] = RAMP[i + 1], t = Math.max(0, Math.min(1, (x - a) / (b - a))); const ch = (c, s) => (c >> s) & 255; const mix = s => Math.round(ch(ca, s) + (ch(cb, s) - ch(ca, s)) * t);
@@ -472,7 +472,7 @@ export function drawHeat(cv, spots0, back, selected, labels = [], opts = {}) {
   const parts = bodyParts();
   // все фигуры этой стороны: тонкий контур как анатомическая подсказка, мышцы с отклонением заливаются цветом состояния
   const outline = Object.entries(SHAPES).filter(([id]) => C.muscles && C.muscles[id] && (C.muscles[id].view === 'back') === back).flatMap(([id]) => [...SHAPES[id], ...mirrorX(SHAPES[id], 'RIGHT')]).map(ell);
-  const fillShapes = k => mine.filter(s => Math.abs(s.tone) > .05 && SHAPES[s.id]).sort((a, b) => Math.abs(a.tone) - Math.abs(b.tone)).flatMap(s => { const [r, g, b] = stateRGB(s.k, s.tone * k * (s.derived && !s.edited ? .75 : 1)); return shapeOf(s).map(e => [ell(e), `rgb(${r},${g},${b})`]); });
+  const fillShapes = k => mine.filter(s => Math.abs(s.tone) > .05 && SHAPES[s.id]).sort((a, b) => Math.abs(a.tone) - Math.abs(b.tone)).flatMap(s => { const [r, g, b] = stateRGB(s.k, s.tone * k * (s.derived && !s.edited ? .75 : 1), s.fl); return shapeOf(s).map(e => [ell(e), `rgb(${r},${g},${b})`]); });
   const numbered = labels.length && labels.every(l => l.n), vw = numbered ? 200 : VW, ox = numbered ? 0 : OX;
   const ctx = cv.getContext('2d'); const sc = cv.clientWidth * devicePixelRatio / vw; cv.width = vw * sc; cv.height = 440 * sc;
   // реалистичная модель: точки мышц берем из проекции модели, а не из овалов плоской схемы
@@ -613,7 +613,7 @@ export function preload3D() { const go = () => { import('three'); import('three/
 // раскраска сетки по тону: и для живой 3D-модели, и для снимков схемы
 function paintMesh(m, spots, out, surf = false) { const order = m.meta.order, lin = c => (c / 255) ** 2.2, BASE3 = baseRGB().map(lin);
   // группа сетки → цвет мышцы по состоянию; соседям достается слабый край того же цвета, чтобы граница читалась
-  const col = new Map(); for (const s of spots) { const o = order.indexOf(s.id); if (o < 0 || s.k === 'OK' || Math.abs(s.tone) < .02) continue; col.set(1 + o * 2 + (s.side === 'RIGHT' ? 1 : 0), stateRGB(s.k, s.tone).map(lin)); }
+  const col = new Map(); for (const s of spots) { const o = order.indexOf(s.id); if (o < 0 || s.k === 'OK' || Math.abs(s.tone) < .02) continue; col.set(1 + o * 2 + (s.side === 'RIGHT' ? 1 : 0), stateRGB(s.k, s.tone, s.fl).map(lin)); }
   // глубокие мышцы закрыты поверхностными (ромбовидные под трапецией, малая грудная под большой): их цвет просвечивает четким пятном над ними
   // глубокие мышцы видны через окно в верхних слоях (meshIndex). Фигура в позе клиента (surf) без окон: окно в изогнутой шее выглядит как разрыв,
   // поэтому там цвет глубокой мышцы мягко проступает на покрывающей поверхности

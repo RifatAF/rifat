@@ -267,6 +267,8 @@ const GAINS = [1, 1.5, 2, 3], VIEWS3 = [['front', 'Спереди'], ['right', '
  *  (шея, плечевой пояс, корпус, таз, ноги) не больше 3 мышц, всего до 8 мышц (с двух сторон считается одной). Самые выраженные идут первыми. */
 const RELAX = .6, FERR = { valgus_max: 5, pelvic_tilt: 1.5, shoulder_tilt: 1.5, head_tilt: 2, trunk_lateral: 1.5, head_forward: 4, knee_hyper: 3, shoulder_shift: .015, hip_shift: .015 };
 const relax = (t, e) => t == null ? t : Math.sign(t) * Math.max(Math.abs(t) * RELAX, e);
+// степень 1–3 из того, во сколько раз признак превышает порог правила: 1 до 1,5 раза, 2 до 2,5, 3 больше
+const DEG = r => !(r > 0) ? 2 : r >= 2.5 ? 3 : r >= 1.5 ? 2 : 1;
 const REGION = y => y < .23 ? 0 : y < .38 ? 1 : y < .52 ? 2 : y < .63 ? 3 : 4;
 export function zonesOf(q) {
   try { const rules = C.bodymap.rules.map(r => FERR[r.feature] == null ? r : { ...r, absGreater: relax(r.absGreater, FERR[r.feature]), greater: relax(r.greater, FERR[r.feature]), less: relax(r.less, FERR[r.feature]) });
@@ -281,19 +283,19 @@ export function zonesOf(q) {
     for (const r of rules) { const v = f[r.feature]; if (r.source !== 'camera' || r.absGreater == null || r.sideFrom !== r.feature || !Number.isFinite(v) || Math.abs(v) <= Math.abs(r.absGreater)) continue;
       const sg = Math.sign(v) * (r.sideNegate ? -1 : 1), side = sg > 0 ? 'RIGHT' : 'LEFT', opp = side === 'RIGHT' ? 'LEFT' : 'RIGHT';
       for (const m of r.muscles) { if (m.w < .4 || m.side === 'both' || !C.muscles[m.id]) continue; const sd = m.side === 'opposite' ? opp : side, key = m.id + ':' + sd;
-        if (!seen.has(key)) { seen.add(key); lat.push({ id: m.id, side: sd, k: m.state === 'OVERLOAD' ? 'HYPER' : m.state, key }); } } }
+        if (!seen.has(key)) { seen.add(key); lat.push({ id: m.id, side: sd, k: m.state === 'OVERLOAD' ? 'HYPER' : m.state, key, d: DEG(Math.abs(v) / Math.abs(r.absGreater)) }); } } }
     // ноги: ось колена в стойке (спереди и сзади) и в полуприседе в правила не попадала, поэтому ноги не показывались.
     // Колено внутрь: мышцы правила knee_valgus той же стороны; наружу: напряжены наружные, слабее приводящие
     const kv = (k, sq) => { const B = q.by || {}, ok = m => m && !m.suspect ? m.v : NaN, v = [(B.front || []), (B.back || [])].map(l => ok(l.find(m => m.key === k))).filter(Number.isFinite), st = v.length ? v.reduce((x, y) => x + y, 0) / v.length : 0;
       const sv = ok((B.squat || []).find(m => m.key === sq)); return { st, sq: Number.isFinite(sv) ? sv : 0 }; };
     const valg = (rules.find(r => r.id === 'knee_valgus') || { muscles: [] }).muscles.filter(m => m.w >= .4), VAR = [['tfl', 'HYPER'], ['piriformis', 'SHORT'], ['adductors', 'WEAK']];
-    const addM = (id, sd, k) => { const key = id + ':' + sd; if (C.muscles[id] && !seen.has(key)) { seen.add(key); lat.push({ id, side: sd, k, key }); } };
+    const addM = (id, sd, k, d) => { const key = id + ':' + sd; if (C.muscles[id] && !seen.has(key)) { seen.add(key); lat.push({ id, side: sd, k, key, d }); } };
     for (const [k, sq, sd] of [['kneeR', 'squatKneeR', 'RIGHT'], ['kneeL', 'squatKneeL', 'LEFT']]) { const v = kv(k, sq);
-      if (v.st > 6 || v.sq > 6) valg.forEach(m => addM(m.id, sd, m.state === 'OVERLOAD' ? 'HYPER' : m.state));
-      else if (v.st < -6) VAR.forEach(([id, st]) => addM(id, sd, st)); }
+      const dk = DEG(Math.max(v.st, v.sq) / 6); if (v.st > 6 || v.sq > 6) valg.forEach(m => addM(m.id, sd, m.state === 'OVERLOAD' ? 'HYPER' : m.state, dk));
+      else if (v.st < -6) VAR.forEach(([id, st]) => addM(id, sd, st, DEG(-v.st / 6))); }
     // база коррекции специалиста важнее общих правил: ее мышцы ставятся первыми, тот же мускул с той же стороны из правил не дублируется
     const pat = patternZones(q, kv), pk = new Set(pat.map(z => z.id + ':' + z.side));
-    const base = [...pat, ...[...lat, ...out].filter(s => !pk.has(s.id + ':' + s.side)).map(s => ({ id: s.id, side: s.side, k: s.k, key: s.key }))];
+    const base = [...pat, ...[...lat, ...out].filter(s => !pk.has(s.id + ':' + s.side)).map(s => ({ id: s.id, side: s.side, k: s.k, key: s.key, d: s.d || (Math.abs(s.tone) >= .7 ? 3 : Math.abs(s.tone) >= .45 ? 2 : 1) }))];
     return [...base, ...chainZones(q, new Set(base.map(z => z.id + ':' + z.side)), new Set(base.map(z => z.id)), base)]; }
   catch (e) { return []; } }
 /** Шаблоны базы коррекции (data/patterns.json), которые включаются сами по замеру: зажатые → «зажатая», слабые → «слабая».
@@ -301,16 +303,16 @@ export function zonesOf(q) {
 export function patternZones(q, kv) {
   const P = Object.fromEntries((C.patterns || []).map(p => [p.id, p])), B = q.by || {}, out = [], seen = new Set(), E = QERR;
   const avg = (views, k) => { const v = views.map(id => ((B[id] || []).find(m => m.key === k && !m.suspect) || {}).v).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
-  const put = (pid, tight, weak, c) => { const p = P[pid]; if (!p) return;
+  const put = (pid, tight, weak, c, d) => { const p = P[pid]; if (!p) return;
     for (const [ids, k, sides] of [[p.tight, 'SHORT', tight], [p.weak, 'WEAK', weak]]) for (const id of ids) for (const sd of sides) { const key = id + ':' + sd;
-      if (!C.muscles[id] || seen.has(key)) continue; seen.add(key); out.push({ id, side: sd, k, key, p: pid, ...(c ? { c: 1 } : {}) }); } };
+      if (!C.muscles[id] || seen.has(key)) continue; seen.add(key); out.push({ id, side: sd, k, key, p: pid, d: c ? 1 : d || 2, ...(c ? { c: 1 } : {}) }); } };
   const both = ['RIGHT', 'LEFT'], hf = avg(['right', 'left'], 'headForward'), sh = avg(['right', 'left'], 'shoulderShift'), hp = avg(['right', 'left'], 'hipShift'), pt = avg(['front', 'back'], 'pelvicTilt');
-  if (hf > 12) put('neck', both, both);
-  if (hp > E.hipShift && sh < 0) put('sway', both, both);
+  if (hf > 12) put('neck', both, both, false, DEG(hf / 12));
+  if (hp > E.hipShift && sh < 0) put('sway', both, both, false, DEG(hp / E.hipShift / 2));
   // таз ниже справа: высокая (доминирующая, зажатая) сторона левая
-  if (Math.abs(pt) > E.pelvicTilt) { const high = pt > 0 ? 'LEFT' : 'RIGHT'; put('pelvis_rot', [high], [high === 'RIGHT' ? 'LEFT' : 'RIGHT']); }
+  if (Math.abs(pt) > E.pelvicTilt) { const high = pt > 0 ? 'LEFT' : 'RIGHT'; put('pelvis_rot', [high], [high === 'RIGHT' ? 'LEFT' : 'RIGHT'], false, DEG(Math.abs(pt) / E.pelvicTilt / 2)); }
   if (kv) for (const [k, sq, sd] of [['kneeR', 'squatKneeR', 'RIGHT'], ['kneeL', 'squatKneeL', 'LEFT']]) { const v = kv(k, sq);
-    if (v.st > 6 || v.sq > 6) put('knee', [sd], [sd]); if (v.st > 6) put('flat_foot', [sd], [sd], true); }
+    if (v.st > 6 || v.sq > 6) put('knee', [sd], [sd], false, DEG(Math.max(v.st, v.sq) / 6)); if (v.st > 6) put('flat_foot', [sd], [sd], true); }
   return out;
 }
 /** Зоны «по цепочке»: не видны на фото напрямую, но следуют из измеренного положения по механике стойки.
@@ -328,7 +330,7 @@ export function chainZones(q, seenKeys = new Set(), have = new Set(), base = [])
   // одна функция, противоположные задачи: сгибатели бедра не бывают одновременно «слабые» (sway back) и «зажатые» (колено согнуто)
   const SYN = { iliopsoas: 'hipflex', rectus_fem: 'hipflex' }, pol = k => k === 'SHORT' ? 1 : k === 'WEAK' ? -1 : 0;
   const clash = (id, k) => SYN[id] && [...base, ...out].some(z => SYN[z.id] === SYN[id] && pol(z.k) * pol(k) < 0);
-  const add = (id, k, sides = ['RIGHT', 'LEFT']) => { if (!C.muscles[id] || clash(id, k)) return; for (const sd of sides) { const key = id + ':' + sd; if (seenKeys.has(key)) continue; seenKeys.add(key); out.push({ id, side: sd, k, key, c: 1 }); } };
+  const add = (id, k, sides = ['RIGHT', 'LEFT']) => { if (!C.muscles[id] || clash(id, k)) return; for (const sd of sides) { const key = id + ':' + sd; if (seenKeys.has(key)) continue; seenKeys.add(key); out.push({ id, side: sd, k, key, c: 1, d: 1 }); } };
   const fwd = (Number.isFinite(sh) ? sh : 0) + (Number.isFinite(hp) ? hp : 0); // плечо относительно лодыжки, см
   // порядок = сила оснований: нагрузка на икры и бедро (измерения ЭМГ и сил), затем позы по Kendall
   if (fwd > 2 * E.shoulderShift || (hf > 2 * E.headForward && sh > E.shoulderShift)) { add('soleus', 'SHORT'); add('calf', 'SHORT'); }
@@ -359,12 +361,12 @@ export async function refreshQuick(a) {
   let zones = cur, zEdit = a.quick.zEdit;
   if (zEdit === false || !cur.length) { zones = auto; zEdit = false; }
   else if (zEdit == null) { const have = new Set(cur.map(z => z.id + ':' + z.side)); zones = [...cur, ...auto.filter(z => !have.has(z.id + ':' + z.side))]; zEdit = true; }
-  a.quick = { ...a.quick, by: q.by, obs: observations(q.by), zones: zones.map(({ id, side, k, key, c, p }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}), ...(p ? { p } : {}) })), zEdit, algo: ALGO };
+  a.quick = { ...a.quick, by: q.by, obs: observations(q.by), zones: zones.map(({ id, side, k, key, c, p, d }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}), ...(p ? { p } : {}), ...(d ? { d } : {}) })), zEdit, algo: ALGO };
   a.snapshot = q.snapshot; a.side = q.side; await _pro.put('assessments', a); return true;
 }
 /** Фоном при открытии кабинета: все быстрые тесты старой версии расчета. */
 export async function refreshAll() { let n = 0; for (const a of await _pro.all('assessments')) if (a.template === 'quick' && a.quick && a.quick.algo !== ALGO) { try { if (await refreshQuick(a)) n++; } catch (e) {} } return n; }
-const zSpots = zones => zones.map(z => ({ ...z, key: z.key || z.id + ':' + z.side, tone: (z.k === 'WEAK' ? -1 : 1) * (z.c ? .45 : .75), back: (C.muscles[z.id] || {}).view === 'back' }));
+const zSpots = zones => zones.map(z => ({ ...z, key: z.key || z.id + ':' + z.side, tone: (z.k === 'WEAK' ? -1 : 1) * [.25, .5, .9][(z.d || (z.c ? 1 : 2)) - 1], fl: .3, back: (C.muscles[z.id] || {}).view === 'back' }));
 // ---------- домашнее задание: по умолчанию из карточек подтвержденных зон, специалист правит список ----------
 // Подбор по парам мышц: у каждой зоны свое упражнение и упражнение для ее антагониста.
 // Зажата или перегружена: расслабить ее и укрепить антагониста (грудные → ромбовидные).
@@ -610,12 +612,23 @@ async function drawMeasure(cv, x, view, ms, compact = false, nums = true) {
  *  Касание раскрывает тест руками, технику, смену статуса и «Убрать». Заменяет прежние «Что делать», «Гипотезу» и список зон. */
 const patName = id => ((C.patterns || []).find(p => p.id === id) || {}).name;
 const zGroups = zones => { const g = new Map(); for (const z of zones) { const k = z.id + ':' + z.k; if (!g.has(k)) g.set(k, []); g.get(k).push(z); } return [...g]; };
+/** Проверка руками для зоны плана: тест длины (признак гипертонуса) и тест силы (признак слабости), коротко «как» и «если».
+ *  Для задачи «Укрепить» тест силы первым. «Руками» только для зажатой: перерастянутую и слабую не растягивают. */
+const ptRows = (m, k) => { const t = m.pt; if (!t) return [m.proTest && `<b>Проверка:</b> ${esc(m.proTest)}`].filter(Boolean);
+  const row = (h, how, res, txt) => `<b>${h}</b> ${esc(how)}<br><span style="color:var(--ink)">→ ${res}, если ${esc(txt)}</span>`;
+  const len = t.len && row('Тест длины.', t.len[0], 'зажата (гипертонус)', t.len[1]), str = t.str && row('Тест силы.', t.str[0], 'слабая', t.str[1]);
+  const hyper = t.len && t.str ? '<span style="color:var(--ink)">→ Перерастянута, если в тесте длины амплитуда больше другой стороны, а в тесте силы не держит.</span>' : '';
+  return [...(k === 'WEAK' || k === 'HYPER' ? [str, len] : [len, str]), k === 'HYPER' && hyper, k === 'SHORT' && t.hands && `<b>Руками:</b> ${esc(t.hands)}`].filter(Boolean); };
+// степень зоны 1–3: яркость цвета на 3D и точки у названия. Без степени: цепочка 1, остальные 2
+const DEGN = ['лёгкая', 'средняя', 'выраженная'], degOf = z => z.d || (z.c ? 1 : 2);
+const degDots = (z, c) => `<span aria-label="степень ${degOf(z)} из 3" style="margin-left:8px;letter-spacing:2px;font-size:11px;vertical-align:2px">${[1, 2, 3].map(n => `<span style="color:${c};opacity:${n <= degOf(z) ? 1 : .25}">●</span>`).join('')}</span>`;
 function planBlock(zones, open = new Set()) {
   const rows = zGroups(zones).map(([key, l]) => { const z = l[0], m = C.muscles[z.id] || {}, sd = l.length > 1 ? '' : ' ' + sideRu(z.side);
-    const ex = m.name ? exRows(chainEx(l, 3).ids).map(e => esc(e.title.split(' (')[0])).join(' → ') : '', more = [m.proTest && `<b>Проверка:</b> ${esc(m.proTest)}`, z.k !== 'WEAK' && m.massage && `<b>Руками:</b> ${esc(m.massage)}`].filter(Boolean);
-    return `<details data-pg="${key}" style="padding:9px 0;border-top:1px solid var(--line-2)"${open.has(key) ? ' open' : ''}><summary style="display:block;position:relative;padding-right:24px;list-style:none;cursor:pointer;font-size:15px;line-height:1.35"><span style="position:absolute;right:0;top:4px;color:var(--sub)">${ic('chevron-down', 's')}</span><span class="pill" style="font-size:12px;padding:2px 8px;margin-right:6px;color:${TCOL[z.k]};border-color:${TCOL[z.k]}">${TASK[z.k]}</span><b>${esc(zoneName(z))}</b><span class="sub">${sd}</span>${(() => { const tag = l[0].p && patName(l[0].p) ? `база: ${esc(patName(l[0].p))}` : l.every(x => x.c) ? 'по цепочке' : ''; return ex || tag ? `<div class="sub" style="font-size:13px;margin-top:3px">${tag ? `<span style="color:var(--ink);opacity:.8">${tag}</span>` + (ex ? ' · ' : '') : ''}${ex}</div>` : ''; })()}</summary>
-      ${more.length ? `<div class="sub" style="font-size:13px;line-height:1.4;margin-top:6px">${more.join('<br>')}</div>` : ''}
-      <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">${Object.keys(ZST).map(k => `<button class="pill" data-pk="${k}" style="height:32px;font-size:12px;padding:0 10px;${k === z.k ? `color:${ZCOL[k]};border-color:${ZCOL[k]};font-weight:600` : 'opacity:.7'}">${ZST[k]}</button>`).join('')}<span style="flex:1"></span><button class="round" data-px aria-label="Убрать зону" style="width:32px;height:32px">${ic('x', 's')}</button></div></details>`; });
+    const ex = m.name ? exRows(chainEx(l, 3).ids).map(e => esc(e.title.split(' (')[0])).join(' → ') : '', more = ptRows(m, z.k);
+    return `<details data-pg="${key}" style="padding:9px 0;border-top:1px solid var(--line-2)"${open.has(key) ? ' open' : ''}><summary style="display:block;position:relative;padding-right:24px;list-style:none;cursor:pointer;font-size:15px;line-height:1.35"><span style="position:absolute;right:0;top:4px;color:var(--sub)">${ic('chevron-down', 's')}</span><span class="pill" style="font-size:12px;padding:2px 8px;margin-right:6px;color:${TCOL[z.k]};border-color:${TCOL[z.k]}">${TASK[z.k]}</span><b>${esc(zoneName(z))}</b><span class="sub">${sd}</span>${degDots(z, ZCOL[z.k])}${(() => { const tag = l[0].p && patName(l[0].p) ? `база: ${esc(patName(l[0].p))}` : l.every(x => x.c) ? 'по цепочке' : ''; return ex || tag ? `<div class="sub" style="font-size:13px;margin-top:3px">${tag ? `<span style="color:var(--ink);opacity:.8">${tag}</span>` + (ex ? ' · ' : '') : ''}${ex}</div>` : ''; })()}</summary>
+      ${more.length ? `<div class="sub" style="font-size:13px;line-height:1.4;margin-top:6px;display:flex;flex-direction:column;gap:8px">${more.map(t => `<div>${t}</div>`).join('')}</div>` : ''}
+      <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">${Object.keys(ZST).map(k => `<button class="pill" data-pk="${k}" style="height:32px;font-size:12px;padding:0 10px;${k === z.k ? `color:${ZCOL[k]};border-color:${ZCOL[k]};font-weight:600` : 'opacity:.7'}">${ZST[k]}</button>`).join('')}<span style="flex:1"></span><button class="round" data-px aria-label="Убрать зону" style="width:32px;height:32px">${ic('x', 's')}</button></div>
+      <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="sub" style="font-size:12px;margin-right:2px">Степень</span>${[1, 2, 3].map(n => `<button class="pill" data-pd="${n}" style="height:30px;font-size:12px;padding:0 10px;${n === degOf(z) ? `color:${ZCOL[z.k]};border-color:${ZCOL[z.k]};font-weight:600` : 'opacity:.7'}">${DEGN[n - 1]}</button>`).join('')}</div></details>`; });
   return `<div class="card" style="padding:12px 16px 12px"><div class="row"><b style="flex:1">План</b><span class="sub" style="font-size:12px">${rows.length ? 'гипотеза, проверьте руками' : ''}</span></div>
     ${rows.join('') || '<div class="sub" style="font-size:14px;padding:8px 0">По замеру выраженных зон нет</div>'}
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px"><button class="btn line" id="qadd" style="height:44px;font-size:14px;padding:0 6px">${ic('plus', 's')}Зона</button><button class="btn line" id="qtpl" style="height:44px;font-size:14px;padding:0 6px">${ic('file-text', 's')}Шаблон</button><button class="btn line" id="qauto" style="height:44px;font-size:14px;padding:0 6px">${ic('rotate-ccw', 's')}Замер</button></div></div>`;
@@ -652,6 +665,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
     host.querySelectorAll('[data-pg]').forEach(el => { const key = el.dataset.pg, [gid, gk] = key.split(':'), mine = z => z.id === gid && z.k === gk;
       el.ontoggle = () => el.open ? opened.add(key) : opened.delete(key);
       el.querySelectorAll('[data-pk]').forEach(b => b.onclick = () => { const k = b.dataset.pk; if (k === gk) return; st.zones.forEach(z => { if (mine(z)) z.k = k; }); opened.delete(key); opened.add(gid + ':' + k); changed(); });
+      el.querySelectorAll('[data-pd]').forEach(b => b.onclick = () => { const d = +b.dataset.pd; st.zones.forEach(z => { if (mine(z)) z.d = d; }); changed(); });
       el.querySelector('[data-px]').onclick = () => { st.zones = st.zones.filter(z => !mine(z)); opened.delete(key); changed(); }; });
     $h('#qauto').onclick = () => { if (st.zones.length && !confirm('Заменить зоны подсказкой по замеру? Ваши правки зон пропадут.')) return; st.zones = zonesOf(summaryOf(st.by, st.h === 170 ? 0 : st.h)); changed(); toast('Зоны пересчитаны'); };
     $h('#qtpl').onclick = () => patternSheet(zs => { const rest = st.zones.filter(x => !zs.some(z => x.id === z.id && x.side === z.side)); st.zones = [...rest, ...zs]; changed(); toast('Шаблон добавлен в план'); });
@@ -756,7 +770,7 @@ export async function quickCard(host, aid, prevId) {
     ${editNote(a) ? `<p class="sub" style="font-size:12px;margin-top:-8px">${esc(editNote(a))}</p>` : ''}
     <div id="qcp" style="display:flex;flex-direction:column;gap:16px"></div>
     ${a.note ? `<div><div class="eyebrow">Ваш вывод · ГИПОТЕЗА</div><div class="card" style="font-size:15px;line-height:1.45;white-space:pre-line">${esc(a.note)}</div></div>` : ''}</div>`;
-  panel(host.querySelector('#qcp'), st, { photos: ((await row('poses', aid)) || {}).photos || {}, onChange: async s => { a.quick = { ...a.quick, zones: s.zones.map(({ id, side, k, key, c, p }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}), ...(p ? { p } : {}) })), confirmed: true, zEdit: !sameZones(s.zones, zonesOf(summaryOf(st.by, qz.hSet ? qz.h : 0))) }; await _pro.put('assessments', a); hwBlock(host.querySelector('#qhw'), aid); } });
+  panel(host.querySelector('#qcp'), st, { photos: ((await row('poses', aid)) || {}).photos || {}, onChange: async s => { a.quick = { ...a.quick, zones: s.zones.map(({ id, side, k, key, c, p, d }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}), ...(p ? { p } : {}), ...(d ? { d } : {}) })), confirmed: true, zEdit: !sameZones(s.zones, zonesOf(summaryOf(st.by, qz.hSet ? qz.h : 0))) }; await _pro.put('assessments', a); hwBlock(host.querySelector('#qhw'), aid); } });
   const hwh = document.createElement('div'); hwh.id = 'qhw'; hwh.style.cssText = 'display:flex;flex-direction:column;gap:8px'; host.querySelector('.qslot').appendChild(hwh);
   hwBlock(hwh, aid);
   host.querySelector('#qcrep').onclick = () => report(aid);
@@ -800,7 +814,7 @@ async function save() {
   const c = Q.client, old = await row('clients', c.id);
   if (!old) await _pro.put('clients', { ...c }); else if ((Q.consent && !Q.consent.reused) || c.height !== old.height || c.weight !== old.weight) await _pro.put('clients', { ...old, ...(Q.consent && !Q.consent.reused ? { consent: Q.consent } : {}), height: c.height || old.height || '', weight: c.weight || old.weight || '' });
   const id = _pro.uid(), q = Q.metrics, prev = (await _pro.all('assessments')).filter(a => a.clientId === c.id).sort((a, b) => b.date - a.date)[0];
-  const a = { id, clientId: c.id, date: Q.date, template: 'quick', templateName: 'Быстрый тест', quick: { by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key, c, p }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}), ...(p ? { p } : {}) })), confirmed: true, algo: ALGO, zEdit: !sameZones(Q.zones, zonesOf(q)), gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf, h: heightCm() || 170, hSet: !!heightCm(), kg: +c.weight || null, views: VIEWS.filter(v => Q.views[v.id]).map(v => v.id), edited: VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id) },
+  const a = { id, clientId: c.id, date: Q.date, template: 'quick', templateName: 'Быстрый тест', quick: { by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key, c, p, d }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}), ...(p ? { p } : {}), ...(d ? { d } : {}) })), confirmed: true, algo: ALGO, zEdit: !sameZones(Q.zones, zonesOf(q)), gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf, h: heightCm() || 170, hSet: !!heightCm(), kg: +c.weight || null, views: VIEWS.filter(v => Q.views[v.id]).map(v => v.id), edited: VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id) },
     snapshot: q.snapshot, side: q.side, consent: Q.consent, note: Q.note, plan: { ex: [], text: Q.rec }, protocol: [], moves: {}, quality: {}, limits: {}, setup: {}, pain: {}, hyp: {}, check: {}, draft: false, prevId: prev ? prev.id : null, savedAt: Date.now() };
   await _pro.put('assessments', a);
   await _pro.put('poses', { assessmentId: id, photos: Object.fromEntries(VIEWS.filter(v => Q.views[v.id]).map(v => { const x = Q.views[v.id]; return [v.id, { photo: x.photo, w: x.w, h: x.h, pts: x.pts, auto: x.auto || null, roll: x.roll, rollSrc: x.rollSrc || null }]; })) });
@@ -834,7 +848,7 @@ async function saveEdit() {
   const a = await row('assessments', Q.editId), ps = await row('poses', Q.editId), es = await editState(a), cid = Q.client.id;
   if (!es.ok) { toast(es.why + '. Правка не сохранена'); Q = null; clientCard(cid); return null; }
   const q = Q.metrics, views = VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id);
-  a.quick = { ...a.quick, by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key, c, p }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}), ...(p ? { p } : {}) })), gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf,
+  a.quick = { ...a.quick, by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key, c, p, d }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}), ...(p ? { p } : {}), ...(d ? { d } : {}) })), gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf,
     edited: [...new Set([...(a.quick.edited || []), ...views])], edits: views.length ? [...(a.quick.edits || []), { at: Date.now(), views }] : a.quick.edits || [] };
   Object.assign(a, { snapshot: q.snapshot, side: q.side, note: Q.note, plan: { ...(a.plan || {}), text: Q.rec } });
   for (const v of views) ps.photos[v].pts = Q.views[v].pts;
