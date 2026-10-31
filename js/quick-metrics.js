@@ -43,12 +43,12 @@ export function viewMetrics(id, pts, w, h, roll = 0, heightCm = 0) {
     add('pelvicTilt', 'Линия таза', F.pelvicTilt(p), 'правая сторона ниже', 'левая сторона ниже');
     add('trunkLateral', 'Смещение корпуса', F.trunkLateral(p), 'вправо', 'влево');
     // ось ноги в стойке: колено внутрь (Х) или наружу (О) от линии бедро–лодыжка; та же формула, что в приседе теста по видео
-    add('kneeR', 'Правое колено', F.fppa(p, true), 'внутрь', 'наружу');
-    add('kneeL', 'Левое колено', F.fppa(p, false), 'внутрь', 'наружу');
+    add('kneeR', 'Ось правого колена', F.fppa(p, true), 'внутрь', 'наружу');
+    add('kneeL', 'Ось левого колена', F.fppa(p, false), 'внутрь', 'наружу');
   } else if (id === 'squat') {
     const add = (key, name, v, pos, neg) => out.push({ key, name, v: r1(v), err: ERR[key], unit: '°', dir: Math.abs(v) <= ERR[key] ? 'в пределах погрешности' : side(v, pos, neg) });
-    add('squatKneeR', 'Правое колено в полуприседе', F.fppa(p, true), 'внутрь', 'наружу');
-    add('squatKneeL', 'Левое колено в полуприседе', F.fppa(p, false), 'внутрь', 'наружу');
+    add('squatKneeR', 'Ось правого колена в полуприседе', F.fppa(p, true), 'внутрь', 'наружу');
+    add('squatKneeL', 'Ось левого колена в полуприседе', F.fppa(p, false), 'внутрь', 'наружу');
     add('squatPelvis', 'Линия таза в полуприседе', F.pelvicTilt(p), 'правая сторона ниже', 'левая сторона ниже');
   } else {
     // боковой вид: ближняя к камере сторона; sideView сам выбирает ее по видимости, здесь подсказываем видимостью по виду
@@ -71,7 +71,7 @@ export const isOut = m => !!m && !m.suspect && m.dir !== 'в пределах п
 
 /** Все виды сразу и сводка в форматах теста по видео (snapshot спереди, side как среднее двух боков) для правил зон. */
 // версия расчета замеров и зон: поднимать при изменении формул или правил, сохраненные тесты пересчитаются по своим точкам
-export const ALGO = 7;
+export const ALGO = 8;
 export function quickMetrics(views, heightCm = 0) {
   const by = {}; for (const v of ALL_VIEWS) { const x = views[v.id]; by[v.id] = x && x.pts ? viewMetrics(v.id, x.pts, x.w, x.h, x.roll || 0, heightCm) : null; }
   return summaryOf(by, heightCm);

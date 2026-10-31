@@ -575,17 +575,17 @@ async function drawMeasure(cv, x, view, ms, compact = false, nums = true) {
   const label = (k, m) => { const [pp, name] = ANCHOR[k] || []; if (!pp) return; const pi = pp.map(i => (SIDE_PT[view] || {})[i] ?? i);
     const axp = pi.reduce((s, i) => s + X(i), 0) / pi.length; let ayp = pi.reduce((s, i) => s + Y(i), 0) / pi.length, isOut = out.has(k);
     const v = `${num(m.v)}${m.unit.trim() === '°' ? '°' : m.unit.includes('см') ? ' см' : '%'}`;
-    // в пределах погрешности подписи нет: на фото только то, на что стоит посмотреть
-    if (!isOut) return;
-    g.font = `600 ${15 * d}px ${MONO}`; const vw = g.measureText(v).width + 20 * d;
+    // в пределах погрешности: короткая зеленая пилюля «Плечи 0,8°» без пояснения
+    if (!isOut && compact) return; // «было → стало»: два узких фото, только отклонения
+    const tv = isOut ? v : `${name} ${v}`; g.font = `600 ${(isOut ? 15 : 13) * d}px ${MONO}`; const vw = g.measureText(tv).width + 20 * d;
     g.font = `500 ${12 * d}px ${SANS}`; const sub = m.dir.replace(' (переразгибание)', '').replace(' (согнуто)', '').replace(' сторона', '');
     // текст под значением переносится по словам, чтобы подпись помещалась в поле сбоку от тела
     const room = Math.max(vw, 112 * d, Math.min(W * .42, Math.max(margin.l, margin.r) - 18 * d)), wrap = []; for (const w of sub.split(' ')) { const t = wrap.length ? wrap[wrap.length - 1] + ' ' + w : w;
       if (wrap.length && g.measureText(t).width + 18 * d > room) wrap.push(w); else if (wrap.length) wrap[wrap.length - 1] = t; else wrap.push(w); }
-    const lines = [name, ...wrap];
-    const sw = Math.max(...lines.map(t => g.measureText(t).width)) + 18 * d, subH = (6 + lines.length * 16) * d;
+    const lines = isOut ? [name, ...wrap] : [];
+    const sw = lines.length ? Math.max(...lines.map(t => g.measureText(t).width)) + 18 * d : 0, subH = (6 + lines.length * 16) * d;
     // колено: подпись со своей стороны, снаружи ноги
-    const bwid = Math.max(vw, sw), want = /nee[RL]$/.test(k) ? axp < W / 2 : side++ % 2 === 0 ? axp > W / 2 : axp <= W / 2, hh = compact ? 28 * d : 31 * d + subH;
+    const bwid = Math.max(vw, sw), want = /nee[RL]$/.test(k) ? axp < W / 2 : side++ % 2 === 0 ? axp > W / 2 : axp <= W / 2, hh = compact || !isOut ? 28 * d : 31 * d + subH;
     // место подписи: у края кадра, без наложения на точки, другие подписи и лицо; ближе к суставу по высоте
     let best = null; for (const left of [want, !want]) { const lx = left ? 12 * d : W - bwid - 12 * d;
       for (let st = -24; st <= 24; st++) { const ly = Math.max(8 * d, Math.min(H - hh - 4 * d, ayp - 20 * d + st * 7 * d)), r = { x: lx - 6 * d, y: ly - 6 * d, w: bwid + 12 * d, h: hh + 12 * d };
@@ -598,8 +598,8 @@ async function drawMeasure(cv, x, view, ms, compact = false, nums = true) {
     if (ly !== ly0 && axp > head.l && axp < head.r && ayp > head.t && ayp < head.b) ayp = ly < head.t ? head.t : head.b;
     g.strokeStyle = isOut ? 'rgba(255,159,10,.75)' : 'rgba(255,255,255,.35)'; g.lineWidth = 1 * d; g.beginPath(); g.moveTo(axp, ayp); g.lineTo(left ? lx + bwid : lx, ly + 14 * d); g.stroke();
     g.fillStyle = isOut ? 'rgba(58,36,6,.84)' : 'rgba(18,48,28,.84)'; g.beginPath(); g.roundRect(lx, ly, vw, 28 * d, 14 * d); g.fill();
-    g.strokeStyle = isOut ? 'rgba(255,159,10,.55)' : 'rgba(48,209,88,.45)'; g.stroke(); g.fillStyle = isOut ? AM : '#30D158'; g.font = `600 ${15 * d}px ${MONO}`; g.textBaseline = 'middle'; g.fillText(isOut ? v : 'в пределах', lx + 10 * d, ly + 14.5 * d);
-    if (!compact) { g.fillStyle = 'rgba(28,28,30,.8)'; g.beginPath(); g.roundRect(lx, ly + 31 * d, sw, subH, 11 * d); g.fill(); g.fillStyle = '#E5E5EA'; g.font = `500 ${12 * d}px ${SANS}`; lines.forEach((t, n) => g.fillText(t, lx + 9 * d, ly + (42.5 + n * 16) * d)); }
+    g.strokeStyle = isOut ? 'rgba(255,159,10,.55)' : 'rgba(48,209,88,.45)'; g.stroke(); g.fillStyle = isOut ? AM : '#30D158'; g.font = `600 ${(isOut ? 15 : 13) * d}px ${MONO}`; g.textBaseline = 'middle'; g.fillText(tv, lx + 10 * d, ly + 14.5 * d);
+    if (!compact && isOut) { g.fillStyle = 'rgba(28,28,30,.8)'; g.beginPath(); g.roundRect(lx, ly + 31 * d, sw, subH, 11 * d); g.fill(); g.fillStyle = '#E5E5EA'; g.font = `500 ${12 * d}px ${SANS}`; lines.forEach((t, n) => g.fillText(t, lx + 9 * d, ly + (42.5 + n * 16) * d)); }
     g.textBaseline = 'alphabetic'; };
   // сначала вне погрешности (главное), потом остальные
   if (nums) for (const m of [...ms].sort((a, b) => (out.has(b.key) ? 1 : 0) - (out.has(a.key) ? 1 : 0))) label(m.key, m);
@@ -637,7 +637,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
   const hasPh = VIEWS.some(v => photos[v.id] && photos[v.id].pts); let v3 = null, mode = '3d', view = 'front';
   const pose = () => poseOf({ by: st.by, h: st.h || 170 }, st.gain);
   host.innerHTML = `<div class="card" id="qfcard" style="padding:12px">
-      ${hasPh ? `<div class="row" style="justify-content:space-between;gap:8px"><div class="seg" id="qmode" style="width:auto;flex:none"><button data-md="3d" class="on" style="padding:0 18px">3D</button><button data-md="ph" style="padding:0 18px">Фото</button></div><span style="flex:1"></span><button class="pill tog${showNums ? ' on' : ''}" id="qpnum" aria-pressed="${showNums}" style="display:none;height:34px">Цифры</button><button class="pill tog${showGrid ? ' on' : ''}" id="qpgrid" aria-pressed="${showGrid}" style="display:none;height:34px">Сетка</button><span class="mt-tag n" id="qmlbl">Типовая фигура</span></div>` : ''}
+      ${hasPh ? `<div class="row" style="justify-content:space-between;gap:8px;flex-wrap:wrap"><div class="seg" id="qmode" style="width:auto;flex:none"><button data-md="3d" class="on" style="padding:0 18px">3D</button><button data-md="ph" style="padding:0 18px">Фото</button></div><span style="flex:1"></span><button class="pill tog${showNums ? ' on' : ''}" id="qpnum" aria-pressed="${showNums}" style="display:none;height:34px">Цифры</button><button class="pill tog${showGrid ? ' on' : ''}" id="qpgrid" aria-pressed="${showGrid}" style="display:none;height:34px">Сетка</button><span class="mt-tag n" id="qmlbl">Типовая фигура</span></div>` : ''}
       <div id="q3d" style="height:min(58vh,420px);margin-top:10px"></div><canvas id="qph" style="width:100%;display:none;margin-top:10px;border-radius:22px"></canvas>
       <div class="seg" id="qview" style="margin-top:10px">${VIEWS.filter(v => !v.opt || (photos[v.id] && photos[v.id].pts)).map((v, i) => `<button data-vw="${v.id}" class="${i ? '' : 'on'}" style="padding:0 6px">${v.short || v.name}</button>`).join('')}</div>
       <div id="qgr"><div class="row" style="gap:10px;margin-top:10px"><span class="sub" style="font-size:13px;flex:none">Усилить</span><div class="seg" id="qgain" style="flex:1">${GAINS.map(g => `<button data-g="${g}" class="${g === st.gain ? 'on' : ''}" style="padding:0 6px">×${String(g).replace('.', ',')}</button>`).join('')}</div></div><div id="qplate">${gainPlate(st.gain)}</div></div>
@@ -660,7 +660,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
   const photoView = () => (md => { const r = (photos[view] || {}).roll; if (mode === 'ph') $h('#qcap').textContent = (r ? `Кадр выровнен на ${String(Math.abs(r)).replace('.', ',')}°${(photos[view] || {}).rollSrc === 'image' ? ' по линиям фона' : ''} · ` : '') + 'касание фото: цифры'; })() || drawMeasure($h('#qph'), photos[view], view, st.by[view] || [], false, showNums).then(ok => { if (!ok && $h('#qph')) { const c = $h('#qph').getContext('2d'); c.clearRect(0, 0, 1e4, 1e4); } });
   const setMode = md => { mode = md; host.querySelectorAll('[data-md]').forEach(x => x.classList.toggle('on', x.dataset.md === md));
     $h('#q3d').style.display = md === '3d' ? '' : 'none'; $h('#qph').style.display = md === 'ph' ? 'block' : 'none'; $h('#qgr').style.display = md === '3d' ? '' : 'none';
-    if ($h('#qmlbl')) $h('#qmlbl').textContent = md === '3d' ? 'Типовая фигура' : 'Фото клиента';
+    if ($h('#qmlbl')) $h('#qmlbl').style.display = md === '3d' ? '' : 'none';
     for (const id of ['#qpgrid', '#qpnum']) if ($h(id)) $h(id).style.display = md === 'ph' ? '' : 'none';
     $h('#qcap').textContent = md === '3d' ? 'Типовая фигура, цветом зоны' : 'Касание фото: убрать или показать цифры';
     if (md === 'ph') photoView(); else if (v3) v3.look(view === 'squat' ? 'front' : view); };
