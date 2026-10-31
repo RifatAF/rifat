@@ -9,7 +9,7 @@ export const VIEWS = [
   { id: 'left', name: 'Слева', say: 'Повернитесь ко мне левым боком' },
 ];
 // дополнительный снимок, необязательный: полуприсед спереди уточняет колени и таз под нагрузкой
-export const SQUAT = { id: 'squat', name: 'Полуприсед', short: 'Присед', say: 'Присядьте наполовину, как на стул, руки вперед', opt: true };
+export const SQUAT = { id: 'squat', name: 'Полуприсед', short: 'Присед', say: 'Присядьте наполовину, как на стул: стопы и колени смотрят вперед, руки вперед', opt: true };
 export const ALL_VIEWS = [...VIEWS, SQUAT];
 // точки, которые специалист видит и правит на каждом фото
 export const EDIT_POINTS = {
@@ -63,7 +63,7 @@ export function viewMetrics(id, pts, w, h, roll = 0, heightCm = 0) {
     deg('kneeHyper', 'Колено относительно линии бедро–лодыжка', s.kneeHyperDeg, 'кзади (переразгибание)', 'кпереди (согнуто)');
   }
   // значения вне физиологии: сбой точек (темная одежда, ракурс), а не тело. Не идут в зоны, фигуру и отчет, специалист видит «проверьте точки»
-  for (const m of out) if (Math.abs(m.v) > (LIMIT[m.key] ?? Infinity)) { m.suspect = true; m.dir = 'проверьте точки'; }
+  for (const m of out) if (Math.abs(m.v) > (LIMIT[m.key] ?? Infinity)) { m.suspect = true; m.dir = /^squatKnee/.test(m.key) ? 'не ось: сгибание' : 'проверьте точки'; }
   return out;
 }
 /** Показатель вне погрешности и правдоподобный: идет в «Что видно», подписи на фото и зоны. */
@@ -71,7 +71,7 @@ export const isOut = m => !!m && !m.suspect && m.dir !== 'в пределах п
 
 /** Все виды сразу и сводка в форматах теста по видео (snapshot спереди, side как среднее двух боков) для правил зон. */
 // версия расчета замеров и зон: поднимать при изменении формул или правил, сохраненные тесты пересчитаются по своим точкам
-export const ALGO = 8;
+export const ALGO = 9;
 export function quickMetrics(views, heightCm = 0) {
   const by = {}; for (const v of ALL_VIEWS) { const x = views[v.id]; by[v.id] = x && x.pts ? viewMetrics(v.id, x.pts, x.w, x.h, x.roll || 0, heightCm) : null; }
   return summaryOf(by, heightCm);
