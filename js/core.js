@@ -14,10 +14,11 @@ export function applyRuleWeights(rules, w, t) { for (const r of rules) { for (co
   if (r.t0 === undefined) r.t0 = r[key]; const tv = t && t[r.id]; r[key] = Number.isFinite(tv) ? tv : r.t0; } }
 export async function loadContent() {
   const get = n => fetch('data/' + n + '.json').then(r => r.json());
-  const [mus, bm, ch, ex] = await Promise.all([get('muscles'), get('bodymap'), get('chains'), get('exercises')]);
+  // patterns: база коррекции специалиста (шаблоны и автозапуск по замеру)
+  const [mus, bm, ch, ex, pt] = await Promise.all([get('muscles'), get('bodymap'), get('chains'), get('exercises'), get('patterns').catch(() => ({ patterns: [] }))]);
   // тексты для клиента простым языком: без них экран результата работает на технических формулировках
   fetch('data/plain.json').then(r => r.ok ? r.json() : null).then(j => { C.plain = (j && j.rules) || {}; }).catch(() => { C.plain = {}; });
-  C.muscles = mus.muscles; C.bodymap = bm; C.chains = ch.chains; C.exercises = Object.fromEntries(ex.exercises.map(e => [e.id, e])); C.booking = 'https://t.me/BodyPassport_bot';
+  C.muscles = mus.muscles; C.bodymap = bm; C.chains = ch.chains; C.patterns = pt.patterns || []; C.exercises = Object.fromEntries(ex.exercises.map(e => [e.id, e])); C.booking = 'https://t.me/BodyPassport_bot';
   // веса «правило → мышца», выученные по калибровкам специалистов (Администрирование → Калибровки): без сети остаются исходные из базы
   // ждем не дольше 2,5 с: иначе клиент и специалист разбирали один тест с разными весами и видели разные мышцы
   const wq = fetch('/api/calib?a=weights', { signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : null).then(j => { if (j && (j.w || j.t)) { applyRuleWeights(bm.rules, j.w, j.t); C.weightsAt = j.at || 0; C.thresholds = j.t || {}; } if (j) C.weights = { retest: j.retest || null }; }).catch(() => {});

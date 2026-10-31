@@ -289,9 +289,28 @@ export function zonesOf(q) {
     for (const [k, sq, sd] of [['kneeR', 'squatKneeR', 'RIGHT'], ['kneeL', 'squatKneeL', 'LEFT']]) { const v = kv(k, sq);
       if (v.st > 6 || v.sq > 6) valg.forEach(m => addM(m.id, sd, m.state === 'OVERLOAD' ? 'HYPER' : m.state));
       else if (v.st < -6) VAR.forEach(([id, st]) => addM(id, sd, st)); }
-    const base = [...lat, ...out].map(s => ({ id: s.id, side: s.side, k: s.k, key: s.key }));
+    // база коррекции специалиста важнее общих правил: ее мышцы ставятся первыми, тот же мускул с той же стороны из правил не дублируется
+    const pat = patternZones(q, kv), pk = new Set(pat.map(z => z.id + ':' + z.side));
+    const base = [...pat, ...[...lat, ...out].filter(s => !pk.has(s.id + ':' + s.side)).map(s => ({ id: s.id, side: s.side, k: s.k, key: s.key }))];
     return [...base, ...chainZones(q, new Set(base.map(z => z.id + ':' + z.side)), new Set(base.map(z => z.id)))]; }
   catch (e) { return []; } }
+/** Шаблоны базы коррекции (data/patterns.json), которые включаются сами по замеру: зажатые → «зажатая», слабые → «слабая».
+ *  Поясница (наклон таза) и плечо (ротаторы) по 4 фото не измеряются: только вручную кнопкой «Шаблон». */
+export function patternZones(q, kv) {
+  const P = Object.fromEntries((C.patterns || []).map(p => [p.id, p])), B = q.by || {}, out = [], seen = new Set(), E = QERR;
+  const avg = (views, k) => { const v = views.map(id => ((B[id] || []).find(m => m.key === k) || {}).v).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
+  const put = (pid, tight, weak, c) => { const p = P[pid]; if (!p) return;
+    for (const [ids, k, sides] of [[p.tight, 'SHORT', tight], [p.weak, 'WEAK', weak]]) for (const id of ids) for (const sd of sides) { const key = id + ':' + sd;
+      if (!C.muscles[id] || seen.has(key)) continue; seen.add(key); out.push({ id, side: sd, k, key, p: pid, ...(c ? { c: 1 } : {}) }); } };
+  const both = ['RIGHT', 'LEFT'], hf = avg(['right', 'left'], 'headForward'), sh = avg(['right', 'left'], 'shoulderShift'), hp = avg(['right', 'left'], 'hipShift'), pt = avg(['front', 'back'], 'pelvicTilt');
+  if (hf > 12) put('neck', both, both);
+  if (hp > E.hipShift && sh < 0) put('sway', both, both);
+  // таз ниже справа: высокая (доминирующая, зажатая) сторона левая
+  if (Math.abs(pt) > E.pelvicTilt) { const high = pt > 0 ? 'LEFT' : 'RIGHT'; put('pelvis_rot', [high], [high === 'RIGHT' ? 'LEFT' : 'RIGHT']); }
+  if (kv) for (const [k, sq, sd] of [['kneeR', 'squatKneeR', 'RIGHT'], ['kneeL', 'squatKneeL', 'LEFT']]) { const v = kv(k, sq);
+    if (v.st > 6 || v.sq > 6) put('knee', [sd], [sd]); if (v.st > 6) put('flat_foot', [sd], [sd], true); }
+  return out;
+}
 /** Зоны «по цепочке»: не видны на фото напрямую, но следуют из измеренного положения по механике стойки.
  *  Отдельный лимит (до 5 мышц, ноги первыми), чтобы шея и плечи не вытесняли ноги. Помечены c:1, специалист проверяет руками.
  *  Основания (docs/clinical/chain_rules.md):
@@ -331,7 +350,7 @@ export async function refreshQuick(a) {
   let zones = cur, zEdit = a.quick.zEdit;
   if (zEdit === false || !cur.length) { zones = auto; zEdit = false; }
   else if (zEdit == null) { const have = new Set(cur.map(z => z.id + ':' + z.side)); zones = [...cur, ...auto.filter(z => !have.has(z.id + ':' + z.side))]; zEdit = true; }
-  a.quick = { ...a.quick, by: q.by, obs: observations(q.by), zones: zones.map(({ id, side, k, key, c }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}) })), zEdit, algo: ALGO };
+  a.quick = { ...a.quick, by: q.by, obs: observations(q.by), zones: zones.map(({ id, side, k, key, c, p }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}), ...(p ? { p } : {}) })), zEdit, algo: ALGO };
   a.snapshot = q.snapshot; a.side = q.side; await _pro.put('assessments', a); return true;
 }
 /** Фоном при открытии кабинета: все быстрые тесты старой версии расчета. */
@@ -541,11 +560,12 @@ async function drawMeasure(cv, x, view, ms, compact = false, nums = true) {
 }
 /** «План»: одна строка на мышцу и задачу (стороны вместе): задача, мышца, цепочка упражнений.
  *  Касание раскрывает тест руками, технику, смену статуса и «Убрать». Заменяет прежние «Что делать», «Гипотезу» и список зон. */
+const patName = id => ((C.patterns || []).find(p => p.id === id) || {}).name;
 const zGroups = zones => { const g = new Map(); for (const z of zones) { const k = z.id + ':' + z.k; if (!g.has(k)) g.set(k, []); g.get(k).push(z); } return [...g]; };
 function planBlock(zones, open = new Set()) {
   const rows = zGroups(zones).map(([key, l]) => { const z = l[0], m = C.muscles[z.id] || {}, sd = l.length > 1 ? '' : ' ' + sideRu(z.side);
     const ex = m.name ? exRows(chainEx(l, 3).ids).map(e => esc(e.title.split(' (')[0])).join(' → ') : '', more = [m.proTest && `<b>Проверка:</b> ${esc(m.proTest)}`, z.k !== 'WEAK' && m.massage && `<b>Руками:</b> ${esc(m.massage)}`].filter(Boolean);
-    return `<details data-pg="${key}" style="padding:9px 0;border-top:1px solid var(--line-2)"${open.has(key) ? ' open' : ''}><summary style="display:block;position:relative;padding-right:24px;list-style:none;cursor:pointer;font-size:15px;line-height:1.35"><span style="position:absolute;right:0;top:4px;color:var(--sub)">${ic('chevron-down', 's')}</span><span class="pill" style="font-size:12px;padding:2px 8px;margin-right:6px;color:${TCOL[z.k]};border-color:${TCOL[z.k]}">${TASK[z.k]}</span><b>${esc(zoneName(z))}</b><span class="sub">${sd}</span>${ex || l.every(x => x.c) ? `<div class="sub" style="font-size:13px;margin-top:3px">${l.every(x => x.c) ? '<span style="color:var(--ink);opacity:.8">по цепочке</span>' + (ex ? ' · ' : '') : ''}${ex}</div>` : ''}</summary>
+    return `<details data-pg="${key}" style="padding:9px 0;border-top:1px solid var(--line-2)"${open.has(key) ? ' open' : ''}><summary style="display:block;position:relative;padding-right:24px;list-style:none;cursor:pointer;font-size:15px;line-height:1.35"><span style="position:absolute;right:0;top:4px;color:var(--sub)">${ic('chevron-down', 's')}</span><span class="pill" style="font-size:12px;padding:2px 8px;margin-right:6px;color:${TCOL[z.k]};border-color:${TCOL[z.k]}">${TASK[z.k]}</span><b>${esc(zoneName(z))}</b><span class="sub">${sd}</span>${(() => { const tag = l[0].p && patName(l[0].p) ? `база: ${esc(patName(l[0].p))}` : l.every(x => x.c) ? 'по цепочке' : ''; return ex || tag ? `<div class="sub" style="font-size:13px;margin-top:3px">${tag ? `<span style="color:var(--ink);opacity:.8">${tag}</span>` + (ex ? ' · ' : '') : ''}${ex}</div>` : ''; })()}</summary>
       ${more.length ? `<div class="sub" style="font-size:13px;line-height:1.4;margin-top:6px">${more.join('<br>')}</div>` : ''}
       <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">${Object.keys(ZST).map(k => `<button class="pill" data-pk="${k}" style="height:32px;font-size:12px;padding:0 10px;${k === z.k ? `color:${ZCOL[k]};border-color:${ZCOL[k]};font-weight:600` : 'opacity:.7'}">${ZST[k]}</button>`).join('')}<span style="flex:1"></span><button class="round" data-px aria-label="Убрать зону" style="width:32px;height:32px">${ic('x', 's')}</button></div></details>`; });
   return `<div class="card" style="padding:12px 16px 12px"><div class="row"><b style="flex:1">План</b><span class="sub" style="font-size:12px">${rows.length ? 'гипотеза, проверьте руками' : ''}</span></div>
@@ -619,16 +639,16 @@ function results() {
 /** Шаблоны из базы коррекции специалиста (data/patterns.json): паттерн → зажатые и слабые мышцы. Только в кабинете. */
 let patterns = null;
 async function patternSheet(onAdd) {
-  try { patterns = patterns || (await (await fetch('data/patterns.json')).json()).patterns; } catch (e) { return toast('Шаблоны не загрузились, проверьте сеть'); }
+  try { patterns = patterns || C.patterns || (await (await fetch('data/patterns.json')).json()).patterns; } catch (e) { return toast('Шаблоны не загрузились, проверьте сеть'); }
   const d = document.createElement('div'); d.className = 'sheet'; let side = 'RIGHT';
   const nm = id => esc(((C.muscles[id] || {}).name || id).toLowerCase());
   d.innerHTML = `<div style="max-height:86dvh;overflow:auto"><h2 style="font-size:20px">Шаблон</h2><p class="sub" style="font-size:13px;margin-top:4px">Из вашей базы коррекции. Добавит зоны в план, клиент увидит только задачи.</p>
-    <div class="group" style="margin-top:12px">${patterns.map((p, i) => `<button class="row-link" data-pt="${i}" style="text-align:left"><span style="flex:1"><b style="font-weight:600">${esc(p.name)}</b><br><small class="sub" style="font-size:12px">Расслабить: ${p.tight.map(nm).join(', ')}<br>Укрепить: ${p.weak.map(nm).join(', ')}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>
+    <div class="group" style="margin-top:12px">${patterns.map((p, i) => `<button class="row-link" data-pt="${i}" style="text-align:left"><span style="flex:1"><b style="font-weight:600">${esc(p.name)}</b><br><small class="sub" style="font-size:12px">Расслабить: ${p.tight.map(nm).join(', ')}<br>Укрепить: ${p.weak.map(nm).join(', ')}<br>${p.auto ? `Сам по замеру: ${esc(p.auto.toLowerCase())}` : 'Только вручную: по фото не измеряется'}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>
     <div id="ptside" style="display:none;margin-top:12px"><b style="font-size:15px">Где зажато (доминирующая сторона)?</b><div class="seg" style="margin-top:8px"><button data-sd="RIGHT" class="on">Справа</button><button data-sd="LEFT">Слева</button></div><button class="btn" id="ptok" style="margin-top:10px">Добавить</button></div>
     <button class="btn ghost" id="ptx" style="margin-top:8px;border:0">Отмена</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'ptx') d.remove(); };
   const both = ['RIGHT', 'LEFT'], opp = s => s === 'RIGHT' ? 'LEFT' : 'RIGHT';
-  const apply = p => { const zs = []; const put = (id, k, sds) => { if (C.muscles[id]) for (const sd of sds) zs.push({ id, side: sd, k, key: id + ':' + sd }); };
+  const apply = p => { const zs = []; const put = (id, k, sds) => { if (C.muscles[id]) for (const sd of sds) zs.push({ id, side: sd, k, key: id + ':' + sd, p: p.id }); };
     p.tight.forEach(id => put(id, 'SHORT', p.lateral ? [side] : both)); p.weak.forEach(id => put(id, 'WEAK', p.lateral ? [opp(side)] : both));
     track('pattern_add', { c: p.id }, false); d.remove(); onAdd(zs); };
   d.querySelectorAll('[data-sd]').forEach(b => b.onclick = () => { side = b.dataset.sd; d.querySelectorAll('[data-sd]').forEach(x => x.classList.toggle('on', x === b)); });
@@ -680,7 +700,7 @@ export async function quickCard(host, aid, prevId) {
     ${editNote(a) ? `<p class="sub" style="font-size:12px;margin-top:-8px">${esc(editNote(a))}</p>` : ''}
     <div id="qcp" style="display:flex;flex-direction:column;gap:16px"></div>
     ${a.note ? `<div><div class="eyebrow">Ваш вывод · ГИПОТЕЗА</div><div class="card" style="font-size:15px;line-height:1.45;white-space:pre-line">${esc(a.note)}</div></div>` : ''}</div>`;
-  panel(host.querySelector('#qcp'), st, { photos: ((await row('poses', aid)) || {}).photos || {}, onChange: async s => { a.quick = { ...a.quick, zones: s.zones.map(({ id, side, k, key, c }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}) })), confirmed: true, zEdit: !sameZones(s.zones, zonesOf(summaryOf(st.by, qz.hSet ? qz.h : 0))) }; await _pro.put('assessments', a); hwBlock(host.querySelector('#qhw'), aid); } });
+  panel(host.querySelector('#qcp'), st, { photos: ((await row('poses', aid)) || {}).photos || {}, onChange: async s => { a.quick = { ...a.quick, zones: s.zones.map(({ id, side, k, key, c, p }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}), ...(p ? { p } : {}) })), confirmed: true, zEdit: !sameZones(s.zones, zonesOf(summaryOf(st.by, qz.hSet ? qz.h : 0))) }; await _pro.put('assessments', a); hwBlock(host.querySelector('#qhw'), aid); } });
   const hwh = document.createElement('div'); hwh.id = 'qhw'; hwh.style.cssText = 'display:flex;flex-direction:column;gap:8px'; host.querySelector('.qslot').appendChild(hwh);
   hwBlock(hwh, aid);
   host.querySelector('#qcrep').onclick = () => report(aid);
@@ -724,7 +744,7 @@ async function save() {
   const c = Q.client, old = await row('clients', c.id);
   if (!old) await _pro.put('clients', { ...c }); else if ((Q.consent && !Q.consent.reused) || c.height !== old.height || c.weight !== old.weight) await _pro.put('clients', { ...old, ...(Q.consent && !Q.consent.reused ? { consent: Q.consent } : {}), height: c.height || old.height || '', weight: c.weight || old.weight || '' });
   const id = _pro.uid(), q = Q.metrics, prev = (await _pro.all('assessments')).filter(a => a.clientId === c.id).sort((a, b) => b.date - a.date)[0];
-  const a = { id, clientId: c.id, date: Q.date, template: 'quick', templateName: 'Быстрый тест', quick: { by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key, c }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}) })), confirmed: true, algo: ALGO, zEdit: !sameZones(Q.zones, zonesOf(q)), gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf, h: heightCm() || 170, hSet: !!heightCm(), kg: +c.weight || null, views: VIEWS.filter(v => Q.views[v.id]).map(v => v.id), edited: VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id) },
+  const a = { id, clientId: c.id, date: Q.date, template: 'quick', templateName: 'Быстрый тест', quick: { by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key, c, p }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}), ...(p ? { p } : {}) })), confirmed: true, algo: ALGO, zEdit: !sameZones(Q.zones, zonesOf(q)), gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf, h: heightCm() || 170, hSet: !!heightCm(), kg: +c.weight || null, views: VIEWS.filter(v => Q.views[v.id]).map(v => v.id), edited: VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id) },
     snapshot: q.snapshot, side: q.side, consent: Q.consent, note: Q.note, plan: { ex: [], text: Q.rec }, protocol: [], moves: {}, quality: {}, limits: {}, setup: {}, pain: {}, hyp: {}, check: {}, draft: false, prevId: prev ? prev.id : null, savedAt: Date.now() };
   await _pro.put('assessments', a);
   await _pro.put('poses', { assessmentId: id, photos: Object.fromEntries(VIEWS.filter(v => Q.views[v.id]).map(v => { const x = Q.views[v.id]; return [v.id, { photo: x.photo, w: x.w, h: x.h, pts: x.pts, auto: x.auto || null, roll: x.roll }]; })) });
@@ -758,7 +778,7 @@ async function saveEdit() {
   const a = await row('assessments', Q.editId), ps = await row('poses', Q.editId), es = await editState(a), cid = Q.client.id;
   if (!es.ok) { toast(es.why + '. Правка не сохранена'); Q = null; clientCard(cid); return null; }
   const q = Q.metrics, views = VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id);
-  a.quick = { ...a.quick, by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key, c }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}) })), gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf,
+  a.quick = { ...a.quick, by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key, c, p }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}), ...(p ? { p } : {}) })), gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf,
     edited: [...new Set([...(a.quick.edited || []), ...views])], edits: views.length ? [...(a.quick.edits || []), { at: Date.now(), views }] : a.quick.edits || [] };
   Object.assign(a, { snapshot: q.snapshot, side: q.side, note: Q.note, plan: { ...(a.plan || {}), text: Q.rec } });
   for (const v of views) ps.photos[v].pts = Q.views[v].pts;
