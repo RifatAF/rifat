@@ -3,14 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>BodyPassport — карта тела по камере телефона</title>
-<meta name="description" content="Тест осанки и движения по камере телефона за 2–5 минут. Подсказывает, что растянуть и что укрепить, и дает упражнения. Бета-версия. Это оценка, не диагноз.">
+<title>BodyPassport: осанка в цифрах по 4 фото для специалистов</title>
+<meta name="description" content="Тест осанки по четырём фото для тренеров, реабилитологов и массажистов. Наклоны и смещения головы, плеч и таза в цифрах, 3D‑фигура в позе клиента, отчёт с вашим именем и «до и после». Работает в браузере телефона.">
 <meta name="theme-color" content="#161617">
-<meta property="og:title" content="BodyPassport — карта тела по камере телефона">
-<meta property="og:description" content="Короткий видеотест по камере: что растянуть, что укрепить и какие упражнения делать. Бета.">
-<meta property="og:image" content="https://bodypassport.app/img/og.jpg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
-<meta property="og:url" content="https://bodypassport.app/"><meta property="og:type" content="website"><meta name="twitter:card" content="summary_large_image">
-<link rel="canonical" href="https://bodypassport.app/">
+<meta property="og:title" content="BodyPassport: осанка в цифрах для вас, в 3D для клиента">
+<meta property="og:description" content="Четыре фото клиента, через пять минут цифры по осанке, 3D‑фигура и отчёт с вашим именем. Первые 3 клиента с PRO бесплатно.">
+<meta property="og:image" content="https://www.bodypassport.app/img/og.jpg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta property="og:url" content="https://www.bodypassport.app/"><meta property="og:type" content="website"><meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://www.bodypassport.app/">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"BodyPassport","url":"https://www.bodypassport.app/","applicationCategory":"HealthApplication","operatingSystem":"Web, iOS, Android","inLanguage":"ru","description":"Тест осанки по четырём фото для тренеров, реабилитологов и массажистов: наклоны и смещения головы, плеч и таза в цифрах, 3D-фигура в позе клиента, отчёт клиенту с именем специалиста и сравнение «до и после». Это не диагноз и не медицинское заключение.","offers":[{"@type":"Offer","name":"Free","price":"0","priceCurrency":"USD"},{"@type":"Offer","name":"PRO","price":"9","priceCurrency":"USD","description":"в месяц"}],"author":{"@type":"Person","name":"Рифат Аюпов","jobTitle":"Биомеханик, кинезиотерапевт"}}</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icons/bp7-64.png">
 <link rel="apple-touch-icon" href="icons/bp7-apple-180.png">
@@ -264,7 +265,7 @@ body:has(.cam) #bugtab,body:has(.sheet) #bugtab{display:none}
 .stagger>*{animation:fd var(--d3) var(--ease-out) both}
 .stagger>*:nth-child(2){animation-delay:calc(var(--stagger)*1)}.stagger>*:nth-child(3){animation-delay:calc(var(--stagger)*2)}
 .stagger>*:nth-child(4){animation-delay:calc(var(--stagger)*3)}.stagger>*:nth-child(5){animation-delay:calc(var(--stagger)*4)}
-.boot{position:fixed;inset:0;z-index:5;display:grid;place-items:center;background:#161617}.boot img{width:168px;height:168px;animation:bootp 1.6s ease-in-out infinite}@keyframes bootp{50%{transform:scale(.94)}}
+.seo{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.boot{position:fixed;inset:0;z-index:5;display:grid;place-items:center;background:#161617}.boot img{width:168px;height:168px;animation:bootp 1.6s ease-in-out infinite}@keyframes bootp{50%{transform:scale(.94)}}
 .spin{width:28px;height:28px;border:3px solid var(--line);border-top-color:var(--ink);border-radius:50%;animation:sp .8s linear infinite;margin:40vh auto}
 @keyframes sp{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){
@@ -508,7 +509,21 @@ body:has(.welcome) #betabar{background:rgba(11,27,59,.72);backdrop-filter:blur(1
 </style>
 </head>
 <body>
-<div id="app"><div class="boot"><img src="icons/bp7-192.png" alt="" width="168" height="168"></div></div>
+<div id="app"><div class="boot"><img src="icons/bp7-192.png" alt="" width="168" height="168"></div>
+<!-- текст лендинга для поисковых и ИИ-роботов, которые не выполняют JavaScript; приложение заменяет его своим экраном. Держать в согласии с js/landing.js -->
+<main class="seo"><h1>BodyPassport: осанка в цифрах для вас, в 3D для клиента</h1>
+<p>Для тренеров, реабилитологов, кинезиотерапевтов и массажистов. По четырём фото приложение измерит наклоны и смещения головы, плеч и таза и покажет их на 3D‑фигуре в позе клиента. Ваша оценка объективна, клиент видит, за что платит. Работает в браузере телефона, установка не нужна. Первые 3 клиента с PRO бесплатно.</p>
+<h2>Что умеет BodyPassport</h2><ul>
+<li>Замер по четырём фото: спереди, справа, сзади и слева. Точки встают сами, неточную можно передвинуть пальцем.</li>
+<li>Что измеряется: наклон головы, линия плеч, линия таза, смещение корпуса, ось коленей, голова, плечо и таз относительно вертикали сбоку. У каждого значения указана погрешность.</li>
+<li>3D‑фигура в позе клиента: зоны «Расслабить», «Укрепить» и «Мягко укрепить» отмечены цветом.</li>
+<li>Отчёт клиенту за минуту: картинка, PDF или ссылка в WhatsApp или Telegram, с вашим именем и телефоном, упражнения на дом.</li>
+<li>Было → стало: через месяц снимите снова, фото встанут рядом, отмечено только то, что изменилось больше погрешности.</li></ul>
+<h2>Пять минут от фото до отчёта</h2><ol><li>Снимите клиента с четырёх сторон. Контур и уровень подскажут, как держать телефон.</li><li>Проверьте точки и подтвердите одним касанием.</li><li>Покажите 3D‑фигуру и отправьте отчёт. Клиент уходит с планом.</li></ol>
+<h2>Данные остаются у вас</h2><p>Фото, точки и выводы хранятся на телефоне специалиста. Отчёт клиенту по ссылке уходит зашифрованным. Приложение измеряет, выводы делает специалист: в отчёте они помечены как «гипотеза специалиста». Это не диагноз и не медицинское заключение.</p>
+<h2>Тарифы</h2><p>Free: $0 навсегда, первые замеры без ограничений, повторные замеры и домашка для 3 клиентов. PRO: $9 в месяц или $90 в год, повторные замеры для всех клиентов, ваш логотип, PDF и отчёт по ссылке. Клиенты не платят. <a href="/pricing">Подробнее о тарифах</a>.</p>
+<p>Автор методики и разработчик: Рифат Аюпов, биомеханик и кинезиотерапевт. Telegram: <a href="https://t.me/RifatAiupov">@RifatAiupov</a>.</p>
+<p><a href="/privacy">Конфиденциальность</a> · <a href="/terms">Соглашение</a></p></main></div>
 <noscript><p style="padding:24px">Включите JavaScript или откройте ссылку в Chrome или Safari.</p></noscript>
 <script>
 // старые Safari и Android: недостающие методы, чтобы код работал на всех телефонах
