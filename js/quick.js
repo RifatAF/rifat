@@ -296,7 +296,11 @@ export function zonesOf(q) {
     // база коррекции специалиста важнее общих правил: ее мышцы ставятся первыми, тот же мускул с той же стороны из правил не дублируется
     const pat = patternZones(q, kv), pk = new Set(pat.map(z => z.id + ':' + z.side));
     const base = [...pat, ...[...lat, ...out].filter(s => !pk.has(s.id + ':' + s.side)).map(s => ({ id: s.id, side: s.side, k: s.k, key: s.key, d: s.d || (Math.abs(s.tone) >= .7 ? 3 : Math.abs(s.tone) >= .45 ? 2 : 1) }))];
-    return [...base, ...chainZones(q, new Set(base.map(z => z.id + ':' + z.side)), new Set(base.map(z => z.id)), base)]; }
+    const all = [...base, ...chainZones(q, new Set(base.map(z => z.id + ':' + z.side)), new Set(base.map(z => z.id)), base)];
+    // степень выше, если ту же мышцу с той же задачей отметили несколько независимых источников: база, общие правила, перекос, цепочка
+    const votes = new Map(), vote = l => { for (const z of new Map(l.map(z => [z.id + ':' + z.side + ':' + z.k, z])).keys()) votes.set(z, (votes.get(z) || 0) + 1); };
+    vote(pat); vote(lat); vote(out); vote(chainZones(q, new Set(), new Set(), []));
+    return all.map(z => ({ ...z, d: Math.min(3, (z.d || 2) + Math.max(0, (votes.get(z.id + ':' + z.side + ':' + z.k) || 1) - 1)) })); }
   catch (e) { return []; } }
 /** Шаблоны базы коррекции (data/patterns.json), которые включаются сами по замеру: зажатые → «зажатая», слабые → «слабая».
  *  Поясница (наклон таза) и плечо (ротаторы) по 4 фото не измеряются: только вручную кнопкой «Шаблон». */
@@ -307,12 +311,12 @@ export function patternZones(q, kv) {
     for (const [ids, k, sides] of [[p.tight, 'SHORT', tight], [p.weak, 'WEAK', weak]]) for (const id of ids) for (const sd of sides) { const key = id + ':' + sd;
       if (!C.muscles[id] || seen.has(key)) continue; seen.add(key); out.push({ id, side: sd, k, key, p: pid, d: c ? 1 : d || 2, ...(c ? { c: 1 } : {}) }); } };
   const both = ['RIGHT', 'LEFT'], hf = avg(['right', 'left'], 'headForward'), sh = avg(['right', 'left'], 'shoulderShift'), hp = avg(['right', 'left'], 'hipShift'), pt = avg(['front', 'back'], 'pelvicTilt');
-  if (hf > 12) put('neck', both, both, false, DEG(hf / 12));
-  if (hp > E.hipShift && sh < 0) put('sway', both, both, false, DEG(hp / E.hipShift / 2));
+  if (hf > 12) put('neck', both, both, false, hf > 22 ? 3 : hf > 16 ? 2 : 1);
+  if (hp > E.hipShift && sh < 0) { const e = (((B.right || B.left || []).find(m => m.key === 'hipShift')) || {}).err || E.hipShift, r = hp / e; put('sway', both, both, false, r > 5 ? 3 : r > 3 ? 2 : 1); }
   // таз ниже справа: высокая (доминирующая, зажатая) сторона левая
-  if (Math.abs(pt) > E.pelvicTilt) { const high = pt > 0 ? 'LEFT' : 'RIGHT'; put('pelvis_rot', [high], [high === 'RIGHT' ? 'LEFT' : 'RIGHT'], false, DEG(Math.abs(pt) / E.pelvicTilt / 2)); }
+  if (Math.abs(pt) > E.pelvicTilt) { const high = pt > 0 ? 'LEFT' : 'RIGHT'; put('pelvis_rot', [high], [high === 'RIGHT' ? 'LEFT' : 'RIGHT'], false, Math.abs(pt) >= 5 ? 3 : Math.abs(pt) >= 3 ? 2 : 1); }
   if (kv) for (const [k, sq, sd] of [['kneeR', 'squatKneeR', 'RIGHT'], ['kneeL', 'squatKneeL', 'LEFT']]) { const v = kv(k, sq);
-    if (v.st > 6 || v.sq > 6) put('knee', [sd], [sd], false, DEG(Math.max(v.st, v.sq) / 6)); if (v.st > 6) put('flat_foot', [sd], [sd], true); }
+    if (v.st > 6 || v.sq > 6) put('knee', [sd], [sd], false, Math.max(v.st, v.sq) >= 15 ? 3 : Math.max(v.st, v.sq) >= 10 ? 2 : 1); if (v.st > 6) put('flat_foot', [sd], [sd], true); }
   return out;
 }
 /** Зоны «по цепочке»: не видны на фото напрямую, но следуют из измеренного положения по механике стойки.
@@ -366,7 +370,7 @@ export async function refreshQuick(a) {
 }
 /** Фоном при открытии кабинета: все быстрые тесты старой версии расчета. */
 export async function refreshAll() { let n = 0; for (const a of await _pro.all('assessments')) if (a.template === 'quick' && a.quick && a.quick.algo !== ALGO) { try { if (await refreshQuick(a)) n++; } catch (e) {} } return n; }
-const zSpots = zones => zones.map(z => ({ ...z, key: z.key || z.id + ':' + z.side, tone: (z.k === 'WEAK' ? -1 : 1) * [.25, .5, .9][(z.d || (z.c ? 1 : 2)) - 1], fl: .3, back: (C.muscles[z.id] || {}).view === 'back' }));
+const zSpots = zones => zones.map(z => ({ ...z, key: z.key || z.id + ':' + z.side, tone: (z.k === 'WEAK' ? -1 : 1) * [.35, .57, .77][(z.d || (z.c ? 1 : 2)) - 1], fl: .45, back: (C.muscles[z.id] || {}).view === 'back' }));
 // ---------- домашнее задание: по умолчанию из карточек подтвержденных зон, специалист правит список ----------
 // Подбор по парам мышц: у каждой зоны свое упражнение и упражнение для ее антагониста.
 // Зажата или перегружена: расслабить ее и укрепить антагониста (грудные → ромбовидные).
