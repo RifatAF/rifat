@@ -4,6 +4,7 @@ import { _pro, proHome, clientCard, homeworkLink, pullResults } from './pro.js';
 import { go, esc, ic, toast, spots, topOf, asClient } from './app.js';
 import { C, cam, startCamera, stopCamera, detectStill, initPose, startMotion, phone, cameraBlocked, openInBrowserSheet, posedFigure, body3D } from './core.js';
 import { poseOf } from './pose-figure.js';
+import { story } from './story.js';
 import { VIEWS as REQ, ALL_VIEWS as VIEWS, EDIT_POINTS, POINT_NAMES, quickMetrics, summaryOf, ALGO, viewMetrics, observations, frameIssue, ERR as QERR, isOut, LIMIT } from './quick-metrics.js';
 import { P, analyze, levelled } from './analysis.js';
 import { track } from './track.js';
@@ -745,14 +746,17 @@ function addZone(onAdd) {
 }
 /** «Показать клиенту»: полный экран, крутящаяся фигура с зонами в цветах задач, 2–3 коротких фразы и задачи. Без кнопок специалиста. */
 function showClient(st, name) {
-  const d = document.createElement('div'), obs = plainObs(st.by), groups = taskGroups(st.zones);
+  const d = document.createElement('div'), obs = plainObs(st.by), groups = taskGroups(st.zones), sto = story(st.by), it0 = sto.items[0];
   d.style.cssText = 'position:fixed;inset:0;z-index:60;background:' + (matte() ? '#161617' : '#080C13') + ';color:#fff;overflow:auto;padding:calc(env(safe-area-inset-top) + 16px) 20px calc(env(safe-area-inset-bottom) + 24px)';
   d.innerHTML = `<button id="scx" aria-label="Закрыть" style="position:absolute;z-index:2;right:16px;top:calc(env(safe-area-inset-top) + 12px);width:48px;height:48px;border-radius:50%;border:0;background:rgba(255,255,255,.12);color:#fff;font-size:22px">✕</button>
     <div style="font-size:15px;opacity:.7;min-height:18px">${esc(name || '')}</div><div style="font-size:28px;font-weight:800;line-height:1.1;margin-top:4px;padding-right:56px">Ваше положение тела</div>
     <div id="sc3" style="height:min(54vh,460px);margin-top:14px"></div>
     <div class="seg" id="scv" style="margin-top:10px">${VIEWS3.map(([v, t], i) => `<button data-vw="${v}" class="${i ? '' : 'on'}">${t}</button>`).join('')}</div>
     ${st.gain > 1 ? `<div style="font-size:15px;font-weight:700;color:#FDE68A;margin-top:10px">Показано с увеличением ×${String(st.gain).replace('.', ',')}, не реальный масштаб</div>` : ''}
-    ${obs.length ? `<div style="font-size:14px;opacity:.7;margin-top:18px">Что видно на фото</div>${obs.map(t => `<div style="font-size:20px;font-weight:700;line-height:1.3;margin-top:6px">${t}</div>`).join('')}` : ''}
+    ${it0 ? `<div style="font-size:14px;opacity:.7;margin-top:18px">Главное</div><div style="font-size:22px;font-weight:800;line-height:1.3;margin-top:6px">${esc(sto.main)}</div>
+      <div style="margin-top:10px">${it0.chain.map((t, i) => `${i ? (it0.key === 'sway' || it0.key === 'lean' ? '<div style="color:#38BDF8;font-size:18px;line-height:1;padding:2px 0 2px 16px">↓</div>' : '<div style="height:6px"></div>') : ''}<div style="display:inline-block;background:rgba(255,255,255,.08);border-radius:12px;padding:8px 14px;font-size:17px;font-weight:600">${esc(t)}</div>`).join('')}</div>
+      ${[['Похоже на', it0.like], ['Проверьте на себе', it0.try], ['С чего начинаем', it0.start]].map(([h, t]) => `<div style="font-size:13px;font-weight:700;letter-spacing:.04em;color:#38BDF8;margin-top:14px">${h.toUpperCase()}</div><div style="font-size:17px;line-height:1.4;margin-top:4px">${esc(t)}</div>`).join('')}`
+      : obs.length ? `<div style="font-size:14px;opacity:.7;margin-top:18px">Что видно на фото</div>${obs.map(t => `<div style="font-size:20px;font-weight:700;line-height:1.3;margin-top:6px">${t}</div>`).join('')}` : ''}
     ${groups.length ? `<div style="font-size:14px;opacity:.7;margin-top:18px">Над чем работаем · гипотеза специалиста</div>${groups.map(g => `<div style="font-size:19px;line-height:1.35;margin-top:8px"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${TCOL[g.k]};margin-right:8px"></span><b>${g.t}:</b> ${esc(g.list.join(', '))}</div>`).join('')}` : ''}
     <div style="font-size:13px;opacity:.55;margin-top:22px">Положение тела в момент фото на типовой фигуре. Цветом отмечены зоны для работы. Не диагноз.</div>`;
   document.body.appendChild(d); let v3 = null; d.querySelector('#scx').onclick = () => { if (v3) v3.dispose(); d.remove(); };
@@ -920,7 +924,7 @@ export async function renderReport(a, c, photos) {
   try { await Promise.all([document.fonts.load(`600 24px ${MN}`), document.fonts.load(`700 24px ${F}`)]); } catch (e) {}
   const author = (await _pro.meta('profile')) || _pro.author(), contact = (await _pro.meta('contact')) || '';
   const imgs = {}; for (const v of VIEWS) if (photos[v.id]) imgs[v.id] = await loadImg(photos[v.id].photo);
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = 4200; const g = cv.getContext('2d'), breaks = [];
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = 7000; const g = cv.getContext('2d'), breaks = [];
   g.fillStyle = '#fff'; g.fillRect(0, 0, W, cv.height); g.textBaseline = 'alphabetic';
   let y = 90; g.fillStyle = SUB; g.font = `700 22px ${F}`; g.fillText('ЗАМЕР ОСАНКИ ПО ФОТО', PAD, y);
   y += 58; g.fillStyle = INK; g.font = `800 48px ${F}`; g.fillText(c.nocard ? 'Замер' : c.name, PAD, y);
@@ -944,7 +948,17 @@ export async function renderReport(a, c, photos) {
     if (gain > 1) { g.fillStyle = '#B45309'; g.font = `700 22px ${F}`; y = wrap(g, `Перекосы на фигуре усилены в ${String(gain).replace('.', ',')} раза, чтобы их было хорошо видно. Это не реальный масштаб: реальные значения в цифрах ниже.`, PAD, y + 4, W - PAD * 2, 30); }
     y += 40; }
   // коротко: 2–3 понятные фразы без чисел, как на экране «Показать клиенту»
-  const plain = plainObs(qz.by); if (plain.length) { head('Коротко', '', INK); g.fillStyle = INK; g.font = `600 27px ${F}`; for (const t of plain) { y += 42; g.fillText('• ' + t, PAD, y); } y += 60; }
+  // «Главное»: вывод одной фразой, цепочка с числами, образ, проверка на себе, с чего начинаем, привычка, как поймем (js/story.js)
+  const sto = story(qz.by);
+  if (sto.items.length) { head('Главное', '', INK); y += 18; g.fillStyle = INK; g.font = `700 30px ${F}`; y = wrap(g, sto.main, PAD, y + 20, W - PAD * 2, 40) + 6;
+    const label = (t, txt) => { g.fillStyle = VIO; g.font = `700 18px ${F}`; g.fillText(t.toUpperCase(), PAD, y + 18); g.fillStyle = INK; g.font = `400 25px ${F}`; y = wrap(g, txt, PAD, y + 52, W - PAD * 2, 34) + 6; };
+    // цепочка: плашки сверху вниз со стрелками, как связаны отклонения
+    const chain = (l, big, arrows) => { for (let k = 0; k < l.length; k++) { g.font = `600 ${big ? 26 : 23}px ${F}`; const bw = Math.min(W - PAD * 2, g.measureText(l[k]).width + 40), bh = big ? 56 : 48;
+        g.fillStyle = '#F2F6FB'; g.beginPath(); g.roundRect(PAD, y, bw, bh, 14); g.fill(); g.fillStyle = INK; g.fillText(l[k], PAD + 20, y + bh / 2 + 9); y += bh;
+        if (k < l.length - 1 && !arrows) y += 10; else if (k < l.length - 1) { g.strokeStyle = LN; g.lineWidth = 3; g.beginPath(); g.moveTo(PAD + 34, y + 4); g.lineTo(PAD + 34, y + 24); g.stroke(); g.beginPath(); g.moveTo(PAD + 26, y + 16); g.lineTo(PAD + 34, y + 26); g.lineTo(PAD + 42, y + 16); g.stroke(); y += 30; } } y += 14; };
+    sto.items.forEach((it, n) => { if (n) { y += 30; g.fillStyle = INK; g.font = `700 27px ${F}`; y = wrap(g, it.short[0].toUpperCase() + it.short.slice(1), PAD, y + 10, W - PAD * 2, 36); }
+      y += 10; chain(it.chain, !n, it.key === 'sway' || it.key === 'lean'); label('Похоже на', it.like); label('Проверьте на себе', it.try); if (!n) { label('С чего начинаем', it.start); label('Привычка на день', it.habit); } });
+    label('Как поймем, что стало лучше', sto.items.map(it => it.check).join(' ')); y += 40; }
   // измерено: только значения вне погрешности, остальные одной строкой (специалист видит все в приложении)
   head('Измерено', 'ЗАМЕР', INK); let inTol = 0;
   for (const v of VIEWS) { const m = (qz.by || {})[v.id]; if (!m) continue; const outs = m.filter(isOut); inTol += m.filter(r => r.dir === 'в пределах погрешности').length; if (!outs.length) continue;
