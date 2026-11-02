@@ -270,6 +270,9 @@ const RELAX = .6, FERR = { valgus_max: 5, pelvic_tilt: 1.5, shoulder_tilt: 1.5, 
 const relax = (t, e) => t == null ? t : Math.sign(t) * Math.max(Math.abs(t) * RELAX, e);
 // степень 1–3 из того, во сколько раз признак превышает порог правила: 1 до 1,5 раза, 2 до 2,5, 3 больше
 const DEG = r => !(r > 0) ? 2 : r >= 2.5 ? 3 : r >= 1.5 ? 2 : 1;
+// погрешность показателя в его единицах (см или % роста без роста клиента) и расхождение боков больше двух погрешностей
+const mErr = (B, k) => { for (const id of ['right', 'left', 'front', 'back']) { const m = ((B || {})[id] || []).find(x => x.key === k); if (m && m.err) return m.err; } return QERR[k]; };
+const split = (B, k) => { const f = id => ((B || {})[id] || []).find(x => x.key === k && !x.suspect), r = f('right'), l = f('left'); return !!(r && l && Math.abs(r.v - l.v) > 2 * r.err); };
 const REGION = y => y < .23 ? 0 : y < .38 ? 1 : y < .52 ? 2 : y < .63 ? 3 : 4;
 export function zonesOf(q) {
   try { const rules = C.bodymap.rules.map(r => FERR[r.feature] == null ? r : { ...r, absGreater: relax(r.absGreater, FERR[r.feature]), greater: relax(r.greater, FERR[r.feature]), less: relax(r.less, FERR[r.feature]) });
@@ -300,7 +303,7 @@ export function zonesOf(q) {
     const all = [...base, ...chainZones(q, new Set(base.map(z => z.id + ':' + z.side)), new Set(base.map(z => z.id)), base)];
     // степень выше, если ту же мышцу с той же задачей отметили несколько независимых источников: база, общие правила, перекос, цепочка
     const votes = new Map(), vote = l => { for (const z of new Map(l.map(z => [z.id + ':' + z.side + ':' + z.k, z])).keys()) votes.set(z, (votes.get(z) || 0) + 1); };
-    vote(pat); vote(lat); vote(out); vote(chainZones(q, new Set(), new Set(), []));
+    vote(pat); vote(lat); vote(out); // цепочка не голосует: она срабатывает на те же числа, что и база
     return all.map(z => ({ ...z, d: Math.min(3, (z.d || 2) + Math.max(0, (votes.get(z.id + ':' + z.side + ':' + z.k) || 1) - 1)) })); }
   catch (e) { return []; } }
 /** Шаблоны базы коррекции (data/patterns.json), которые включаются сами по замеру: зажатые → «зажатая», слабые → «слабая».
@@ -312,8 +315,11 @@ export function patternZones(q, kv) {
     for (const [ids, k, sides] of [[p.tight, 'SHORT', tight], [p.weak, 'WEAK', weak]]) for (const id of ids) for (const sd of sides) { const key = id + ':' + sd;
       if (!C.muscles[id] || seen.has(key)) continue; seen.add(key); out.push({ id, side: sd, k, key, p: pid, d: c ? 1 : d || 2, ...(c ? { c: 1 } : {}) }); } };
   const both = ['RIGHT', 'LEFT'], hf = avg(['right', 'left'], 'headForward'), sh = avg(['right', 'left'], 'shoulderShift'), hp = avg(['right', 'left'], 'hipShift'), pt = avg(['front', 'back'], 'pelvicTilt');
-  if (hf > 12) put('neck', both, both, false, hf > 22 ? 3 : hf > 16 ? 2 : 1);
-  if (hp > E.hipShift && sh < 0) { const e = (((B.right || B.left || []).find(m => m.key === 'hipShift')) || {}).err || E.hipShift, r = hp / e; put('sway', both, both, false, r > 5 ? 3 : r > 3 ? 2 : 1); }
+  if (hf > 12) put('neck', both, both, false, split(B, 'headForward') ? 1 : hf > 22 ? 3 : hf > 16 ? 2 : 1);
+  // sway back: таз впереди лодыжки И плечи позади таза, оба больше погрешности (раньше хватало плеч позади на миллиметр).
+  // Бока расходятся (снимок не в профиль): степень 1
+  const eH = mErr(B, 'hipShift'), eS = mErr(B, 'shoulderShift');
+  if (hp > eH && sh < -eS) { const r = hp / eH; put('sway', both, both, false, split(B, 'hipShift') ? 1 : r > 5 ? 3 : r > 3 ? 2 : 1); }
   // таз ниже справа: высокая (доминирующая, зажатая) сторона левая
   if (Math.abs(pt) > E.pelvicTilt) { const high = pt > 0 ? 'LEFT' : 'RIGHT'; put('pelvis_rot', [high], [high === 'RIGHT' ? 'LEFT' : 'RIGHT'], false, Math.abs(pt) >= 5 ? 3 : Math.abs(pt) >= 3 ? 2 : 1); }
   if (kv) for (const [k, sq, sd] of [['kneeR', 'squatKneeR', 'RIGHT'], ['kneeL', 'squatKneeL', 'LEFT']]) { const v = kv(k, sq);
@@ -331,7 +337,7 @@ export function patternZones(q, kv) {
 export function chainZones(q, seenKeys = new Set(), have = new Set(), base = []) {
   const B = q.by || {}, sv = k => { const v = ['right', 'left'].map(id => ((B[id] || []).find(m => m.key === k && !m.suspect) || {}).v).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
   const fv = k => { const v = ['front', 'back'].map(id => ((B[id] || []).find(m => m.key === k && !m.suspect) || {}).v).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
-  const sh = sv('shoulderShift'), hp = sv('hipShift'), kn = sv('kneeHyper'), hf = sv('headForward'), pt = fv('pelvicTilt'), E = QERR, out = [];
+  const sh = sv('shoulderShift'), hp = sv('hipShift'), kn = sv('kneeHyper'), hf = sv('headForward'), pt = fv('pelvicTilt'), E = { ...QERR, shoulderShift: mErr(B, 'shoulderShift'), hipShift: mErr(B, 'hipShift') }, out = [];
   // одна функция, противоположные задачи: сгибатели бедра не бывают одновременно «слабые» (sway back) и «зажатые» (колено согнуто)
   const SYN = { iliopsoas: 'hipflex', rectus_fem: 'hipflex' }, pol = k => k === 'SHORT' ? 1 : k === 'WEAK' ? -1 : 0;
   const clash = (id, k) => SYN[id] && [...base, ...out].some(z => SYN[z.id] === SYN[id] && pol(z.k) * pol(k) < 0);
@@ -342,7 +348,7 @@ export function chainZones(q, seenKeys = new Set(), have = new Set(), base = [])
   if (kn < -E.kneeHyper) add('rectus_fem', 'SHORT');
   if (Math.abs(pt) > E.pelvicTilt) { const low = pt > 0 ? 'RIGHT' : 'LEFT', high = low === 'RIGHT' ? 'LEFT' : 'RIGHT'; add('glute_min', 'WEAK', [high]); add('adductors', 'SHORT', [high]); add('tfl', 'SHORT', [low]); }
   if (kn < -E.kneeHyper) { add('iliopsoas', 'SHORT'); add('hamstrings', 'SHORT'); }
-  if (hp > E.hipShift && sh < 0) { add('hamstrings', 'SHORT'); add('transversus', 'WEAK'); }
+  if (hp > E.hipShift && sh < -E.shoulderShift) { add('hamstrings', 'SHORT'); add('transversus', 'WEAK'); }
   if (sh > E.shoulderShift) { add('iliopsoas', 'SHORT'); add('rectus_fem', 'SHORT'); add('erector', 'HYPER'); add('multifidus', 'WEAK'); }
   // до 7 мест; икроножная с камбаловидной и две мышцы бедра занимают по одному; мышцы из основного списка не дублируем
   const slot = id => ({ soleus: 'calf' })[id] || id, mus = new Set(), ok = new Set();
