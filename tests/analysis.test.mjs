@@ -30,3 +30,31 @@ test('подъемы на носок: считает 5 подъемов и пр�
   for (const hv of [.95, .3]) assert.equal(Movement.calfRaise(calfFrames(5, hv), true).f.calf_reps_r, 5, 'видимость пятки ' + hv);
   assert.equal(Movement.calfRaise(calfFrames(0, .95), true).f.calf_reps_r, 0, 'без подъемов');
 });
+
+// ---------- аудит сторон 03.11.2026: перекосы во фронтальной плоскости ----------
+const snap = s => features({ snapshot: s, moves: {}, protocol: [] });
+const muscOf = (f, id) => (findings(rules, f).find(x => x.rule.id === id) || { muscles: [] }).muscles.map(m => `${m.id}:${m.side}:${m.state}`).sort();
+test('таз ниже справа: слабая отводящая на высокой (левой) стороне, напрягатель фасции на низкой (Kendall)', () => {
+  const m = muscOf(snap({ pelvicTilt: 5, trunkLateral: 0, shoulderTilt: 0, headTilt: 0 }), 'pelvis_tilt');
+  assert.deepEqual(m, ['glute_med:LEFT:WEAK', 'tfl:RIGHT:SHORT']);
+});
+test('квадратная поясницы: сторона по наклону корпуса относительно таза', () => {
+  // корпус ровный, таз ниже справа: поясница изогнута влево, вогнутая сторона левая (высокое бедро по Kendall)
+  assert.deepEqual(muscOf(snap({ pelvicTilt: 5, trunkLateral: 0 }), 'trunk_shift'), ['obliques:LEFT:SHORT', 'ql:LEFT:SHORT']);
+  // корпус ушел вправо вслед за тазом на тот же угол: изгиба нет, вывода о сторонах нет
+  assert.deepEqual(muscOf(snap({ pelvicTilt: 3, trunkLateral: 3.4 }), 'trunk_shift'), []);
+  // таз ровный, корпус наклонен вправо: короче правый бок
+  assert.deepEqual(muscOf(snap({ pelvicTilt: 0, trunkLateral: 5 }), 'trunk_shift'), ['obliques:RIGHT:SHORT', 'ql:RIGHT:SHORT']);
+});
+test('плечо выше: верхняя трапециевидная укорочена на высокой стороне, а не «перерастянута»', () => {
+  assert.deepEqual(muscOf(snap({ shoulderTilt: 5 }), 'shoulder_tilt'), ['levator:LEFT:SHORT', 'lower_trap:LEFT:WEAK', 'upper_trap:LEFT:SHORT']);
+});
+test('голова к правому плечу: укорочены правые грудино-ключично-сосцевидная и лестничные', () => {
+  assert.deepEqual(muscOf(snap({ headTilt: 5 }), 'head_tilt'), ['scalene:RIGHT:SHORT', 'scm:RIGHT:SHORT']);
+});
+test('упражнение «Наклон в сторону» тянет бок, указанный в названии', () => {
+  const ex = Object.fromEntries(JSON.parse(fs.readFileSync(new URL('../data/exercises.json', import.meta.url))).exercises.map(e => [e.id, e]));
+  assert.match(ex.ex_side_stretch_left.steps.join(' '), /левую руку.*вправо.*левый бок/);
+  assert.match(ex.ex_side_stretch_right.steps.join(' '), /правую руку.*влево.*правый бок/);
+  assert.match(ex.ex_ql_stretch_left.steps.join(' '), /левую руку.*вправо/);
+});

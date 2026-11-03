@@ -266,7 +266,7 @@ const GAINS = [1, 1.5, 2, 3], VIEWS3 = [['front', 'Спереди'], ['right', '
  *  Пороги правил подобраны для теста по видео; на фото признак учитывается с 60% порога, но не меньше погрешности замера.
  *  Наклон головы вперед почти всегда выше порога и раньше забирал все места шеей: теперь из одного отдела тела
  *  (шея, плечевой пояс, корпус, таз, ноги) не больше 3 мышц, всего до 8 мышц (с двух сторон считается одной). Самые выраженные идут первыми. */
-const RELAX = .6, FERR = { valgus_max: 5, pelvic_tilt: 1.5, shoulder_tilt: 1.5, head_tilt: 2, trunk_lateral: 1.5, head_forward: 4, knee_hyper: 3, shoulder_shift: .015, hip_shift: .015 };
+const RELAX = .6, FERR = { valgus_max: 5, pelvic_tilt: 1.5, shoulder_tilt: 1.5, head_tilt: 2, trunk_lateral: 1.5, lumbar_lateral: 2.1, head_forward: 4, knee_hyper: 3, shoulder_shift: .015, hip_shift: .015 };
 const relax = (t, e) => t == null ? t : Math.sign(t) * Math.max(Math.abs(t) * RELAX, e);
 // степень 1–3 из того, во сколько раз признак превышает порог правила: 1 до 1,5 раза, 2 до 2,5, 3 больше
 const DEG = r => !(r > 0) ? 2 : r >= 2.5 ? 3 : r >= 1.5 ? 2 : 1;
@@ -283,7 +283,7 @@ export function zonesOf(q) {
     for (const s of sp.map((x, i) => [x, i + (two(x.id) ? 2 : 0)]).sort((x, y) => x[1] - y[1]).map(x => x[0])) { const k = s.id + ':' + s.side, r = REGION(s.y);
       if (seen.has(k)) continue; if (!mus.has(s.id)) { if (per[r] >= 3 || mus.size >= 8) continue; mus.add(s.id); per[r]++; } seen.add(k); out.push(s); }
     // перекос виден на фото, значит его главные мышцы в списке всегда: у слабых правил (корпус вбок) вес мал, и косые с квадратной не набирали порог
-    const sn = q.snapshot || {}, f = { pelvic_tilt: sn.pelvicTilt, trunk_lateral: sn.trunkLateral, shoulder_tilt: sn.shoulderTilt, head_tilt: sn.headTilt }, lat = [];
+    const sn = q.snapshot || {}, f = { pelvic_tilt: sn.pelvicTilt, trunk_lateral: sn.trunkLateral, lumbar_lateral: sn.trunkLateral - sn.pelvicTilt, shoulder_tilt: sn.shoulderTilt, head_tilt: sn.headTilt }, lat = [];
     for (const r of rules) { const v = f[r.feature]; if (r.source !== 'camera' || r.absGreater == null || r.sideFrom !== r.feature || !Number.isFinite(v) || Math.abs(v) <= Math.abs(r.absGreater)) continue;
       const sg = Math.sign(v) * (r.sideNegate ? -1 : 1), side = sg > 0 ? 'RIGHT' : 'LEFT', opp = side === 'RIGHT' ? 'LEFT' : 'RIGHT';
       for (const m of r.muscles) { if (m.w < .4 || m.side === 'both' || !C.muscles[m.id]) continue; const sd = m.side === 'opposite' ? opp : side, key = m.id + ':' + sd;
@@ -320,8 +320,11 @@ export function patternZones(q, kv) {
   // Бока расходятся (снимок не в профиль): степень 1
   const eH = mErr(B, 'hipShift'), eS = mErr(B, 'shoulderShift');
   if (hp > eH && sh < -eS) { const r = hp / eH; put('sway', both, both, false, split(B, 'hipShift') ? 1 : r > 5 ? 3 : r > 3 ? 2 : 1); }
-  // таз ниже справа: высокая (доминирующая, зажатая) сторона левая
-  if (Math.abs(pt) > E.pelvicTilt) { const high = pt > 0 ? 'LEFT' : 'RIGHT'; put('pelvis_rot', [high], [high === 'RIGHT' ? 'LEFT' : 'RIGHT'], false, Math.abs(pt) >= 5 ? 3 : Math.abs(pt) >= 3 ? 2 : 1); }
+  // квадратная и косые: сторона по наклону корпуса относительно таза (lum = корпус − таз, плюс = вправо), а не по одному тазу.
+  // Kendall, высокое бедро при ровном корпусе: lum = −таз, вогнута (короче) высокая сторона, как раньше. Если корпус ушел вслед за тазом,
+  // lum около нуля, бока по длине равны, и прежнее правило ставило «зажатую» наугад (аудит сторон 03.11.2026)
+  const tl = avg(['front', 'back'], 'trunkLateral'), lum = (Number.isFinite(tl) ? tl : 0) - pt, eL = Number.isFinite(tl) ? Math.hypot(E.trunkLateral, E.pelvicTilt) : E.pelvicTilt;
+  if (Math.abs(pt) > E.pelvicTilt && Math.abs(lum) > eL) { const cc = lum > 0 ? 'RIGHT' : 'LEFT'; put('pelvis_rot', [cc], [cc === 'RIGHT' ? 'LEFT' : 'RIGHT'], false, Math.abs(lum) >= 5 ? 3 : Math.abs(lum) >= 3.5 ? 2 : 1); }
   if (kv) for (const [k, sq, sd] of [['kneeR', 'squatKneeR', 'RIGHT'], ['kneeL', 'squatKneeL', 'LEFT']]) { const v = kv(k, sq);
     if (v.st > 6 || v.sq > 6) put('knee', [sd], [sd], false, Math.max(v.st, v.sq) >= 15 ? 3 : Math.max(v.st, v.sq) >= 10 ? 2 : 1); if (v.st > 6) put('flat_foot', [sd], [sd], true); }
   return out;

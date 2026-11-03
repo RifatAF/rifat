@@ -18,7 +18,7 @@ export function poseOf(q, gain = 1) {
   const sidePct = key => { const r = avg(v('right', key), v('left', key)); const unit = (q.by.right || q.by.left || []).find(x => x.key === key); return unit && /см/.test(unit.unit) ? r / (q.h || 170) : r / 100; };
   const p = {
     headTilt: avg(v('front', 'headTilt'), v('back', 'headTilt')), shoulderTilt: avg(v('front', 'shoulderTilt'), v('back', 'shoulderTilt')),
-    pelvicTilt: avg(v('front', 'pelvicTilt'), v('back', 'pelvicTilt')), trunkLateral: v('front', 'trunkLateral') || 0,
+    pelvicTilt: avg(v('front', 'pelvicTilt'), v('back', 'pelvicTilt')), trunkLateral: avg(v('front', 'trunkLateral'), v('back', 'trunkLateral')),
     headForward: avg(v('right', 'headForward'), v('left', 'headForward')), kneeHyper: avg(v('right', 'kneeHyper'), v('left', 'kneeHyper')),
     shoulderShift: sidePct('shoulderShift'), hipShift: sidePct('hipShift'),
   };
