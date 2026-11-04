@@ -138,8 +138,9 @@ function selfIntro() {
     <p class="sub" style="margin-top:8px;font-size:15px;line-height:1.45">${esc(inv.s)} просит вас сделать 4 фото в полный рост: спереди, справа, сзади и слева. Это около 5 минут. Снимки сделаются сами, кнопку нажимать не нужно.</p>
     <div class="card" style="margin-top:14px;display:flex;flex-direction:column;gap:10px"><b style="font-size:17px">Как подготовиться</b>
      ${tip('Одежда по фигуре: шорты или леггинсы и футболка, лучше босиком. Волосы соберите.')}
-     ${tip('Поставьте телефон вертикально на полку, стул или стопку книг на уровне пояса, экраном к себе.')}
-     ${tip('Отойдите на 2,5–3 метра: в кадре вы целиком, от макушки до стоп.')}
+     ${tip('Поставьте телефон вертикально, экраном к себе: на полку или стул на уровне пояса, отойдите на 2,5–3 метра.')}
+     ${tip('Можно на пол: прислоните телефон стоймя к стене, коробке или ножке стула и отойдите дальше, на 3–3,5 метра. Сильно назад не наклоняйте: приложение подскажет.')}
+     ${tip('В кадре вы целиком, от макушки до стоп.')}
      ${tip('Встаньте у ровной стены, свет спереди или сбоку, не со спины.')}
      ${tip('Стойте как обычно, не выпрямляйтесь специально.')}</div>
     ${inv.h ? '' : `<input id="shgt" class="field" type="text" inputmode="numeric" maxlength="3" placeholder="Ваш рост, см (по желанию)" aria-label="Рост, см" style="margin-top:14px">`}
@@ -168,7 +169,7 @@ function selfCheck() {
 async function selfSend() {
   const btn = $('#ssend'); btn.disabled = true; btn.textContent = 'Отправляем…';
   const pack = q => ({ type: 'quick', v: 1, date: Q.date, h: +Q.client.height || 0, consent: Q.consent,
-    views: Object.fromEntries(REQ.filter(v => Q.views[v.id]).map(v => { const x = Q.views[v.id]; return [v.id, { photo: x.photo, w: x.w, h: x.h, pts: x.pts, roll: x.roll, rollSrc: x.rollSrc || null }]; })) });
+    views: Object.fromEntries(REQ.filter(v => Q.views[v.id]).map(v => { const x = Q.views[v.id]; return [v.id, { photo: x.photo, w: x.w, h: x.h, pts: x.pts, roll: x.roll, rollSrc: x.rollSrc || null, ...(Number.isFinite(x.pitch) ? { pitch: x.pitch } : {}) }]; })) });
   try { let body = await seal.encrypt(Q.self.k, pack());
     // запас до лимита ящика 3,5 МБ: темное или пестрое фото весит больше, тогда пересжимаем
     if (body.length > 3.3 * 1024 * 1024) { for (const v of REQ) { const x = Q.views[v.id]; if (!x) continue; const im = await imgOf(x.photo); const cv = document.createElement('canvas'); cv.width = x.w; cv.height = x.h; cv.getContext('2d').drawImage(im, 0, 0); x.photo = cv.toDataURL('image/jpeg', .6); } body = await seal.encrypt(Q.self.k, pack()); }
@@ -188,7 +189,7 @@ export function cleanSelfQuick(r) {
     if (typeof x.photo !== 'string' || x.photo.length > 2e6 || !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(x.photo)) throw new Error('bad photo');
     if (!num(x.w, 64, 4000) || !num(x.h, 64, 4000) || !Number.isInteger(x.w) || !Number.isInteger(x.h)) throw new Error('bad size');
     const pts = Array.isArray(x.pts) && x.pts.length === 33 && x.pts.every(p => p && num(p.x, -x.w, 2 * x.w) && num(p.y, -x.h, 2 * x.h)) ? x.pts.map(p => ({ x: p.x, y: p.y, visibility: num(p.visibility, 0, 1) ? p.visibility : 1 })) : null;
-    views[v.id] = { photo: x.photo, w: x.w, h: x.h, pts, auto: pts ? pts.map(p => ({ ...p })) : null, roll: num(x.roll, -15, 15) ? x.roll : 0, rollSrc: ['sensor', 'image', 'none'].includes(x.rollSrc) ? x.rollSrc : null }; }
+    views[v.id] = { photo: x.photo, w: x.w, h: x.h, pts, auto: pts ? pts.map(p => ({ ...p })) : null, roll: num(x.roll, -15, 15) ? x.roll : 0, rollSrc: ['sensor', 'image', 'none'].includes(x.rollSrc) ? x.rollSrc : null, ...(num(x.pitch, -90, 90) ? { pitch: x.pitch } : {}) }; }
   if (!Object.keys(views).length) throw new Error('no views');
   const date = num(r.date, Date.now() - 31 * 864e5, Date.now() + 864e5) ? Math.min(r.date, Date.now()) : Date.now();
   return { views, date, h: num(r.h, 100, 230) ? Math.round(r.h) : 0, consent: r.consent && num(r.consent.at, 1.7e12, 4e12) ? { at: r.consent.at, ver: typeof r.consent.ver === 'string' ? r.consent.ver.slice(0, 40) : '', remote: 1 } : { at: date, ver: '', remote: 1 } };
@@ -230,7 +231,8 @@ function shoot(i, single = false) {
     const lv = $('#qlevel'); if (!lv) return; const roll = phone.ok ? phone.roll : 0;
     lv.style.transform = `rotate(${-roll}deg)`; lv.style.background = Math.abs(roll) <= 2 ? '#34D399' : 'rgba(255,255,255,.7)';
     const now = performance.now(); if (now - lumT > 900) { lumT = now; try { const x = lumCv.getContext('2d', { willReadFrequently: true }); x.drawImage(video, 0, 0, 24, 24); const d = x.getImageData(0, 0, 24, 24).data; let s = 0; for (let k = 0; k < d.length; k += 4) s += d[k] * .3 + d[k + 1] * .59 + d[k + 2] * .11; lum = s / 576; } catch (e) {} }
-    const h = selfText(Math.abs(roll) > 2.5 && phone.ok ? 'Выровняйте телефон: полоска станет зеленой' : lum < 45 ? 'Мало света: включите свет или повернитесь к окну' : f.pose ? frameIssue(v.id, f.pose, f.w, f.h) : 'Клиент целиком в контуре');
+    // телефон на полу клиент обычно откидывает назад: снизу под углом корпус в кадре искажается, поэтому просим поставить стоймя (до 15°)
+    const h = selfText(Math.abs(roll) > 2.5 && phone.ok ? 'Выровняйте телефон: полоска станет зеленой' : Q.self && phone.ok && Math.abs(phone.pitch) > 15 ? 'Телефон наклонен назад. Поставьте его стоймя, прислоните к опоре' : lum < 45 ? 'Мало света: включите свет или повернитесь к окну' : f.pose ? frameIssue(v.id, f.pose, f.w, f.h) : 'Клиент целиком в контуре');
     $('#qhint').textContent = h; $('#qhint').style.color = h ? '#FDE68A' : '#86EFAC'; if (!h) $('#qhint').textContent = 'Можно снимать';
     // клиент снимает себя сам: кадр в порядке 1,2 с подряд, и запускается отсчет 3 секунды; вышел из контура, отсчет сбрасывается
     if (Q.self && !busy) { if (h) { okSince = 0; if (count && count.auto) stopCount(); } else if (!count) { okSince = okSince || now; if (now - okSince > 1200) startCount(3, true); } }
@@ -257,7 +259,7 @@ function shoot(i, single = false) {
     const issue = selfText(frameIssue(v.id, pts, cv.width, cv.height));
     // крена с датчика нет (фото из галереи, датчик не разрешен): выравниваем по линиям фона
     let rollSrc = roll ? 'sensor' : null; if (!roll) { try { roll = estimateRoll(cv, cv.width, cv.height, pts); } catch (e) { roll = 0; } rollSrc = roll ? 'image' : 'none'; }
-    Q.views[v.id] = { photo: cv.toDataURL('image/jpeg', Q.self ? .8 : .85), w: cv.width, h: cv.height, pts, auto: pts ? pts.map(p => ({ ...p })) : null, roll, rollSrc, ok: false, issue };
+    Q.views[v.id] = { photo: cv.toDataURL('image/jpeg', Q.self ? .8 : .85), w: cv.width, h: cv.height, pts, auto: pts ? pts.map(p => ({ ...p })) : null, roll, rollSrc, ok: false, issue, ...(phone.ok ? { pitch: Math.round(phone.pitch * 10) / 10 } : {}) };
     if (issue) return review(i, single);
     next(i, single);
   };
