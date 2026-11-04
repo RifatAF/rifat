@@ -162,7 +162,7 @@ function selfCheck() {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">${REQ.map((v, i) => { const x = Q.views[v.id];
       return `<div class="card" style="padding:8px;display:flex;flex-direction:column;gap:8px"><div style="aspect-ratio:3/4;border-radius:12px;overflow:hidden;background:var(--surface-2);display:grid;place-items:center">${x ? `<img src="${x.photo}" alt="${v.name}" style="width:100%;height:100%;object-fit:cover">` : `<span class="sub">нет фото</span>`}</div>
        <div class="row" style="justify-content:space-between;gap:6px"><b style="font-size:14px">${v.name}</b><button class="pill" data-re="${i}">${x ? 'Переснять' : 'Снять'}</button></div>${x && x.issue ? `<div style="font-size:12px;color:#FF9F0A;line-height:1.3">${esc(x.issue)}</div>` : ''}</div>`; }).join('')}</div></div>
-    <div class="dock"><button class="btn" id="ssend"${REQ.every(v => Q.views[v.id]) ? '' : ' disabled'}>${ic('send', 's')}Отправить специалисту</button><p class="sub" id="snote" style="font-size:12px;text-align:center;margin-top:6px">Фото зашифруются и уйдут только специалисту: ${esc(Q.self.s)}</p></div></div>`);
+    <div class="dock"><button class="btn" id="ssend"${REQ.every(v => Q.views[v.id]) ? '' : ' disabled'}>${ic('mail', 's')}Отправить специалисту</button><p class="sub" id="snote" style="font-size:12px;text-align:center;margin-top:6px">Фото зашифруются и уйдут только специалисту: ${esc(Q.self.s)}</p></div></div>`);
   document.querySelectorAll('[data-re]').forEach(b => b.onclick = () => { Q.wasBack = cam.back; cam.back = false; startMotion(); shoot(+b.dataset.re, true); });
   $('#ssend').onclick = selfSend;
 }
@@ -178,7 +178,7 @@ async function selfSend() {
     track('self_quick_sent', null, false); const who = Q.self.s; Q = null;
     go(`<div class="scr fade"><div class="pad" style="padding-top:calc(env(safe-area-inset-top) + 40px);text-align:center"><div style="font-size:64px">✓</div><h1 style="margin-top:8px">Готово!</h1>
       <p class="sub" style="margin-top:10px;font-size:16px;line-height:1.45">Фото ушли специалисту: ${esc(who)}. Он проверит точки и пришлет вам отчет.</p></div></div>`);
-  } catch (e) { track('self_quick_fail', { c: String(e.message || e).slice(0, 40) }, false); btn.disabled = false; btn.innerHTML = `${ic('send', 's')}Отправить еще раз`; toast('Не отправилось: ' + (e.message || e) + '. Проверьте интернет'); }
+  } catch (e) { track('self_quick_fail', { c: String(e.message || e).slice(0, 40) }, false); btn.disabled = false; btn.innerHTML = `${ic('mail', 's')}Отправить еще раз`; toast('Не отправилось: ' + (e.message || e) + '. Проверьте интернет'); }
 }
 /** Результат теста по ссылке пришел в кабинет: только ожидаемые поля и типы, иначе отказ (данные с чужого телефона). */
 export function cleanSelfQuick(r) {
