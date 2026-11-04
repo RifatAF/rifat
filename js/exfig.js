@@ -20,8 +20,9 @@ const EX = {
   ex_thoracic_open_book: { a: { ...SIDE, view: 'top', hy: 70, hx: 125, aN1: 88, aN2: 88, aF1: 92, aF2: 92, lN1: 80, lN2: 10, lN3: 90, lF1: 84, lF2: 12, lF3: 90 },
     m: { kA: .2, aN1: 10, aN2: 10 }, b: { aN1: -90, aN2: -90 }, hl: 'chest' },
   ex_neck_rotation: { a: { ...FRONT, nose: 0 }, b: { nose: .85 }, hl: 'neck' },
-  ex_side_stretch: { a: { ...FRONT }, b: { t: -78, aF1: -70, aF2: -55, hx: 96 }, hl: 'side' },
-  ex_ql_stretch: { a: { ...FRONT }, b: { t: -74, aF1: -60, aF2: -40, hx: 94, lF1: 100 }, hl: 'side' },
+  // спереди экран зеркален телу: F (справа на экране) — левая рука клиента. Версия _left тянет левый бок: левая рука над головой, наклон вправо (влево на экране)
+  ex_side_stretch: { a: { ...FRONT }, b: { t: -108, aF1: -105, aF2: -165, hx: 108 }, hl: 'side' },
+  ex_ql_stretch: { a: { ...FRONT }, b: { t: -110, aF1: -108, aF2: -170, hx: 110, lF1: 100 }, hl: 'side' },
   ex_glute_bridge: { a: { ...SUPINE, legAt: 1 }, b: { hy: 124, t: 154 }, hl: 'hip' },
   ex_side_plank_knees: { a: { ...SIDE, hx: 120, hy: 146, t: 208.6, hd: 205, aN1: 90, aN2: 180, aF1: 92, aF2: 182, lN1: 3, lN2: 160, kS: .35, lF1: 4, lF2: 160, lN3: 160, lF3: 160 },
     b: { hx: 121.6, hy: 137.2, t: 197.4, hd: 195, lN1: 17.4, lF1: 18.4 }, hl: 'side' },

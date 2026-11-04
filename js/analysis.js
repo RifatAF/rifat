@@ -291,6 +291,9 @@ export function recompute(t, frames) {
 export function features(t) {
   const f = { const_r: 1, const_l: -1 };
   const s = t.snapshot; if (s) { f.shoulder_tilt = s.shoulderTilt; f.pelvic_tilt = s.pelvicTilt; f.head_tilt = s.headTilt; f.trunk_lateral = s.trunkLateral;
+    // наклон корпуса относительно таза (боковой изгиб поясницы): от него зависит, на какой стороне сближены ребра и гребень таза.
+    // При тазе ниже справа его ось наклонена вправо на тот же угол, поэтому вычитаем (знаки у обоих: плюс = вправо)
+    if (Number.isFinite(s.trunkLateral) && Number.isFinite(s.pelvicTilt)) f.lumbar_lateral = s.trunkLateral - s.pelvicTilt;
     // кисти «костяшками вперед»: среднее двух рук (поворот у обеих рук обычно общий, от сутулых плеч)
     const hr = [s.handRotL, s.handRotR].filter(Number.isFinite); if (hr.length) f.hand_rot = hr.reduce((a, b) => a + b, 0) / hr.length; }
   if (t.side) { f.head_forward = t.side.headForwardDeg; f.knee_hyper = t.side.kneeHyperDeg; f.shoulder_shift = t.side.shoulderShift; f.hip_shift = t.side.hipShift; }
@@ -337,7 +340,7 @@ export function features(t) {
   if (Number.isFinite(sr.sls_depth_r) && Number.isFinite(sl.sls_depth_l)) { put('asym_quad', sl.sls_depth_l - sr.sls_depth_r); f.sym_quad = [sl.sls_depth_l, sr.sls_depth_r]; }
   // признаки из шагов с плохой съемкой (качество ниже 60 или один повтор): слабые находки по ним не показываем, см. findings()
   const Q = t.quality || {}, low = k => (Q[k] != null && Q[k] < 60) || (t.moves && t.moves[k] && t.moves[k].quality === 'DOUBTFUL');
-  const LQ = { stand: ['shoulder_tilt', 'pelvic_tilt', 'head_tilt', 'trunk_lateral', 'hand_rot'], side_stand: ['head_forward', 'knee_hyper', 'shoulder_shift', 'hip_shift'],
+  const LQ = { stand: ['shoulder_tilt', 'pelvic_tilt', 'head_tilt', 'trunk_lateral', 'lumbar_lateral', 'hand_rot'], side_stand: ['head_forward', 'knee_hyper', 'shoulder_shift', 'hip_shift'],
     ohs_front: ['valgus_max', 'sq_shift', 'foot_out_max', 'sq_depth', 'oh_reach'], ohs_back: ['valgus_max', 'sq_shift', 'sq_pelvis'], ohs_side: ['sq_lean', 'sq_arms', 'sq_heel'],
     sls_r: ['sls_valgus_r', 'sls_drop_r', 'sls_trunk_r', 'sls_sway_r', 'sls_arms_r', 'sls_touch_r', 'asym_quad'], sls_l: ['sls_valgus_l', 'sls_drop_l', 'sls_trunk_l', 'sls_sway_l', 'sls_arms_l', 'sls_touch_l', 'asym_quad'], t_hold: ['asym_delt'], bends: ['asym_bend', 'bend_sum'], calf_r: ['asym_calf', 'calf_reps_r'], calf_l: ['asym_calf', 'calf_reps_l'] };
   const lowq = {}; for (const [k, fs] of Object.entries(LQ)) if (low(k)) for (const x of fs) lowq[x] = true;

@@ -38,7 +38,9 @@ function cleanInv(o) { if (!o || typeof o !== 'object') throw new Error('bad inv
   if (!id.test(o.i || '') || !key.test(o.k || '')) throw new Error('bad invite');
   const p = Array.isArray(o.p) ? o.p.filter(u => typeof u === 'string' && Object.prototype.hasOwnProperty.call(UNITS, u)) : [];
   const d = Number.isFinite(+o.d) && +o.d > 1.7e12 && +o.d < 4e12 ? +o.d : undefined;
-  return { i: o.i, k: o.k, s: str(o.s, 80) || 'Специалист', n: str(o.n, 40), p: p.length ? p : Object.keys(UNITS), ...(d ? { d } : {}), ...(o.cal === 1 ? { cal: 1 } : {}) }; }
+  return { i: o.i, k: o.k, s: str(o.s, 80) || 'Специалист', n: str(o.n, 40), p: p.length ? p : Object.keys(UNITS), ...(d ? { d } : {}), ...(o.cal === 1 ? { cal: 1 } : {}),
+    // q: быстрый тест по 4 фото, клиент снимает себя сам; h: рост из карточки специалиста
+    ...(o.q === 1 ? { q: 1 } : {}), ...(Number.isInteger(o.h) && o.h >= 100 && o.h <= 230 ? { h: o.h } : {}) }; }
 const app = $('#app');
 const TG = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData ? window.Telegram.WebApp : null;
 if (TG) { TG.ready(); TG.expand(); }
@@ -972,6 +974,8 @@ export function startError(e, retry) {
 }
 async function inviteWelcome() {
   track('inv_open'); if (!inviteWelcome.chk) { inviteWelcome.chk = 1; checkInvAlive(); }
+  // быстрый тест по ссылке: свое согласие на передачу фото, без опроса о безопасности (стоя, без движений)
+  if ((INV() || {}).q) return import('./quick.js').then(m => m.selfTest(INV())).catch(e => toast('Не открылось: ' + e.message));
   // клиенту по ссылке аккаунт не нужен: пожилые бросали тест на экране входа. Только согласия и проверка безопасности
   if (!linkConsentOk()) { linkConsent(inviteWelcome, (INV() || {}).s); return addSpecHint(); }
   if (!safetyOk()) { safetyScreen(inviteWelcome, () => linkConsent(inviteWelcome, (INV() || {}).s), bot()); return addSpecHint(); }

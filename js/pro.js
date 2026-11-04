@@ -570,7 +570,7 @@ export async function clientCard(id) {
      ${pending.map(v => `<div class="row" style="margin-top:8px;font-size:14px;background:var(--surface);border-radius:12px;padding:8px 10px"><span style="flex:1">${when(v.t)}: консультация состоялась?</span><button class="pill" data-vy="${v.id}">Да</button><button class="pill" data-vn="${v.id}" style="margin-left:6px">Нет</button></div>`).join('')}
      ${next ? `<button class="btn line" id="vinv" style="margin-top:10px;height:44px">Отправить клиенту приглашение</button>` : ''}
 </div></div>
-   <div class="pad" style="margin-top:12px;display:flex;flex-direction:column;gap:10px"><button class="btn" id="nq">${ic('camera', 's')}${qs.length ? 'Повторный быстрый тест' : 'Быстрый тест'}</button>${fullMode() ? `<button class="btn line" id="na">${last ? 'Повторный тест по видео' : 'Тест по видео'}</button><button class="btn ghost" id="inv" style="background:var(--surface)">Ссылка на тест из дома</button>${last ? '<button class="btn ghost" id="nb">Оценка с другим протоколом</button>' : ''}${as.length >= 3 ? '<button class="btn ghost" id="rel">Повторяемость: 3 последних теста</button>' : ''}` : ''}</div>
+   <div class="pad" style="margin-top:12px;display:flex;flex-direction:column;gap:10px"><button class="btn" id="nq">${ic('camera', 's')}${qs.length ? 'Повторный быстрый тест' : 'Быстрый тест'}</button><button class="btn line" id="nqs">${ic('send', 's')}Онлайн: клиент снимет себя сам</button>${fullMode() ? `<button class="btn line" id="na">${last ? 'Повторный тест по видео' : 'Тест по видео'}</button><button class="btn ghost" id="inv" style="background:var(--surface)">Ссылка на тест из дома</button>${last ? '<button class="btn ghost" id="nb">Оценка с другим протоколом</button>' : ''}${as.length >= 3 ? '<button class="btn ghost" id="rel">Повторяемость: 3 последних теста</button>' : ''}` : ''}</div>
    ${c.notes ? `<div class="pad" style="margin-top:12px"><div class="card" style="font-size:15px;line-height:1.4"><div class="eyebrow">Заметки</div>${esc(c.notes)}</div></div>` : ''}
    <h3 class="pad" style="margin:22px 0 8px;font-size:17px">История</h3>
    <div class="pad" style="display:flex;flex-direction:column;gap:8px">${as.length || done.length ? [...as.map(a => ({ t: a.date, a })), ...done.map(v => ({ t: v.t, v }))].sort((x, y) => y.t - x.t).map(({ a, v }) => {
@@ -585,6 +585,7 @@ export async function clientCard(id) {
   document.querySelectorAll('.gopro-home').forEach(b => b.onclick = () => gate('home', c.name.split(' ')[0]));
   if (lastQ) quickJs().then(m => m.quickCard($('#qcard'), last.id, qs.length >= 2 ? qs.at(-2).id : null)).catch(e => toast('Не открылось: ' + e.message));
   $('#nq').onclick = async () => { if (last && !(await canTrack(c))) return; quickJs().then(m => m.quickTest(id)); };
+  $('#nqs').onclick = () => sendSelfQuick(c);
   if (last && !lastQ) { const sp = proSpots(last); let v3 = null;
     const show = back => { if (v3) { v3.dispose(); v3 = null; } $('#cvis').style.height = ''; $('#cvis').innerHTML = '<canvas id="cheat" style="width:150px;display:block"></canvas>'; $('#cvis').style.width = '130px'; $('#cfind').style.display = ''; drawHeat($('#cheat'), onlyKeys(sp, mainKeys(last, sp)), back, null, cNum); ['vf', 'vb', 'v3'].forEach(k => $('#' + k).classList.toggle('on', k === (back ? 'vb' : 'vf'))); };
     show(cNum.filter(l => (sp.find(x => x.key === l.key) || {}).back).length > cNum.length / 2); $('#vf').onclick = () => show(false); $('#vb').onclick = () => show(true);
@@ -1470,10 +1471,10 @@ async function freshBox(b) {
   const id = await newBoxId(); if (!b) return { id, key: await seal.key() };
   return signedBox(id) ? { id, key: b.key, old: b.id } : b;
 }
-async function inviteLink(c, units, date) {
+async function inviteLink(c, units, date, extra = {}) {
   const fresh = await freshBox(c.invite); if (fresh !== c.invite) { c.invite = fresh; await put('clients', c); }
   const author = (await meta('profile')) || defaultAuthor();
-  return location.origin + '/?src=inv' + (myRef() ? '&ref=' + myRef() : '') + '#inv=' + seal.pack({ i: c.invite.id, k: c.invite.key, n: c.name.split(' ')[0], s: author, p: units, ...(date ? { d: date } : {}) });
+  return location.origin + '/?src=inv' + (myRef() ? '&ref=' + myRef() : '') + '#inv=' + seal.pack({ i: c.invite.id, k: c.invite.key, n: c.name.split(' ')[0], s: author, p: units, ...(date ? { d: date } : {}), ...extra });
 }
 /** Какой тест пройдет клиент по ссылке: хранится на сервере у ящика, поэтому тест можно сменить после отправки. */
 async function setInviteTest(c, units) { if (!c.invite || !c.invite.id) return false;
@@ -1496,6 +1497,18 @@ async function sendInvite(c) {
     d.querySelector('#snd').onclick = async () => { let url; try { url = await inviteLink(c, tpl[2]); } catch (e) { toast('Не удалось создать ссылку: ' + e.message); return; } setInviteTest(c, tpl[2]); track('invite_sent'); useHit('tpl', tpl[0]); const text = `${c.name.split(' ')[0]}, здравствуйте! Пройдите, пожалуйста, тест движения по ссылке, это 2–4 минуты. Результат сразу придет мне.`;
       if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url); toast('Ссылка скопирована'); } d.remove(); }; };
   draw(); document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); };
+}
+/** Онлайн-работа: ссылка на быстрый тест, клиент снимает себя сам. Фото и точки приходят зашифрованными в карточку, специалист проверяет точки. */
+async function sendSelfQuick(c) {
+  if ((await byClient(c.id)).length && !(await canTrack(c))) return;
+  const d = document.createElement('div'); d.className = 'sheet';
+  d.innerHTML = `<div><h2>Клиент снимет себя сам</h2><p class="sub" style="font-size:14px;margin-top:6px;line-height:1.45">${esc(c.name)} откроет ссылку, поставит телефон на полку и сделает 4 фото: снимки делаются сами по отсчету. Фото с точками придут в карточку, вы проверите точки и отправите отчет как обычно.</p>
+    <p class="sub" style="font-size:13px;margin-top:8px">${+c.height ? `Рост из карточки: ${esc(c.height)} см.` : 'Роста в карточке нет: клиент сможет указать его сам.'} Фото шифруются на телефоне клиента, ключ только у вас и в ссылке.</p>
+    <button class="btn" id="snd" style="margin-top:14px">${ic('send', 's')}Отправить ссылку</button><button class="btn ghost" id="cx" style="margin-top:8px;border:0">Отмена</button></div>`;
+  document.body.appendChild(d); d.onclick = e => { if (e.target === d) d.remove(); }; d.querySelector('#cx').onclick = () => d.remove();
+  d.querySelector('#snd').onclick = async () => { let url; try { url = await inviteLink(c, [], null, { q: 1, ...(+c.height >= 100 && +c.height <= 230 ? { h: Math.round(+c.height) } : {}) }); } catch (e) { toast('Не удалось создать ссылку: ' + e.message); return; }
+    track('self_quick_link'); const text = `${c.name.split(' ')[0]}, здравствуйте! Сделайте, пожалуйста, 4 фото для теста осанки: телефон на полку на уровне пояса, отойти на 3 метра, снимки делаются сами. Около 5 минут.`;
+    if (navigator.share) await navigator.share({ text, url }).catch(() => {}); else { await navigator.clipboard.writeText(text + ' ' + url); toast('Ссылка скопирована'); } d.remove(); };
 }
 const str = (v, n) => typeof v === 'string' ? v.replace(/[\u0000-\u001f]/g, ' ').slice(0, n) : '';
 const KEY = /^[a-z_]{1,20}$/;
@@ -1652,6 +1665,8 @@ export async function pullResults() {
     // клиент открыл ссылку с домашкой или подтянул новую версию: подтверждение доставки
     if (r && r.type === 'seen') { if (c.hw && Number.isFinite(+r.upd)) { c.hw.seen = Date.now(); c.hw.seenUpd = Math.max(+r.upd, c.hw.seenUpd || 0); await put('clients', c); } done(item.p); continue; }
     if (r && r.type === 'cns') { await saveCns(c, r.items); done(item.p); continue; }
+    // быстрый тест, клиент снял себя сам: фото с точками в карточку, точки проверяет специалист
+    if (r && r.type === 'quick') { try { await (await import('./quick.js')).addRemoteQuick(c, r); got.push(c.name); done(item.p); } catch (e) { console.warn('quick item', e); if (/^bad|^no views/.test(e.message)) done(item.p); } continue; }
     if (r && r.type === 'join') { const p0 = r.profile && typeof r.profile === 'object' ? r.profile : {};
       c.selfReport = { complaints: str(p0.complaints, 600), activity: str(p0.activity, 120), dob: /^\d{4}-\d{2}-\d{2}$/.test(p0.dob) ? p0.dob : '', sex: ['M', 'F'].includes(p0.sex) ? p0.sex : '', height: /^\d{2,3}$/.test(p0.height) ? p0.height : '', name: [str(p0.name, 40), str(p0.surname, 60)].filter(Boolean).join(' ') };
       await put('clients', c); r = r.result; if (!r || typeof r !== 'object') { done(item.p); continue; } }
