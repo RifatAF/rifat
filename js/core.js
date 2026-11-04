@@ -696,6 +696,10 @@ export async function body3D(container, spots0, onPick, opts = {}) {
       const el = document.createElement('button'); el.className = 'mark3d'; el.setAttribute('aria-label', [(C.muscles[s.id] || {}).name || (C.muscles[s.id] || {}).zone || 'Зона', s.side === 'RIGHT' ? 'справа' : s.side === 'LEFT' ? 'слева' : ''].filter(Boolean).join(' ')); el.innerHTML = `<span class="mark ${s.k}"${s.derived && !s.edited ? ' style="opacity:.75"' : ''}></span>`;
       el.onclick = () => onPick && onPick(s.key); container.appendChild(el); return { el, c, local: at3(c), n: new THREE.Vector3(c[0], 0, -(c[1] - 10)).normalize(), vis: null }; }).filter(Boolean); };
   buildMarks(spots);
+  // метки боли из жалоб (кабинет специалиста): у сустава, видны и с обратной стороны, но бледнее
+  let pmarks = [];
+  const buildPains = list => { pmarks.forEach(x => x.el.remove()); pmarks = (list || []).map(s => { const el = document.createElement('div'); el.className = 'pain3d'; el.setAttribute('role', 'img'); el.setAttribute('aria-label', 'Боль: ' + s.label); el.title = s.label;
+    el.innerHTML = `<span>${s.p != null ? s.p : '!'}</span>`; container.appendChild(el); return { el, c: s.c, local: at3(s.c), n: new THREE.Vector3(s.n[0], s.n[2], -s.n[1]), vis: null }; }); dirty = true; };
   // Поток частиц по волокнам, как ветер на погодной карте: главная ось мышцы (PCA по ее наружной поверхности) ≈ направление
   // волокон, поперек оси несколько дорожек на всю ширину мышцы. Гипертонус: частицы стекаются с концов к центру и гаснут
   // в нем (мышца стягивается). Перерастяжение: разбегаются от центра к краям (мышцу растягивают). Слабая: редкие тусклые
@@ -753,7 +757,10 @@ export async function body3D(container, spots0, onPick, opts = {}) {
       // метка поясницы иначе считалась бы передней и просвечивала на животе
       nv.copy(x.n).transformDirection(obj.matrixWorld); cv3.copy(camera.position).sub(wv); const vis = nv.dot(cv3) > -0.05 * cv3.length();
       const p = cv3.copy(wv).project(camera); x.el.style.transform = `translate(${((p.x + 1) / 2 * w).toFixed(1)}px,${((1 - p.y) / 2 * h).toFixed(1)}px)`;
-      if (vis !== x.vis) { x.vis = vis; x.el.style.opacity = vis ? 1 : 0; x.el.style.pointerEvents = vis ? 'auto' : 'none'; } } };
+      if (vis !== x.vis) { x.vis = vis; x.el.style.opacity = vis ? 1 : 0; x.el.style.pointerEvents = vis ? 'auto' : 'none'; } }
+    for (const x of pmarks) { obj.localToWorld(wv.copy(x.local)); nv.copy(x.n).transformDirection(obj.matrixWorld); cv3.copy(camera.position).sub(wv); const vis = nv.dot(cv3) > -0.05 * cv3.length();
+      const p = cv3.copy(wv).project(camera); x.el.style.transform = `translate(${((p.x + 1) / 2 * w).toFixed(1)}px,${((1 - p.y) / 2 * h).toFixed(1)}px)`;
+      if (vis !== x.vis) { x.vis = vis; x.el.style.opacity = normOn ? 0 : vis ? 1 : .35; } } };
   // появление: тон 0→1 за 560 мс, камера доезжает с поворота 25° до фронта за 800 мс
   const target = col.slice(); let rv = null;
   if (opts.reveal && !reduceMotion()) { for (let i = 0; i < m.nv; i++) col.set(BASE3, i * 3); geo.attributes.color.needsUpdate = true;
@@ -780,15 +787,18 @@ export async function body3D(container, spots0, onPick, opts = {}) {
     look(view) { const a = { front: 0, right: -Math.PI / 2, back: Math.PI, left: Math.PI / 2 }[view] || 0; isBack = view === 'back';
       flyTo(new THREE.Vector3(0, 0, 0), ZONES.all[1], new THREE.Vector3(Math.sin(a), 0, Math.cos(a))); },
     /** Новая поза (кнопки «Усилить») без пересоздания сцены. */
-    pose(p) { if (!PF) return; curPose = p; bend(p); geo.attributes.position.needsUpdate = true; marks.forEach(x => { x.local = at3(x.c); }); dirty = true; },
+    pose(p) { if (!PF) return; curPose = p; bend(p); geo.attributes.position.needsUpdate = true; marks.forEach(x => { x.local = at3(x.c); }); pmarks.forEach(x => { x.local = at3(x.c); }); dirty = true; },
+    /** Метки боли: [{c, n, p, label}] из painSpots (js/complaints.js); [] — убрать. */
+    pains(list) { buildPains(list); },
     /** Новая раскраска и маркеры (правка специалиста) без пересоздания сцены и сброса камеры. */
     /** Слой мышц: ids — набор видимых и кликабельных мышц, null — все слои. */
     only(ids) { only = ids; api.update(lastSpots); },
     /** «Как должно быть»: мышцы в балансе, без цвета, маркеров и стрелок. false — вернуть результат теста. */
     norm(on) { normOn = !!on; const sp = normOn ? lastSpots.map(s => ({ ...s, k: 'OK', tone: 0 })) : (only ? lastSpots.map(s => only.has(s.id) ? s : { ...s, k: 'OK', tone: 0 }) : lastSpots);
-      paint(sp, col); target.set(col); geo.attributes.color.needsUpdate = true; arrows.visible = !normOn; marks.forEach(x => { x.el.hidden = normOn; }); dirty = true; },
+      paint(sp, col); target.set(col); geo.attributes.color.needsUpdate = true; arrows.visible = !normOn; marks.forEach(x => { x.el.hidden = normOn; }); pmarks.forEach(x => { x.el.hidden = normOn; }); dirty = true; },
     update(spots) { spots = alias3d(spots, order); lastSpots = spots; spots = only ? spots.map(s => only.has(s.id) ? s : { ...s, k: 'OK', tone: 0 }) : spots; paint(spots, col); target.set(col); geo.attributes.color.needsUpdate = true; { const ix = opts.pose ? m.idx : meshIndex(m, spots); if (ix !== curIx) { curIx = ix; geo.setIndex(new THREE.BufferAttribute(ix, 1)); } } buildMarks(spots); buildArrows(spots); if (normOn) api.norm(true); dirty = true; },
     dispose() { if (!alive) return; alive = false; ctl.dispose(); if (pts) pts.geometry.dispose(); pmat.dispose(); geo.dispose(); mat.dispose(); renderer.dispose(); try { renderer.forceContextLoss(); } catch (e) {} } };
+  if (opts.pains) buildPains(opts.pains);
   anim(); return api;
 }
 
