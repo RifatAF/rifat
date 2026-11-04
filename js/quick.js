@@ -11,6 +11,7 @@ import { track } from './track.js';
 import { matte } from './ds.js';
 import qrcode from './qr.js';
 import { releaseFor } from './biomechanics-engine.js';
+import { PZ, PZN, MID, mergeComplaints, painSpots, painLabel, painCompat, painPlan } from './complaints.js';
 
 const $ = s => document.querySelector(s);
 const CONSENT_VER = '2026-10-v4-draft';
@@ -494,7 +495,7 @@ const zSpots = zones => zones.map(z => ({ ...z, key: z.key || z.id + ':' + z.sid
 // Зажата или перегружена: расслабить ее и укрепить антагониста (грудные → ромбовидные).
 // Слабая: укрепить ее и расслабить того, кто ее перегружает (ягодицы → сгибатели бедра), затем в движении.
 // Круги: сначала главное для каждой зоны, потом пары, потом движение; одна мышца с двух сторон идет парой упражнений.
-export function chainEx(zones, max = 8) {
+export function chainEx(zones, max = 8, pains = null, { add = true } = {}) {
   const ex = id => C.exercises[id], out = [], why = {}, rank = {}, groups = new Map(), ORD = { SHORT: 0, WEAK: 1, HYPER: 2 };
   for (const z of zones || []) { const k = z.id + ':' + z.k; if (!groups.has(k)) groups.set(k, { id: z.id, k: z.k, sides: new Set() }); groups.get(k).sides.add(z.side === 'RIGHT' ? 'right' : 'left'); }
   const nm = id => ((C.muscles[id] || {}).name || id).toLowerCase(), rounds = [[], [], []];
@@ -517,9 +518,13 @@ export function chainEx(zones, max = 8) {
     const ids = [...g.sides].map(sd => x.replace('{s}', sd)).filter((id, i, l) => ex(id) && l.indexOf(id) === i); if (!ids.length) continue;
     const add = ids.filter(id => !out.includes(id)); if (add.length && out.length + add.length <= max) { out.push(...add); add.forEach(id => { why[id] = reason; rank[id] = r === rounds[2] ? 2 : /расслабить|снять/.test(reason) ? 0 : 1; }); } break; }
   // порядок занятия: сначала расслабить зажатые, затем активировать слабые, в конце движение
-  return { ids: out.map((id, i) => [id, i]).sort((x, y) => (rank[x[0]] - rank[y[0]]) || x[1] - y[1]).map(x => x[0]), why };
+  const ids = out.map((id, i) => [id, i]).sort((x, y) => (rank[x[0]] - rank[y[0]]) || x[1] - y[1]).map(x => x[0]);
+  // жалобы: убрать нагрузку на больную зону, добавить упражнение по жалобе (js/complaints.js)
+  if (!pains || !pains.length) return { ids, why };
+  const pp = painPlan(ids, pains, { has: id => !!ex(id), max, add }); pp.added.forEach(a => { why[a.id] = 'по жалобе: ' + painLabel(a.e); });
+  return { ids: pp.ids, why, pain: pp };
 }
-const autoEx = a => chainEx((a.quick || {}).zones || []).ids;
+const autoEx = a => chainEx((a.quick || {}).zones || [], 8, a.complaints || null).ids;
 export const hwEx = a => (a.plan && Array.isArray(a.plan.ex) && a.plan.ex.length ? a.plan.ex : autoEx(a)).filter(id => C.exercises[id]).slice(0, 8);
 const exLabel = id => C.exercises[id].title.split(' (')[0] + (id.endsWith('_right') ? ', правая' : id.endsWith('_left') ? ', левая' : '');
 // левая и правая версии одного упражнения в отчете одной строкой
@@ -744,9 +749,9 @@ const ptRows = (m, k) => { const t = m.pt; if (!t) return [m.proTest && `<b>Пр
 // степень зоны 1–3: яркость цвета на 3D и точки у названия. Без степени: цепочка 1, остальные 2
 const DEGN = ['лёгкая', 'средняя', 'выраженная'], degOf = z => z.d || (z.c ? 1 : 2);
 const degDots = (z, c) => `<span aria-label="степень ${degOf(z)} из 3" style="margin-left:8px;letter-spacing:2px;font-size:11px;vertical-align:2px">${[1, 2, 3].map(n => `<span style="color:${c};opacity:${n <= degOf(z) ? 1 : .25}">●</span>`).join('')}</span>`;
-function planBlock(zones, open = new Set()) {
+function planBlock(zones, open = new Set(), pains = null) {
   const rows = zGroups(zones).map(([key, l]) => { const z = l[0], m = C.muscles[z.id] || {}, sd = l.length > 1 ? '' : ' ' + sideRu(z.side);
-    const ex = m.name ? exRows(chainEx(l, 3).ids).map(e => esc(e.title.split(' (')[0])).join(' → ') : '', more = ptRows(m, z.k);
+    const ex = m.name ? exRows(chainEx(l, 3, pains, { add: false }).ids).map(e => esc(e.title.split(' (')[0])).join(' → ') : '', more = ptRows(m, z.k);
     return `<details data-pg="${key}" style="padding:9px 0;border-top:1px solid var(--line-2)"${open.has(key) ? ' open' : ''}><summary style="display:block;position:relative;padding-right:24px;list-style:none;cursor:pointer;font-size:15px;line-height:1.35"><span style="position:absolute;right:0;top:4px;color:var(--sub)">${ic('chevron-down', 's')}</span><span class="pill" style="font-size:12px;padding:2px 8px;margin-right:6px;color:${TCOL[z.k]};border-color:${TCOL[z.k]}">${TASK[z.k]}</span><b>${esc(zoneName(z))}</b><span class="sub">${sd}</span>${degDots(z, ZCOL[z.k])}${(() => { const tag = l[0].p && patName(l[0].p) ? `база: ${esc(patName(l[0].p))}` : l.every(x => x.c) ? 'по цепочке' : ''; return ex || tag ? `<div class="sub" style="font-size:13px;margin-top:3px">${tag ? `<span style="color:var(--ink);opacity:.8">${tag}</span>` + (ex ? ' · ' : '') : ''}${ex}</div>` : ''; })()}</summary>
       ${more.length ? `<div class="sub" style="font-size:13px;line-height:1.4;margin-top:6px;display:flex;flex-direction:column;gap:8px">${more.map(t => `<div>${t}</div>`).join('')}</div>` : ''}
       <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">${Object.keys(ZST).map(k => `<button class="pill" data-pk="${k}" style="height:32px;font-size:12px;padding:0 10px;${k === z.k ? `color:${ZCOL[k]};border-color:${ZCOL[k]};font-weight:600` : 'opacity:.7'}">${ZST[k]}</button>`).join('')}<span style="flex:1"></span><button class="round" data-px aria-label="Убрать зону" style="width:32px;height:32px">${ic('x', 's')}</button></div>
@@ -778,12 +783,12 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
       <div class="seg" id="qview" style="margin-top:10px">${VIEWS.filter(v => !v.opt || (photos[v.id] && photos[v.id].pts)).map((v, i) => `<button data-vw="${v.id}" class="${i ? '' : 'on'}" style="padding:0 6px">${v.short || v.name}</button>`).join('')}</div>
       <div id="qgr"><div class="row" style="gap:10px;margin-top:10px"><span class="sub" style="font-size:13px;flex:none">Усилить</span><div class="seg" id="qgain" style="flex:1">${GAINS.map(g => `<button data-g="${g}" class="${g === st.gain ? 'on' : ''}" style="padding:0 6px">×${String(g).replace('.', ',')}</button>`).join('')}</div></div><div id="qplate">${gainPlate(st.gain)}</div></div>
       <div class="sub" id="qcap" style="font-size:12px;text-align:center;margin-top:8px">Типовая фигура, цветом зоны</div></div>
-    ${checkCard(st.by)}<div id="qplan"></div><div class="qslot" style="display:contents"></div>
+    <div id="qpain"></div>${checkCard(st.by)}<div id="qplan"></div><div class="qslot" style="display:contents"></div>
     <details class="acc"><summary style="font-weight:600;font-size:15px"><span>Замеры · вне погрешности <span class="mono">${out}</span> из <span class="mono">${n}</span></span></summary><div style="display:flex;flex-direction:column;gap:12px;margin-top:10px">${out ? `<div><div class="eyebrow">Главное</div><div class="group" style="padding:0">${obsRows(st.by)}</div></div>` : ''}${VIEWS.filter(v => st.by[v.id]).map(v => `<div><div class="eyebrow">${v.name}</div>${metricRows(st.by[v.id])}</div>`).join('')}</div></details>
     <p class="mt-cal">Поправка на крен телефона учтена · погрешности замера в методике</p>`;
   const $h = s => host.querySelector(s);
   const opened = new Set();
-  const plan = () => { $h('#qplan').innerHTML = planBlock(st.zones, opened);
+  const plan = () => { $h('#qplan').innerHTML = planBlock(st.zones, opened, st.pains); painSum();
     host.querySelectorAll('[data-pg]').forEach(el => { const key = el.dataset.pg, [gid, gk] = key.split(':'), mine = z => z.id === gid && z.k === gk;
       el.ontoggle = () => el.open ? opened.add(key) : opened.delete(key);
       el.querySelectorAll('[data-pk]').forEach(b => b.onclick = () => { const k = b.dataset.pk; if (k === gk) return; st.zones.forEach(z => { if (mine(z)) z.k = k; }); opened.delete(key); opened.add(gid + ':' + k); changed(); });
@@ -793,6 +798,35 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
     $h('#qtpl').onclick = () => patternSheet(zs => { const rest = st.zones.filter(x => !zs.some(z => x.id === z.id && x.side === z.side)); st.zones = [...rest, ...zs]; changed(); toast('Шаблон добавлен в план'); });
     $h('#qadd').onclick = () => addZone(zs => { const rest = st.zones.filter(x => !zs.some(z => x.id === z.id && x.side === z.side)); if (new Set([...rest, ...zs].map(z => z.id)).size > 20) return toast('Не больше 20 мышц'); st.zones = [...rest, ...zs]; changed(); }); };
   const changed = () => { if (v3) v3.update(zSpots(st.zones)); plan(); onChange(st); };
+  // жалобы: текст разбирается сам, зоны и сторону можно поправить; метки на 3D и поправка плана сразу
+  const pkey = e => e.z + ':' + (e.s || ''); st.pman = st.pman || []; st.pdel = st.pdel || []; st.ptext = st.ptext || ''; st.pains = mergeComplaints(st.ptext, st.pman, st.pdel);
+  $h('#qpain').innerHTML = `<div class="card" style="padding:12px 14px"><div class="row"><b style="flex:1">Жалобы клиента</b><span class="sub" style="font-size:12px">видите только вы</span></div>
+    <textarea id="qptx" rows="2" maxlength="600" placeholder="Например: болит правое колено 6/10 после бега, ноет левый локоть" style="width:100%;margin-top:8px;border:0;background:var(--bg);border-radius:12px;padding:10px 12px;font:15px var(--font);resize:vertical;color:var(--text);box-sizing:border-box">${esc(st.ptext)}</textarea>
+    <div id="qpl"></div><button class="pill" id="qpadd" style="height:34px;margin-top:8px">${ic('plus', 's')}Зона боли</button><div id="qpsum"></div></div>`;
+  const pdraw = () => { const pb = 'height:32px;min-width:32px;padding:0 9px;font-size:13px';
+    $h('#qpl').innerHTML = st.pains.map((e, i) => `<div class="row" style="gap:8px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line-2);margin-top:${i ? 0 : 8}px"><b style="flex:1;min-width:110px;font-size:14px">${esc(PZN[e.z])}${e.t ? ' <span class="sub" style="font-size:11px;font-weight:400">из текста</span>' : ''}</b>
+      <span class="row" style="gap:4px;flex:none">${[['LEFT', 'Лев'], ['RIGHT', 'Прав'], ['BOTH', 'Обе']].map(([k, n]) => `<button class="pill" data-ps="${i}:${k}" style="${pb};${e.s === k ? 'border-color:var(--ink);font-weight:700' : 'opacity:.65'}">${n}</button>`).join('')}</span>
+      <span class="row" style="gap:4px;flex:none"><button class="pill" data-pm="${i}:-1" style="${pb}" aria-label="Слабее">−</button><b class="mono" style="width:46px;text-align:center;font-size:14px;color:${(e.p ?? 5) >= 7 ? '#FF3B30' : 'var(--ink)'}">${e.p == null ? '?' : e.p}/10</b><button class="pill" data-pm="${i}:1" style="${pb}" aria-label="Сильнее">+</button></span>
+      <button class="pill" data-pxx="${i}" style="${pb}" aria-label="Убрать">✕</button></div>`).join('');
+    const edit = (i, f) => { const e = st.pains[i]; if (e.t) { st.pdel.push(pkey(e)); delete e.t; } else st.pman = st.pman.filter(x => x !== e); f(e); st.pman = st.pman.filter(x => pkey(x) !== pkey(e)); st.pman.push(e); pchg(); };
+    host.querySelectorAll('[data-ps]').forEach(b => b.onclick = () => { const [i, k] = b.dataset.ps.split(':'); edit(+i, e => { e.s = e.s === k ? null : k; }); });
+    host.querySelectorAll('[data-pm]').forEach(b => b.onclick = () => { const [i, d] = b.dataset.pm.split(':'); edit(+i, e => { e.p = Math.max(0, Math.min(10, (e.p == null ? 5 : e.p) + +d)); }); });
+    host.querySelectorAll('[data-pxx]').forEach(b => b.onclick = () => { const e = st.pains[+b.dataset.pxx]; if (e.t) st.pdel.push(pkey(e)); else st.pman = st.pman.filter(x => x !== e); pchg(); }); };
+  function painSum() { const box = $h('#qpsum'); if (!box) return; if (!st.pains || !st.pains.length) { box.innerHTML = ''; return; }
+    const pp = chainEx(st.zones, 8, st.pains).pain || { cut: [], added: [], acute: [] }, lines = [];
+    if (pp.acute.length) lines.push(`<div style="color:#FF3B30;font-weight:600">Сильная боль: ${esc(pp.acute.map(painLabel).join(', ').toLowerCase())}. Нагрузку на эти зоны в план не даем. Сначала очная оценка; при травме, онемении, слабости в руке или ноге, ночной боли или температуре направьте к врачу.</div>`);
+    const cut = [...new Map(pp.cut.map(c => [exLabel(c.id).split(',')[0], c])).values()];
+    if (cut.length) lines.push(`<div><b>Убрано из плана:</b> ${cut.map(c => esc(exLabel(c.id).split(',')[0]) + ' <span class="sub">(' + esc(PZN[c.e.z].toLowerCase()) + ')</span>').join(', ')}</div>`);
+    for (const a of pp.added) lines.push(`<div><b>Добавлено:</b> ${esc(exLabel(a.id))}<br><span class="sub" style="font-size:12px">${esc(a.src)}</span></div>`);
+    if (!lines.length) lines.push('<div class="sub">План не изменился: его упражнения эти зоны почти не нагружают.</div>');
+    if (st.pains.some(e => e.p == null || (e.p >= MID && e.p < 7))) lines.push('<div class="sub" style="font-size:12px">Во время упражнений боль не выше 5 из 10 и к следующему утру не сильнее, чем до занятия (Silbernagel 2007).</div>');
+    box.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;font-size:14px;line-height:1.4;border-top:1px solid var(--line-2);padding-top:10px">${lines.join('')}</div>`; }
+  const pchg = () => { st.pains = mergeComplaints(st.ptext, st.pman, st.pdel); pdraw(); if (v3) v3.pains(painSpots(st.pains)); plan(); onChange(st); };
+  { let tm = 0; $h('#qptx').oninput = e => { clearTimeout(tm); tm = setTimeout(() => { st.ptext = e.target.value.slice(0, 600); pchg(); }, 450); }; }
+  $h('#qpadd').onclick = () => { const d = document.createElement('div'); d.className = 'sheet'; d.innerHTML = `<div class="sheet-body"><button class="sheet-x" aria-label="Закрыть">✕</button><h2 style="font-size:20px">Где болит</h2><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:12px">${PZ.map(([k, n]) => `<button class="pill" data-pz="${k}">${n}</button>`).join('')}</div></div>`;
+    document.body.appendChild(d); d.onclick = ev => { if (ev.target === d || ev.target.closest('.sheet-x')) d.remove(); };
+    d.querySelectorAll('[data-pz]').forEach(b => b.onclick = () => { d.remove(); st.pman.push({ z: b.dataset.pz, s: null, p: null }); pchg(); }); };
+  pdraw();
   plan();
   const photoView = () => (md => { const r = (photos[view] || {}).roll; if (mode === 'ph') $h('#qcap').textContent = (r ? `Кадр выровнен на ${Math.abs(r).toFixed(2).replace('.', ',')}°${(photos[view] || {}).rollSrc === 'image' ? ' по линиям фона' : ''} · ` : '') + 'касание фото: цифры'; })() || drawMeasure($h('#qph'), photos[view], view, st.by[view] || [], false, showNums).then(ok => { if (!ok && $h('#qph')) { const c = $h('#qph').getContext('2d'); c.clearRect(0, 0, 1e4, 1e4); } });
   const setMode = md => { mode = md; host.querySelectorAll('[data-md]').forEach(x => x.classList.toggle('on', x.dataset.md === md));
@@ -808,7 +842,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
   host.querySelectorAll('[data-vw]').forEach(b => b.onclick = () => { view = b.dataset.vw; host.querySelectorAll('[data-vw]').forEach(x => x.classList.toggle('on', x === b)); if (mode === 'ph') photoView(); else if (v3) v3.look(view === 'squat' ? 'front' : view); });
   host.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { st.gain = +b.dataset.g; host.querySelectorAll('[data-g]').forEach(x => x.classList.toggle('on', x === b)); $h('#qplate').innerHTML = gainPlate(st.gain); if (v3) v3.pose(pose()); onChange(st); });
   // без WebGL2 3D-фигуры нет: остаются фото с замерами (если есть) или блок прячется
-  body3D($h('#q3d'), zSpots(st.zones), key => { const z = st.zones.find(x => (x.key || x.id + ':' + x.side) === key); if (z) toast(`${zoneName(z)} ${sideRu(z.side)}: ${ZST[z.k]}`); }, { pose: pose() })
+  body3D($h('#q3d'), zSpots(st.zones), key => { const z = st.zones.find(x => (x.key || x.id + ':' + x.side) === key); if (z) toast(`${zoneName(z)} ${sideRu(z.side)}: ${ZST[z.k]}`); }, { pose: pose(), pains: painSpots(st.pains) })
     .then(api => { v3 = api; }).catch(() => { if (hasPh) { setMode('ph'); const m = $h('#qmode'); if (m) m.remove(); } else { const f = $h('#qfcard'); if (f) f.remove(); } onNoFig(); });
 }
 function results() {
@@ -821,8 +855,8 @@ function results() {
     <label class="row" id="qgl" style="gap:10px;font-size:14px"><input type="checkbox" id="qgpdf"${Q.gainPdf ? ' checked' : ''} style="width:20px;height:20px"> В отчете фигура с усилением перекосов, ×${String(Q.gain > 1 ? Q.gain : REPORT_GAIN).replace('.', ',')} (с пометкой «усилено»)</label>
    </div>
    <div class="dock"><button class="btn line" id="qshow">${ic('maximize', 's')}Показать клиенту</button><button class="btn" id="qsave" style="margin-top:8px">${ic('file-text', 's')}${Q.editId && Q.until !== 0 ? 'Сохранить правку' : 'Сохранить и отчет'}</button></div></div>`);
-  const st = { by: q.by, zones: Q.zones, gain: Q.gain, h: heightCm() || 170 };
-  panel($('#qpanel'), st, { photos: Q.views, onChange: s => { Q.zones = s.zones; Q.gain = s.gain; }, onNoFig: () => { const l = $('#qgl'); if (l) l.remove(); } });
+  const st = { by: q.by, zones: Q.zones, gain: Q.gain, h: heightCm() || 170, ...(Q.cmp || {}) };
+  panel($('#qpanel'), st, { photos: Q.views, onChange: s => { Q.zones = s.zones; Q.gain = s.gain; Q.cmp = cmpOf(s); }, onNoFig: () => { const l = $('#qgl'); if (l) l.remove(); } });
   const keep = () => { Q.note = $('#qcon').value.trim(); Q.rec = $('#qrec').value.trim(); Q.gainPdf = !!($('#qgpdf') && $('#qgpdf').checked); };
   $('#qshow').onclick = () => { keep(); showClient(st, Q.client.nocard ? '' : Q.client.name); };
   $('#back').onclick = () => { keep(); editor(3); };
@@ -886,7 +920,7 @@ function showClient(st, name) {
 export async function quickCard(host, aid, prevId) {
   await refreshQuick(await row('assessments', aid));
   const a = await row('assessments', aid), c = await row('clients', a.clientId), qz = a.quick || {};
-  const st = { by: qz.by || {}, zones: (qz.zones || []).map(z => ({ ...z })), gain: 1, h: qz.h || 170 }, es = await editState(a);
+  const st = { by: qz.by || {}, zones: (qz.zones || []).map(z => ({ ...z })), gain: 1, h: qz.h || 170, ...cmpLoad(a) }, es = await editState(a);
   // действия под рукой: отчет, показать клиенту, было → стало (до повторного теста кнопка видна, но неактивна)
   const tool = (id, icon, t, off) => `<button class="tool" id="${id}"${off ? ' disabled style="opacity:.45"' : ''}>${ic(icon)}<span>${t}</span></button>`;
   host.innerHTML = `<div class="pad" style="margin-top:12px;display:flex;flex-direction:column;gap:16px"><div class="row" style="gap:8px"><b style="flex:1;font-size:17px">Быстрый тест · ${_pro.fmtDate(a.date)}</b></div>
@@ -895,7 +929,7 @@ export async function quickCard(host, aid, prevId) {
     ${editNote(a) ? `<p class="sub" style="font-size:12px;margin-top:-8px">${esc(editNote(a))}</p>` : ''}
     <div id="qcp" style="display:flex;flex-direction:column;gap:16px"></div>
     ${a.note ? `<div><div class="eyebrow">Ваш вывод · ГИПОТЕЗА</div><div class="card" style="font-size:15px;line-height:1.45;white-space:pre-line">${esc(a.note)}</div></div>` : ''}</div>`;
-  panel(host.querySelector('#qcp'), st, { photos: ((await row('poses', aid)) || {}).photos || {}, onChange: async s => { a.quick = { ...a.quick, zones: s.zones.map(({ id, side, k, key, c, p, d }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}), ...(p ? { p } : {}), ...(d ? { d } : {}) })), confirmed: true, zEdit: !sameZones(s.zones, zonesOf(summaryOf(st.by, qz.hSet ? qz.h : 0))) }; await _pro.put('assessments', a); hwBlock(host.querySelector('#qhw'), aid); } });
+  panel(host.querySelector('#qcp'), st, { photos: ((await row('poses', aid)) || {}).photos || {}, onChange: async s => { cmpSave(a, cmpOf(s)); a.quick = { ...a.quick, zones: s.zones.map(({ id, side, k, key, c, p, d }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}), ...(p ? { p } : {}), ...(d ? { d } : {}) })), confirmed: true, zEdit: !sameZones(s.zones, zonesOf(summaryOf(st.by, qz.hSet ? qz.h : 0))) }; await _pro.put('assessments', a); hwBlock(host.querySelector('#qhw'), aid); } });
   const hwh = document.createElement('div'); hwh.id = 'qhw'; hwh.style.cssText = 'display:flex;flex-direction:column;gap:8px'; host.querySelector('.qslot').appendChild(hwh);
   hwBlock(hwh, aid);
   host.querySelector('#qcrep').onclick = () => report(aid);
@@ -934,6 +968,10 @@ export async function quickCompare(prevId, curId) {
   document.querySelectorAll('#cmpm [data-md]').forEach(b => b.onclick = () => { mode = b.dataset.md; document.querySelectorAll('#cmpm [data-md]').forEach(x => x.classList.toggle('on', x === b)); draw(); });
   track('screen', { c: 'quick_compare' }, false);
 }
+// жалобы в оценке: текст, ручные правки, итоговый список (по нему план) и боль по зонам для старых экранов
+const cmpOf = s => ({ ptext: s.ptext || '', pman: (s.pman || []).map(({ z, s: sd, p }) => ({ z, s: sd, p })), pdel: [...new Set(s.pdel || [])], pains: (s.pains || []).map(({ z, s: sd, p, t }) => ({ z, s: sd, p, ...(t ? { t: 1 } : {}) })) });
+const cmpSave = (a, c) => { if (!c) return; Object.assign(a, { complaint: { text: c.ptext, man: c.pman, del: c.pdel }, complaints: c.pains, ...painCompat(c.pains) }); };
+const cmpLoad = a => a.complaint ? { ptext: a.complaint.text || '', pman: (a.complaint.man || []).map(e => ({ ...e })), pdel: [...(a.complaint.del || [])] } : {};
 async function save() {
   if (Q.editId) return saveEdit();
   const c = Q.client, old = await row('clients', c.id);
@@ -941,6 +979,7 @@ async function save() {
   const id = _pro.uid(), q = Q.metrics, prev = (await _pro.all('assessments')).filter(a => a.clientId === c.id).sort((a, b) => b.date - a.date)[0];
   const a = { id, clientId: c.id, date: Q.date, template: 'quick', templateName: 'Быстрый тест', quick: { by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key, c, p, d }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}), ...(p ? { p } : {}), ...(d ? { d } : {}) })), confirmed: true, algo: ALGO, zEdit: !sameZones(Q.zones, zonesOf(q)), gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf, h: heightCm() || 170, hSet: !!heightCm(), kg: +c.weight || null, views: VIEWS.filter(v => Q.views[v.id]).map(v => v.id), edited: VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id) },
     snapshot: q.snapshot, side: q.side, consent: Q.consent, note: Q.note, plan: { ex: [], text: Q.rec }, protocol: [], moves: {}, quality: {}, limits: {}, setup: {}, pain: {}, hyp: {}, check: {}, draft: false, prevId: prev ? prev.id : null, savedAt: Date.now() };
+  cmpSave(a, Q.cmp);
   await _pro.put('assessments', a);
   await _pro.put('poses', { assessmentId: id, photos: Object.fromEntries(VIEWS.filter(v => Q.views[v.id]).map(v => { const x = Q.views[v.id]; return [v.id, { photo: x.photo, w: x.w, h: x.h, pts: x.pts, auto: x.auto || null, roll: x.roll, rollSrc: x.rollSrc || null }]; })) });
   track('assess_done', { n: a.quick.views.length, c: 'quick' }, false);
@@ -968,7 +1007,7 @@ async function editSaved(aid) {
   if (!es.ok) return toast(es.why); if (!ps || !ps.photos) return toast('Фото этого теста нет на телефоне');
   const qz = a.quick || {};
   // тест по ссылке до проверки специалистом: зоны пересчитываются по поправленным точкам
-  Q = { client: c, date: a.date, editId: aid, until: es.until, consent: a.consent, zones: a.remote && a.draft ? null : (qz.zones || []).map(z => ({ ...z })), gain: qz.gain || 1, gainPdf: !qz.gainOff, note: a.note || '', rec: (a.plan && a.plan.text) || '',
+  Q = { client: c, date: a.date, editId: aid, until: es.until, consent: a.consent, zones: a.remote && a.draft ? null : (qz.zones || []).map(z => ({ ...z })), gain: qz.gain || 1, gainPdf: !qz.gainOff, note: a.note || '', rec: (a.plan && a.plan.text) || '', cmp: cmpLoad(a),
     views: Object.fromEntries(Object.entries(ps.photos).map(([k, x]) => [k, { ...x, pts: x.pts && x.pts.map(p => ({ ...p })), ok: true, edited: false }])) };
   editor(0);
 }
@@ -978,7 +1017,7 @@ async function saveEdit() {
   const q = Q.metrics, views = VIEWS.filter(v => Q.views[v.id] && Q.views[v.id].edited).map(v => v.id);
   a.quick = { ...a.quick, by: q.by, obs: Q.obs, zones: Q.zones.map(({ id, side, k, key, c, p, d }) => ({ id, side, k, key, ...(c ? { c: 1 } : {}), ...(p ? { p } : {}), ...(d ? { d } : {}) })), gain: Q.gain > 1 ? Q.gain : REPORT_GAIN, gainOff: !Q.gainPdf,
     edited: [...new Set([...(a.quick.edited || []), ...views])], edits: views.length ? [...(a.quick.edits || []), { at: Date.now(), views }] : a.quick.edits || [] };
-  Object.assign(a, { snapshot: q.snapshot, side: q.side, note: Q.note, plan: { ...(a.plan || {}), text: Q.rec } });
+  Object.assign(a, { snapshot: q.snapshot, side: q.side, note: Q.note, plan: { ...(a.plan || {}), text: Q.rec } }); cmpSave(a, Q.cmp);
   for (const v of views) ps.photos[v].pts = Q.views[v].pts;
   if (a.remote && a.draft) { a.draft = false; a.savedAt = Date.now(); a.quick.confirmed = true; a.quick.zEdit = !sameZones(Q.zones, zonesOf(q)); track('remote_quick_checked', { n: views.length }, false); }
   await _pro.put('assessments', a); await _pro.put('poses', ps);
