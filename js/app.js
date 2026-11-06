@@ -90,8 +90,8 @@ const TONE_HELP_CLIENT = `<details class="q"><summary aria-label="Что зна�
   <span><span class="mark sm HYPER"></span> <b>Мягко укрепить</b>: спокойные удержания. Растягивать не нужно</span>
   <span><span class="mark sm SHORT"></span> <b>Расслабить</b>: раскатка и мягкая растяжка</span></div></details>`;
 export const TONE_HELP = () => specView() ? TONE_HELP_SPEC : TONE_HELP_CLIENT;
-export const TONE_HEX = bySession({ HYPER: '#F59E0B', SHORT: '#EF4444', WEAK: '#3B73D9', OK: '#15803D', NT: '#B9BEC2', DONE: '#22C55E' }, { HYPER: '#EAB308', SHORT: '#2563EB', WEAK: '#F97316', OK: '#15803D', NT: '#B9BEC2', DONE: '#22C55E' });
-export const TONE_TEXT_HEX = bySession({ HYPER: '#9E4E0E', SHORT: '#B42323', WEAK: '#2A5CB8', OK: '#15803D', NT: '#6B747A', DONE: '#15803D' }, { HYPER: '#A16207', SHORT: '#1D4ED8', WEAK: '#C2410C', OK: '#15803D', NT: '#6B747A', DONE: '#15803D' });
+export const TONE_HEX = bySession({ HYPER: '#F59E0B', SHORT: '#EF4444', WEAK: '#3B73D9', OK: '#15803D', NT: '#B9BEC2', DONE: '#22C55E' }, { HYPER: '#60A5FA', SHORT: '#EF4444', WEAK: '#2563EB', OK: '#15803D', NT: '#B9BEC2', DONE: '#22C55E' });
+export const TONE_TEXT_HEX = bySession({ HYPER: '#9E4E0E', SHORT: '#B42323', WEAK: '#2A5CB8', OK: '#15803D', NT: '#6B747A', DONE: '#15803D' }, { HYPER: '#1D6FD8', SHORT: '#B91C1C', WEAK: '#1D4ED8', OK: '#15803D', NT: '#6B747A', DONE: '#15803D' });
 const sideWord = s => s === 'RIGHT' ? 'справа' : 'слева';
 // ---------- итог в три строки: глагол действия, мышца, одна измеренная деталь ----------
 const VERBS = [['WEAK', 'Укрепить'], ['SHORT', 'Расслабить'], ['HYPER', 'Разгрузить']];
