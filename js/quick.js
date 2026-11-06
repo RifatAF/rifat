@@ -4,7 +4,6 @@ import { _pro, proHome, clientCard, homeworkLink, pullResults } from './pro.js';
 import { go, esc, ic, toast, spots, topOf, asClient } from './app.js';
 import { C, cam, startCamera, stopCamera, detectStill, initPose, startMotion, phone, cameraBlocked, openInBrowserSheet, posedFigure, body3D, seal } from './core.js';
 import { poseOf } from './pose-figure.js';
-import { story } from './story.js';
 import { VIEWS as REQ, ALL_VIEWS as VIEWS, EDIT_POINTS, POINT_NAMES, quickMetrics, summaryOf, ALGO, viewMetrics, observations, frameIssue, ERR as QERR, isOut, LIMIT } from './quick-metrics.js';
 import { P, analyze, levelled } from './analysis.js';
 import { track } from './track.js';
@@ -366,7 +365,7 @@ const metricRows = m => `<div class="group">${m.map(r => `<div class="row" style
 // ---------- 5. результат: фигура в позе клиента с зонами → что видно → замеры → вывод специалиста ----------
 // статусы зон для специалиста (ТЗ v4, п. 3.5); клиент видит не статус, а задачу тренировки
 const ZST = { WEAK: 'слабая', SHORT: 'зажатая', HYPER: 'перерастянутая' }, ZNEXT = { WEAK: 'SHORT', SHORT: 'HYPER', HYPER: 'WEAK' };
-const ZCOL = matte() ? { WEAK: '#0A84FF', SHORT: '#FF453A', HYPER: '#FF9F0A' } : { WEAK: '#2563EB', SHORT: '#DC2626', HYPER: '#D97706' }, TCOL = matte() ? { WEAK: '#30D158', HYPER: '#66D4CF', SHORT: '#FF9F0A' } : { WEAK: '#F97316', HYPER: '#EAB308', SHORT: '#3B82F6' };
+const ZCOL = matte() ? { WEAK: '#0A84FF', SHORT: '#FF453A', HYPER: '#FF9F0A' } : { WEAK: '#2563EB', SHORT: '#DC2626', HYPER: '#D97706' }, TCOL = matte() ? { WEAK: '#0A84FF', HYPER: '#64B4FF', SHORT: '#FF453A' } : { WEAK: '#2563EB', HYPER: '#60A5FA', SHORT: '#EF4444' };
 export const TASK = { WEAK: 'Укрепить', HYPER: 'Мягко укрепить', SHORT: 'Расслабить' };
 const sideRu = s => s === 'RIGHT' ? 'справа' : s === 'LEFT' ? 'слева' : '';
 const zoneName = z => (C.muscles[z.id] || {}).name || z.id;
@@ -616,6 +615,8 @@ export function plainObs(by, max = 3) { const best = {};
 export function taskGroups(zones) { const g = new Map();
   for (const z of zones || []) { if (!g.has(z.k)) g.set(z.k, new Map()); const m = g.get(z.k), nm = ((C.muscles[z.id] || {}).zone || zoneName(z)).toLowerCase(); if (!m.has(nm)) m.set(nm, new Set()); m.get(nm).add(z.side); }
   return [...g].map(([k, m]) => ({ k, t: TASK[k], list: [...m].map(([nm, s]) => s.size > 1 ? nm : `${nm} ${sideRu([...s][0])}`.trim()) })); }
+/** Клиенту два списка: красный «Расслабить» и синий «Укрепить» (мягко укрепить входит в «Укрепить»). */
+export const clientGroups = zones => taskGroups((zones || []).map(z => ({ ...z, k: z.k === 'SHORT' ? 'SHORT' : 'WEAK' }))).sort((a, b) => (a.k === 'SHORT' ? 0 : 1) - (b.k === 'SHORT' ? 0 : 1));
 const REPORT_GAIN = 2; // усиление фигуры в отчете клиенту по умолчанию
 const gainPlate = g => g > 1 ? `<div style="font-size:13px;font-weight:700;color:#B45309;background:#FEF3C7;border-radius:10px;padding:6px 10px;margin-top:8px">Показано с увеличением ×${String(g).replace('.', ',')}, не реальный масштаб</div>` : '';
 // ---------- замеры на фото: линии, отвес и подписи отклонений прямо у суставов (паспорт, было → стало) ----------
@@ -897,19 +898,18 @@ function addZone(onAdd) {
 }
 /** «Показать клиенту»: полный экран, крутящаяся фигура с зонами в цветах задач, 2–3 коротких фразы и задачи. Без кнопок специалиста. */
 function showClient(st, name) {
-  const d = document.createElement('div'), obs = plainObs(st.by), groups = taskGroups(st.zones), sto = story(st.by), it0 = sto.items[0];
+  const d = document.createElement('div'), obs = plainObs(st.by), groups = clientGroups(st.zones), exs = exRows(chainEx(st.zones, 8, st.pains || null).ids).slice(0, 6);
   d.style.cssText = 'position:fixed;inset:0;z-index:60;background:' + (matte() ? '#161617' : '#080C13') + ';color:#fff;overflow:auto;padding:calc(env(safe-area-inset-top) + 16px) 20px calc(env(safe-area-inset-bottom) + 24px)';
   d.innerHTML = `<button id="scx" aria-label="Закрыть" style="position:absolute;z-index:2;right:16px;top:calc(env(safe-area-inset-top) + 12px);width:48px;height:48px;border-radius:50%;border:0;background:rgba(255,255,255,.12);color:#fff;font-size:22px">✕</button>
     <div style="font-size:15px;opacity:.7;min-height:18px">${esc(name || '')}</div><div style="font-size:28px;font-weight:800;line-height:1.1;margin-top:4px;padding-right:56px">Ваше положение тела</div>
     <div id="sc3" style="height:min(54vh,460px);margin-top:14px"></div>
     <div class="seg" id="scv" style="margin-top:10px">${VIEWS3.map(([v, t], i) => `<button data-vw="${v}" class="${i ? '' : 'on'}">${t}</button>`).join('')}</div>
     ${st.gain > 1 ? `<div style="font-size:15px;font-weight:700;color:#FDE68A;margin-top:10px">Показано с увеличением ×${String(st.gain).replace('.', ',')}, не реальный масштаб</div>` : ''}
-    ${it0 ? `<div style="font-size:14px;opacity:.7;margin-top:18px">Главное</div><div style="font-size:22px;font-weight:800;line-height:1.3;margin-top:6px">${esc(sto.main)}</div>
-      <div style="margin-top:10px">${it0.chain.map((t, i) => `${i ? (it0.key === 'sway' || it0.key === 'lean' ? '<div style="color:#38BDF8;font-size:18px;line-height:1;padding:2px 0 2px 16px">↓</div>' : '<div style="height:6px"></div>') : ''}<div style="display:inline-block;background:rgba(255,255,255,.08);border-radius:12px;padding:8px 14px;font-size:17px;font-weight:600">${esc(t)}</div>`).join('')}</div>
-      ${[['Похоже на', it0.like], ['Проверьте на себе', it0.try], ['С чего начинаем', it0.start]].map(([h, t]) => `<div style="font-size:13px;font-weight:700;letter-spacing:.04em;color:#38BDF8;margin-top:14px">${h.toUpperCase()}</div><div style="font-size:17px;line-height:1.4;margin-top:4px">${esc(t)}</div>`).join('')}`
+    ${groups.length ? `<div style="display:flex;gap:18px;margin-top:16px;font-size:16px;font-weight:600"><span><i style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${TCOL.SHORT};margin-right:8px;vertical-align:-1px"></i>Расслабить</span><span><i style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${TCOL.WEAK};margin-right:8px;vertical-align:-1px"></i>Укрепить</span></div>
+      ${groups.map(g => `<div style="margin-top:14px"><div style="font-size:14px;font-weight:800;letter-spacing:.04em;color:${TCOL[g.k]}">${g.t.toUpperCase()}</div><div style="font-size:20px;font-weight:600;line-height:1.35;margin-top:2px">${esc(g.list.join(', '))}</div></div>`).join('')}`
       : obs.length ? `<div style="font-size:14px;opacity:.7;margin-top:18px">Что видно на фото</div>${obs.map(t => `<div style="font-size:20px;font-weight:700;line-height:1.3;margin-top:6px">${t}</div>`).join('')}` : ''}
-    ${groups.length ? `<div style="font-size:14px;opacity:.7;margin-top:18px">Над чем работаем · гипотеза специалиста</div>${groups.map(g => `<div style="font-size:19px;line-height:1.35;margin-top:8px"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${TCOL[g.k]};margin-right:8px"></span><b>${g.t}:</b> ${esc(g.list.join(', '))}</div>`).join('')}` : ''}
-    <div style="font-size:13px;opacity:.55;margin-top:22px">Положение тела в момент фото на типовой фигуре. Цветом отмечены зоны для работы. Не диагноз.</div>`;
+    ${exs.length ? `<div style="font-size:14px;font-weight:800;letter-spacing:.04em;opacity:.7;margin-top:20px">УПРАЖНЕНИЯ</div>${exs.map((x, n) => `<div style="font-size:18px;line-height:1.35;margin-top:8px"><b>${n + 1}. ${esc(x.title.split(' (')[0])}</b>${x.dose ? `<span style="opacity:.7"> · ${esc(x.dose)}</span>` : ''}</div>`).join('')}` : ''}
+    <div style="font-size:13px;opacity:.55;margin-top:22px">Типовая фигура в вашей позе по фото. Не диагноз.</div>`;
   document.body.appendChild(d); let v3 = null; d.querySelector('#scx').onclick = () => { if (v3) v3.dispose(); d.remove(); };
   asClient(() => body3D(d.querySelector('#sc3'), zSpots(st.zones), null, { pose: poseOf({ by: st.by, h: st.h || 170 }, st.gain), noMarks: true }))
     .then(api => { v3 = api; d.querySelectorAll('[data-vw]').forEach(b => b.onclick = () => { d.querySelectorAll('[data-vw]').forEach(x => x.classList.toggle('on', x === b)); api.look(b.dataset.vw); }); })
@@ -1104,36 +1104,27 @@ export async function renderReport(a, c, photos) {
     figs.forEach((im, n) => { const x = x0 + n * (fw + gap); g.strokeStyle = '#F59E0B'; g.lineWidth = 2; g.setLineDash([8, 7]); g.beginPath(); g.moveTo(x + fw / 2, y); g.lineTo(x + fw / 2, y + fh); g.stroke(); g.setLineDash([]); g.drawImage(im, x, y, fw, fh);
       g.fillStyle = SUB; g.font = `600 20px ${F}`; g.textAlign = 'center'; g.fillText(n ? 'Справа' : 'Спереди', x + fw / 2, y + fh + 28); g.textAlign = 'left';
       if (gain > 1) { const t = `Усилено ×${String(gain).replace('.', ',')}`; g.font = `700 19px ${F}`; const tw = g.measureText(t).width + 24; g.fillStyle = '#FEF3C7'; g.beginPath(); g.roundRect(x + fw - tw, y, tw, 34, 10); g.fill(); g.fillStyle = '#B45309'; g.fillText(t, x + fw - tw + 12, y + 23); } });
-    y += fh + 56; g.fillStyle = SUB; g.font = `400 20px ${F}`; y = wrap(g, 'Положение на типовой фигуре по фото, а не тело клиента. Цветом отмечены зоны для работы, пунктир: вертикаль.', PAD, y, W - PAD * 2, 28);
+    y += fh + 56; g.fillStyle = SUB; g.font = `400 20px ${F}`; y = wrap(g, 'Красным: расслабить. Синим: укрепить. Типовая фигура в позе по фото, пунктир: вертикаль.', PAD, y, W - PAD * 2, 28);
     if (gain > 1) { g.fillStyle = '#B45309'; g.font = `700 22px ${F}`; y = wrap(g, `Перекосы на фигуре усилены в ${String(gain).replace('.', ',')} раза, чтобы их было хорошо видно. Это не реальный масштаб: реальные значения в цифрах ниже.`, PAD, y + 4, W - PAD * 2, 30); }
     y += 40; }
-  // коротко: 2–3 понятные фразы без чисел, как на экране «Показать клиенту»
-  // «Главное»: вывод одной фразой, цепочка с числами, образ, проверка на себе, с чего начинаем, привычка, как поймем (js/story.js)
-  const sto = story(qz.by);
-  if (sto.items.length) { head('Главное', '', INK); y += 18; g.fillStyle = INK; g.font = `700 30px ${F}`; y = wrap(g, sto.main, PAD, y + 20, W - PAD * 2, 40) + 6;
-    const label = (t, txt) => { g.fillStyle = VIO; g.font = `700 18px ${F}`; g.fillText(t.toUpperCase(), PAD, y + 18); g.fillStyle = INK; g.font = `400 25px ${F}`; y = wrap(g, txt, PAD, y + 52, W - PAD * 2, 34) + 6; };
-    // цепочка: плашки сверху вниз со стрелками, как связаны отклонения
-    const chain = (l, big, arrows) => { for (let k = 0; k < l.length; k++) { g.font = `600 ${big ? 26 : 23}px ${F}`; const bw = Math.min(W - PAD * 2, g.measureText(l[k]).width + 40), bh = big ? 56 : 48;
-        g.fillStyle = '#F2F6FB'; g.beginPath(); g.roundRect(PAD, y, bw, bh, 14); g.fill(); g.fillStyle = INK; g.fillText(l[k], PAD + 20, y + bh / 2 + 9); y += bh;
-        if (k < l.length - 1 && !arrows) y += 10; else if (k < l.length - 1) { g.strokeStyle = LN; g.lineWidth = 3; g.beginPath(); g.moveTo(PAD + 34, y + 4); g.lineTo(PAD + 34, y + 24); g.stroke(); g.beginPath(); g.moveTo(PAD + 26, y + 16); g.lineTo(PAD + 34, y + 26); g.lineTo(PAD + 42, y + 16); g.stroke(); y += 30; } } y += 14; };
-    sto.items.forEach((it, n) => { if (n) { y += 30; g.fillStyle = INK; g.font = `700 27px ${F}`; y = wrap(g, it.short[0].toUpperCase() + it.short.slice(1), PAD, y + 10, W - PAD * 2, 36); }
-      y += 10; chain(it.chain, !n, it.key === 'sway' || it.key === 'lean'); label('Похоже на', it.like); label('Проверьте на себе', it.try); if (!n) { label('С чего начинаем', it.start); label('Привычка на день', it.habit); } });
-    label('Как поймем, что стало лучше', sto.items.map(it => it.check).join(' ')); y += 40; }
+  // коротко: что расслабить (красный), что укрепить (синий) и упражнения; замеры ниже
+  if (zones.length || a.note) { head('Что делаем', 'ГИПОТЕЗА СПЕЦИАЛИСТА', VIO); y += 10;
+    for (const gr of clientGroups(zones)) { y += 44; const col = gr.k === 'SHORT' ? '#DC2626' : '#1D4ED8'; g.fillStyle = col; g.beginPath(); g.arc(PAD + 10, y - 9, 10, 0, Math.PI * 2); g.fill();
+      g.font = `800 27px ${F}`; const t = gr.t + ': '; g.fillText(t, PAD + 32, y); const tw = g.measureText(t).width; g.fillStyle = INK; g.font = `500 27px ${F}`;
+      y = wrap(g, gr.list.join(', '), PAD + 32 + tw, y, W - PAD * 2 - 32 - tw, 36) - 36; }
+    if (a.note) { y += 14; g.fillStyle = INK; g.font = `400 25px ${F}`; for (const para of a.note.split('\n')) y = wrap(g, para, PAD, y + 30, W - PAD * 2, 34); }
+    y += 40; }
+  const exs = exRows(hwEx(a)).slice(0, 6);
+  if (exs.length || (a.plan && a.plan.text)) { y += 20; head('Упражнения', '', INK); y += 10; g.fillStyle = INK; g.font = `400 25px ${F}`;
+    exs.forEach((e, n) => { y = wrap(g, `${n + 1}. ${e.title.split(' (')[0]}${e.dose ? ': ' + e.dose : ''}`, PAD, y + 30, W - PAD * 2, 34) - 4; });
+    if (a.plan && a.plan.text) for (const para of a.plan.text.split('\n')) y = wrap(g, para, PAD, y + 30, W - PAD * 2, 34);
+    y += 60; }
   // измерено: только значения вне погрешности, остальные одной строкой (специалист видит все в приложении)
   head('Измерено', 'ЗАМЕР', INK); let inTol = 0;
   for (const v of VIEWS) { const m = (qz.by || {})[v.id]; if (!m) continue; const outs = m.filter(isOut); inTol += m.filter(r => r.dir === 'в пределах погрешности').length; if (!outs.length) continue;
     y += 44; g.fillStyle = SUB; g.font = `700 19px ${F}`; g.fillText(v.name.toUpperCase(), PAD, y);
     for (const r of outs) { y += 38; g.fillStyle = INK; g.font = `500 25px ${F}`; g.fillText(`${r.name}: ${r.dir}`, PAD, y); g.font = `600 24px ${M ? MN : F}`; g.textAlign = 'right'; g.fillText(`${num(r.v)}${r.unit.trim() === '°' ? '°' : r.unit}`, W - PAD, y); g.textAlign = 'left'; } }
   if (inTol) { y += 40; g.fillStyle = SUB; g.font = `400 21px ${F}`; g.fillText(`Еще ${inTol} ${inTol % 10 === 1 && inTol % 100 !== 11 ? 'значение' : [2, 3, 4].includes(inTol % 10) && ![12, 13, 14].includes(inTol % 100) ? 'значения' : 'значений'} в пределах погрешности`, PAD, y); }
-  if (zones.length || a.note) { y += 60; head('Над чем работаем', 'ГИПОТЕЗА СПЕЦИАЛИСТА', VIO); y += 10;
-    for (const gr of taskGroups(zones)) { y += 40; g.fillStyle = { WEAK: '#C2410C', HYPER: '#A16207', SHORT: '#1D4ED8' }[gr.k] || INK; g.font = `700 26px ${F}`; const t = gr.t + ': '; g.fillText(t, PAD, y); const tw = g.measureText(t).width; g.fillStyle = INK; g.font = `500 26px ${F}`;
-      y = wrap(g, gr.list.join(', '), PAD + tw, y, W - PAD * 2 - tw, 36) - 36; }
-    if (a.note) { y += 14; g.fillStyle = INK; g.font = `400 25px ${F}`; for (const para of a.note.split('\n')) y = wrap(g, para, PAD, y + 30, W - PAD * 2, 34); } }
-  // рекомендации: упражнения из существующих карточек зон и текст специалиста
-  const exs = exRows(hwEx(a)).slice(0, 6);
-  if (exs.length || (a.plan && a.plan.text)) { y += 60; head('Домашнее задание', '', INK); y += 10; g.fillStyle = INK; g.font = `400 25px ${F}`;
-    exs.forEach((e, n) => { y = wrap(g, `${n + 1}. ${e.title.split(' (')[0]}${e.dose ? ': ' + e.dose : ''}`, PAD, y + 30, W - PAD * 2, 34) - 4; });
-    if (a.plan && a.plan.text) for (const para of a.plan.text.split('\n')) y = wrap(g, para, PAD, y + 30, W - PAD * 2, 34); }
   y += 50; breaks.push(y - 20); g.fillStyle = SUB; g.font = `400 21px ${F}`;
   y = wrap(g, 'Замер по фото. Показаны значения больше погрешности замера. Положение на фото зависит от стойки в момент съемки.' + (editNote(a) ? ' ' + editNote(a) + '.' : ''), PAD, y, W - PAD * 2, 30);
   g.fillStyle = INK; g.font = `700 22px ${F}`; y = wrap(g, LEGAL, PAD, y + 10, W - PAD * 2, 30);
@@ -1183,7 +1174,7 @@ export async function renderCompare(A, B, c, pa, pb) {
   const same = rows.length - ch.length; if (same) { y += 20; g.fillStyle = SUB; g.font = `400 22px ${F}`; y = wrap(g, `Без изменений (в пределах погрешности): ${same} ${same % 10 === 1 && same % 100 !== 11 ? 'показатель' : [2, 3, 4].includes(same % 10) && ![12, 13, 14].includes(same % 100) ? 'показателя' : 'показателей'}.`, PAD, y, W - PAD * 2, 30); }
   const groups = taskGroups(qb.zones || []);
   if (groups.length) { y += 50; head('Над чем работаем дальше'); g.fillStyle = SUB; g.font = `400 20px ${F}`; g.fillText('Гипотеза специалиста', PAD, y + 4); y += 6;
-    for (const gr of groups) { y += 40; g.fillStyle = { WEAK: '#C2410C', HYPER: '#A16207', SHORT: '#1D4ED8' }[gr.k] || INK; g.font = `700 26px ${F}`; const t = gr.t + ': '; g.fillText(t, PAD, y); const w2 = g.measureText(t).width; g.fillStyle = INK; g.font = `500 26px ${F}`;
+    for (const gr of groups) { y += 40; g.fillStyle = { WEAK: '#1D4ED8', HYPER: '#1D4ED8', SHORT: '#B91C1C' }[gr.k] || INK; g.font = `700 26px ${F}`; const t = gr.t + ': '; g.fillText(t, PAD, y); const w2 = g.measureText(t).width; g.fillStyle = INK; g.font = `500 26px ${F}`;
       y = wrap(g, gr.list.join(', '), PAD + w2, y, W - PAD * 2 - w2, 36) - 36; } }
   y += 60; breaks.push(y - 20); g.fillStyle = SUB; g.font = `400 21px ${F}`;
   const notes = [editNote(A) && 'До: ' + editNote(A).toLowerCase(), editNote(B) && 'После: ' + editNote(B).toLowerCase()].filter(Boolean).join('. ');

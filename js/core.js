@@ -349,8 +349,8 @@ function bodyParts() { const e = (x, y, rx, ry) => { const p = new Path2D(); p.e
 const RAMP = [[-1, 0x3B73D9], [-.45, 0x8FB0F0], [0, 0xCEDBF2], [.45, 0xF8B860], [1, 0xEF4444]];
 // цвет мышцы по состоянию, а не по знаку: гипертонус красный, перерастяжение оранжевый, слабая синяя; сила отклонения дает насыщенность
 const STATE_RGB = { HYPER: [245, 158, 11], SHORT: [239, 68, 68], WEAK: [59, 115, 217], DONE: [34, 197, 94] }, BASE_LIGHT = [206, 219, 242], BASE_DARK = [184, 202, 236];
-// клиенту цвет означает задачу тренировки, а не состояние мышцы: теплый = нагрузить (укрепить оранжевый, мягко укрепить желтый), холодный = расслабить (синий)
-const ACT_RGB = { ...STATE_RGB, WEAK: [249, 115, 22], HYPER: [234, 179, 8], SHORT: [37, 99, 235] };
+// клиенту цвет означает задачу тренировки: красный = расслабить, синий = укрепить (мягко укрепить светло-синий). Просьба Рифата 06.11.2026
+const ACT_RGB = { ...STATE_RGB, WEAK: [37, 99, 235], HYPER: [96, 165, 250], SHORT: [239, 68, 68] };
 // в кабинете специалиста (navy) фигура холодная синяя, у клиента светлая
 const darkUI = () => document.documentElement.dataset.session === 'SPECIALIST_OPERATED' || document.documentElement.dataset.theme === 'pro';
 const baseRGB = () => darkUI() ? BASE_DARK : BASE_LIGHT;
@@ -363,10 +363,10 @@ export function ramp(v) { const x = Math.max(-1, Math.min(1, v)); let i = RAMP.f
   const [a, ca] = RAMP[i], [b, cb] = RAMP[i + 1], t = Math.max(0, Math.min(1, (x - a) / (b - a))); const ch = (c, s) => (c >> s) & 255; const mix = s => Math.round(ch(ca, s) + (ch(cb, s) - ch(ca, s)) * t);
   return [mix(16), mix(8), mix(0)]; }
 export const RAMP_CSS = 'linear-gradient(90deg,' + RAMP.map(([v, c]) => '#' + c.toString(16).padStart(6, '0') + ' ' + ((v + 1) * 50) + '%').join(',') + ')';
-export const MARK_HEX = { HYPER: '#F59E0B', SHORT: '#EF4444', WEAK: '#3B73D9', DONE: '#22C55E' }, ACT_HEX = { ...MARK_HEX, WEAK: '#F97316', HYPER: '#EAB308', SHORT: '#2563EB' };
-// Apple Matte: те же смыслы в цветах Apple. Клиенту «Укрепить» зеленый, «Мягко укрепить» мятный, «Расслабить» янтарный
-if (matte()) { Object.assign(STATE_RGB, { HYPER: [255, 159, 10], SHORT: [255, 69, 58], WEAK: [10, 132, 255], DONE: [48, 209, 88] }); Object.assign(ACT_RGB, { WEAK: [48, 209, 88], HYPER: [102, 212, 207], SHORT: [255, 159, 10] });
-  Object.assign(MARK_HEX, { HYPER: '#FF9F0A', SHORT: '#FF453A', WEAK: '#0A84FF', DONE: '#30D158' }); Object.assign(ACT_HEX, { WEAK: '#30D158', HYPER: '#66D4CF', SHORT: '#FF9F0A' }); }
+export const MARK_HEX = { HYPER: '#F59E0B', SHORT: '#EF4444', WEAK: '#3B73D9', DONE: '#22C55E' }, ACT_HEX = { ...MARK_HEX, WEAK: '#2563EB', HYPER: '#60A5FA', SHORT: '#EF4444' };
+// Apple Matte: те же смыслы в цветах Apple. Клиенту «Укрепить» синий, «Мягко укрепить» светло-синий, «Расслабить» красный
+if (matte()) { Object.assign(STATE_RGB, { HYPER: [255, 159, 10], SHORT: [255, 69, 58], WEAK: [10, 132, 255], DONE: [48, 209, 88] }); Object.assign(ACT_RGB, { WEAK: [10, 132, 255], HYPER: [100, 180, 255], SHORT: [255, 69, 58] });
+  Object.assign(MARK_HEX, { HYPER: '#FF9F0A', SHORT: '#FF453A', WEAK: '#0A84FF', DONE: '#30D158' }); Object.assign(ACT_HEX, { WEAK: '#0A84FF', HYPER: '#64B4FF', SHORT: '#FF453A' }); }
 /** Маркер состояния формой: перегрузка — круг, укорочение — ромб, слабость — кольцо. derived: пунктир без ореола. */
 export function drawMark(ctx, x, y, k, o = {}) {
   const c = (specPal() ? MARK_HEX : ACT_HEX)[k]; if (!c) return; const sc = o.scale ?? 1; ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
