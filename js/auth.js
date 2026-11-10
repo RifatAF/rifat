@@ -33,9 +33,13 @@ export async function mailLinkLogin() {
   try { me = (await post('mail', { email, code: m[2], ref: localStorage.getItem('bp_ref') })).user; localStorage.setItem('bp_mail', email); localStorage.setItem(CONSENT_KEY, String(Date.now()));
     track('login_ok', { c: 'mail_link' }, false); window.dispatchEvent(new Event('bp-login')); return me; }
   catch (e) { return { error: e.message }; } }
+/** Случайный номер этого устройства (не отпечаток): по нему сервер отличает коллегу от своего второго аккаунта. */
+export function devId() { try { let d = localStorage.getItem('bp_dev'); if (!/^[a-z0-9]{16}$/.test(d || '')) { d = Array.from(crypto.getRandomValues(new Uint8Array(8)), x => x.toString(16).padStart(2, '0')).join(''); localStorage.setItem('bp_dev', d); } return d; } catch (e) { return ''; } }
+/** Тест сохранен: день и устройство на сервер (для «пригласи коллегу»). Ошибка не мешает работе. */
+export function noteTest() { if (!me) return; fetch('/api/auth?a=act', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ d: devId() }) }).catch(() => {}); }
 export async function getMe(force) {
   if (me !== undefined && !force) return me;
-  try { const r = await fetch('/api/auth?a=me', { cache: 'no-store' }); me = r.ok ? (await r.json()).user : null; } catch (e) { me = null; }
+  try { const r = await fetch('/api/auth?a=me', { cache: 'no-store', headers: { 'X-BP-Dev': devId() } }); me = r.ok ? (await r.json()).user : null; } catch (e) { me = null; }
   // аккаунт владельца или тестовый: на этом устройстве действия больше не уходят в статистику, даже до входа
   try { if (me && me.noStats) localStorage.setItem('bp_noev', '1'); } catch (e) {}
   return me;

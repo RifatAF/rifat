@@ -113,12 +113,40 @@ export async function creditReferral(u, isNew) {
   if (needPro) { owner.invitedPro = (owner.invitedPro || 0) + 1; u.refCreditedPro = true; }
   u.referredBy = owner.id; await saveUser(owner);
 }
+// «Пригласи коллегу, получи месяц PRO» (решение Рифата 10.11.2026). Месяц дается, только когда коллега настоящий:
+// он оплатил PRO или сделал REF_TESTS тестов минимум в REF_DAYS разных дня со своего устройства, ни разу не замеченного у пригласившего,
+// и хотя бы раз заходил из сети, где пригласившего не было (коллеги в одной студии проходят, когда коллега открывает кабинет с мобильного или дома).
+// Свой второй аккаунт на том же телефоне или в той же сети месяц не дает. Не больше REF_MAX_YEAR месяцев за 365 дней.
+export const REF_TESTS = 3, REF_DAYS = 2, REF_BONUS_DAYS = 30, REF_MAX_YEAR = 6;
+const hid = s => s && SECRET ? crypto.createHmac('sha256', SECRET).update('seen:' + s).digest('hex').slice(0, 16) : null;
+export const reqIp = req => String((req && req.headers && (req.headers['x-forwarded-for'] || req.headers['x-real-ip'])) || '').split(',')[0].trim();
+/** Запоминает устройство и сеть аккаунта (хэши, без самих адресов). true, если появилось новое и аккаунт надо сохранить. */
+export function noteSeen(u, dev, ip) { let ch = false;
+  for (const [k, v] of [['devs', /^[a-z0-9]{8,40}$/i.test(dev || '') ? hid('d:' + dev) : null], ['ips', ip ? hid('i:' + ip) : null]]) {
+    if (!v) continue; const l = u[k] || []; if (!l.includes(v)) { u[k] = [...l, v].slice(-20); ch = true; } }
+  return ch; }
+export const refQualified = (u, owner) => !!u && !!owner && u.id !== owner.id && (u.acts || 0) >= REF_TESTS && new Set(u.actDays || []).size >= REF_DAYS
+  && (u.devs || []).length > 0 && !(u.devs || []).some(x => (owner.devs || []).includes(x)) && (u.ips || []).some(x => !(owner.ips || []).includes(x));
+/** Месяц PRO пригласившему за этого коллегу, один раз. by: 'paid' (оплатил) или 'active' (работает сам). Возвращает пригласившего или null. */
+export async function tgNote(chat, text) { const tok = process.env.TELEGRAM_BOT_TOKEN; if (!tok || !chat) return;
+  try { await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text }) }); } catch (e) {} }
+const bonusNote = o => { if (/^t_\d+$/.test(o.id)) return tgNote(o.id.slice(2), `BodyPassport: коллега по вашему приглашению начал работать, вам месяц PRO. PRO до ${new Date(o.planUntil).toLocaleDateString('ru', { day: 'numeric', month: 'long' })}.`); };
+export async function grantRefBonus(u, by) {
+  if (!u || !u.referredBy || u.refRewarded) return null;
+  const owner = await loadUser(u.referredBy).catch(() => null); if (!owner || owner.id === u.id) return null;
+  if (by !== 'paid' && !refQualified(u, owner)) return null;
+  const now = Date.now(), year = (owner.refBonus || []).filter(x => now - x.t < 365 * 864e5);
+  u.refRewarded = by; if (year.length >= REF_MAX_YEAR) return null;
+  const base = Math.max(now, owner.planUntil || 0, trialActive(owner) ? owner.trialUntil : 0);
+  owner.plan = ['pro', 'studio'].includes(owner.plan) ? owner.plan : 'pro'; owner.planUntil = base + REF_BONUS_DAYS * 864e5;
+  owner.refBonus = [...(owner.refBonus || []), { t: now, by, n: String(u.name || '').split(' ')[0].slice(0, 30) }].slice(-50);
+  await saveUser(owner); await bonusNote(owner); return owner; }
 // версия политики и согласий: при смене версии вошедших просим согласиться заново
 export const CONSENT_VERSION = '2026-10-v3';
 export const publicUser = u => { if (!u) return u; const p = effectivePlan(u);
   return { id: u.id, provider: u.provider, name: u.name, givenName: u.givenName || null, familyName: u.familyName || null, email: u.email || null, photo: u.photo || null, role: u.role || null, specialty: u.specialty || null, admin: isAdmin(u), noStats: noStats(u), plan: p.plan, planUntil: p.until, planBeta: p.beta, consentOk: u.consentVersion === CONSENT_VERSION,
     refCode: u.refCode || null, invited: u.invited || 0, invitedPro: u.invitedPro || 0, invitedColleagues: u.invitedPro || 0, maxClientSlots: maxClientSlots(u), isPro: p.plan !== 'start', planBeta: p.beta, payEmail: u.payEmail || null,
     trial: !!p.trial, trialClients: newTerms(u) && !terms3(u) ? TRIAL_CLIENTS : null, locked: !p.beta && p.plan === 'start', trialUntil: u.trialUntil || null, trialEndedBy: u.trialEndedBy || null, trialEndSeen: !!u.trialEndSeen, paidEver: !!u.paidEver,
-    balance: u.balance || 0, balanceLog: (u.balanceLog || []).slice(-20) }; };
+    balance: u.balance || 0, balanceLog: (u.balanceLog || []).slice(-20), refBonus: (u.refBonus || []).length }; };
 
 export async function currentUser(req) { const uid = sessionUid(req); return uid ? loadUser(uid) : null; }
