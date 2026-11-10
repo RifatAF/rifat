@@ -116,8 +116,9 @@ export async function creditReferral(u, isNew) {
 // «Пригласи коллегу, получи месяц PRO» (решение Рифата 10.11.2026). Месяц дается, только когда коллега настоящий:
 // он оплатил PRO или сделал REF_TESTS тестов минимум в REF_DAYS разных дня со своего устройства, ни разу не замеченного у пригласившего,
 // и хотя бы раз заходил из сети, где пригласившего не было (коллеги в одной студии проходят, когда коллега открывает кабинет с мобильного или дома).
-// Свой второй аккаунт на том же телефоне или в той же сети месяц не дает. Не больше REF_MAX_YEAR месяцев за 365 дней.
-export const REF_TESTS = 3, REF_DAYS = 2, REF_BONUS_DAYS = 30, REF_MAX_YEAR = 6;
+// Свой второй аккаунт на том же телефоне или в той же сети месяц не дает. Засчитываются до REF_MAX коллег (решение Рифата 10.11.2026):
+// 5 коллег на PRO × 20% их оплат на баланс = 100% своего PRO (api/lava.js).
+export const REF_TESTS = 3, REF_DAYS = 2, REF_BONUS_DAYS = 30, REF_MAX = 5;
 const hid = s => s && SECRET ? crypto.createHmac('sha256', SECRET).update('seen:' + s).digest('hex').slice(0, 16) : null;
 export const reqIp = req => String((req && req.headers && (req.headers['x-forwarded-for'] || req.headers['x-real-ip'])) || '').split(',')[0].trim();
 /** Запоминает устройство и сеть аккаунта (хэши, без самих адресов). true, если появилось новое и аккаунт надо сохранить. */
@@ -135,8 +136,8 @@ export async function grantRefBonus(u, by) {
   if (!u || !u.referredBy || u.refRewarded) return null;
   const owner = await loadUser(u.referredBy).catch(() => null); if (!owner || owner.id === u.id) return null;
   if (by !== 'paid' && !refQualified(u, owner)) return null;
-  const now = Date.now(), year = (owner.refBonus || []).filter(x => now - x.t < 365 * 864e5);
-  u.refRewarded = by; if (year.length >= REF_MAX_YEAR) return null;
+  const now = Date.now();
+  u.refRewarded = by; if ((owner.refBonus || []).length >= REF_MAX) return null;
   const base = Math.max(now, owner.planUntil || 0, trialActive(owner) ? owner.trialUntil : 0);
   owner.plan = ['pro', 'studio'].includes(owner.plan) ? owner.plan : 'pro'; owner.planUntil = base + REF_BONUS_DAYS * 864e5;
   owner.refBonus = [...(owner.refBonus || []), { t: now, by, n: String(u.name || '').split(' ')[0].slice(0, 30) }].slice(-50);
