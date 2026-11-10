@@ -12,7 +12,7 @@ import { painWord, PAIN_SCALE } from './vas.js';
 import { npsCard, bindNps, installCard, bindInstall, installNow, canInstall, feedbackSheet, referralSheet, myRef, bugSheet, DEV, proSurvey, proSurveyDue, installSheet } from './grow.js';
 import { meSync, logout, getMe, calibOn } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
-import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS, BAL_PRO, PRO_PRICE } from './plans.js';
+import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS, BAL_PRO, PRO_PRICE, locked, needPro } from './plans.js';
 import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast, preload3D, saveBlob , setBodySex, cameraBlocked, openInBrowserSheet } from './core.js';
 import { baBlock, bindBa } from './app.js';
 import { asClient, cleanResult, verdict, verdictCard, ntitle, SHORT, passportImage, LIMIT_NAMES, stepList, bindStepList, go, spots, title, tech, TONE, TONE_HEX, TONE_TEXT_HEX, toneText, plan, mainOf, TONE_HELP, applyMain, fromMain, muscleInfo, ex, totalMin, workout, onboarding, progressChart, adminScreen, UNITS, sortUnits, rowsOf, secs, mins, SETUP_SEC, runProtocol, funnelScreen, TIP_ACT } from './app.js';
@@ -24,7 +24,7 @@ async function trackedIds() { const since = Date.now() - 30 * DAY, [cs, as] = aw
   for (const c of cs) if (!c.demo && ((c.retestSent || 0) > since || (c.progress && c.progress.at > since) || (c.hw && Math.max(c.hw.at || 0, c.hw.upd || 0) > since))) ids.add(c.id);
   for (const c of cs) if (c.demo) ids.delete(c.id); return ids; }
 /** Можно ли вести этого клиента: он уже в ведении или есть свободное место. Нет: шторка «ведение без лимита». */
-export async function canTrack(c) { if (isPro()) return true; const ids = await trackedIds(); if (ids.has(c.id)) return true; return checkClientSlotAvailable(ids.size); }
+export async function canTrack(c) { if (isPro()) return true; if (!needPro()) return false; const ids = await trackedIds(); if (ids.has(c.id)) return true; return checkClientSlotAvailable(ids.size); }
 const $ = s => document.querySelector(s);
 /** Полная версия (тест по видео, тест из дома, сеанс) включается в «Администрировании»; без нее основа кабинета: быстрый тест по 4 фото. */
 export const fullMode = () => localStorage.getItem('bp_full') === '1';
@@ -250,6 +250,12 @@ function slotWidget(s, left = Infinity) {
   const u = meSync(), buy = t => `<button class="btn gopro" id="slget" style="height:48px;margin-top:10px">${ic('star', 's')}${t}</button>`;
   const bar = (n, max, red) => `<div style="height:6px;border-radius:3px;background:var(--surface);margin-top:8px;overflow:hidden"><div style="height:100%;width:${Math.min(100, Math.round(n / Math.max(1, max) * 100))}%;background:${red ? 'var(--over)' : 'var(--ink)'}"></div></div>`;
   const until = t => new Date(t).toLocaleDateString('ru', { day: 'numeric', month: 'long' });
+  if (locked()) return `<div class="pad" style="margin-top:var(--s3)"><div class="card" id="slots" style="padding:12px 14px;border:1px solid var(--over)">
+    <div style="font-size:15px"><b>Пробный период закончился</b></div><div class="sub" style="font-size:13px;margin-top:4px">Новые клиенты и тесты только в PRO. Сохраненное открывается как раньше.</div>${buy(`Купить PRO · ${PRO_PRICE}`)}</div></div>`;
+  if (u && u.trial && !u.trialClients) { const dl = Math.max(1, Math.ceil((u.trialUntil - Date.now()) / DAY));
+    return `<div class="pad" style="margin-top:var(--s3)"><div class="card" id="slots" style="padding:12px 14px;background:var(--ok-s)">
+    <div class="row" style="font-size:14px;gap:8px"><span style="flex:1"><b>Пробный PRO</b> · осталось <b>${dl} ${dl === 1 ? 'день' : dl < 5 ? 'дня' : 'дней'}</b></span><span class="sub" style="font-size:12px">до ${until(u.trialUntil)}</span></div>
+    ${bar(7 - Math.min(7, dl), 7, dl <= 2)}<div class="sub" style="font-size:12px;margin-top:8px">Потом новые клиенты и тесты только в PRO</div>${buy(`Оставить PRO · ${PRO_PRICE}`)}</div></div>`; }
   if (u && u.trial) { const n = u.trialClients ? Math.max(0, u.trialClients - left) : 0;
     return `<div class="pad" style="margin-top:var(--s3)"><div class="card" id="slots" style="padding:12px 14px;background:var(--ok-s)">
     <div class="row" style="font-size:14px;gap:8px"><span style="flex:1"><b>Пробный PRO</b> · ${u.trialClients ? `клиентов <b>${n} из ${u.trialClients}</b>` : `до ${until(u.trialUntil)}`}</span><span class="sub" style="font-size:12px">до ${until(u.trialUntil)}</span></div>
@@ -492,7 +498,7 @@ async function clientForm(id, thenAssess) {
     <button class="btn line" id="dict" style="height:48px">${ic('mic', 's')}Надиктовать</button>
    </div><div class="pad" style="padding-bottom:24px"><button class="btn" id="save">${thenAssess ? 'Сохранить и начать оценку' : 'Сохранить'}</button></div></div>`);
   $('#back').onclick = () => id ? clientCard(id) : proHome(); $('#dict').onclick = () => dictate($('#notes'), $('#dict'));
-  $('#save').onclick = async () => { const v = n => $('#' + n).value.trim(); if (!v('first')) { $('#first').style.borderColor = 'var(--over)'; $('#first').focus(); return; }
+  $('#save').onclick = async () => { if (!id && !needPro()) return; const v = n => $('#' + n).value.trim(); if (!v('first')) { $('#first').style.borderColor = 'var(--over)'; $('#first').focus(); return; }
     Object.assign(c, { first: v('first'), last: v('last'), name: [v('first'), v('last')].filter(Boolean).join(' '), dob: v('dob'), sex: v('sex'), height: v('height'), weight: v('weight'), leg: v('hand'), hand: v('hand'), activity: v('activity'), complaints: v('complaints'), notes: v('notes') });
     await put('clients', c); thenAssess ? newAssessment(c.id) : clientCard(c.id); };
 }
@@ -670,6 +676,7 @@ async function trialClientsLeft() { const u = meSync(); if (!u || !u.trial || !u
   return u.trialClients - new Set(as.filter(a => real.has(a.clientId)).map(a => a.clientId)).size; }
 /** Перед первым тестом клиента: если пробные клиенты кончились, закрывает пробный и показывает итог; next продолжает тест. */
 export async function trialGate(clientId, next) {
+  if (!needPro()) return;
   if ((await all('assessments')).some(a => a.clientId === clientId) || (await trialClientsLeft()) > 0) return next();
   try { await fetch('/api/auth?a=trialend', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ by: 'clients' }) }); await getMe(true); track('trial_end', { c: 'clients' }, false); } catch (e) { return next(); }
   return trialEndScreen(next);
@@ -687,11 +694,11 @@ async function trialEndScreen(next) {
     <div class="kpi"><div><b>${new Set(mine.map(a => a.clientId)).size}</b><span>клиентов</span></div><div><b>${retests.length}</b><span>повторных тестов</span></div><div><b style="color:var(--ok-t)">${better}</b><span>с меньшей болью</span></div></div>
     ${better ? `<p class="sub">У ${better} ${better === 1 ? 'клиента' : 'клиентов'} боль снизилась в среднем на ${fixed(sum / better)} балла. История и данные остаются у вас на любом тарифе.</p>` : '<p class="sub">История и данные остаются у вас на любом тарифе.</p>'}
     <button class="btn" id="tem">Оставить PRO · $9 в месяц</button>
-    <button class="btn ghost" id="tef">${next ? 'Продолжить тест на Free' : 'Остаться на Free'}</button>
-    <p class="sub" style="font-size:12px;text-align:center">На Free: первые тесты новых клиентов без лимита, ведение ${slots().max} клиентов (ретест и домашка), отчет с плашкой BodyPassport.</p></div>`);
+    <button class="btn ghost" id="tef">Только посмотреть сохраненное</button>
+    <p class="sub" style="font-size:12px;text-align:center">Без PRO открываются сохраненные клиенты и отчеты. Новые клиенты, тесты, ретесты и домашка только в PRO.</p></div>`);
   const seen = () => fetch('/api/auth?a=trialseen', { method: 'POST' }).then(() => getMe(true)).catch(() => {});
   $('#tem').onclick = async () => { await seen(); goPro('month'); };
-  $('#tef').onclick = async () => { await seen(); next ? next() : proHome(); };
+  $('#tef').onclick = async () => { await seen(); proHome(); };
 }
 /** Баланс за коллег: начисления и оплата своего PRO. Вывода в деньги нет. */
 async function balanceScreen() {
@@ -826,6 +833,7 @@ async function quickStart() {
 }
 
 async function newAssessment(clientId, retestOf, opts = {}) {
+  if (!needPro()) return;
   const c = await get('clients', clientId); const prev = retestOf ? await get('assessments', retestOf) : null;
   let tpl = prev ? TEMPLATES.find(t => t[0] === prev.template) || ['custom', prev.templateName || 'Свой', prev.protocol] : opts.tpl || favTpl(); let units = prev ? prev.protocol : tpl[2]; const pain = { ...(opts.pain || {}) }; const pre = {}; let expect = '', painSide = opts.painSide || (prev && prev.painSide) || null;
   const draw = () => { const rows = rowsOf(units);
@@ -1214,7 +1222,7 @@ async function undoRestore() { const v = await snapLoad(); if (!v) return toast(
   indexedDB.deleteDatabase(snapName()); toast('Вернул как было'); proHome(); }
 
 // для автотестов
-export const _pro = { all, put, get, del, db, canTrack: c => canTrack(c), trialGate: (id, next) => trialGate(id, next), backup: () => backup(), meta: k => meta(k), uid: () => uid(), author: () => defaultAuthor(), fmtDate: t => fmtDate(t), unpack: (...a) => unpack(...a), normalize: (...a) => normalize(...a), phaseRep: (...a) => phaseRep(...a), clientCard: (...a) => clientCard(...a), calendarScreen: (...a) => calendarScreen(...a), result: (...a) => result(...a), compare: (...a) => compare(...a) };
+export const _pro = { all, put, get, del, db, needPro: () => needPro(), canTrack: c => canTrack(c), trialGate: (id, next) => trialGate(id, next), backup: () => backup(), meta: k => meta(k), uid: () => uid(), author: () => defaultAuthor(), fmtDate: t => fmtDate(t), unpack: (...a) => unpack(...a), normalize: (...a) => normalize(...a), phaseRep: (...a) => phaseRep(...a), clientCard: (...a) => clientCard(...a), calendarScreen: (...a) => calendarScreen(...a), result: (...a) => result(...a), compare: (...a) => compare(...a) };
 
 // =================== Этап 2: «было → стало» и отчет клиенту ===================
 const BONES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28], [27, 31], [28, 32], [27, 29], [28, 30]];
@@ -1502,6 +1510,7 @@ async function sendInvite(c) {
 }
 /** Онлайн-тест с главного экрана: выбрать клиента или завести нового (имя и рост), затем ссылка. */
 async function selfPick() {
+  if (!needPro()) return;
   const clients = (await all('clients')).filter(c => !c.demo && !c.nocard).sort((x, y) => (y.created || 0) - (x.created || 0)).slice(0, 8);
   const d = document.createElement('div'); d.className = 'sheet';
   d.innerHTML = `<div><h2>Онлайн-тест клиенту</h2><p class="sub" style="font-size:14px;margin-top:6px;line-height:1.45">Клиент получит ссылку, сам снимет 4 фото с автоспуском, и они придут к вам с точками. Кому отправить?</p>
@@ -1519,6 +1528,7 @@ async function selfPick() {
 }
 /** Онлайн-работа: ссылка на быстрый тест, клиент снимает себя сам. Фото и точки приходят зашифрованными в карточку, специалист проверяет точки. */
 async function sendSelfQuick(c) {
+  if (!needPro()) return;
   if ((await byClient(c.id)).length && !(await canTrack(c))) return;
   const d = document.createElement('div'); d.className = 'sheet';
   d.innerHTML = `<div><h2>Клиент снимет себя сам</h2><p class="sub" style="font-size:14px;margin-top:6px;line-height:1.45">${esc(c.name)} откроет ссылку, поставит телефон на полку и сделает 4 фото: снимки делаются сами по отсчету. Фото с точками придут в карточку, вы проверите точки и отправите отчет как обычно.</p>
