@@ -22,6 +22,7 @@ const row = async (st, k) => { const r = await _pro.get(st, k); return r && !(ty
 
 // ---------- 1. клиент ----------
 export async function quickTest(clientId = null) {
+  if (!_pro.needPro()) return;
   if (cameraBlocked()) return openInBrowserSheet();
   const clients = (await _pro.all('clients')).filter(c => !c.demo && !c.nocard), asses = await _pro.all('assessments');
   const last = id => Math.max(0, ...asses.filter(a => a.clientId === id).map(a => a.date));

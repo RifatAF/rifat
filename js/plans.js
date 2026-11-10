@@ -44,6 +44,22 @@ export function plan() {
 }
 export const isPro = () => isBeta() || plan().plan !== 'start';
 export const isTrial = () => !isBeta() && !!(meSync() && meSync().trial);
+/** Пробный закончился, PRO не оплачен: можно только смотреть сохраненных клиентов и отчеты (решение Рифата 10.11.2026). */
+export const locked = () => !isBeta() && !isPro();
+/** Пускает к новой работе (клиент, тест, ретест, ссылка, домашка) или показывает единственный выход: купить PRO. */
+export function needPro() { if (!locked()) return true; track('paywall_view', { c: 'locked' }, false); lockSheet(); return false; }
+export function lockSheet() {
+  const d = document.createElement('div'); d.className = 'sheet';
+  d.innerHTML = `<div><div class="eyebrow">Пробный период закончился</div><h2 style="margin-top:6px">Новые клиенты и тесты только в PRO</h2>
+    <p class="sub" style="margin-top:8px">Сохраненные клиенты и отчеты открываются как раньше. Новые клиенты, тесты, ретесты, ссылки и домашка клиенту доступны в PRO.</p>
+    <button class="btn" id="lkm" style="margin-top:var(--s5)">PRO на месяц · $9</button>
+    ${PAY_URL_YEAR ? '<button class="btn line" id="lky" style="margin-top:var(--s2)">PRO на год · $90 (2 месяца в подарок)</button>' : ''}
+    <button class="btn ghost" id="lkx" style="margin-top:var(--s2)">Закрыть</button></div>`;
+  document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'lkx') d.remove(); };
+  d.querySelector('#lkm').onclick = () => { d.remove(); goPro('month'); };
+  if (d.querySelector('#lky')) d.querySelector('#lky').onclick = () => { d.remove(); goPro('year'); };
+  return d;
+}
 /** Слоты клиентов: max с сервера (5 + 3 за коллегу), у Про без лимита. */
 export function slots(used = 0) {
   const u = meSync(), pro = isPro();
@@ -54,12 +70,13 @@ export const can = f => !PRO[f] || isPro();
 /** Можно ли завести еще одного клиента. Нет: показывает выбор «пригласить коллегу» или «PRO». */
 export function checkClientSlotAvailable(activeClientsCount) {
   const s = slots(activeClientsCount);
-  if (s.pro || s.used < s.max) return true;
+  if (s.pro) return true; if (locked()) return needPro();
+  if (s.used < s.max) return true;
   track('limit_hit', { c: 'clients' }, false); slotSheet(s); return false;
 }
 // ссылка-приглашение коллеге и готовый текст
 export const refLink = () => { const u = meSync(); return location.origin + '/?src=pro' + (u && u.refCode ? '&ref=' + u.refCode : ''); };
-export const refText = () => 'Делаю в BodyPassport замер осанки по 4 фото и отчет клиенту со своим именем. Первые 3 клиента с PRO бесплатно, попробуй: ' + refLink();
+export const refText = () => 'Делаю в BodyPassport замер осанки по 4 фото и отчет клиенту со своим именем. 7 дней PRO бесплатно, попробуй: ' + refLink();
 /** Приглашение коллеге: шторка с готовым текстом, «Отправить» (меню телефона) и «Скопировать» с явным подтверждением. */
 export function copyRefText() {
   track('ref_share', { c: 'slots' }, false); const text = refText();
@@ -109,7 +126,8 @@ const pitch = () => ['trainer', 'kinesio', 'studio'].includes(localStorage.getIt
   : 'Продает вас: ваш логотип и ссылка на отчет вместо плашки BodyPassport, история прогресса клиентов.';
 /** Пускает к функции или показывает шторку PRO с тем, что именно откроется. ctx: имя клиента для заголовка. */
 export function gate(f, ctx) {
-  if (can(f) || isPro()) return true;
+  if (isPro()) return true; if (locked()) return needPro();
+  if (can(f)) return true;
   track('paywall_view', { c: f }, false);
   const d = document.createElement('div'), t = GATE[f] || 'Эта функция'; d.className = 'sheet';
   d.innerHTML = `<div><div class="eyebrow">PRO</div><h2 style="margin-top:6px">${t}${ctx ? ': ' + String(ctx).replace(/[<>&"]/g, '') : ''}</h2>
