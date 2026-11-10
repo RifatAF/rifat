@@ -270,6 +270,30 @@ test('пробный PRO: 7 дней с первого входа в полно�
   SESS.APP.beta = true; store.set('users/t_801.json', { body: JSON.stringify({ id: 't_801', role: 'specialist', consentVersion: '2026-10-v3' }), uploadedAt: '' });
   me = await call(auth, { query: { a: 'me' }, headers: { cookie: cookie('t_801') } }); assert.equal(me.j.user.trialUntil, null); SESS.APP.beta = false;
 });
+test('пригласи коллегу: месяц PRO только за настоящего коллегу (свое устройство, работа в 2 разных дня) или за его оплату', async () => {
+  SESS.APP.beta = false; const H = (uid, dev, ip) => ({ cookie: cookie(uid), 'x-bp-dev': dev, 'x-forwarded-for': ip });
+  const yday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  store.set('users/t_950.json', { body: JSON.stringify({ id: 't_950', role: 'specialist', consentVersion: '2026-10-v3', trialUntil: 1 }), uploadedAt: '' });
+  await call(auth, { headers: H('t_950', 'aaaaaaaaaaaaaaaa', '1.1.1.1'), query: { a: 'me' } });
+  // свой второй аккаунт с того же телефона: не засчитывается
+  store.set('users/t_951.json', { body: JSON.stringify({ id: 't_951', role: 'specialist', consentVersion: '2026-10-v3', trialUntil: 1, referredBy: 't_950', acts: 2, actDays: [yday] }), uploadedAt: '' });
+  await call(auth, { method: 'POST', query: { a: 'act' }, body: { d: 'aaaaaaaaaaaaaaaa' }, headers: H('t_951', 'aaaaaaaaaaaaaaaa', '2.2.2.2') });
+  let o = await call(auth, { query: { a: 'me' }, headers: H('t_950', 'aaaaaaaaaaaaaaaa', '1.1.1.1') }); assert.equal(o.j.user.isPro, false, 'тот же телефон');
+  // другой телефон, но все тесты в один день: рано
+  store.set('users/t_952.json', { body: JSON.stringify({ id: 't_952', role: 'specialist', consentVersion: '2026-10-v3', trialUntil: 1, referredBy: 't_950', acts: 2 }), uploadedAt: '' });
+  await call(auth, { method: 'POST', query: { a: 'act' }, body: { d: 'bbbbbbbbbbbbbbbb' }, headers: H('t_952', 'bbbbbbbbbbbbbbbb', '3.3.3.3') });
+  o = await call(auth, { query: { a: 'me' }, headers: H('t_950', 'aaaaaaaaaaaaaaaa', '1.1.1.1') }); assert.equal(o.j.user.isPro, false, 'один день');
+  // настоящий коллега: свой телефон, 3 теста в 2 дня
+  store.set('users/t_953.json', { body: JSON.stringify({ id: 't_953', role: 'specialist', consentVersion: '2026-10-v3', trialUntil: 1, referredBy: 't_950', acts: 2, actDays: [yday] }), uploadedAt: '' });
+  await call(auth, { method: 'POST', query: { a: 'act' }, body: { d: 'cccccccccccccccc' }, headers: H('t_953', 'cccccccccccccccc', '4.4.4.4') });
+  o = await call(auth, { query: { a: 'me' }, headers: H('t_950', 'aaaaaaaaaaaaaaaa', '1.1.1.1') });
+  assert.equal(o.j.user.isPro, true); assert.ok(o.j.user.planUntil > Date.now() + 29 * 864e5 && o.j.user.planUntil < Date.now() + 31 * 864e5); assert.equal(o.j.user.refBonus, 1);
+  await call(auth, { method: 'POST', query: { a: 'act' }, body: { d: 'cccccccccccccccc' }, headers: H('t_953', 'cccccccccccccccc', '4.4.4.4') });
+  o = await call(auth, { query: { a: 'me' }, headers: H('t_950', 'aaaaaaaaaaaaaaaa', '1.1.1.1') }); assert.equal(o.j.user.refBonus, 1, 'за одного коллегу один раз');
+  // оплата коллеги засчитывается без проверки устройства
+  const owner = { id: 'o', planUntil: 0 }; assert.equal(SESS.refQualified({ id: 'c', acts: 3, actDays: ['a', 'b'], devs: ['x'], ips: ['n'] }, { ...owner, devs: ['y'], ips: ['n'] }), false, 'только сеть пригласившего');
+  assert.equal(SESS.refQualified({ id: 'c', acts: 3, actDays: ['a', 'b'], devs: ['x'], ips: ['n', 'm'] }, { ...owner, devs: ['y'], ips: ['n'] }), true, 'одна студия, но заходил и из другой сети');
+});
 test('баланс за коллег: 20% от оплаты коллеги, годовой +365 дней, оплата балансом', async () => {
   SESS.APP.beta = false; process.env.LAVA_WEBHOOK_BASIC = 'bp:pw'; const h = { authorization: 'Basic ' + Buffer.from('bp:pw').toString('base64') };
   store.set('users/t_900.json', { body: JSON.stringify({ id: 't_900', role: 'specialist', consentVersion: '2026-10-v3', trialUntil: 1, balance: 800 }), uploadedAt: '' });

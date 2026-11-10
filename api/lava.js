@@ -6,7 +6,7 @@
 // Не нашли человека: платеж лежит в lava/unmatched, администратору приходит сообщение в Telegram.
 import crypto from 'node:crypto';
 import { put, get } from './_store.js';
-import { loadUser, saveUser, allUsers, REF_SHARE, REF_MONTHS, PRO_PRICE } from './_session.js';
+import { loadUser, saveUser, allUsers, REF_SHARE, REF_MONTHS, PRO_PRICE, grantRefBonus } from './_session.js';
 
 const PRO_DAYS = 31, YEAR_DAYS = 365, YEAR_MIN = 5000; // годовой: свой продукт (LAVA_YEAR_PRODUCT_ID) или сумма от 5000 ₽
 // цена в lava.top в долларах ($9 / $90), рублями платят по курсу: сумму приводим к рублям (курс USD_RUB, по умолчанию 80)
@@ -71,6 +71,8 @@ export default async function handler(req, res) {
         const amt = Math.round((rub(b) || (days === YEAR_DAYS ? 7200 : PRO_PRICE)) * REF_SHARE);
         if (ref && amt > 0) { ref.balance = (ref.balance || 0) + amt; ref.balanceLog = [...(ref.balanceLog || []), { t: Date.now(), a: amt, k: 'ref', n: String(u.name || '').split(' ')[0].slice(0, 30) }].slice(-100); await saveUser(ref);
           if (/^t_\d+$/.test(ref.id)) await tg(ref.id.slice(2), `BodyPassport: коллега оплатил PRO, вам на баланс +${amt} ₽. Баланс можно потратить на свой PRO в меню кабинета.`); } }
+      // оплатил коллега по приглашению: пригласившему месяц PRO (один раз)
+      if (u.referredBy && !u.refRewarded) { await grantRefBonus(u, 'paid').catch(e => console.error('refbonus', e)); await saveUser(u); }
       await put(`lava/contracts/${parent}.json`, JSON.stringify({ uid: u.id, t: Date.now() }), J);
       await put(`lava/done/${cid}.json`, JSON.stringify({ ...note, uid: u.id }), J);
       if (/^t_\d+$/.test(u.id)) await tg(u.id.slice(2), `BodyPassport: PRO ${days === YEAR_DAYS ? 'на год ' : ''}включен до ${new Date(u.planUntil).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' })}. Спасибо!`);

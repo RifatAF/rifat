@@ -7,6 +7,7 @@ import { poseOf } from './pose-figure.js';
 import { VIEWS as REQ, ALL_VIEWS as VIEWS, EDIT_POINTS, POINT_NAMES, quickMetrics, summaryOf, ALGO, viewMetrics, observations, frameIssue, ERR as QERR, isOut, LIMIT } from './quick-metrics.js';
 import { P, analyze, levelled } from './analysis.js';
 import { track } from './track.js';
+import { noteTest } from './auth.js';
 import { matte } from './ds.js';
 import qrcode from './qr.js';
 import { releaseFor } from './biomechanics-engine.js';
@@ -983,7 +984,7 @@ async function save() {
   cmpSave(a, Q.cmp);
   await _pro.put('assessments', a);
   await _pro.put('poses', { assessmentId: id, photos: Object.fromEntries(VIEWS.filter(v => Q.views[v.id]).map(v => { const x = Q.views[v.id]; return [v.id, { photo: x.photo, w: x.w, h: x.h, pts: x.pts, auto: x.auto || null, roll: x.roll, rollSrc: x.rollSrc || null }]; })) });
-  track('assess_done', { n: a.quick.views.length, c: 'quick' }, false);
+  track('assess_done', { n: a.quick.views.length, c: 'quick' }, false); noteTest();
   if (prev) track('retest_done', { n: Math.round((Q.date - prev.date) / 864e5) }, false);
   if (prev && Q.date - prev.date <= 14 * 864e5) track('retest_14d', null, false);
   return id;

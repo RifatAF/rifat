@@ -1,6 +1,6 @@
 // Быстрый вход: Google (Google Identity Services), Telegram (виджет на сайте или Mini App внутри Telegram) и код на почту (подходит всем, в том числе iPhone без Google).
 import crypto from 'node:crypto';
-import { setSession, clearSession, sessionUid, loadUser, saveUser, deleteUser, allUsers, publicUser, noStats, isAdmin, effectivePlan, CONSENT_VERSION, maxClientSlots, ensureRefIndex, loadApp, saveApp, APP, creditReferral, startTrialIfNeeded, trialActive, newTerms, PRO_PRICE } from './_session.js';
+import { setSession, clearSession, sessionUid, loadUser, saveUser, deleteUser, allUsers, publicUser, noStats, isAdmin, effectivePlan, CONSENT_VERSION, maxClientSlots, ensureRefIndex, loadApp, saveApp, APP, creditReferral, startTrialIfNeeded, trialActive, newTerms, PRO_PRICE, noteSeen, reqIp, grantRefBonus } from './_session.js';
 const CLOUD_BACKUP = process.env.CLOUD_BACKUP === '1';
 
 const GOOGLE_ID = process.env.GOOGLE_CLIENT_ID || '';
@@ -114,7 +114,8 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && a === 'config') return res.status(200).json({ beta: APP.beta, calib: APP.calib, google: GOOGLE_ID || null, email: !!MAIL_KEY, telegram: TG_TOKEN && TG_NAME ? TG_NAME : null, telegramWeb: await widgetReady(String(req.headers.host || '').split(':')[0]), telegramId: TG_TOKEN ? TG_TOKEN.split(':')[0] : null, cloudBackup: CLOUD_BACKUP });
     if (req.method === 'GET' && a === 'me') { const uid = sessionUid(req); const u = uid && await loadUser(uid); if (!u) { if (uid) clearSession(res); return res.status(401).json({ user: null }); }
       if (!u.refCode && process.env.SESSION_SECRET) { await ensureRefIndex(u); await saveUser(u); } // код приглашения для тех, кто вошел до реферальной программы
-      if (startTrialIfNeeded(u)) await saveUser(u);
+      // устройство и сеть (хэши): по ним приглашение коллеги отличается от своего второго аккаунта
+      if (startTrialIfNeeded(u) | noteSeen(u, req.headers['x-bp-dev'], reqIp(req))) await saveUser(u);
       return res.status(200).json({ user: publicUser(u) }); }
     // резервная копия данных телефона в аккаунте: после удаления приложения тесты, анкета и занятия возвращаются при входе
     if (req.method === 'GET' && a === 'backup') { const uid = sessionUid(req); if (!uid) return res.status(401).json({ error: 'войдите' });
@@ -157,6 +158,9 @@ export default async function handler(req, res) {
       if (trialActive(u) && (b.by || 'retest') === by) { u.trialEndedBy = by; u.trialEndedAt = Date.now(); await saveUser(u); } return res.status(200).json({ user: publicUser(u) }); }
     if (a === 'trialseen') { u.trialEndSeen = true; await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }
     // баланс за коллег тратится только на свой PRO: PRO_PRICE ₽ (≈ $9) = 31 день
+    // тест сохранен: день и устройство для проверки «настоящего коллеги»; при выполнении условий пригласившему месяц PRO
+    if (a === 'act') { const d = new Date().toISOString().slice(0, 10); u.acts = Math.min(1e6, (u.acts || 0) + 1); u.actDays = [...new Set([...(u.actDays || []), d])].slice(-30);
+      noteSeen(u, b.d, reqIp(req)); await grantRefBonus(u, 'active').catch(e => console.error('refbonus', e)); await saveUser(u); return res.status(200).json({ ok: true }); }
     if (a === 'paybalance') { if ((u.balance || 0) < PRO_PRICE) return res.status(400).json({ error: 'на балансе меньше ' + PRO_PRICE + ' ₽' });
       u.balance -= PRO_PRICE; u.plan = 'pro'; u.planUntil = Math.max(Date.now(), u.planUntil || 0) + 31 * 864e5; u.paidEver = true;
       u.balanceLog = [...(u.balanceLog || []), { t: Date.now(), a: -PRO_PRICE, k: 'pro' }].slice(-100); await saveUser(u); return res.status(200).json({ user: publicUser(u) }); }

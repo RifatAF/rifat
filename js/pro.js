@@ -10,7 +10,7 @@ import { analyze, fmt, recompute } from './analysis.js';
 import { track, vasStats } from './track.js';
 import { painWord, PAIN_SCALE } from './vas.js';
 import { npsCard, bindNps, installCard, bindInstall, installNow, canInstall, feedbackSheet, referralSheet, myRef, bugSheet, DEV, proSurvey, proSurveyDue, installSheet } from './grow.js';
-import { meSync, logout, getMe, calibOn } from './auth.js';
+import { meSync, logout, getMe, calibOn, noteTest } from './auth.js';
 import { scoreSpot, LABELS, BAND_NAMES, RULE_NAMES, RESEARCH } from './evidence.js';
 import { gate, goPro, planLine, plan as tariff, SPECIALTIES, TEMPLATE_ORDER, slots, checkClientSlotAvailable, copyRefText, isPro, isBeta, REF_SLOTS, BAL_PRO, PRO_PRICE, locked, needPro } from './plans.js';
 import { C, voice, cam, startMotion, initPose, prefetchPose, drawHeat, RAMP_CSS, device, seal, body3D, ic, toast, preload3D, saveBlob , setBodySex, cameraBlocked, openInBrowserSheet } from './core.js';
@@ -251,7 +251,7 @@ function slotWidget(s, left = Infinity) {
   const bar = (n, max, red) => `<div style="height:6px;border-radius:3px;background:var(--surface);margin-top:8px;overflow:hidden"><div style="height:100%;width:${Math.min(100, Math.round(n / Math.max(1, max) * 100))}%;background:${red ? 'var(--over)' : 'var(--ink)'}"></div></div>`;
   const until = t => new Date(t).toLocaleDateString('ru', { day: 'numeric', month: 'long' });
   if (locked()) return `<div class="pad" style="margin-top:var(--s3)"><div class="card" id="slots" style="padding:12px 14px;border:1px solid var(--over)">
-    <div style="font-size:15px"><b>Пробный период закончился</b></div><div class="sub" style="font-size:13px;margin-top:4px">Новые клиенты и тесты только в PRO. Сохраненное открывается как раньше.</div>${buy(`Купить PRO · ${PRO_PRICE}`)}</div></div>`;
+    <div style="font-size:15px"><b>Пробный период закончился</b></div><div class="sub" style="font-size:13px;margin-top:4px">Новые клиенты и тесты только в PRO. Сохраненное открывается как раньше.</div>${buy(`Купить PRO · ${PRO_PRICE}`)}<button class="btn line goref" id="slref" style="height:44px;margin-top:8px">Пригласить коллегу: месяц PRO</button></div></div>`;
   if (u && u.trial && !u.trialClients) { const dl = Math.max(1, Math.ceil((u.trialUntil - Date.now()) / DAY));
     return `<div class="pad" style="margin-top:var(--s3)"><div class="card" id="slots" style="padding:12px 14px;background:var(--ok-s)">
     <div class="row" style="font-size:14px;gap:8px"><span style="flex:1"><b>Пробный PRO</b> · осталось <b>${dl} ${dl === 1 ? 'день' : dl < 5 ? 'дня' : 'дней'}</b></span><span class="sub" style="font-size:12px">до ${until(u.trialUntil)}</span></div>
@@ -864,7 +864,7 @@ async function newAssessment(clientId, retestOf, opts = {}) {
       track('assess_start', { n: units.length }, false); if (!localStorage.getItem('bp_first_test')) { localStorage.setItem('bp_first_test', String(Date.now())); track('first_test', null, false); }
       const r = await runProtocol(units, { target: prev && prev.setup, onCancel: () => clientCard(clientId), pre, specialist: true, repeat: !!prev }); if (!r) return;
       const a = { id: uid(), clientId, date: r.date, template: tpl[0], templateName: session ? 'После сеанса' : tpl[0] === 'posture' && !prev ? 'До сеанса' : tpl[1], protocol: r.protocol, snapshot: r.snapshot, side: r.side, moves: r.moves, quality: r.quality, setup: r.setup, ...(r.main ? { main: r.main } : {}), tech: r.tech || null, limits: r.limits || {}, pain, painSide, lumbarZone: LUMBAR[tpl[0]] || (prev && prev.lumbarZone) || null, hyp: {}, plan: null, note: '', expect: expect.trim().slice(0, 500), nextDate: r.date + 30 * DAY, prevId: prev ? prev.id : null, draft: true };
-      await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); backupSoon(); track('assess_done', { n: units.length }, false); if (prev) track('retest_done', { n: Math.round((r.date - prev.date) / DAY) }, false); if (prev && r.date - prev.date <= 14 * DAY) track('retest_14d', null, false); if (prev) endTrialOnRetest(); await result(a.id);
+      await put('assessments', a); await put('poses', { assessmentId: a.id, poses: r.poses }); backupSoon(); track('assess_done', { n: units.length }, false); noteTest(); if (prev) track('retest_done', { n: Math.round((r.date - prev.date) / DAY) }, false); if (prev && r.date - prev.date <= 14 * DAY) track('retest_14d', null, false); if (prev) endTrialOnRetest(); await result(a.id);
       // анкета специалиста (BP-17): когда результат уже посмотрели, пока не ответил
       if (isBeta() && proSurveyDue()) setTimeout(() => { if ($('#rep') && !document.querySelector('.sheet')) proSurvey('test'); }, 25000); }; };
   draw(); if (opts.autostart) $('#go').click();

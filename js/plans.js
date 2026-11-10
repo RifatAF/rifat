@@ -54,10 +54,12 @@ export function lockSheet() {
     <p class="sub" style="margin-top:8px">Сохраненные клиенты и отчеты открываются как раньше. Новые клиенты, тесты, ретесты, ссылки и домашка клиенту доступны в PRO.</p>
     <button class="btn" id="lkm" style="margin-top:var(--s5)">PRO на месяц · $9</button>
     ${PAY_URL_YEAR ? '<button class="btn line" id="lky" style="margin-top:var(--s2)">PRO на год · $90 (2 месяца в подарок)</button>' : ''}
+    <button class="btn line" id="lkr" style="margin-top:var(--s2)">Пригласить коллегу: месяц PRO</button>
     <button class="btn ghost" id="lkx" style="margin-top:var(--s2)">Закрыть</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'lkx') d.remove(); };
   d.querySelector('#lkm').onclick = () => { d.remove(); goPro('month'); };
   if (d.querySelector('#lky')) d.querySelector('#lky').onclick = () => { d.remove(); goPro('year'); };
+  d.querySelector('#lkr').onclick = () => { d.remove(); copyRefText(); };
   return d;
 }
 /** Слоты клиентов: max с сервера (5 + 3 за коллегу), у Про без лимита. */
@@ -74,6 +76,8 @@ export function checkClientSlotAvailable(activeClientsCount) {
   if (s.used < s.max) return true;
   track('limit_hit', { c: 'clients' }, false); slotSheet(s); return false;
 }
+// «Пригласи коллегу, получи месяц PRO»: условия совпадают с api/_session.js (REF_TESTS, REF_DAYS, refQualified)
+export const REF_RULE = 'Месяц PRO вам, когда коллега начнет работать: сделает 3 теста в разные дни со своего телефона или оплатит PRO. Свой второй аккаунт не засчитывается. С каждой оплаты коллеги еще 20% вам на баланс.';
 // ссылка-приглашение коллеге и готовый текст
 export const refLink = () => { const u = meSync(); return location.origin + '/?src=pro' + (u && u.refCode ? '&ref=' + u.refCode : ''); };
 export const refText = () => 'Делаю в BodyPassport замер осанки по 4 фото и отчет клиенту со своим именем. 7 дней PRO бесплатно, попробуй: ' + refLink();
@@ -81,7 +85,7 @@ export const refText = () => 'Делаю в BodyPassport замер осанки
 export function copyRefText() {
   track('ref_share', { c: 'slots' }, false); const text = refText();
   const d = document.createElement('div'); d.className = 'sheet';
-  d.innerHTML = `<div><h2>Пригласить коллегу</h2><p class="sub" style="margin-top:6px">${isBeta() ? 'Отправьте коллеге этот текст со ссылкой.' : 'Когда коллега оплатит PRO, вам на баланс придет 20% его оплат в течение 24 месяцев. Баланс тратится на ваш PRO.'}</p>
+  d.innerHTML = `<div><h2>Пригласить коллегу</h2><p class="sub" style="margin-top:6px">${isBeta() ? 'Отправьте коллеге этот текст со ссылкой.' : REF_RULE}</p>
     <div class="card" style="margin-top:var(--s3);font-size:15px;line-height:1.45;border:1px solid var(--line)">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>
     ${navigator.share ? '<button class="btn" id="rfsh" style="margin-top:var(--s4)">Отправить коллеге</button>' : ''}
     <button class="btn${navigator.share ? ' line' : ''}" id="rfcp" style="margin-top:var(--s2)">Скопировать текст и ссылку</button>
@@ -134,7 +138,7 @@ export function gate(f, ctx) {
     <p class="sub" style="margin-top:8px">${pitch()}</p>
     <button class="btn" id="pwm" style="margin-top:var(--s5)">PRO на месяц · $9</button>
     ${PAY_URL_YEAR ? '<button class="btn line" id="pwy" style="margin-top:var(--s2)">PRO на год · $90 (2 месяца в подарок)</button>' : ''}
-    <button class="btn ghost" id="pwr" style="margin-top:var(--s2)">Пригласить коллегу</button>
+    <button class="btn ghost" id="pwr" style="margin-top:var(--s2)">Пригласить коллегу: месяц PRO</button>
     <button class="btn ghost" id="pwx" style="margin-top:var(--s1);border:0">Не сейчас</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'pwx') d.remove(); };
   d.querySelector('#pwm').onclick = () => { d.remove(); goPro('month'); };
@@ -164,5 +168,7 @@ export function planLine() {
   if (isBeta()) return 'Бета: все возможности открыты';
   return `Тариф ${PLANS[p.plan].name}${p.plan !== 'start' && until ? ', до ' + until : ''}`;
 }
+// кнопка с классом goref открывает приглашение коллеги
+document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('.goref'); if (!a) return; e.preventDefault(); copyRefText(); });
 // любая ссылка с классом gopro в приложении ведет через выбор почты к оплате
 document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('.gopro'); if (!a) return; e.preventDefault(); document.querySelectorAll('.sheet').forEach(x => x.remove()); goPro(); });
