@@ -290,6 +290,10 @@ test('пригласи коллегу: месяц PRO только за наст
   assert.equal(o.j.user.isPro, true); assert.ok(o.j.user.planUntil > Date.now() + 29 * 864e5 && o.j.user.planUntil < Date.now() + 31 * 864e5); assert.equal(o.j.user.refBonus, 1);
   await call(auth, { method: 'POST', query: { a: 'act' }, body: { d: 'cccccccccccccccc' }, headers: H('t_953', 'cccccccccccccccc', '4.4.4.4') });
   o = await call(auth, { query: { a: 'me' }, headers: H('t_950', 'aaaaaaaaaaaaaaaa', '1.1.1.1') }); assert.equal(o.j.user.refBonus, 1, 'за одного коллегу один раз');
+  // не больше 5 коллег: шестой месяц не дает
+  store.set('users/t_960.json', { body: JSON.stringify({ id: 't_960', role: 'specialist', consentVersion: '2026-10-v3', trialUntil: 1, refBonus: [1, 2, 3, 4, 5].map(t => ({ t, by: 'paid' })) }), uploadedAt: '' });
+  store.set('users/t_961.json', { body: JSON.stringify({ id: 't_961', role: 'specialist', consentVersion: '2026-10-v3', trialUntil: 1, referredBy: 't_960' }), uploadedAt: '' });
+  assert.equal(await SESS.grantRefBonus(JSON.parse(store.get('users/t_961.json').body), 'paid'), null, 'шестой коллега');
   // оплата коллеги засчитывается без проверки устройства
   const owner = { id: 'o', planUntil: 0 }; assert.equal(SESS.refQualified({ id: 'c', acts: 3, actDays: ['a', 'b'], devs: ['x'], ips: ['n'] }, { ...owner, devs: ['y'], ips: ['n'] }), false, 'только сеть пригласившего');
   assert.equal(SESS.refQualified({ id: 'c', acts: 3, actDays: ['a', 'b'], devs: ['x'], ips: ['n', 'm'] }, { ...owner, devs: ['y'], ips: ['n'] }), true, 'одна студия, но заходил и из другой сети');

@@ -77,7 +77,7 @@ export function checkClientSlotAvailable(activeClientsCount) {
   track('limit_hit', { c: 'clients' }, false); slotSheet(s); return false;
 }
 // «Пригласи коллегу, получи месяц PRO»: условия совпадают с api/_session.js (REF_TESTS, REF_DAYS, refQualified)
-export const REF_RULE = 'Месяц PRO вам, когда коллега начнет работать: сделает 3 теста в разные дни со своего телефона или оплатит PRO. Свой второй аккаунт не засчитывается. С каждой оплаты коллеги еще 20% вам на баланс.';
+export const REF_RULE = 'До 5 коллег. За каждого месяц PRO, когда он начнет работать: сделает 3 теста в разные дни со своего телефона или оплатит PRO. С каждой оплаты коллеги 20% вам на баланс: 5 коллег на PRO оплачивают ваш PRO полностью. Свой второй аккаунт не засчитывается.';
 // ссылка-приглашение коллеге и готовый текст
 export const refLink = () => { const u = meSync(); return location.origin + '/?src=pro' + (u && u.refCode ? '&ref=' + u.refCode : ''); };
 export const refText = () => 'Делаю в BodyPassport замер осанки по 4 фото и отчет клиенту со своим именем. 7 дней PRO бесплатно, попробуй: ' + refLink();
