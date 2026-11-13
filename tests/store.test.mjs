@@ -8,6 +8,7 @@ mock.module('@vercel/blob', { namedExports: {
   list: async () => ({ blobs: [...blob.keys()].map(p => ({ pathname: p })), hasMore: false }),
   del: async ps => [].concat(ps).forEach(p => blob.delete(p)) } });
 globalThis.fetch = async (url, o) => { const u = new URL(url), key = decodeURIComponent(u.pathname.split('/').slice(2).join('/'));
+  if (u.searchParams.has('list-type')) { const pre = u.searchParams.get('prefix') || ''; return new Response(`<R>${[...r2.keys()].filter(k => k.startsWith(pre)).map(k => `<Contents><Key>${k}</Key><Size>1</Size></Contents>`).join('')}<IsTruncated>false</IsTruncated></R>`, { status: 200 }); }
   if (o.method === 'PUT') { r2.set(key, String(o.body)); return new Response('', { status: 200 }); }
   if (o.method === 'DELETE') { r2.delete(key); return new Response(null, { status: 204 }); }
   return r2.has(key) ? new Response(r2.get(key), { status: 200 }) : new Response('', { status: 404 }); };
@@ -23,5 +24,6 @@ test('R2 основное: запись только в R2, старое из Bl
   assert.equal(await txt(await S.get('users/old.json')), '{"old":1}', 'старый файл из Blob');
   await S.del('users/old.json'); assert.equal(await S.get('users/old.json'), null, 'удаленное не возвращается из Blob');
   blob.set('users/old.json', '{"old":1}');
-  const c = await S.copyBatch(); assert.equal(c.copied, 1); assert.equal(r2.get('users/old.json'), '{"old":1}');
+  r2.set('users/n.json', '1'); blob.set('users/n.json', '1'); const l = await S.list({ prefix: 'users/' }); assert.deepEqual(l.blobs.map(b => b.pathname).sort(), ['users/a.json', 'users/n.json', 'users/old.json'], 'список из R2 и Blob без повторов');
+  const c = await S.copyBatch(); assert.equal(c.copied, 2); assert.equal(r2.get('users/old.json'), '{"old":1}');
 });

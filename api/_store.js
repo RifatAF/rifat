@@ -74,7 +74,18 @@ export async function get(p, o) {
   // основное хранилище недоступно или файла там нет: берем из копии
   for (const m of [...mirrors, ...readBack]) { try { const r = await m.get(p, o); if (r) return r; } catch (e) {} } return null;
 }
-export const list = o => primary.list(o);
+// до конца переноса список собирается из R2 и из Blob: сначала все страницы R2, потом Blob без повторов того, что уже было в R2.
+// Курсор: «p:…» — страница R2, «b:…» — страница Blob. После переноса и удаления Blob список идет только из R2.
+export async function list(o = {}) {
+  if (!readBack.length) return primary.list(o);
+  const c = o.cursor ? String(o.cursor) : 'p:', phase = c[0], cur = c.slice(2) || undefined, out = [];
+  let seen = new Set();
+  if (phase === 'p') { const r = await primary.list({ ...o, cursor: cur }); out.push(...r.blobs); seen = new Set(r.blobs.map(b => b.pathname));
+    if (r.hasMore) return { blobs: out, hasMore: true, cursor: 'p:' + r.cursor }; }
+  const r = await readBack[0].list({ ...o, cursor: phase === 'b' ? cur : undefined }).catch(() => ({ blobs: [], hasMore: false }));
+  out.push(...r.blobs.filter(b => !seen.has(b.pathname)).map(b => ({ ...b, url: b.pathname })));
+  return { blobs: out, hasMore: !!r.hasMore, cursor: r.hasMore ? 'b:' + r.cursor : undefined };
+}
 export async function del(x) { const ps = [].concat(x); await primary.del(primary.name === 'blob' ? x : ps.map(pathOf)); await mirror('del', m => m.del(m.name === 'blob' ? ps.map(pathOf) : ps.map(pathOf)));
   // удаленное не должно вернуться из старой копии в Blob через запасное чтение
   for (const m of readBack) await m.del(ps.map(pathOf)).catch(e => console.error('store del blob', e.message)); }
