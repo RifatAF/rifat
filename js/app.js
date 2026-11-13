@@ -2149,8 +2149,9 @@ export async function adminScreen(back) {
   // хранилище сервера: основное и копии (Vercel Blob, Cloudflare R2, домашний сервер); перенос пачками до конца
   $('#astore').onclick = async () => { let info; try { const r = await fetch('/api/store'); info = await r.json(); if (!r.ok) throw new Error(info.error || r.status); } catch (e) { return toast('Не удалось узнать: ' + e.message); }
     const N = { blob: 'Vercel Blob', s3: 'S3 (Cloudflare R2 или другое)', backup: 'резервное S3 (домашний сервер)' };
-    if (!info.mirrors.length) return toast(`Данные в ${N[info.primary]}. Копии не настроены: добавьте S3_* или BACKUP_S3_* в Vercel`);
-    if (!confirm(`Основное: ${N[info.primary]}. Копии: ${info.mirrors.map(m => N[m]).join(', ')}. Скопировать все старые данные в копии?`)) return;
+    const back = info.readBack || [];
+    if (!info.mirrors.length && !back.length) return toast(`Данные в ${N[info.primary]}. Переносить нечего`);
+    if (!confirm(back.length ? `Основное: ${N[info.primary]}. Перенести все старые данные из Vercel Blob в R2? После этого Blob можно удалить.` : `Основное: ${N[info.primary]}. Копии: ${info.mirrors.map(m => N[m]).join(', ')}. Скопировать все старые данные в копии?`)) return;
     let cur = '', n = 0; try { do { const r = await fetch('/api/store?a=copy' + (cur ? '&cursor=' + encodeURIComponent(cur) : '')); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); n += j.copied; cur = j.cursor; toast('Скопировано файлов: ' + n); } while (cur); toast('Готово, скопировано файлов: ' + n); }
     catch (e) { toast('Остановилось на ' + n + ': ' + e.message); } };
   if ($('#a3d')) $('#a3d').onclick = () => check3D(() => adminScreen(back));

@@ -5,7 +5,7 @@
 //   blob   — Vercel Blob (BLOB_READ_WRITE_TOKEN), как было;
 //   s3     — любое S3-совместимое: Cloudflare R2, Backblaze B2, Yandex Object Storage (S3_KEY, S3_SECRET; S3_ENDPOINT, S3_BUCKET, S3_REGION по желанию);
 //   backup — второе S3, например MinIO на домашнем сервере (BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_KEY, BACKUP_S3_SECRET, BACKUP_S3_REGION).
-// STORE_PRIMARY=blob|s3 выбирает, откуда читать (по умолчанию blob). Запись и удаление идут в основное хранилище,
+// Основное хранилище: R2, если заданы S3_KEY и S3_SECRET (STORE_PRIMARY=blob — прежняя схема). Запись и удаление идут в основное хранилище,
 // и копия уходит во все остальные настроенные. Сбой копии не ломает запрос, он пишется в лог.
 import crypto from 'node:crypto';
 
@@ -55,9 +55,15 @@ const blobStore = { name: 'blob',
   list: async o => (await blob()).list(o), del: async ps => (await blob()).del(ps) };
 
 const S3 = s3cfg('S3_'), BK = s3cfg('BACKUP_S3_');
-export const STORES = [env.BLOB_READ_WRITE_TOKEN ? blobStore : null, S3 ? s3store(S3) : null, BK ? s3store(BK) : null].filter(Boolean);
-const primary = (env.STORE_PRIMARY === 's3' && S3 && STORES.find(s => s.name === 's3')) || STORES.find(s => s.name === 'blob') || STORES[0] || blobStore;
+// с 13.11.2026 (решение Рифата): если ключи R2 заданы, основное хранилище — Cloudflare R2, в Vercel Blob больше не пишем.
+// Blob остается только запасным чтением старых файлов, которых еще нет в R2 (пока жив BLOB_READ_WRITE_TOKEN).
+// STORE_PRIMARY=blob возвращает прежнюю схему (основное Blob, копия в R2).
+const blobBack = env.BLOB_READ_WRITE_TOKEN ? blobStore : null, r2 = S3 ? s3store(S3) : null, bk = BK ? s3store(BK) : null;
+const r2main = !!r2 && env.STORE_PRIMARY !== 'blob';
+export const STORES = (r2main ? [r2, bk] : [blobBack, r2, bk]).filter(Boolean);
+const primary = STORES[0] || blobStore;
 const mirrors = STORES.filter(s => s !== primary);
+const readBack = r2main && blobBack ? [blobBack] : [];
 // ссылка Vercel Blob → путь файла: в S3 ключ равен пути
 const pathOf = x => { const s = String(x); if (!/^https?:\/\//.test(s)) return s; try { return decodeURIComponent(new URL(s).pathname.replace(/^\//, '')); } catch (e) { return s; } };
 const mirror = (what, fn) => Promise.all(mirrors.map(m => fn(m).catch(e => console.error('store mirror', m.name, what, e.message))));
@@ -66,16 +72,31 @@ export async function put(p, body, o = {}) { const r = await primary.put(p, body
 export async function get(p, o) {
   try { const r = await primary.get(p, o); if (r) return r; } catch (e) { if (!mirrors.length) throw e; console.error('store get', primary.name, e.message); }
   // основное хранилище недоступно или файла там нет: берем из копии
-  for (const m of mirrors) { try { const r = await m.get(p, o); if (r) return r; } catch (e) {} } return null;
+  for (const m of [...mirrors, ...readBack]) { try { const r = await m.get(p, o); if (r) return r; } catch (e) {} } return null;
 }
-export const list = o => primary.list(o);
-export async function del(x) { const ps = [].concat(x); await primary.del(primary.name === 'blob' ? x : ps.map(pathOf)); await mirror('del', m => m.del(m.name === 'blob' ? ps.map(pathOf) : ps.map(pathOf))); }
-export const storeInfo = () => ({ primary: primary.name, mirrors: mirrors.map(m => m.name) });
+// до конца переноса список собирается из R2 и из Blob: сначала все страницы R2, потом Blob без повторов того, что уже было в R2.
+// Курсор: «p:…» — страница R2, «b:…» — страница Blob. После переноса и удаления Blob список идет только из R2.
+export async function list(o = {}) {
+  if (!readBack.length) return primary.list(o);
+  const c = o.cursor ? String(o.cursor) : 'p:', phase = c[0], cur = c.slice(2) || undefined, out = [];
+  let seen = new Set();
+  if (phase === 'p') { const r = await primary.list({ ...o, cursor: cur }); out.push(...r.blobs); seen = new Set(r.blobs.map(b => b.pathname));
+    if (r.hasMore) return { blobs: out, hasMore: true, cursor: 'p:' + r.cursor }; }
+  const r = await readBack[0].list({ ...o, cursor: phase === 'b' ? cur : undefined }).catch(() => ({ blobs: [], hasMore: false }));
+  out.push(...r.blobs.filter(b => !seen.has(b.pathname)).map(b => ({ ...b, url: b.pathname })));
+  return { blobs: out, hasMore: !!r.hasMore, cursor: r.hasMore ? 'b:' + r.cursor : undefined };
+}
+export async function del(x) { const ps = [].concat(x); await primary.del(primary.name === 'blob' ? x : ps.map(pathOf)); await mirror('del', m => m.del(m.name === 'blob' ? ps.map(pathOf) : ps.map(pathOf)));
+  // удаленное не должно вернуться из старой копии в Blob через запасное чтение
+  for (const m of readBack) await m.del(ps.map(pathOf)).catch(e => console.error('store del blob', e.message)); }
+export const storeInfo = () => ({ primary: primary.name, mirrors: mirrors.map(m => m.name), readBack: readBack.map(m => m.name) });
 /** Копия всех файлов основного хранилища в остальные: пачками, по курсору (кнопка в Администрировании). */
+// при R2 основном копирует оставшееся из Vercel Blob в R2 (перенос), иначе из основного в копии
 export async function copyBatch(cursor, limit = 200) {
-  const r = await primary.list({ limit, cursor }); let n = 0;
-  for (const b of r.blobs) { const g = await primary.get(b.pathname, { access: 'private', useCache: false }).catch(() => null); if (!g || !g.stream) continue;
+  const src = readBack[0] || primary, dst = readBack.length ? [primary, ...mirrors] : mirrors;
+  const r = await src.list({ limit, cursor }); let n = 0;
+  for (const b of r.blobs) { const g = await src.get(b.pathname, { access: 'private', useCache: false }).catch(() => null); if (!g || !g.stream) continue;
     const ch = []; for await (const c of g.stream) ch.push(Buffer.from(c)); const body = Buffer.concat(ch);
-    await Promise.all(mirrors.map(m => m.put(b.pathname, body, { access: 'private', contentType: b.pathname.endsWith('.json') ? 'application/json' : 'application/octet-stream', addRandomSuffix: false, allowOverwrite: true }))); n++; }
+    await Promise.all(dst.map(m => m.put(b.pathname, body, { access: 'private', contentType: b.pathname.endsWith('.json') ? 'application/json' : 'application/octet-stream', addRandomSuffix: false, allowOverwrite: true }))); n++; }
   return { copied: n, cursor: r.hasMore ? r.cursor : null };
 }
