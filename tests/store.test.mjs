@@ -21,5 +21,7 @@ test('R2 основное: запись только в R2, старое из Bl
   assert.equal(r2.get('users/a.json'), '{"a":1}'); assert.equal(blob.has('users/a.json'), false, 'в Blob не пишем');
   blob.set('users/old.json', '{"old":1}');
   assert.equal(await txt(await S.get('users/old.json')), '{"old":1}', 'старый файл из Blob');
+  await S.del('users/old.json'); assert.equal(await S.get('users/old.json'), null, 'удаленное не возвращается из Blob');
+  blob.set('users/old.json', '{"old":1}');
   const c = await S.copyBatch(); assert.equal(c.copied, 1); assert.equal(r2.get('users/old.json'), '{"old":1}');
 });
