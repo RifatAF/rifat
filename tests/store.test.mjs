@@ -9,7 +9,7 @@ mock.module('@vercel/blob', { namedExports: {
   del: async ps => [].concat(ps).forEach(p => blob.delete(p)) } });
 globalThis.fetch = async (url, o) => { const u = new URL(url), key = decodeURIComponent(u.pathname.split('/').slice(2).join('/'));
   if (o.method === 'PUT') { r2.set(key, String(o.body)); return new Response('', { status: 200 }); }
-  if (o.method === 'DELETE') { r2.delete(key); return new Response('', { status: 204 }); }
+  if (o.method === 'DELETE') { r2.delete(key); return new Response(null, { status: 204 }); }
   return r2.has(key) ? new Response(r2.get(key), { status: 200 }) : new Response('', { status: 404 }); };
 Object.assign(process.env, { BLOB_READ_WRITE_TOKEN: 'x', S3_KEY: 'k', S3_SECRET: 's' }); delete process.env.STORE_PRIMARY;
 const S = await import('../api/_store.js');
