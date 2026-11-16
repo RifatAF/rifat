@@ -68,7 +68,7 @@ const LOAD = {
   ex_band_row_low: { shoulder: 1, elbow: 1, wrist: 1 }, ex_sleeper_stretch: { shoulder: 2 }, ex_lat_roll_mfr: { shoulder: 1, upper_back: 1 },
   ex_band_ext_rot: { shoulder: 1, elbow: 1 }, ex_wall_er_iso: { shoulder: 1, wrist: 1 }, ex_calf_wall_stretch: { foot: 2, knee: 1 },
   ex_it_roll_mfr: { hip: 1, knee: 1, wrist: 1, shoulder: 1 }, ex_quad_set: { knee: 1 }, ex_adductor_squeeze: { hip: 1, knee: 1 },
-  ex_shin_roll_mfr: { foot: 1, wrist: 1 }, ex_short_foot: { foot: 1 }, ex_calf_raise_axis: { foot: 2, knee: 1 },
+  ex_shin_roll_mfr: { foot: 1, wrist: 1 }, ex_9090_hip_lift: { low_back: 1, hip: 1 }, ex_lateral_breath: { low_back: 1, shoulder: 1 }, ex_plantar_mfr: { foot: 1 }, ex_knee_to_wall: { foot: 2, knee: 1 }, ex_short_foot: { foot: 1 }, ex_calf_raise_axis: { foot: 2, knee: 1 },
 };
 const base = id => id.replace(/_(left|right)$/, '');
 export const loadOf = id => LOAD[base(id)] || {};
