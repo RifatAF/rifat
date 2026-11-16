@@ -422,7 +422,7 @@ export function patternZones(q, kv) {
   const P = Object.fromEntries((C.patterns || []).map(p => [p.id, p])), B = q.by || {}, out = [], seen = new Set(), E = QERR;
   const avg = (views, k) => { const v = views.map(id => ((B[id] || []).find(m => m.key === k && !m.suspect) || {}).v).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
   const put = (pid, tight, weak, c, d) => { const p = P[pid]; if (!p) return;
-    for (const [ids, k, sides] of [[p.tight, 'SHORT', tight], [p.weak, 'WEAK', weak]]) for (const id of ids) for (const sd of sides) { const key = id + ':' + sd;
+    for (const [ids, k, sides] of [[p.tight, 'SHORT', tight], [p.hyper || [], 'HYPER', tight], [p.weak, 'WEAK', weak]]) for (const id of ids) for (const sd of sides) { const key = id + ':' + sd;
       if (!C.muscles[id] || seen.has(key)) continue; seen.add(key); out.push({ id, side: sd, k, key, p: pid, d: c ? 1 : d || 2, ...(c ? { c: 1 } : {}) }); } };
   const both = ['RIGHT', 'LEFT'], hf = avg(['right', 'left'], 'headForward'), sh = avg(['right', 'left'], 'shoulderShift'), hp = avg(['right', 'left'], 'hipShift'), pt = avg(['front', 'back'], 'pelvicTilt');
   if (hf > 12) put('neck', both, both, false, split(B, 'headForward') ? 1 : hf > 22 ? 3 : hf > 16 ? 2 : 1);
@@ -450,18 +450,26 @@ export function patternZones(q, kv) {
 export function chainZones(q, seenKeys = new Set(), have = new Set(), base = []) {
   const B = q.by || {}, sv = k => { const v = ['right', 'left'].map(id => ((B[id] || []).find(m => m.key === k && !m.suspect) || {}).v).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
   const fv = k => { const v = ['front', 'back'].map(id => ((B[id] || []).find(m => m.key === k && !m.suspect) || {}).v).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
-  const sh = sv('shoulderShift'), hp = sv('hipShift'), kn = sv('kneeHyper'), hf = sv('headForward'), pt = fv('pelvicTilt'), E = { ...QERR, shoulderShift: mErr(B, 'shoulderShift'), hipShift: mErr(B, 'hipShift') }, out = [];
+  const sh = sv('shoulderShift'), hp = sv('hipShift'), kn = sv('kneeHyper'), hf = sv('headForward'), pt = fv('pelvicTilt'), tl = fv('trunkLateral'), E = { ...QERR, shoulderShift: mErr(B, 'shoulderShift'), hipShift: mErr(B, 'hipShift') }, out = [];
   // одна функция, противоположные задачи: сгибатели бедра не бывают одновременно «слабые» (sway back) и «зажатые» (колено согнуто)
   const SYN = { iliopsoas: 'hipflex', rectus_fem: 'hipflex' }, pol = k => k === 'SHORT' ? 1 : k === 'WEAK' ? -1 : 0;
   const clash = (id, k) => SYN[id] && [...base, ...out].some(z => SYN[z.id] === SYN[id] && pol(z.k) * pol(k) < 0);
   const add = (id, k, sides = ['RIGHT', 'LEFT']) => { if (!C.muscles[id] || clash(id, k)) return; for (const sd of sides) { const key = id + ':' + sd; if (seenKeys.has(key)) continue; seenKeys.add(key); out.push({ id, side: sd, k, key, c: 1, d: 1 }); } };
   const fwd = (Number.isFinite(sh) ? sh : 0) + (Number.isFinite(hp) ? hp : 0); // плечо относительно лодыжки, см
   // порядок = сила оснований: нагрузка на икры и бедро (измерения ЭМГ и сил), затем позы по Kendall
-  if (fwd > 2 * E.shoulderShift || (hf > 2 * E.headForward && sh > E.shoulderShift)) { add('soleus', 'SHORT'); add('calf', 'SHORT'); }
-  if (kn < -E.kneeHyper) add('rectus_fem', 'SHORT');
+  // правила 16.11.2026 (кейс «Владимир», решение Рифата, docs/clinical/chain_rules.md): таз впереди лодыжки — тоже тело впереди стоп,
+  // камбаловидная и стопа тормозят падение вперед; согнутое колено учитываем от двух погрешностей (4° у Владимира был шум)
+  const ahead = hp > E.hipShift, sway = ahead && sh < -E.shoulderShift, bent = kn < -2 * E.kneeHyper;
+  if (fwd > 2 * E.shoulderShift || (hf > 2 * E.headForward && sh > E.shoulderShift) || ahead) { add('soleus', 'SHORT'); add('calf', 'SHORT'); }
+  // sway back: задняя поверхность бедра удлинена и держит таз от падения вперед — мягко укрепить, не растягивать; работу с нее снимают ягодицы
+  if (sway) { add('hamstrings', 'HYPER'); add('glute_max', 'WEAK'); add('transversus', 'WEAK'); }
+  if (bent) add('rectus_fem', 'SHORT');
   if (Math.abs(pt) > E.pelvicTilt) { const low = pt > 0 ? 'RIGHT' : 'LEFT', high = low === 'RIGHT' ? 'LEFT' : 'RIGHT'; add('glute_min', 'WEAK', [high]); add('adductors', 'SHORT', [high]); add('tfl', 'SHORT', [low]); }
-  if (kn < -E.kneeHyper) { add('iliopsoas', 'SHORT'); add('hamstrings', 'SHORT'); }
-  if (hp > E.hipShift && sh < -E.shoulderShift) { add('hamstrings', 'SHORT'); add('transversus', 'WEAK'); }
+  // перекос таза и корпус ушел в ту же сторону (изгиба поясницы нет, правило pelvis_rot молчит): квадратная на низкой стороне
+  // держит корпус и перегружена — расслабить, и сразу укрепить среднюю ягодичную той же стороны
+  if (Math.abs(pt) > E.pelvicTilt && Number.isFinite(tl) && Math.abs(tl) > E.trunkLateral && Math.sign(tl) === Math.sign(pt) && Math.abs(tl - pt) <= Math.hypot(E.trunkLateral, E.pelvicTilt)) {
+    const low = pt > 0 ? 'RIGHT' : 'LEFT'; add('ql', 'SHORT', [low]); add('glute_med', 'WEAK', [low]); }
+  if (bent) { add('iliopsoas', 'SHORT'); if (!ahead) add('hamstrings', 'SHORT'); }
   if (sh > E.shoulderShift) { add('iliopsoas', 'SHORT'); add('rectus_fem', 'SHORT'); add('erector', 'HYPER'); add('multifidus', 'WEAK'); }
   // до 7 мест; икроножная с камбаловидной и две мышцы бедра занимают по одному; мышцы из основного списка не дублируем
   const slot = id => ({ soleus: 'calf' })[id] || id, mus = new Set(), ok = new Set();
@@ -496,7 +504,15 @@ const zSpots = zones => zones.map(z => ({ ...z, key: z.key || z.id + ':' + z.sid
 // Зажата или перегружена: расслабить ее и укрепить антагониста (грудные → ромбовидные).
 // Слабая: укрепить ее и расслабить того, кто ее перегружает (ягодицы → сгибатели бедра), затем в движении.
 // Круги: сначала главное для каждой зоны, потом пары, потом движение; одна мышца с двух сторон идет парой упражнений.
-export function chainEx(zones, max = 8, pains = null, { add = true } = {}) {
+const NEUTRAL = new Set(['ex_9090_hip_lift', 'ex_lateral_breath', 'ex_tva_breath', 'ex_posterior_tilt']);
+/** Запреты по замеру: таз впереди лодыжки — не растягивать заднюю поверхность бедра (она удлинена и держит таз). */
+export function bansOf(by) { const v = ['right', 'left'].map(id => (((by || {})[id] || []).find(m => m.key === 'hipShift' && !m.suspect) || {}).v).filter(Number.isFinite);
+  return v.length && v.reduce((a, b) => a + b, 0) / v.length > mErr(by || {}, 'hipShift') ? new Set(['ex_hamstring_stretch']) : null; }
+/** Колени смотрят наружу больше 6° (вид спереди или сзади): подсказка про разворот стоп. */
+export function kneeOutNote(by) { const v = k => ['front', 'back'].map(id => (((by || {})[id] || []).find(m => m.key === k && !m.suspect) || {}).v).filter(Number.isFinite);
+  const out = ['kneeR', 'kneeL'].some(k => { const a = v(k); return a.length && a.reduce((x, y) => x + y, 0) / a.length < -6; });
+  return out ? 'Колени смотрят наружу: разрешите стопам естественный разворот на 10–15°, не ставьте их параллельно силой, пока не вернутся внутренняя ротация бедра и подвижность голеностопа.' : ''; }
+export function chainEx(zones, max = 8, pains = null, { add = true, ban = null } = {}) {
   const ex = id => C.exercises[id], out = [], why = {}, rank = {}, groups = new Map(), ORD = { SHORT: 0, WEAK: 1, HYPER: 2 };
   for (const z of zones || []) { const k = z.id + ':' + z.k; if (!groups.has(k)) groups.set(k, { id: z.id, k: z.k, sides: new Set() }); groups.get(k).sides.add(z.side === 'RIGHT' ? 'right' : 'left'); }
   const nm = id => ((C.muscles[id] || {}).name || id).toLowerCase(), rounds = [[], [], []];
@@ -507,26 +523,47 @@ export function chainEx(zones, max = 8, pains = null, { add = true } = {}) {
     const p = m.plan || {}, ant = m.antagonist && C.muscles[m.antagonist];
     if (g.k === 'WEAK') { rounds[0].push([g, [...(p.isolate || []), ...(m.activate || [])], `${nm(g.id)}: укрепить`]);
       const subs = (p.subs || []).filter(x => C.muscles[x]).slice(0, 1).map(nm); rounds[1].push([g, p.release || [], subs.length ? `${subs.join(', ')}: расслабить, работает вместо «${nm(g.id)}»` : `${nm(g.id)}: снять перегруз`]); rounds[2].push([g, p.integrate || [], `${nm(g.id)}: в движении`]); }
-    else { rounds[0].push([g, releaseFor(m, g.k, ex), `${nm(g.id)}: расслабить`]);
+    else { rounds[0].push([g, releaseFor(m, g.k, ex), `${nm(g.id)}: ${g.k === 'HYPER' ? 'мягко укрепить' : 'расслабить'}`]);
       // зажатую без антагониста в базе не укрепляем; перегруженную можно мягко
       if (ant) rounds[1].push([g, [...((ant.plan && ant.plan.isolate) || []), ...(ant.activate || [])], `${nm(m.antagonist)}: укрепить, пара к «${nm(g.id)}»`]);
       else if (g.k === 'HYPER') rounds[1].push([g, m.activate || [], `${nm(g.id)}: мягко укрепить`]); } }
   // не растягиваем то, что в плане слабое или перерастянутое: выпад для сгибателей бедра при sway back, где они слабые (аудит 31.10.2026)
   const long = new Set((zones || []).filter(z => z.k !== 'SHORT').map(z => z.id)), base = x => x.replace(/_(left|right|\{s\})$/, '');
   const hits = x => Object.entries(C.muscles).some(([id, m]) => long.has(id) && (m.relax || []).some(r => base(r) === base(x)));
+  // лимит считается по упражнениям, а не по сторонам: «МФР стопы» левой и правой — одно упражнение в плане
+  const nB = l => new Set(l.map(base)).size;
+  // протокол коррекции первым (16.11.2026, Рифат): стопа и голень → квадратная с дыханием в бок → таз в нейтраль 90/90 →
+  // средняя ягодичная той же стороны → большая ягодичная → межлопаточная зона. Остальные пары мышц добирают оставшиеся места
+  const G = (id, k) => gs.find(g => g.id === id && g.k === k), sd = g => [...g.sides];
+  const proto = [];
+  { const f = G('soleus', 'SHORT') || G('calf', 'SHORT'); if (f) proto.push([sd(f), ['ex_plantar_mfr_{s}', 'ex_knee_to_wall_{s}'], 'стопа и голень: снять тормоз перед работой с тазом']); }
+  { const q = G('ql', 'SHORT'); if (q) proto.push([sd(q), ['ex_lateral_breath_{s}'], 'квадратная поясницы: расслабить, раскрыть бок'], [sd(q), ['ex_side_plank_knees_{s}'], 'средняя ягодичная: укрепить сразу после квадратной']); }
+  if (G('hamstrings', 'HYPER')) proto.push([['left'], ['ex_9090_hip_lift'], 'задняя поверхность бедра: мягко укрепить, таз в нейтраль']);
+  { const m = G('glute_med', 'WEAK'); if (m && !G('ql', 'SHORT')) proto.push([sd(m), ['ex_glute_med_wall_{s}'], 'средняя ягодичная: укрепить']); }
+  { const m = G('glute_max', 'WEAK'); if (m) proto.push([['left'], ['ex_band_glute_bridge'], 'большая ягодичная: укрепить, снять работу с задней поверхности бедра']); }
+  { const m = G('rhomboid', 'WEAK') || G('lower_trap', 'WEAK') || G('thoracic_ext', 'WEAK'); if (m) proto.push([['left'], ['ex_y_raise'], 'межлопаточная зона: укрепить']); }
+  for (const [sides, list, reason] of proto) for (const x of list) { if (ban && ban.has(base(x))) continue;
+    const ids = sides.map(s2 => x.replace('{s}', s2)).filter((id, i, l) => ex(id) && l.indexOf(id) === i && !out.includes(id));
+    if (ids.length && nB([...out, ...ids]) <= max) { out.push(...ids); ids.forEach(id => { why[id] = reason; rank[id] = 1; }); } }
   for (const r of rounds) for (const [g, list, reason] of r) for (const x of list) {
     if (/расслабить|снять/.test(reason) && hits(x)) continue;
+    if (ban && ban.has(base(x))) continue;
     const ids = [...g.sides].map(sd => x.replace('{s}', sd)).filter((id, i, l) => ex(id) && l.indexOf(id) === i); if (!ids.length) continue;
-    const add = ids.filter(id => !out.includes(id)); if (add.length && out.length + add.length <= max) { out.push(...add); add.forEach(id => { why[id] = reason; rank[id] = r === rounds[2] ? 2 : /расслабить|снять/.test(reason) ? 0 : 1; }); } break; }
-  // порядок занятия: сначала расслабить зажатые, затем активировать слабые, в конце движение
-  const ids = out.map((id, i) => [id, i]).sort((x, y) => (rank[x[0]] - rank[y[0]]) || x[1] - y[1]).map(x => x[0]);
+    const add = ids.filter(id => !out.includes(id)); if (add.length && nB([...out, ...add]) <= max) { out.push(...add); add.forEach(id => { why[id] = reason; rank[id] = r === rounds[2] ? 2 : /расслабить|снять/.test(reason) ? 0 : 1; }); } break; }
+  // порядок занятия (16.11.2026): МФР и подвижность → растяжка → нейтраль таза (дыхание, 90/90) → активация → движение
+  const stage = id => { const e = ex(id) || {}, b = base(id);
+    if (rank[id] === 2) return 4; if (/_mfr$/.test(b) || e.category === 'подвижность' || b === 'ex_cat_cow') return 0;
+    if (e.category === 'растяжка') return 1; if (NEUTRAL.has(b)) return 2; return 3; };
+  const ids = out.map((id, i) => [id, i]).sort((x, y) => (stage(x[0]) - stage(y[0])) || x[1] - y[1]).map(x => x[0]);
   // жалобы: убрать нагрузку на больную зону, добавить упражнение по жалобе (js/complaints.js)
   if (!pains || !pains.length) return { ids, why };
   const pp = painPlan(ids, pains, { has: id => !!ex(id), max, add }); pp.added.forEach(a => { why[a.id] = 'по жалобе: ' + painLabel(a.e); });
   return { ids: pp.ids, why, pain: pp };
 }
-const autoEx = a => chainEx((a.quick || {}).zones || [], 8, a.complaints || null).ids;
-export const hwEx = a => (a.plan && Array.isArray(a.plan.ex) && a.plan.ex.length ? a.plan.ex : autoEx(a)).filter(id => C.exercises[id]).slice(0, 8);
+const autoEx = a => chainEx((a.quick || {}).zones || [], 8, a.complaints || null, { ban: bansOf((a.quick || {}).by) }).ids;
+// до 8 упражнений; левая и правая версии одного упражнения считаются одним
+export const hwEx = a => { const l = (a.plan && Array.isArray(a.plan.ex) && a.plan.ex.length ? a.plan.ex : autoEx(a)).filter(id => C.exercises[id]), seen = new Set();
+  return l.filter(id => { const b = id.replace(/_(left|right)$/, ''); if (seen.has(b)) return true; if (seen.size >= 8) return false; seen.add(b); return true; }); };
 const exLabel = id => C.exercises[id].title.split(' (')[0] + (id.endsWith('_right') ? ', правая' : id.endsWith('_left') ? ', левая' : '');
 // левая и правая версии одного упражнения в отчете одной строкой
 const exRows = ids => ids.map(id => C.exercises[id]).filter((e, i, l) => l.findIndex(x => x.title.split(' (')[0] === e.title.split(' (')[0]) === i);
@@ -752,15 +789,16 @@ const ptRows = (m, k) => { const t = m.pt; if (!t) return [m.proTest && `<b>Пр
 // степень зоны 1–3: яркость цвета на 3D и точки у названия. Без степени: цепочка 1, остальные 2
 const DEGN = ['лёгкая', 'средняя', 'выраженная'], degOf = z => z.d || (z.c ? 1 : 2);
 const degDots = (z, c) => `<span aria-label="степень ${degOf(z)} из 3" style="margin-left:8px;letter-spacing:2px;font-size:11px;vertical-align:2px">${[1, 2, 3].map(n => `<span style="color:${c};opacity:${n <= degOf(z) ? 1 : .25}">●</span>`).join('')}</span>`;
-function planBlock(zones, open = new Set(), pains = null) {
+function planBlock(zones, open = new Set(), pains = null, by = null) {
   const rows = zGroups(zones).map(([key, l]) => { const z = l[0], m = C.muscles[z.id] || {}, sd = l.length > 1 ? '' : ' ' + sideRu(z.side);
-    const ex = m.name ? exRows(chainEx(l, 3, pains, { add: false }).ids).map(e => esc(e.title.split(' (')[0])).join(' → ') : '', more = ptRows(m, z.k);
+    const ex = m.name ? exRows(chainEx(l, 3, pains, { add: false, ban: bansOf(by) }).ids).map(e => esc(e.title.split(' (')[0])).join(' → ') : '', more = ptRows(m, z.k);
     return `<details data-pg="${key}" style="padding:9px 0;border-top:1px solid var(--line-2)"${open.has(key) ? ' open' : ''}><summary style="display:block;position:relative;padding-right:24px;list-style:none;cursor:pointer;font-size:15px;line-height:1.35"><span style="position:absolute;right:0;top:4px;color:var(--sub)">${ic('chevron-down', 's')}</span><span class="pill" style="font-size:12px;padding:2px 8px;margin-right:6px;color:${TCOL[z.k]};border-color:${TCOL[z.k]}">${TASK[z.k]}</span><b>${esc(zoneName(z))}</b><span class="sub">${sd}</span>${degDots(z, ZCOL[z.k])}${(() => { const tag = l[0].p && patName(l[0].p) ? `база: ${esc(patName(l[0].p))}` : l.every(x => x.c) ? 'по цепочке' : ''; return ex || tag ? `<div class="sub" style="font-size:13px;margin-top:3px">${tag ? `<span style="color:var(--ink);opacity:.8">${tag}</span>` + (ex ? ' · ' : '') : ''}${ex}</div>` : ''; })()}</summary>
       ${more.length ? `<div class="sub" style="font-size:13px;line-height:1.4;margin-top:6px;display:flex;flex-direction:column;gap:8px">${more.map(t => `<div>${t}</div>`).join('')}</div>` : ''}
       <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">${Object.keys(ZST).map(k => `<button class="pill" data-pk="${k}" style="height:32px;font-size:12px;padding:0 10px;${k === z.k ? `color:${ZCOL[k]};border-color:${ZCOL[k]};font-weight:600` : 'opacity:.7'}">${ZST[k]}</button>`).join('')}<span style="flex:1"></span><button class="round" data-px aria-label="Убрать зону" style="width:32px;height:32px">${ic('x', 's')}</button></div>
       <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="sub" style="font-size:12px;margin-right:2px">Степень</span>${[1, 2, 3].map(n => `<button class="pill" data-pd="${n}" style="height:30px;font-size:12px;padding:0 10px;${n === degOf(z) ? `color:${ZCOL[z.k]};border-color:${ZCOL[z.k]};font-weight:600` : 'opacity:.7'}">${DEGN[n - 1]}</button>`).join('')}</div></details>`; });
   return `<div class="card" style="padding:12px 16px 12px"><div class="row"><b style="flex:1">План</b><span class="sub" style="font-size:12px">${rows.length ? 'гипотеза, проверьте руками' : ''}</span></div>
     ${rows.join('') || '<div class="sub" style="font-size:14px;padding:8px 0">По замеру выраженных зон нет</div>'}
+    ${kneeOutNote(by) ? `<div style="font-size:13px;line-height:1.4;margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--bg)">${esc(kneeOutNote(by))}</div>` : ''}
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px"><button class="btn line" id="qadd" style="height:44px;font-size:14px;padding:0 6px">${ic('plus', 's')}Зона</button><button class="btn line" id="qtpl" style="height:44px;font-size:14px;padding:0 6px">${ic('file-text', 's')}Шаблон</button><button class="btn line" id="qauto" style="height:44px;font-size:14px;padding:0 6px">${ic('rotate-ccw', 's')}Замер</button></div></div>`;
 }
 /** «Проверьте замер»: значения вне физиологии (не учтены) и расхождение правого и левого бока больше двух погрешностей
@@ -791,7 +829,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
     <p class="mt-cal">Поправка на крен телефона учтена · погрешности замера в методике</p>`;
   const $h = s => host.querySelector(s);
   const opened = new Set();
-  const plan = () => { $h('#qplan').innerHTML = planBlock(st.zones, opened, st.pains); painSum();
+  const plan = () => { $h('#qplan').innerHTML = planBlock(st.zones, opened, st.pains, st.by); painSum();
     host.querySelectorAll('[data-pg]').forEach(el => { const key = el.dataset.pg, [gid, gk] = key.split(':'), mine = z => z.id === gid && z.k === gk;
       el.ontoggle = () => el.open ? opened.add(key) : opened.delete(key);
       el.querySelectorAll('[data-pk]').forEach(b => b.onclick = () => { const k = b.dataset.pk; if (k === gk) return; st.zones.forEach(z => { if (mine(z)) z.k = k; }); opened.delete(key); opened.add(gid + ':' + k); changed(); });
@@ -816,7 +854,7 @@ function panel(host, st, { onChange = () => {}, onNoFig = () => {}, photos = {} 
     host.querySelectorAll('[data-pm]').forEach(b => b.onclick = () => { const [i, d] = b.dataset.pm.split(':'); edit(+i, e => { e.p = Math.max(0, Math.min(10, (e.p == null ? 5 : e.p) + +d)); }); });
     host.querySelectorAll('[data-pxx]').forEach(b => b.onclick = () => { const e = st.pains[+b.dataset.pxx]; if (e.t) st.pdel.push(pkey(e)); else st.pman = st.pman.filter(x => x !== e); pchg(); }); };
   function painSum() { const box = $h('#qpsum'); if (!box) return; if (!st.pains || !st.pains.length) { box.innerHTML = ''; return; }
-    const pp = chainEx(st.zones, 8, st.pains).pain || { cut: [], added: [], acute: [] }, lines = [];
+    const pp = chainEx(st.zones, 8, st.pains, { ban: bansOf(st.by) }).pain || { cut: [], added: [], acute: [] }, lines = [];
     if (pp.acute.length) lines.push(`<div style="color:#FF3B30;font-weight:600">Сильная боль: ${esc(pp.acute.map(painLabel).join(', ').toLowerCase())}. Нагрузку на эти зоны в план не даем. Сначала очная оценка; при травме, онемении, слабости в руке или ноге, ночной боли или температуре направьте к врачу.</div>`);
     const cut = [...new Map(pp.cut.map(c => [exLabel(c.id).split(',')[0], c])).values()];
     if (cut.length) lines.push(`<div><b>Убрано из плана:</b> ${cut.map(c => esc(exLabel(c.id).split(',')[0]) + ' <span class="sub">(' + esc(PZN[c.e.z].toLowerCase()) + ')</span>').join(', ')}</div>`);
@@ -872,13 +910,13 @@ async function patternSheet(onAdd) {
   const d = document.createElement('div'); d.className = 'sheet'; let side = 'RIGHT';
   const nm = id => esc(((C.muscles[id] || {}).name || id).toLowerCase());
   d.innerHTML = `<div style="max-height:86dvh;overflow:auto"><h2 style="font-size:20px">Шаблон</h2><p class="sub" style="font-size:13px;margin-top:4px">Из вашей базы коррекции. Рабочая гипотеза: подтвердите мышечными тестами и ретестом. Клиент увидит только задачи.</p>
-    <div class="group" style="margin-top:12px">${patterns.map((p, i) => `<button class="row-link" data-pt="${i}" style="text-align:left"><span style="flex:1"><b style="font-weight:600">${esc(p.name)}</b><br><small class="sub" style="font-size:12px">Расслабить: ${p.tight.map(nm).join(', ')}<br>Укрепить: ${p.weak.map(nm).join(', ')}<br>${p.auto ? `Сам по замеру: ${esc(p.auto.toLowerCase())}` : 'Только вручную: по фото не измеряется'}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>
+    <div class="group" style="margin-top:12px">${patterns.map((p, i) => `<button class="row-link" data-pt="${i}" style="text-align:left"><span style="flex:1"><b style="font-weight:600">${esc(p.name)}</b><br><small class="sub" style="font-size:12px">${p.tight.length ? `Расслабить: ${p.tight.map(nm).join(', ')}<br>` : ''}Укрепить: ${[...(p.hyper || []), ...p.weak].map(nm).join(', ')}<br>${p.auto ? `Сам по замеру: ${esc(p.auto.toLowerCase())}` : 'Только вручную: по фото не измеряется'}</small></span>${ic('chevron-right', 's chev')}</button>`).join('')}</div>
     <div id="ptside" style="display:none;margin-top:12px"><b style="font-size:15px">Где зажато (доминирующая сторона)?</b><div class="seg" style="margin-top:8px"><button data-sd="RIGHT" class="on">Справа</button><button data-sd="LEFT">Слева</button></div><button class="btn" id="ptok" style="margin-top:10px">Добавить</button></div>
     <button class="btn ghost" id="ptx" style="margin-top:8px;border:0">Отмена</button></div>`;
   document.body.appendChild(d); d.onclick = e => { if (e.target === d || e.target.id === 'ptx') d.remove(); };
   const both = ['RIGHT', 'LEFT'], opp = s => s === 'RIGHT' ? 'LEFT' : 'RIGHT';
   const apply = p => { const zs = []; const put = (id, k, sds) => { if (C.muscles[id]) for (const sd of sds) zs.push({ id, side: sd, k, key: id + ':' + sd, p: p.id }); };
-    p.tight.forEach(id => put(id, 'SHORT', p.lateral ? [side] : both)); p.weak.forEach(id => put(id, 'WEAK', p.lateral ? [opp(side)] : both));
+    p.tight.forEach(id => put(id, 'SHORT', p.lateral ? [side] : both)); (p.hyper || []).forEach(id => put(id, 'HYPER', p.lateral ? [side] : both)); p.weak.forEach(id => put(id, 'WEAK', p.lateral ? [opp(side)] : both));
     track('pattern_add', { c: p.id }, false); d.remove(); onAdd(zs); };
   d.querySelectorAll('[data-sd]').forEach(b => b.onclick = () => { side = b.dataset.sd; d.querySelectorAll('[data-sd]').forEach(x => x.classList.toggle('on', x === b)); });
   d.querySelectorAll('[data-pt]').forEach(b => b.onclick = () => { const p = patterns[+b.dataset.pt]; if (!p.lateral) return apply(p);
@@ -900,7 +938,7 @@ function addZone(onAdd) {
 }
 /** «Показать клиенту»: полный экран, крутящаяся фигура с зонами в цветах задач, 2–3 коротких фразы и задачи. Без кнопок специалиста. */
 function showClient(st, name) {
-  const d = document.createElement('div'), obs = plainObs(st.by), groups = clientGroups(st.zones), exs = exRows(chainEx(st.zones, 8, st.pains || null).ids).slice(0, 6);
+  const d = document.createElement('div'), obs = plainObs(st.by), groups = clientGroups(st.zones), exs = exRows(chainEx(st.zones, 8, st.pains || null, { ban: bansOf(st.by) }).ids).slice(0, 6), kno = kneeOutNote(st.by);
   d.style.cssText = 'position:fixed;inset:0;z-index:60;background:' + (matte() ? '#161617' : '#080C13') + ';color:#fff;overflow:auto;padding:calc(env(safe-area-inset-top) + 16px) 20px calc(env(safe-area-inset-bottom) + 24px)';
   d.innerHTML = `<button id="scx" aria-label="Закрыть" style="position:absolute;z-index:2;right:16px;top:calc(env(safe-area-inset-top) + 12px);width:48px;height:48px;border-radius:50%;border:0;background:rgba(255,255,255,.12);color:#fff;font-size:22px">✕</button>
     <div style="font-size:15px;opacity:.7;min-height:18px">${esc(name || '')}</div><div style="font-size:28px;font-weight:800;line-height:1.1;margin-top:4px;padding-right:56px">Ваше положение тела</div>
@@ -911,6 +949,7 @@ function showClient(st, name) {
       ${groups.map(g => `<div style="margin-top:14px"><div style="font-size:14px;font-weight:800;letter-spacing:.04em;color:${TCOL[g.k]}">${g.t.toUpperCase()}</div><div style="font-size:20px;font-weight:600;line-height:1.35;margin-top:2px">${esc(g.list.join(', '))}</div></div>`).join('')}`
       : obs.length ? `<div style="font-size:14px;opacity:.7;margin-top:18px">Что видно на фото</div>${obs.map(t => `<div style="font-size:20px;font-weight:700;line-height:1.3;margin-top:6px">${t}</div>`).join('')}` : ''}
     ${exs.length ? `<div style="font-size:14px;font-weight:800;letter-spacing:.04em;opacity:.7;margin-top:20px">УПРАЖНЕНИЯ</div>${exs.map((x, n) => `<div style="font-size:18px;line-height:1.35;margin-top:8px"><b>${n + 1}. ${esc(x.title.split(' (')[0])}</b>${x.dose ? `<span style="opacity:.7"> · ${esc(x.dose)}</span>` : ''}</div>`).join('')}` : ''}
+    ${kno ? `<div style="font-size:16px;line-height:1.4;margin-top:14px;opacity:.85">${esc(kno)}</div>` : ''}
     <div style="font-size:13px;opacity:.55;margin-top:22px">Типовая фигура в вашей позе по фото. Не диагноз.</div>`;
   document.body.appendChild(d); let v3 = null; d.querySelector('#scx').onclick = () => { if (v3) v3.dispose(); d.remove(); };
   asClient(() => body3D(d.querySelector('#sc3'), zSpots(st.zones), null, { pose: poseOf({ by: st.by, h: st.h || 170 }, st.gain), noMarks: true }))
@@ -1119,6 +1158,7 @@ export async function renderReport(a, c, photos) {
   const exs = exRows(hwEx(a)).slice(0, 6);
   if (exs.length || (a.plan && a.plan.text)) { y += 20; head('Упражнения', '', INK); y += 10; g.fillStyle = INK; g.font = `400 25px ${F}`;
     exs.forEach((e, n) => { y = wrap(g, `${n + 1}. ${e.title.split(' (')[0]}${e.dose ? ': ' + e.dose : ''}`, PAD, y + 30, W - PAD * 2, 34) - 4; });
+    if (kneeOutNote(qz.by)) { g.fillStyle = SUB; g.font = `400 23px ${F}`; y = wrap(g, kneeOutNote(qz.by), PAD, y + 34, W - PAD * 2, 32); g.fillStyle = INK; g.font = `400 25px ${F}`; }
     if (a.plan && a.plan.text) for (const para of a.plan.text.split('\n')) y = wrap(g, para, PAD, y + 30, W - PAD * 2, 34);
     y += 60; }
   // измерено: только значения вне погрешности, остальные одной строкой (специалист видит все в приложении)
