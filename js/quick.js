@@ -463,6 +463,9 @@ export function chainZones(q, seenKeys = new Set(), have = new Set(), base = [])
   if (fwd > 2 * E.shoulderShift || (hf > 2 * E.headForward && sh > E.shoulderShift) || ahead) { add('soleus', 'SHORT'); add('calf', 'SHORT'); }
   // sway back: задняя поверхность бедра удлинена и держит таз от падения вперед — мягко укрепить, не растягивать; работу с нее снимают ягодицы
   if (sway) { add('hamstrings', 'HYPER'); add('glute_max', 'WEAK'); add('transversus', 'WEAK'); }
+  // таз впереди лодыжки без sway (плечи не позади таза): сгибатели бедра держат таз впереди и тормозят ягодицы (нижний перекрестный, Janda) —
+  // подвздошно-поясничная «зажатая», большая ягодичная «слабая» (кейс 16.11.2026: после порога колена 6° подвздошная пропала)
+  if (ahead && !sway) { add('iliopsoas', 'SHORT'); add('glute_max', 'WEAK'); }
   if (bent) add('rectus_fem', 'SHORT');
   if (Math.abs(pt) > E.pelvicTilt) { const low = pt > 0 ? 'RIGHT' : 'LEFT', high = low === 'RIGHT' ? 'LEFT' : 'RIGHT'; add('glute_min', 'WEAK', [high]); add('adductors', 'SHORT', [high]); add('tfl', 'SHORT', [low]); }
   // перекос таза и корпус ушел в ту же сторону (изгиба поясницы нет, правило pelvis_rot молчит): квадратная на низкой стороне
@@ -470,7 +473,7 @@ export function chainZones(q, seenKeys = new Set(), have = new Set(), base = [])
   if (Math.abs(pt) > E.pelvicTilt && Number.isFinite(tl) && Math.abs(tl) > E.trunkLateral && Math.sign(tl) === Math.sign(pt) && Math.abs(tl - pt) <= Math.hypot(E.trunkLateral, E.pelvicTilt)) {
     const low = pt > 0 ? 'RIGHT' : 'LEFT'; add('ql', 'SHORT', [low]); add('glute_med', 'WEAK', [low]); }
   if (bent) { add('iliopsoas', 'SHORT'); if (!ahead) add('hamstrings', 'SHORT'); }
-  if (sh > E.shoulderShift) { add('iliopsoas', 'SHORT'); add('rectus_fem', 'SHORT'); add('erector', 'HYPER'); add('multifidus', 'WEAK'); }
+  if (sh > E.shoulderShift) { add('iliopsoas', 'SHORT'); add('rectus_fem', 'SHORT'); add('erector', 'HYPER'); add('multifidus', 'WEAK'); add('glute_max', 'WEAK'); }
   // до 7 мест; икроножная с камбаловидной и две мышцы бедра занимают по одному; мышцы из основного списка не дублируем
   const slot = id => ({ soleus: 'calf' })[id] || id, mus = new Set(), ok = new Set();
   for (const z of out) { if (have.has(z.id)) continue; if (!mus.has(slot(z.id)) && mus.size >= 7) continue; mus.add(slot(z.id)); ok.add(z.id); }
@@ -538,9 +541,10 @@ export function chainEx(zones, max = 8, pains = null, { add = true, ban = null }
   const proto = [];
   { const f = G('soleus', 'SHORT') || G('calf', 'SHORT'); if (f) proto.push([sd(f), ['ex_plantar_mfr_{s}', 'ex_knee_to_wall_{s}'], 'стопа и голень: снять тормоз перед работой с тазом']); }
   { const q = G('ql', 'SHORT'); if (q) proto.push([sd(q), ['ex_lateral_breath_{s}'], 'квадратная поясницы: расслабить, раскрыть бок'], [sd(q), ['ex_side_plank_knees_{s}'], 'средняя ягодичная: укрепить сразу после квадратной']); }
+  { const h = G('iliopsoas', 'SHORT'); if (h) proto.push([sd(h), ['ex_hip_flexor_stretch_{s}'], 'подвздошно-поясничная: расслабить, чтобы включились ягодицы']); }
   if (G('hamstrings', 'HYPER')) proto.push([['left'], ['ex_9090_hip_lift'], 'задняя поверхность бедра: мягко укрепить, таз в нейтраль']);
   { const m = G('glute_med', 'WEAK'); if (m && !G('ql', 'SHORT')) proto.push([sd(m), ['ex_glute_med_wall_{s}'], 'средняя ягодичная: укрепить']); }
-  { const m = G('glute_max', 'WEAK'); if (m) proto.push([['left'], ['ex_band_glute_bridge'], 'большая ягодичная: укрепить, снять работу с задней поверхности бедра']); }
+  { const m = G('glute_max', 'WEAK'); if (m) proto.push([['left'], ['ex_band_glute_bridge'], 'большая ягодичная: укрепить']); }
   { const m = G('rhomboid', 'WEAK') || G('lower_trap', 'WEAK') || G('thoracic_ext', 'WEAK'); if (m) proto.push([['left'], ['ex_y_raise'], 'межлопаточная зона: укрепить']); }
   for (const [sides, list, reason] of proto) for (const x of list) { if (ban && ban.has(base(x))) continue;
     const ids = sides.map(s2 => x.replace('{s}', s2)).filter((id, i, l) => ex(id) && l.indexOf(id) === i && !out.includes(id));
