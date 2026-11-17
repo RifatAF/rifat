@@ -6,3 +6,5 @@ models/
 vendor/
 voice/
 public/
+.wrangler/
+.dev.vars

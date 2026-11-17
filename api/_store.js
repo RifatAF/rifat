@@ -54,46 +54,57 @@ const blobStore = { name: 'blob',
   put: async (p, body, o) => (await blob()).put(p, body, o), get: async (p, o) => (await blob()).get(p, o),
   list: async o => (await blob()).list(o), del: async ps => (await blob()).del(ps) };
 
-const S3 = s3cfg('S3_'), BK = s3cfg('BACKUP_S3_');
-// с 13.11.2026 (решение Рифата): если ключи R2 заданы, основное хранилище — Cloudflare R2, в Vercel Blob больше не пишем.
+// Cloudflare Worker (worker/index.js) кладет сюда привязку R2 (env.DATA): чтение и запись напрямую, без ключей S3
+function bindStore(B) {
+  return { name: 's3',
+    async put(p, body, o = {}) { await B.put(p, body, { httpMetadata: { contentType: o.contentType || 'application/octet-stream' } }); return { pathname: p, url: p }; },
+    async get(p) { const r = await B.get(p); return r ? { stream: r.body, pathname: p } : null; },
+    async list({ prefix = '', limit = 1000, cursor } = {}) { const r = await B.list({ prefix, limit: Math.min(1000, limit), cursor });
+      return { blobs: r.objects.map(x => ({ pathname: x.key, url: x.key, size: x.size, uploadedAt: x.uploaded })), hasMore: !!r.truncated, cursor: r.truncated ? r.cursor : undefined }; },
+    async del(ps) { await B.delete([].concat(ps)); } };
+}
+// хранилища выбираются при первом обращении: в Worker привязка R2 появляется только с первым запросом
+// с 13.11.2026 (решение Рифата): если есть R2 (привязка или ключи), основное хранилище — Cloudflare R2, в Vercel Blob больше не пишем.
 // Blob остается только запасным чтением старых файлов, которых еще нет в R2 (пока жив BLOB_READ_WRITE_TOKEN).
 // STORE_PRIMARY=blob возвращает прежнюю схему (основное Blob, копия в R2).
-const blobBack = env.BLOB_READ_WRITE_TOKEN ? blobStore : null, r2 = S3 ? s3store(S3) : null, bk = BK ? s3store(BK) : null;
-const r2main = !!r2 && env.STORE_PRIMARY !== 'blob';
-export const STORES = (r2main ? [r2, bk] : [blobBack, r2, bk]).filter(Boolean);
-const primary = STORES[0] || blobStore;
-const mirrors = STORES.filter(s => s !== primary);
-const readBack = r2main && blobBack ? [blobBack] : [];
+let CFG = null;
+function cfg() { if (CFG) return CFG;
+  const S3 = s3cfg('S3_'), BK = s3cfg('BACKUP_S3_'), bind = globalThis.__BP_R2;
+  const blobBack = env.BLOB_READ_WRITE_TOKEN ? blobStore : null, r2 = bind ? bindStore(bind) : S3 ? s3store(S3) : null, bk = BK ? s3store(BK) : null;
+  const r2main = !!r2 && env.STORE_PRIMARY !== 'blob';
+  const stores = (r2main ? [r2, bk] : [blobBack, r2, bk]).filter(Boolean), primary = stores[0] || blobStore;
+  return (CFG = { stores, primary, mirrors: stores.filter(s => s !== primary), readBack: r2main && blobBack ? [blobBack] : [] }); }
+export const STORES = new Proxy([], { get: (t, k) => cfg().stores[k] });
 // ссылка Vercel Blob → путь файла: в S3 ключ равен пути
 const pathOf = x => { const s = String(x); if (!/^https?:\/\//.test(s)) return s; try { return decodeURIComponent(new URL(s).pathname.replace(/^\//, '')); } catch (e) { return s; } };
-const mirror = (what, fn) => Promise.all(mirrors.map(m => fn(m).catch(e => console.error('store mirror', m.name, what, e.message))));
+const mirror = (what, fn) => Promise.all(cfg().mirrors.map(m => fn(m).catch(e => console.error('store mirror', m.name, what, e.message))));
 
-export async function put(p, body, o = {}) { const r = await primary.put(p, body, o); await mirror('put ' + p, m => m.put(p, body, o)); return r; }
+export async function put(p, body, o = {}) { const r = await cfg().primary.put(p, body, o); await mirror('put ' + p, m => m.put(p, body, o)); return r; }
 export async function get(p, o) {
-  try { const r = await primary.get(p, o); if (r) return r; } catch (e) { if (!mirrors.length) throw e; console.error('store get', primary.name, e.message); }
+  try { const r = await cfg().primary.get(p, o); if (r) return r; } catch (e) { if (!cfg().mirrors.length) throw e; console.error('store get', cfg().primary.name, e.message); }
   // основное хранилище недоступно или файла там нет: берем из копии
-  for (const m of [...mirrors, ...readBack]) { try { const r = await m.get(p, o); if (r) return r; } catch (e) {} } return null;
+  for (const m of [...cfg().mirrors, ...cfg().readBack]) { try { const r = await m.get(p, o); if (r) return r; } catch (e) {} } return null;
 }
 // до конца переноса список собирается из R2 и из Blob: сначала все страницы R2, потом Blob без повторов того, что уже было в R2.
 // Курсор: «p:…» — страница R2, «b:…» — страница Blob. После переноса и удаления Blob список идет только из R2.
 export async function list(o = {}) {
-  if (!readBack.length) return primary.list(o);
+  if (!cfg().readBack.length) return cfg().primary.list(o);
   const c = o.cursor ? String(o.cursor) : 'p:', phase = c[0], cur = c.slice(2) || undefined, out = [];
   let seen = new Set();
-  if (phase === 'p') { const r = await primary.list({ ...o, cursor: cur }); out.push(...r.blobs); seen = new Set(r.blobs.map(b => b.pathname));
+  if (phase === 'p') { const r = await cfg().primary.list({ ...o, cursor: cur }); out.push(...r.blobs); seen = new Set(r.blobs.map(b => b.pathname));
     if (r.hasMore) return { blobs: out, hasMore: true, cursor: 'p:' + r.cursor }; }
-  const r = await readBack[0].list({ ...o, cursor: phase === 'b' ? cur : undefined }).catch(() => ({ blobs: [], hasMore: false }));
+  const r = await cfg().readBack[0].list({ ...o, cursor: phase === 'b' ? cur : undefined }).catch(() => ({ blobs: [], hasMore: false }));
   out.push(...r.blobs.filter(b => !seen.has(b.pathname)).map(b => ({ ...b, url: b.pathname })));
   return { blobs: out, hasMore: !!r.hasMore, cursor: r.hasMore ? 'b:' + r.cursor : undefined };
 }
-export async function del(x) { const ps = [].concat(x); await primary.del(primary.name === 'blob' ? x : ps.map(pathOf)); await mirror('del', m => m.del(m.name === 'blob' ? ps.map(pathOf) : ps.map(pathOf)));
+export async function del(x) { const ps = [].concat(x); await cfg().primary.del(cfg().primary.name === 'blob' ? x : ps.map(pathOf)); await mirror('del', m => m.del(m.name === 'blob' ? ps.map(pathOf) : ps.map(pathOf)));
   // удаленное не должно вернуться из старой копии в Blob через запасное чтение
-  for (const m of readBack) await m.del(ps.map(pathOf)).catch(e => console.error('store del blob', e.message)); }
-export const storeInfo = () => ({ primary: primary.name, mirrors: mirrors.map(m => m.name), readBack: readBack.map(m => m.name) });
+  for (const m of cfg().readBack) await m.del(ps.map(pathOf)).catch(e => console.error('store del blob', e.message)); }
+export const storeInfo = () => ({ primary: cfg().primary.name, mirrors: cfg().mirrors.map(m => m.name), readBack: cfg().readBack.map(m => m.name) });
 /** Копия всех файлов основного хранилища в остальные: пачками, по курсору (кнопка в Администрировании). */
 // при R2 основном копирует оставшееся из Vercel Blob в R2 (перенос), иначе из основного в копии
 export async function copyBatch(cursor, limit = 200) {
-  const src = readBack[0] || primary, dst = readBack.length ? [primary, ...mirrors] : mirrors;
+  const src = cfg().readBack[0] || cfg().primary, dst = cfg().readBack.length ? [cfg().primary, ...cfg().mirrors] : cfg().mirrors;
   const r = await src.list({ limit, cursor }); let n = 0;
   for (const b of r.blobs) { const g = await src.get(b.pathname, { access: 'private', useCache: false }).catch(() => null); if (!g || !g.stream) continue;
     const ch = []; for await (const c of g.stream) ch.push(Buffer.from(c)); const body = Buffer.concat(ch);

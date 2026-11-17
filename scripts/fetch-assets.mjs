@@ -32,10 +32,17 @@ async function save(path, buf) { await mkdir(dirname(path), { recursive: true })
 
 // сайт собирается в public/: Vercel публикует ее целиком, вместе со скачанными файлами
 const OUT = 'public';
-const SKIP = new Set(['api', 'scripts', 'node_modules', 'public', '.git', '.vercel', 'package.json', 'package-lock.json', 'AUDIT.md', '.gitignore', '.vercelignore', 'vercel.json', '_headers', 'tests', 'docs']);
+const SKIP = new Set(['api', 'scripts', 'node_modules', 'public', '.git', '.vercel', 'package.json', 'package-lock.json', 'AUDIT.md', '.gitignore', '.vercelignore', 'vercel.json', '_headers', 'tests', 'docs', 'worker', 'wrangler.jsonc', '.wrangler']);
 await rm(OUT, { recursive: true, force: true }); await mkdir(OUT, { recursive: true });
 const { readdir } = await import('node:fs/promises');
 for (const e of await readdir('.')) if (!SKIP.has(e) && !e.endsWith('.md')) await cp(e, OUT + '/' + e, { recursive: true });
+
+// Cloudflare: заголовки безопасности и кэша для статики (public/_headers) из тех же правил, что в vercel.json
+{ const { readFile } = await import('node:fs/promises'); const vc = JSON.parse(await readFile('vercel.json', 'utf8')), lines = [];
+  for (const h of vc.headers || []) { const hs = h.headers.filter(x => !/^x-vercel/i.test(x.key)); if (!hs.length) continue;
+    const m = h.source.match(/^\/\(([\w|]+)\)\/\(\.\*\)$/), paths = h.source === '/(.*)' ? ['/*'] : m ? m[1].split('|').map(d => `/${d}/*`) : /[()]/.test(h.source) ? [] : [h.source];
+    for (const pth of paths) lines.push(pth, ...hs.map(x => `  ${x.key}: ${x.value}`)); }
+  await writeFile(OUT + '/_headers', lines.join('\n') + '\n'); }
 
 const idx = JSON.parse((await get('voice/index.json')).toString('utf8'));
 // модели позы, MediaPipe и three.js в сборку не кладем: vercel.json проксирует их с Google и jsDelivr через наш домен

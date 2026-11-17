@@ -1,0 +1,20 @@
+// Cloudflare Workers: сайт (public/) + функции (api/ через worker/index.js) + данные в R2. Гайд: docs/cloudflare_migration.md
+{
+  "name": "bodypassport",
+  "main": "worker/index.js",
+  "compatibility_date": "2025-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none",
+    // функции и прокси моделей идут через Worker; остальная статика отдается напрямую и не тратит лимит запросов
+    "run_worker_first": ["/api/*", "/models/*", "/vendor/*"]
+  },
+  "r2_buckets": [{ "binding": "DATA", "bucket_name": "bodypassport-data" }],
+  "triggers": { "crons": ["17 3 * * *", "0 12 * * *"] },
+  "alias": { "@vercel/blob": "./worker/noblob.js" },
+  "vars": { "SITE_HOST": "bodypassport.app" },
+  "observability": { "enabled": true }
+}
