@@ -23,7 +23,13 @@
 2. Если предлагает перенести данные из Vercel Blob в R2, нажмите «ОК» и дождитесь конца. После переезда Blob будет недоступен.
 3. Откройте Vercel → проект bodypassport → Settings → Environment Variables. Перепишите значения переменных из списка в шаге 3: они понадобятся.
 
-## Шаг 1. Создать Worker из GitHub
+## Шаг 1. Деплой
+
+Вариант А (основной с 17.11.2026): GitHub Actions `.github/workflows/cloudflare.yml` деплоит при каждом коммите в `main`. Нужен секрет репозитория `CLOUDFLARE_API_TOKEN` (GitHub → Settings → Secrets and variables → Actions). Без секрета деплой пропускается.
+
+Вариант Б: сборка Cloudflare из GitHub (ниже).
+
+### Вариант Б. Создать Worker из GitHub
 
 1. dash.cloudflare.com → Workers & Pages → Create → Import a repository (Workers).
 2. Подключите GitHub, выберите репозиторий `RifatAF/rifat`.
