@@ -1,6 +1,6 @@
 // Cloudflare Workers: сайт (public/) + функции (api/ через worker/index.js) + данные в R2. Гайд: docs/cloudflare_migration.md
 {
-  "name": "bodypassport",
+  "name": "rifat",
   "main": "worker/index.js",
   "compatibility_date": "2025-09-01",
   "compatibility_flags": ["nodejs_compat"],

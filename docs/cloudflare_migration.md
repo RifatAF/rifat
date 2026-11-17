@@ -27,7 +27,7 @@
 
 1. dash.cloudflare.com → Workers & Pages → Create → Import a repository (Workers).
 2. Подключите GitHub, выберите репозиторий `RifatAF/rifat`.
-3. Project name: `bodypassport`. Production branch: `main`.
+3. Project name: `rifat` (так назван Worker в аккаунте; имя должно совпадать с `name` в `wrangler.jsonc`). Production branch: `main`.
 4. Build command: `npm ci && node scripts/fetch-assets.mjs`
 5. Deploy command: `npx wrangler deploy` (стоит по умолчанию).
 6. Нажмите Deploy. Первая сборка 3–5 минут.
@@ -40,7 +40,7 @@ R2 → бакет `bodypassport-data` должен существовать в �
 
 ## Шаг 3. Секреты
 
-Worker `bodypassport` → Settings → Variables and Secrets → Add, тип Secret. Значения из Vercel:
+Worker `rifat` → Settings → Variables and Secrets → Add, тип Secret. Значения из Vercel:
 
 Обязательные: `SESSION_SECRET`, `CRON_SECRET`, `ADMIN_IDS`, `GOOGLE_CLIENT_ID`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TG_WEBHOOK_SECRET`, `RESEND_API_KEY`, `MAIL_FROM`, `LAVA_WEBHOOK_BASIC`, `LAVA_WEBHOOK_KEY`, `LAVA_PRODUCT_ID`.
 
@@ -54,7 +54,7 @@ Worker `bodypassport` → Settings → Variables and Secrets → Add, тип Sec
 
 ## Шаг 4. Проверить на временном адресе
 
-Откройте `https://bodypassport.<ваш-поддомен>.workers.dev`:
+Откройте `https://rifat.<ваш-поддомен>.workers.dev`:
 - главная и `/pricing` открываются;
 - `.../api/auth?a=config` отдает JSON;
 - `.../vendor/three/three.module.js` скачивается.
@@ -70,7 +70,7 @@ Worker `bodypassport` → Settings → Variables and Secrets → Add, тип Sec
 
 ## Шаг 6. Привязать домен к Worker
 
-Worker `bodypassport` → Settings → Domains & Routes → Add → Custom domain: `bodypassport.app`, затем так же `www.bodypassport.app`.
+Worker `rifat` → Settings → Domains & Routes → Add → Custom domain: `bodypassport.app`, затем так же `www.bodypassport.app`.
 
 ## Шаг 7. Проверка на bodypassport.app
 
