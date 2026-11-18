@@ -12,6 +12,7 @@ import { matte } from './ds.js';
 import qrcode from './qr.js';
 import { releaseFor } from './biomechanics-engine.js';
 import { PZ, PZN, MID, mergeComplaints, painSpots, painLabel, painCompat, painPlan } from './complaints.js';
+import { PHASES, RULES, PER_WEEK, planState } from './homeplan.js';
 
 const $ = s => document.querySelector(s);
 const CONSENT_VER = '2026-10-v4-draft';
@@ -1164,6 +1165,16 @@ export async function renderReport(a, c, photos) {
     exs.forEach((e, n) => { y = wrap(g, `${n + 1}. ${e.title.split(' (')[0]}${e.dose ? ': ' + e.dose : ''}`, PAD, y + 30, W - PAD * 2, 34) - 4; });
     if (kneeOutNote(qz.by)) { g.fillStyle = SUB; g.font = `400 23px ${F}`; y = wrap(g, kneeOutNote(qz.by), PAD, y + 34, W - PAD * 2, 32); g.fillStyle = INK; g.font = `400 25px ${F}`; }
     if (a.plan && a.plan.text) for (const para of a.plan.text.split('\n')) y = wrap(g, para, PAD, y + 30, W - PAD * 2, 34);
+    y += 60; }
+  // план на 4 недели по трем «П»: сколько раз в неделю, как растет нагрузка, когда повторный тест (js/homeplan.js)
+  if (exs.length) { y += 10; head('План на 4 недели', `${PER_WEEK} РАЗА В НЕДЕЛЮ`, VIO); y += 6;
+    const st = planState({ start: a.date, next: +a.nextDate || 0, now: a.date }), dd = t => new Date(t).toLocaleDateString('ru', { day: 'numeric', month: 'long' });
+    PHASES.forEach((p, i) => { y += 48; g.fillStyle = VIO; g.font = `700 22px ${M ? MN : F}`; g.fillText(`${i + 1} нед.`, PAD, y);
+      g.fillStyle = INK; g.font = `800 26px ${F}`; g.fillText(p.t, PAD + 110, y); const tw = g.measureText(p.t).width; g.fillStyle = SUB; g.font = `500 24px ${F}`; g.fillText(' · ' + p.goal, PAD + 110 + tw, y);
+      g.fillStyle = INK; g.font = `400 23px ${F}`; y = wrap(g, p.dose, PAD + 110, y + 34, W - PAD * 2 - 110, 31) - 31; });
+    y += 52; g.fillStyle = VIO; g.font = `800 26px ${F}`; g.fillText(`Повторный тест: ${dd(st.retest)}`, PAD, y);
+    g.fillStyle = INK; g.font = `400 23px ${F}`; for (const r of RULES) y = wrap(g, '• ' + r, PAD, y + 42, W - PAD * 2, 31) - 31;
+    y += 31;
     y += 60; }
   // измерено: только значения вне погрешности, остальные одной строкой (специалист видит все в приложении)
   head('Измерено', 'ЗАМЕР', INK); let inTol = 0;
